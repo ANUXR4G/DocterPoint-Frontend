@@ -1,0 +1,12 @@
+fastapi[standard]
+uvicorn[standard]
+celery[redis]
+flower
+pydantic-settings
+alembic
+SQLAlchemy
+psycopg2-binary
+bcrypt
+pyjwt
+pycryptodome
+requests
