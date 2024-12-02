@@ -6,7 +6,7 @@ from app.db import get_db as db
 from app.core.utils import ResponseHandler
 from app.models import User, Doctor, Hospital
 from app.core.security import decrypt, generate_hash
-from app.core.security import uuid_to_short_url, short_url_to_uuid
+from app.core.security import uuid_to_base64, base64_to_uuid
 from app.schemas.doctor import DoctorCreateAdmin, DoctorUpdateAdmin, DoctorResponse
 
 
@@ -94,7 +94,7 @@ class DoctorService:
     # transform the result for general users 
     result = [
       {
-        "url": uuid_to_short_url(str(doctor.id)),
+        "url": uuid_to_base64(str(doctor.id)),
         **{key: val for key, val in doctor.__dict__.items() if key != 'id' }
       }
       for doctor in doctors
@@ -112,7 +112,7 @@ class DoctorService:
   # retrieve doctor account information using doctor id  /general
   @staticmethod
   async def get_doctor_information(id: str, db: Session):
-    doctor_id = short_url_to_uuid(id)
+    doctor_id = base64_to_uuid(id)
     
     doctor = db.query(Doctor).where(Doctor.id == doctor_id).options(
       defer(Doctor.password),
@@ -139,7 +139,7 @@ class DoctorService:
         emails=doctor.emails,
         contact_numbers=doctor.contact_numbers,
         hospital={
-          "url": uuid_to_short_url(str(doctor.hospital.id)),
+          "url": uuid_to_base64(str(doctor.hospital.id)),
           "name": doctor.hospital.name,
           "city": doctor.hospital.city,
           "address": doctor.hospital.address
@@ -262,10 +262,10 @@ class DoctorService:
     # transform the result for general users 
     result = [
       {
-        "url": uuid_to_short_url(str(doctor.id)),
+        "url": uuid_to_base64(str(doctor.id)),
         **{key: val for key, val in doctor.__dict__.items() if key != 'id'},
         "hospital": {
-          "url": uuid_to_short_url(hospital_id),
+          "url": uuid_to_base64(hospital_id),
           **{key: val for key, val in doctor.hospital.__dict__.items() if key != 'id'}
         }
       }

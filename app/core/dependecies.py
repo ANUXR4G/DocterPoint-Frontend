@@ -34,10 +34,7 @@ def include_auth(
     raise ResponseHandler.no_permission(f"user doesn't have enough permission")
 
   if not patient:
-    raise HTTPException(
-      status_code=400,
-      detail='something went wrong!'
-    )
+    raise ResponseHandler.no_permission(f"user doesn't have enough permission")
   
   return patient
 

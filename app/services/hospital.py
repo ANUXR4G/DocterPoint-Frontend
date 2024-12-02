@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, defer
 
 from app.models import Hospital
 from app.core.utils import ResponseHandler
-from app.core.security import uuid_to_short_url, short_url_to_uuid
+from app.core.security import uuid_to_base64, base64_to_uuid
 from app.schemas.hospital import HospitalBase, HospitalCreateAdmin, HospitalUpdateAdmin
 
 
@@ -29,7 +29,7 @@ class HospitalService:
     # transform the result for general users 
     result = [
       {
-        "url": uuid_to_short_url(str(hospital.id)),
+        "url": uuid_to_base64(str(hospital.id)),
         # key everything except for id
         **{key: val for key, val in hospital.__dict__.items() if key != 'id' }
       }
@@ -46,7 +46,7 @@ class HospitalService:
 
   @staticmethod 
   async def get_hospital_information(id: str, db: Session):
-    hospital_id = short_url_to_uuid(id)
+    hospital_id = base64_to_uuid(id)
     hospital = db.query(Hospital).where(Hospital.id == hospital_id).options(
       defer(Hospital.created_at),
       defer(Hospital.updated_at)

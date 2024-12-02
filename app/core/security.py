@@ -16,9 +16,7 @@ from app.models import User, Patient, Doctor
 from app.core.utils import ResponseHandler, scopes
 
 
-
 origins = [origin.strip() for origin in settings.frontend_origins.split(",")]
-
 
 
 # generate a hashed password
@@ -67,13 +65,16 @@ async def decrypt(encrypted_text: str, key=settings.hashing_secret_key):
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"decryption failed {e}")
 
 
-# covert uuid string to short url
-def uuid_to_short_url(uuid_str: str):
+# covert uuid to base64 string
+def uuid_to_base64(uuid_value: str | UUID) -> str:
   try:
-    uuid_bytes = UUID(uuid_str).bytes # convert to byes
-    # encode bytes to base64 string
-    base64_str = base64.urlsafe_b64encode(uuid_bytes).rstrip(b'=').decode('ascii')
+    if isinstance(uuid_value, UUID):
+      uuid_bytes = uuid_value.bytes
+    else:
+      uuid_bytes = UUID(uuid_value).bytes # convert to byes
     
+    # encoded base64 string 
+    base64_str = base64.urlsafe_b64encode(uuid_bytes).rstrip(b'=').decode('ascii')
     return base64_str
   except Exception:
     raise HTTPException(
@@ -82,13 +83,12 @@ def uuid_to_short_url(uuid_str: str):
     )
 
 
-# convert short url to original uuid
-def short_url_to_uuid(short_url: str):
+# convert base64 string to uuid
+def base64_to_uuid(base64_str: str) -> UUID:
   try:
-    padding = '=' * (4 - len(short_url) % 4)
-    base64_str = short_url + padding 
-    uuid_bytes = base64.urlsafe_b64decode(base64_str) # decode base64 string to bytes
-
+    padding = '=' * (4 - len(base64_str) % 4)
+    base64_bytes = base64_str + padding 
+    uuid_bytes = base64.urlsafe_b64decode(base64_bytes) # encoded base64 string to bytes
     return UUID(bytes=uuid_bytes) # original uuid
   except Exception:
     raise HTTPException(
@@ -158,7 +158,7 @@ async def get_user_token(user: User | Patient | Doctor, message: str, status: in
   refresh_token = create_access_token(payload, refresh_token_expires)
 
   # generated short url using user id 
-  url = uuid_to_short_url(str(user.id)) 
+  user_id = uuid_to_base64(user.id) 
   
   # return to redirect url if it's triggered via google
   if(redirect_url):
@@ -174,7 +174,7 @@ async def get_user_token(user: User | Patient | Doctor, message: str, status: in
       "status": "successful",
       "message": message,
       "data": {
-        "url": url,
+        "id": user_id,
         "name": user.name,
         "email": user.email,
         "role": user.role,

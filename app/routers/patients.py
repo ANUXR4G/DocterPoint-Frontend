@@ -17,7 +17,7 @@ router = APIRouter()
 # get a patient profile information by id 
 @router.get("/profile")
 async def get_patient_account_information(
-  session_user: Patient = Security(include_auth, scopes=["patient:read_profile"]),
+  session_user: Patient = Security(include_auth, scopes=["patient:read"]),
   redis: Redis = Depends(cache),
 ):
   return await PatientService.get_patient_information(session_user, redis)

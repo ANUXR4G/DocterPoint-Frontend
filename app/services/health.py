@@ -5,7 +5,7 @@ from fastapi import HTTPException, Query
 
 from app.core.utils import ResponseHandler
 from app.models import Patient, HealthRecord
-from app.core.security import short_url_to_uuid, uuid_to_short_url
+from app.core.security import base64_to_uuid, uuid_to_base64
 from app.schemas.health import HealthRecordUpdate, HealthRecordResponse, BloodGlucose, BloodPressure, HealthRecordUpdateAdmin
 
 
@@ -13,7 +13,7 @@ class HealthMonitorings:
   # get health record of patient by id
   @staticmethod
   async def get_health_record_details(patient_id: str, session_user: Patient, db: Session):
-    user_id = short_url_to_uuid(patient_id) # get the original uuid from the url 
+    user_id = base64_to_uuid(patient_id) # get the original uuid from the url 
 
     # check if requested user matches w session user
     if user_id != session_user.id:
@@ -35,7 +35,7 @@ class HealthMonitorings:
     
 
     # generated short url using health record id 
-    url = uuid_to_short_url(str(health_record.id)) 
+    url = uuid_to_base64(str(health_record.id)) 
 
     return {
       "status": "successful",
@@ -65,7 +65,7 @@ class HealthMonitorings:
     session_user: Patient, 
     db: Session
   ):
-    user_id = short_url_to_uuid(patient_id) # get the original uuid from the url 
+    user_id = base64_to_uuid(patient_id) # get the original uuid from the url 
 
     # check if requested user matches w session user
     if user_id != session_user.id: 
@@ -92,7 +92,7 @@ class HealthMonitorings:
     db.refresh(db_health_records)
 
     # generated short url using health record id 
-    url = uuid_to_short_url(str(db_health_records.id)) 
+    url = uuid_to_base64(str(db_health_records.id)) 
 
     return {
       "status": "successful",
@@ -120,7 +120,7 @@ class HealthMonitorings:
     session_user: Patient, 
     db: Session
   ):
-    health_record_id = short_url_to_uuid(record_id) # get the original uuid from the url   
+    health_record_id = base64_to_uuid(record_id) # get the original uuid from the url   
     
     # get the health record details
     health_record = db.query(HealthRecord).where(HealthRecord.id == health_record_id).first()
@@ -181,7 +181,7 @@ class HealthMonitorings:
     session_user: Patient, 
     db: Session
   ):
-    health_record_id = short_url_to_uuid(record_id) # get the original uuid from the url   
+    health_record_id = base64_to_uuid(record_id) # get the original uuid from the url   
     
     # get the health record details
     health_record = db.query(HealthRecord).where(HealthRecord.id == health_record_id).first()
@@ -227,7 +227,7 @@ class HealthMonitorings:
     session_user: Patient, 
     db: Session
   ):
-    health_record_id = short_url_to_uuid(record_id) # get the original uuid from the url   
+    health_record_id = base64_to_uuid(record_id) # get the original uuid from the url   
     
     # get the health record details
     health_record = db.query(HealthRecord).where(HealthRecord.id == health_record_id).first()

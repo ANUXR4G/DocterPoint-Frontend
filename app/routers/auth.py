@@ -1,10 +1,10 @@
 import json
 import requests
 from sqlalchemy.orm import Session
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Response, Security
 
 
-from app.models import User
+from app.models import User, Patient
 from app.db import get_db as db
 from app.core.config import settings
 from app.services.auth import AuthService
@@ -92,7 +92,6 @@ async def user_google_callback(state, code: str | None = None, error: str | None
   # extract the state params from the url 
   state = json.loads(state)
   source_tag = state.get("source", "")
-  redirect_url = state.get("redirect_url", "")
   
   # check if the google account is verified or not 
   if not user_data.get("verified_email", False):
@@ -104,7 +103,7 @@ async def user_google_callback(state, code: str | None = None, error: str | None
     "picture": img_src,
   }
 
-  return await AuthService.google_auth(payload, source_tag, redirect_url, db)
+  return await AuthService.google_auth(payload, source_tag, db)
 
 
 # handle user log out session

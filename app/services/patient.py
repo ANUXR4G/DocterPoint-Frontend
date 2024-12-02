@@ -7,7 +7,7 @@ from fastapi import HTTPException, Query
 
 from app.models import User, Patient
 from app.core.utils import ResponseHandler
-from app.core.security import short_url_to_uuid, uuid_to_short_url, decrypt, verify_password, generate_hash
+from app.core.security import base64_to_uuid, uuid_to_base64, decrypt, verify_password, generate_hash
 from app.schemas.users import UserResponse, UserUpdate, UserPasswordChange, PatientCreateAdmin, PatientResponseAdmin, PatientUpdateAdmin
 
 
@@ -20,7 +20,7 @@ class PatientService:
 
     # restructure the patient profile informations 
     profile_data = {
-      "url": uuid_to_short_url(str(session_user.id)),
+      "id": uuid_to_base64(str(session_user.id)),
       "email": session_user.email,
       "name": session_user.name,
       "profession": session_user.profession,
@@ -41,8 +41,7 @@ class PatientService:
     
 
 
-
-  # handle updating patient information /default  
+  # handle updating patient information /patient  
   @staticmethod
   async def change_patient_information(
     id: str, 
@@ -50,7 +49,7 @@ class PatientService:
     session_user: Patient, 
     db: Session
   ):
-    user_id = short_url_to_uuid(id) # get the original uuid from the url 
+    user_id = base64_to_uuid(id) # get the original uuid from the url 
 
     # check if requested user matches w session user
     if user_id != session_user.id: 
@@ -69,9 +68,6 @@ class PatientService:
     user_payload = { key: val for key, val in payload.items() if key in User.__table__.columns }
     patient_payload = { key: val for key, val in payload.items() if key in Patient.__table__.columns }
     
-    print('user_payload', user_payload)
-    print('patient_payload', patient_payload)
-    
     
     if user_payload:
       db.query(User).where(User.id == user_id).update(user_payload)
@@ -83,21 +79,22 @@ class PatientService:
 
     db.commit()
     db.refresh(session_user)
-
+    
     return {
       "status": "successful",
       "message": f"successfully updated profile information - {user_id}",
-      "data": UserResponse(
-        url=id,
-        name=session_user.name,
-        email=session_user.email,
-        profession=session_user.profession,
-        gender=session_user.gender,
-        date_of_birth=session_user.date_of_birth,
-        address=session_user.address,
-        contact_number=session_user.contact_number,
-        emergency_number=session_user.emergency_number,
-      )
+      "data": {
+        "id": uuid_to_base64(session_user.id),
+        "email": session_user.email,
+        "name": session_user.name,
+        "profession": session_user.profession,
+        "gender": session_user.gender,
+        "img_src": session_user.img_src,
+        "date_of_birth": session_user.date_of_birth,
+        "address": session_user.address,
+        "contact_number": session_user.contact_number,
+        "emergency_number": session_user.emergency_number
+      }
     }
   
   

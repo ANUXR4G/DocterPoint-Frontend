@@ -59,7 +59,7 @@ class AuthService:
 
   # handle google authetication (patient)
   @staticmethod
-  async def google_auth(credentials: UserLoginGoogle, tag: str | None, redirect_url: str | None, db: Session):
+  async def google_auth(credentials: UserLoginGoogle, tag: str | None, db: Session):
     try:
       email = credentials.get('email')
       name = credentials.get('name')
@@ -79,16 +79,29 @@ class AuthService:
       if tag == "gg_login" and not user:
         return RedirectResponse('/login?success=attempted&status=nuser')
       
+      # redirect url from login based on role 
+      redirect_url=f'/patient/dashboard'
       
       # if the user is verified then directly return the tokens 
       if tag == "gg_login" and user:
-        return await get_user_token(user, f'successfully user logged in via google - {user.id}', status=None, redirect_url=redirect_url)
+        return await get_user_token(
+          user, 
+          f'successfully user logged in via google - {user.id}', 
+          status=None, 
+          redirect_url=redirect_url
+        )
           
 
       # handle user signup
       # if the user already exists directly return the tokens  
       if tag == "gg_signup" and user:
-        return await get_user_token(user, f'successfully user logged in via google - {user.id}', status=None, redirect_url=redirect_url)
+        return await get_user_token(
+          user, 
+          f'successfully user logged in via google - {user.id}', 
+          status=None, 
+          redirect_url=redirect_url
+        )
+          
           
       # create a new patient 
       new_patient = Patient(
@@ -96,12 +109,17 @@ class AuthService:
         name=name,
         img_src=img_src
       )
-
+      
       db.add(new_patient)
       db.commit()
       db.refresh(new_patient)
 
       # return the tokens for the newly created user
-      return await get_user_token(new_patient, f'successfully user signed up via google - {new_patient.id}', status=None, redirect_url=redirect_url)
+      return await get_user_token(
+        new_patient, 
+        f'successfully user signed up via google - {new_patient.id}', 
+        status=None, 
+        redirect_url=redirect_url
+      )
     except Exception:
       return RedirectResponse('/login?success=attempted&status=unknown') 

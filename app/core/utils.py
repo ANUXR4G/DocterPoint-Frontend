@@ -3,29 +3,51 @@ from fastapi.responses import JSONResponse
 
 scopes = {
   "user": [
-    "patient:read_profile", 
-    "patient:update_profile",
-    "patient:update_password"
+    "patient:read", 
+    "patient:write",
+    "patient:update",
+    "health:read",
+    "health:write",
+    "health:update",
+    "health:delete",
   ],
   "doctor": [
-    "patient:read_profile", 
-    "patient:update_profile",
-    "doctor:read_profile", 
-    "doctor:update_profile"
+    "patient:read", 
+    "patient:update",
+    "doctor:read",
+    "doctor:update",
+    "health:read",
   ],
   "staff": [
     "staff:read", 
-    "staff:write"
+    "staff:update",
+    "doctor:read", 
+    "doctor:write",
+    "doctor:update",
+    "doctor:delete",
+    "health:read"
   ],
   "admin": [
     "patient:read", 
-    "patient:write", 
+    "patient:write",
+    "patient:update", 
+    "patient:delete", 
     "doctor:read", 
     "doctor:write", 
+    "doctor:update", 
+    "doctor:delete", 
     "staff:read", 
     "staff:write", 
+    "staff:update", 
+    "staff:delete", 
     "admin:read", 
-    "admin:write"
+    "admin:write",
+    "admin:update",
+    "admin:delete",
+    "health:read",
+    "health:write",
+    "health:update",
+    "health:delete",
   ]
 }
 
