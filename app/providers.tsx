@@ -28,8 +28,16 @@ const initialState: AppState = {
 // create a new context for the counter
 export const AppContext = createContext(initialState)
 
-export default function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient())
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: Infinity, // ignore stale
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
+function Providers({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeProps | null>(null)
   const [showMenu, setShowMenu] = useState<boolean>(false)
   const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(false)
@@ -111,3 +119,5 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     </QueryClientProvider>
   )
 }
+
+export { Providers, queryClient }

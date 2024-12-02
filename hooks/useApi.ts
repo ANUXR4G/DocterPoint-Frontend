@@ -8,10 +8,7 @@ export function useApi<
   TData = TQueryFnData
 >(
   queryKey: TQueryKey,
-  fetcher: (
-    params: TQueryKey[1],
-    token: string | null
-  ) => Promise<TQueryFnData>,
+  fetcher: (params: TQueryKey[1], token: string) => Promise<TQueryFnData>,
   options?: Omit<
     UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
     "queryKey" | "queryFn"
@@ -27,3 +24,6 @@ export function useApi<
     ...options,
   })
 }
+
+// usage
+// const { data } = useApi(["user/profile"], (_, token) => userService.profile(token))

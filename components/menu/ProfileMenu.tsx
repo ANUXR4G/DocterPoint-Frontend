@@ -1,6 +1,7 @@
 "use client"
 
 import { Icon, SimpleModal, ThemeSwitch } from "@/components"
+import { useProfile } from "@/hooks/useProfile"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -11,23 +12,9 @@ type Props = {
 }
 
 export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
-  const router = useRouter()
+  const { data, logout } = useProfile(false)
 
-  async function handleLogout() {
-    console.log("hello")
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API}/auth/logout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    })
-    if (!response.ok) {
-      throw new Error("unable to log out rn, try again!")
-    }
-
-    router.replace("/login")
-    router.refresh()
-  }
+  if (!data) return <div />
 
   return (
     <SimpleModal
@@ -101,7 +88,7 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
         {/* logout */}
         <div className="py-1">
           <button
-            onClick={handleLogout}
+            onClick={() => logout()}
             className="w-full flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700"
           >
             <div>

@@ -1,11 +1,14 @@
-import {
-  DietPreference,
-  FoodRecommendations,
-  Icon,
-  NutrientsRecommendationChart,
-} from "@/components"
+import { DietPreference, NutrientsRecommendationChart } from "@/components"
 import { recommendedCategoryOptions } from "@/lib/dummy/recommededOptData"
+import dynamic from "next/dynamic"
 import Image from "next/image"
+
+const FoodRecommendations = dynamic(
+  () => import("../../../components/ui/patients/diet/FoodRecommendations"),
+  {
+    ssr: false,
+  }
+)
 
 export default function DietPage() {
   // recommeded options

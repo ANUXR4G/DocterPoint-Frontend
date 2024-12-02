@@ -32,8 +32,7 @@ async function signup(values: AuthValueType) {
   }
 }
 
-async function profile(token: string | null): Promise<User | null> {
-  if (!token) return null
+async function profile(token: string) {
   const respose = await fetch(
     `${process.env.NEXT_PUBLIC_API}/users/patient/profile`,
     {
@@ -52,8 +51,24 @@ async function profile(token: string | null): Promise<User | null> {
   return respose.json()
 }
 
+async function logout() {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API}/auth/logout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error("unable to log out rn, try again later!")
+  }
+
+  return response.json()
+}
+
 export const userService = {
   login,
   signup,
   profile,
+  logout,
 }

@@ -22,6 +22,7 @@ export default function Form() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
+  const callbackURL = searchParams.get("callback")
   const googleStatus = searchParams.get("status")
 
   const {
@@ -56,22 +57,27 @@ export default function Form() {
     mutationFn: (credentials: AuthValueType) => userService.signup(credentials),
   })
 
-  // push to dashboard after an successful request
+  // push to dashboard after an successful authetication
   useEffect(() => {
+    // based on role redirect to specific dashboard
     if (
       (loginData && loginData.status === "successful") ||
       (signupData && signupData.status === "successful")
     ) {
+      if (callbackURL) {
+        // redirect to callback url if there is any n then return
+        router.push(`${process.env.NEXT_PUBLIC_URL}/${callbackURL}`)
+      }
       router.push(
         `/${
-          (loginData && loginData.data.role == "user" && "patient") ||
-          (signupData && signupData.data.role == "user" && "patient") ||
+          (loginData && loginData.data.role === "user" && "patient") ||
+          (signupData && signupData.data.role === "user" && "patient") ||
           (loginData && loginData.data.role) ||
           (signupData && signupData.data.role)
         }/dashboard`
       )
     }
-  }, [loginData, signupData, router])
+  }, [loginData, signupData, router, callbackURL])
 
   const errorExists = Object.keys(errors).some(
     (key) => errors.hasOwnProperty(key) && errors[key] !== null

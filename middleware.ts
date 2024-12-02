@@ -1,21 +1,8 @@
 import { NextResponse, NextRequest } from "next/server"
+import { SCOPES } from "./scopes"
 
 const PROTECTED_ROUTES = ["/patient/:path*", "/doctor/:path*"]
 const AUTH_ROUTES = ["/login", "/signup"]
-
-const SCOPES: Record<string, string[]> = {
-  user: [
-    "patient:read_profile",
-    "patient:update_profile",
-    "patient:update_password",
-  ],
-  doctor: [
-    "patient:read_profile",
-    "patient:update_profile",
-    "doctor:read_profile",
-    "doctor:update_profile",
-  ],
-}
 
 // define role-based routes and scopes
 const roleScopes: Record<string, string[]> = {
@@ -62,7 +49,14 @@ export function middleware(req: NextRequest) {
 
   // redirect to login page if user is trying to access protected routes without a token
   if (isProtectedRoute && !token) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl))
+    // get the triggering routing identifier
+    const destination = req.nextUrl.href.split(
+      `${process.env.NEXT_PUBLIC_OG_URL}/`
+    )[1]
+    const url = destination
+      ? `/login?callback=${encodeURIComponent(destination)}`
+      : "/login" // callback based on routing identifier
+    return NextResponse.redirect(new URL(url, req.nextUrl))
   }
 
   // restrict protected routes based on scopes

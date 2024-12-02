@@ -36,7 +36,7 @@ export default async function LoginPage() {
         </div>
 
         {/* google provider */}
-        <GoogleButton />
+        <GoogleButton type="signup" />
         <div className="mt-4">
           <p className="text-center text-sm">
             &#169; {currentYear} GlucoGuide. Your Trusted Partner in Diabetes

@@ -21,6 +21,7 @@ async function refreshAccessToken(token: string) {
 }
 
 function isTokenExpired(token: string) {
+  if (token.length === 0) return true
   return firey.getTokenDuration(token) < Date.now() / 1000
 }
 

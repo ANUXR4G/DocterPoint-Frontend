@@ -1,41 +1,10 @@
 "use client"
 
 import { Icon } from "@/components"
-import { useToken } from "@/hooks/useToken"
-import { useQuery } from "react-query"
+import { useProfile } from "@/hooks/useProfile"
 
 export default function HealthInformations() {
-  const token = useToken()
-
-  // const { refetch, data } = useApi(
-  //   ["user"],
-  //   (_, token) => fetchUserDetails(token),
-  //   { enabled: false, refetchOnWindowFocus: false }
-  // )
-
-  const { data } = useQuery({
-    queryKey: "user/profile",
-    queryFn: async () => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API}/users/patient/profile`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error("failed to fetch user details!")
-      }
-
-      return await response.json()
-    },
-    staleTime: Infinity,
-  })
-
+  const { data } = useProfile()
   console.log(data)
 
   return (

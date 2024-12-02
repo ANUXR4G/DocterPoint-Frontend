@@ -14,7 +14,6 @@ export function GoogleButton({
   const encodedState = encodeURIComponent(
     JSON.stringify({
       source: type === "login" ? "gg_login" : "gg_signup",
-      redirect_url: process.env.NEXT_PUBLIC_URL,
     })
   )
 
@@ -24,8 +23,7 @@ export function GoogleButton({
         `${process.env.NEXT_PUBLIC_API}/auth/google?state=${encodedState}`
       )
       const url = await response.json()
-      // go to the google concent page
-      router.push(url)
+      router.push(url) // go to the google concent page
     } catch (error) {
       console.log(error)
     }

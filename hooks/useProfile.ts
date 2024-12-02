@@ -1,20 +1,50 @@
 import { userService } from "@/lib/services/user"
-import { useQuery } from "react-query"
-import { useToken } from "./useToken"
+import { useApi } from "./useApi"
 import { User } from "@/types"
+import { UseMutateFunction, useMutation } from "react-query"
+import { useEffect } from "react"
+import { queryClient } from "@/app/providers"
 
-export const useProfile = () => {
-  const token = useToken()
+type USEPROFILERETURN = {
+  data: User | null
+  logout: UseMutateFunction<any, unknown, void, unknown>
+}
 
-  const { data, isError, error } = useQuery<User | null, Error>({
-    queryKey: ["user/profile"],
-    queryFn: () => userService.profile(token),
+export function useProfile(allowFetching: boolean = true): USEPROFILERETURN {
+  const { data: userInfo, isError } = useApi(
+    ["user/profile"],
+    (_, token) => userService.profile(token),
+    {
+      enabled: allowFetching,
+    }
+  )
+
+  // handle user log out
+  const { mutate, isSuccess: isLogoutSuccess } = useMutation({
+    mutationFn: () => userService.logout(),
+    onSuccess: () => {
+      queryClient.removeQueries(["user/profile"])
+    },
   })
 
-  if (isError || !data) {
-    console.log(error)
-    return null
+  // redirect to login page if user logged out
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    if (isLogoutSuccess) {
+      window.location.reload()
+    }
+  }, [isLogoutSuccess])
+
+  if (isError || !userInfo) {
+    return {
+      data: null,
+      logout: mutate,
+    }
   }
 
-  return data
+  return {
+    data: userInfo.data,
+    logout: mutate,
+  }
 }
