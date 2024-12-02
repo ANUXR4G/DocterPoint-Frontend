@@ -14,6 +14,7 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
   const router = useRouter()
 
   async function handleLogout() {
+    console.log("hello")
     const response = await fetch(`${process.env.NEXT_PUBLIC_API}/auth/logout`, {
       method: "POST",
       headers: {
