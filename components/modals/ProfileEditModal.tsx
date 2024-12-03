@@ -17,12 +17,13 @@ import {
   physicalActivities,
   smokingStatuses,
 } from "@/lib/dummy/lifestyles"
+import { ProfileValues } from "@/types"
 import { firey } from "@/utils"
 import { validations } from "@/utils/validations"
 import Image from "next/image"
-import React, { useRef, useState } from "react"
+import React, { useState } from "react"
 
-const initialValues = {
+const initialValues: ProfileValues = {
   name: "Walter White",
   dateOfBirth: "05/05/1999",
   gender: "male",
@@ -48,30 +49,19 @@ export default function ProfileEditModal() {
   const [imgUploadSrc, setImgUploadSrc] = useState<File | null>()
 
   const {
-    errors,
-    isSubmitting,
-    setIsSubmitting,
     values,
     setValues,
-    handleBlur,
+    errors,
+    touched,
+    isSubmitting,
+    isDisabled,
     handleChange,
+    handleBlur,
     handleSubmit,
   } = useForm({
-    formValues: initialValues,
-    onSubmit: (val) => {
-      console.log(val)
-      setIsSubmitting(false)
-    },
-    validationFunc: validations.profile_edit,
+    initialValues,
+    onSubmit: (result) => console.log(result),
   })
-
-  const disableBtn = Object.keys(errors).some(
-    (key) => errors.hasOwnProperty(key) && errors[key] !== null
-  )
-
-  function errStatus(key: string) {
-    return errors.hasOwnProperty(key) && errors[key] !== null
-  }
 
   function handleImgOnChange(e: React.ChangeEvent<HTMLInputElement>) {
     // handle if the file uploader is cancelled
@@ -175,7 +165,7 @@ export default function ProfileEditModal() {
         handler={() => setOpenModal(false)}
         direction="center"
         secondaryBtn={
-          <Button disabled={isSubmitting || disableBtn} onClick={handleSubmit}>
+          <Button disabled={isSubmitting || isDisabled} onClick={handleSubmit}>
             Save change
           </Button>
         }
@@ -223,7 +213,6 @@ export default function ProfileEditModal() {
                 value={values.name}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                valid={errStatus("name")}
               />
               <DatePicker
                 name="DOB"
@@ -246,7 +235,6 @@ export default function ProfileEditModal() {
                 value={values.profession}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                valid={errStatus("profession")}
               />
               <TextInput
                 name="Contact"
@@ -254,14 +242,12 @@ export default function ProfileEditModal() {
                 value={values.contactNumber}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                valid={errStatus("contactNumber")}
               />
               <TextInput
                 name="Emergency Contact"
                 value={values.emergencyContact}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                valid={errStatus("emergencyContact")}
               />
               <TextInput
                 name="Email"
@@ -269,14 +255,12 @@ export default function ProfileEditModal() {
                 value={values.emailAddress}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                valid={errStatus("emailAddress")}
               />
               <TextInput
                 name="Address"
                 value={values.address}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                valid={errStatus("address")}
               />
             </div>
           </div>
@@ -292,7 +276,6 @@ export default function ProfileEditModal() {
                 value={values.weight}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                valid={errStatus("weight")}
               />
               <TextInput
                 name="Height (ft)"
@@ -301,15 +284,12 @@ export default function ProfileEditModal() {
                 value={values.height}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                valid={errStatus("height")}
               />
               <BasicSelect
                 name="Blood Group"
                 className="-ml-0.5"
                 values={bloodGroups}
-                onChange={(e) =>
-                  setValues((prev) => ({ ...prev, bloodGroup: e.target.value }))
-                }
+                onChange={handleChange}
               />
             </div>
 

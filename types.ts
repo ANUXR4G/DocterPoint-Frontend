@@ -1,3 +1,25 @@
+export type FormErrors<T> = Partial<Record<keyof T, string>>
+export type AuthValues = { email: string; password: string }
+
+export type ProfileValues = {
+  name: string
+  dateOfBirth: string
+  gender: string
+  address: string
+  imgSrc: string
+  profession: string
+  contactNumber: string
+  emergencyContact: string
+  emailAddress: string
+  bloodGroup: string
+  weight: number
+  height: number
+  diabetesStatus: string[]
+  familyHistoryStatus: string[]
+  smokingStatus: string
+  physicalActivity: string
+}
+
 export type IconNames =
   | "search"
   | "key"

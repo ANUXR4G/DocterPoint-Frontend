@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 
 type Props = {
   type?: "primary" | "secondary" | "outline"
+  typeBtn?: "button" | "submit" | "reset"
   onClick?: React.MouseEventHandler<HTMLButtonElement>
   children: React.ReactNode
   className?: string
@@ -12,6 +13,7 @@ type Props = {
 
 export default function Button({
   type = "primary",
+  typeBtn = "button",
   onClick,
   children,
   className,
@@ -20,7 +22,7 @@ export default function Button({
   return (
     <motion.button
       whileTap={{ scale: 0.97 }}
-      type="button"
+      type={typeBtn}
       disabled={disabled}
       className={`py-2 px-3 inline-flex items-center font-medium gap-x-2 text-sm rounded-lg border border-gray-200 ${className} ${
         type === "primary" &&

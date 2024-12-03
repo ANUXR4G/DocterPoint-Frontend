@@ -14,7 +14,7 @@ type Props = {
 export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
   const { data, logout } = useProfile(false)
 
-  if (!data) return <div />
+  // if (!data) return <div />
 
   return (
     <SimpleModal

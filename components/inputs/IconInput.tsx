@@ -4,21 +4,21 @@ import { IconNames } from "@/types"
 import { firey } from "@/utils"
 
 type Props = {
-  icon?: IconNames
+  icon: IconNames
   type?: React.HTMLInputTypeAttribute
   label?: string
   onBlur?: (e: React.FocusEvent<HTMLInputElement, Element>) => void
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  status: string | null
+  error?: string
   name: string
   value: string | number
 }
 
 const IconInput = React.memo(function IconInput({
-  icon = "envelope",
-  type = "text",
-  label = "Email Address",
-  status,
+  icon,
+  type,
+  label,
+  error,
   onBlur,
   onChange,
   name,
@@ -27,7 +27,7 @@ const IconInput = React.memo(function IconInput({
   return (
     <div
       className={`flex items-center relative h-16 border border-neutral-600 rounded-md px-5 group ${
-        !!status && `outline outline-1 outline-offset-1 outline-red-600`
+        !!error && `outline outline-1 outline-offset-1 outline-red-600`
       }`}
     >
       <div className="mt-1 w-10 after:absolute after:contents[''] after:h-full after:border-r after:opacity-80 after:border-neutral-600 after:top-0 after:left-14">

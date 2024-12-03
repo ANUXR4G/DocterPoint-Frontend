@@ -8,11 +8,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { firey } from "@/utils"
 import { userService } from "@/lib/services/user"
 import { validations } from "@/utils/validations"
-import { AuthValueType } from "@/types"
+import { AuthValues, AuthValueType } from "@/types"
 import { useForm } from "@/hooks/useForm"
 import { IconInput, Button, Icon } from "@/components"
 
-const initialState: AuthValueType = {
+const initialValues: AuthValues = {
   email: "",
   password: "",
 }
@@ -26,17 +26,18 @@ export default function Form() {
   const googleStatus = searchParams.get("status")
 
   const {
-    errors,
-    isSubmitting,
-    setIsSubmitting,
     values,
+    errors,
+    touched,
+    isSubmitting,
+    isDisabled,
     handleChange,
     handleBlur,
     handleSubmit,
   } = useForm({
-    formValues: initialState,
-    onSubmit: (val) => handleAuthentication(val),
-    validationFunc: validations.auth_validations,
+    initialValues,
+    onSubmit: (result) => handleAuthentication(result),
+    validator: validations.auth,
   })
 
   const {
@@ -67,6 +68,7 @@ export default function Form() {
       if (callbackURL) {
         // redirect to callback url if there is any n then return
         router.push(`${process.env.NEXT_PUBLIC_URL}/${callbackURL}`)
+        return
       }
       router.push(
         `/${
@@ -79,13 +81,8 @@ export default function Form() {
     }
   }, [loginData, signupData, router, callbackURL])
 
-  const errorExists = Object.keys(errors).some(
-    (key) => errors.hasOwnProperty(key) && errors[key] !== null
-  )
-
   // handle authentication
   async function handleAuthentication(values: AuthValueType) {
-    if (errorExists) return // return nothing if there is any errors
     const encryptedPass = await firey.generateEncryption(values.password) // encrypted password
     // handle login request
     if (pathname === "login") {
@@ -102,8 +99,6 @@ export default function Form() {
         password: encryptedPass,
       })
     }
-
-    setIsSubmitting(false)
   }
 
   return (
@@ -137,23 +132,31 @@ export default function Form() {
       </div>
 
       {/* email and password input */}
-      <div className="mt-5 flex flex-col gap-4">
+      <form
+        className="mt-5 flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault()
+          handleSubmit()
+        }}
+      >
         <IconInput
+          icon="envelope"
+          name="email"
+          label="Email Address"
           value={values.email}
           onChange={handleChange}
-          status={errors["email"]}
           onBlur={handleBlur}
-          name="email"
+          error={touched.email ? errors.email : undefined}
         />
         <IconInput
-          value={values.password}
-          onChange={handleChange}
-          status={errors["password"]}
-          onBlur={handleBlur}
           icon="key"
           name="password"
           type="password"
           label="Password"
+          value={values.password}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          error={touched.password ? errors.password : undefined}
         />
         {((loginData && loginData.status === "unsuccessful") ||
           (signupData && signupData.status === "unsuccessful") ||
@@ -176,15 +179,14 @@ export default function Form() {
             </p>
           </motion.div>
         )}
-
         <Button
-          disabled={errorExists}
           className="w-full center py-5"
-          onClick={handleSubmit}
+          typeBtn="submit"
+          disabled={
+            isSubmitting || isDisabled || loginIsLoading || signupIsLoading
+          }
         >
-          {(!errorExists && isSubmitting) ||
-          loginIsLoading ||
-          signupIsLoading ? (
+          {isSubmitting || loginIsLoading || signupIsLoading ? (
             <div className="size-5">
               <Icon name="spinning-loader" className="fill-orange-100" />
             </div>
@@ -192,7 +194,7 @@ export default function Form() {
             `Continue`
           )}
         </Button>
-      </div>
+      </form>
     </div>
   )
 }

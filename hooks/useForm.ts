@@ -1,121 +1,119 @@
-import {
-  FocusEvent,
-  ChangeEvent,
-  useCallback,
-  useEffect,
-  useState,
-  FormEvent,
-} from "react"
+import React, { ChangeEvent, useCallback, useEffect, useState } from "react"
 
-type CustomHookFormErrorType = {
-  [key: string]: string | null
-}
+type FormErrors<T> = Partial<Record<keyof T, string>>
+type Touched<T> = Partial<Record<keyof T, boolean>>
+type Validator<T> = (values: T) => FormErrors<T>
 
-type CustomHookFormType<T> = {
-  formValues: T
-  onSubmit: (val: T) => Promise<any> | void
-  validationFunc: (val: T) => CustomHookFormErrorType | any
+type UseFormType<T> = {
+  initialValues: T
+  onSubmit: (values: T) => Promise<any> | void
+  validator?: Validator<T>
 }
 
 export function useForm<T>({
-  formValues,
-  validationFunc,
+  initialValues,
   onSubmit,
-}: CustomHookFormType<T>) {
-  const [values, setValues] = useState<T>(formValues)
-  const [touched, setTouched] = useState({})
-  const [errors, setErrors] = useState<CustomHookFormErrorType>({})
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+  validator,
+}: UseFormType<T>) {
+  const [values, setValues] = useState<T>(initialValues)
+  const [touched, setTouched] = useState<Touched<T>>({})
+  const [errors, setErrors] = useState<FormErrors<T>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isDisabled, setIsDisabled] = useState(false)
 
-  useEffect(() => {
-    const validationErrors = validationFunc(values)
-    const touchedFields = Object.keys(touched)
-    // create a new string of arrays w the validation errors
-    // then filter thoese fields that has been touched
-    if (validationErrors) {
-      const touchedErrors = Object.keys(validationErrors)
-        .filter((field) => touchedFields.includes(field))
-        .reduce<CustomHookFormErrorType>((acc, field) => {
-          // create the specific error if not exists
-          if (!acc[field]) {
-            acc[field] = validationErrors[field]
-          }
-          return acc
-        }, {})
+  // set to true if the input was touched
+  const handleBlur = useCallback(
+    (
+      e: React.ChangeEvent<
+        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+      >
+    ) => {
+      const { name } = e.target
+      setTouched((prev) => ({ ...prev, [name]: true }))
+    },
+    []
+  )
 
-      setErrors((err) => ({ ...err, ...touchedErrors }))
-    }
-    // eslint-disable-next-line
-  }, [touched])
-
-  useEffect(() => {
-    // check if the error object is empty
-    const errorsCrossChecked = Object.values(errors).every(
-      (val) => val === null
-    )
-    const timerID = setTimeout(() => {
-      if (!errorsCrossChecked) {
-        setIsSubmitting(false)
+  // handle on change event for the inputs
+  const handleChange = useCallback(
+    (
+      e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    ) => {
+      const { type, name, value } = e.target
+      if (type === "checkbox") {
+        const { checked } = e.target as HTMLInputElement
+        setValues((prev) => ({ ...prev, [name]: checked }))
+      } else {
+        setValues((prev) => ({
+          ...prev,
+          [name]: value,
+        }))
       }
+    },
+    []
+  )
 
-      if (isSubmitting && errorsCrossChecked) {
-        onSubmit(values)
+  // handle form submission
+  const handleSubmit = useCallback(async () => {
+    if (validator) {
+      const validatorErrors = validator(values)
+      setErrors(validatorErrors)
+
+      const errorKeys = Object.keys(validatorErrors)
+      if (errorKeys.length > 0) {
+        // update input touched state if there is any error
+        errorKeys.map((key) => setTouched((prev) => ({ ...prev, [key]: true })))
+        setIsDisabled(true) // disable the submission button
+        return // skip everything n return
       }
-      // setIsSubmitting(false)
-    }, 2000)
-
-    return () => {
-      clearTimeout(timerID)
     }
-    //eslint-disable-next-line
-  }, [isSubmitting])
 
-  const handleChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const { type, name, checked, value } = e.target
-    const _value = type === "checkbox" ? checked : value
-    setValues((val) => ({ ...val, [name]: _value }))
-  }, [])
+    setIsSubmitting(true)
 
-  const handleBlur = useCallback((e: FocusEvent<HTMLInputElement>) => {
-    const { name } = e.target
-    setTouched((field) => ({ ...field, [name]: true }))
-  }, [])
+    // handle the submission
+    await onSubmit(values)
 
-  function handleSubmit() {
-    if (validationFunc) {
-      const validationErrors = validationFunc(values)
-      setErrors((err) => ({ ...err, ...validationErrors }))
+    setIsSubmitting(false)
+  }, [values, validator, onSubmit])
+
+  // make sure to always set the errors
+  // also make sure that disable button state gets updated
+  useEffect(() => {
+    if (validator) {
+      const validatorErrors = validator(values)
+      setErrors(validatorErrors)
+      if (isDisabled && Object.keys(validatorErrors).length === 0) {
+        setIsDisabled(false)
+      }
     }
-    setIsSubmitting(true)
-  }
-
-  function handleFormSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    // store errors
-    const validationErrors = validationFunc(values)
-    setErrors((err) => ({ ...err, ...validationErrors }))
-    // proceed submission
-    setIsSubmitting(true)
-  }
+  }, [validator, values, isDisabled])
 
   return {
     values,
     setValues,
+    touched,
     errors,
+    isSubmitting,
+    isDisabled,
     handleChange,
     handleBlur,
     handleSubmit,
-    handleFormSubmit,
-    isSubmitting,
-    setIsSubmitting,
   }
 }
 
 // usage guide
-// useForm hook
-// const {} = useForm({ formValues: {}, onSubmit: (val) => console.log(val), validationFunc: checkCredentials })
+// const { values, touched, handleChange, handleBlur, handleSubmit, isSubmitting, errors } = useForm({
+//   initialValues: { email: "" },
+//   onSubmit: (result) => { console.log(result) },
+//   validator: validations.login,
+// });
+
 // optimize input renders
-// wrap the input component with memo() inexpensive performace, ps -> callback function is for caching so using a callback function w/o memo function is useless
-// const CustomInput = memo(function CustomInput () {
-//   return <input onChange={handleChange} onBlur={handleBlur} />
-// })
+// wrap the input component with React.memo() for inexpensive performace
+// ps, React.useCallback functions is for optimizing so using a React.useCallback w/o memo function is useless
+// const Input = React.memo(({ name, type, value, onChange, onBlur }: Props) => {
+//   return <input name={name} type={type} value={value} onChange={onChange} onBlur={onBlur} />;
+// });
+
+// the error can be accessed by the following line
+// const emailError = touched.email ? errors.email : undefined
