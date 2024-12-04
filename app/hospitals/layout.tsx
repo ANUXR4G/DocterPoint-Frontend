@@ -1,4 +1,4 @@
-import { Navigation } from "@/components"
+import { Background, Navigation } from "@/components"
 
 export default function HospitalsLayout({
   children,
@@ -8,7 +8,12 @@ export default function HospitalsLayout({
   return (
     <>
       <Navigation />
-      <div className="ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] min-h-[calc(100vh-64px)] px-3 xs:px-4 dark:bg-zinc-900">
+      <Background name="gradient-2" className="dark:hidden" />
+      <Background
+        name="half-box-pattern"
+        className="hidden !fixed dark:block"
+      />
+      <div className="relative full ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] p-4 xs:px-4">
         {children}
       </div>
     </>

@@ -32,7 +32,7 @@ export function GoogleButton({
   return (
     <motion.button
       whileTap={{ scale: 0.95 }}
-      className="size-12 flex mt-2 mx-auto p-2 border border-neutral-500 rounded-full"
+      className="size-12 flex mt-2 mx-auto p-2 border border-neutral-400/70 dark:border-neutral-500 rounded-full"
       onClick={handleGoogleSignup}
     >
       <Icon name="google" className="size-full" />

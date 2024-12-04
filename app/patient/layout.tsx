@@ -1,4 +1,4 @@
-import { Navigation } from "@/components"
+import { Background, Navigation } from "@/components"
 
 export default function PatientLayout({
   children,
@@ -8,9 +8,10 @@ export default function PatientLayout({
   return (
     <>
       <Navigation />
-      <div className="ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] min-h-[calc(100vh-64px)] p-3 xs:px-4 dark:bg-zinc-900">
+      <Background name="gradient-2" />
+      <main className="full ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] p-4 xs:px-4">
         {children}
-      </div>
+      </main>
     </>
   )
 }

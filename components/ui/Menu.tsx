@@ -9,11 +9,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useClickOutside } from "@/hooks/useClickOutside"
 import { useAppContext } from "@/hooks/useAppContext"
+import { useProfile } from "@/hooks/useProfile"
 
 export default function Menu() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const pathname = usePathname()
   const { closeMenu } = useAppContext()
+  const { logout } = useProfile(false)
 
   useClickOutside(containerRef, () => closeMenu())
 
@@ -31,7 +33,9 @@ export default function Menu() {
         {/* logo */}
         <div className="center gap-2 mb-8">
           <Icon className="w-8 h-8 -ml-4" name="gluco-guide" />
-          <h3 className="font-bold text-[#0067FF]">GlucoGuide</h3>
+          <h3 className="font-bold bg-gradient-to-r text-lg from-blue-800 to-indigo-900 bg-clip-text text-transparent dark:from-indigo-500 dark:to-blue-500">
+            GlucoGuide
+          </h3>
         </div>
 
         <div className="h-full w-full flex flex-col px-4 pb-3 justify-between overflow-y-auto custom-scroll">
@@ -71,7 +75,16 @@ export default function Menu() {
               Support
             </span>
             {content.slice(6, content.length).map(({ name, icon }, idx) => (
-              <button key={`sidebar_bottom_link_${idx}`}>
+              <button
+                key={`sidebar_bottom_link_${idx}`}
+                onClick={() => {
+                  // handle user logout
+                  if (idx === 2) {
+                    logout()
+                    closeMenu()
+                  }
+                }}
+              >
                 <div
                   className={`flex items-center transition duration-200 py-2 px-2 gap-2 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 ${
                     idx === 2 && `mt-8`
@@ -93,7 +106,7 @@ export default function Menu() {
 
       {/* overlay */}
       <motion.div
-        className="min-h-full min-w-full bg-black/60 contrast-75 dark:bg-black/50 dark:contrast-70 fixed z-50 top-0 right-0 bottom-0 left-0 md:hidden"
+        className="min-h-full min-w-full bg-black/60 contrast-75 dark:bg-black/50 dark:contrast-70 fixed z-50 top-0 right-0 bottom-0 left-0"
         variants={fadingAnimation}
         initial="initial"
         animate="animate"

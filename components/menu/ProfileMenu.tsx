@@ -3,7 +3,6 @@
 import { Icon, SimpleModal, ThemeSwitch } from "@/components"
 import { useProfile } from "@/hooks/useProfile"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 
 type Props = {
   open: boolean
@@ -12,7 +11,7 @@ type Props = {
 }
 
 export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
-  const { data, logout } = useProfile(false)
+  const { logout } = useProfile(false)
 
   // if (!data) return <div />
 

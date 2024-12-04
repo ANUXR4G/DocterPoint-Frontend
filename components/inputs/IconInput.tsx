@@ -1,7 +1,6 @@
 import React from "react"
 import Icon from "../icons"
 import { IconNames } from "@/types"
-import { firey } from "@/utils"
 
 type Props = {
   icon: IconNames
@@ -27,7 +26,7 @@ const IconInput = React.memo(function IconInput({
   return (
     <div
       className={`flex items-center relative h-16 border border-neutral-600 rounded-md px-5 group ${
-        !!error && `outline outline-1 outline-offset-1 outline-red-600`
+        !!error && `outline outline-1 border-red-600 outline-red-600`
       }`}
     >
       <div className="mt-1 w-10 after:absolute after:contents[''] after:h-full after:border-r after:opacity-80 after:border-neutral-600 after:top-0 after:left-14">
@@ -48,7 +47,7 @@ const IconInput = React.memo(function IconInput({
         />
         <label
           htmlFor={name}
-          className="absolute text-xs text-gray-500 transition-all duration-200 transform left-4 font-medium -top-2 peer-placeholder-shown:top-0.5 peer-placeholder-shown:font-semibold peer-placeholder-shown:text-sm peer-focus:-top-2 peer-focus:text-xs peer-focus:font-medium peer-focus:text-blue-300"
+          className="absolute text-xs text-gray-500 transition-all duration-200 transform left-4 font-medium -top-2 peer-placeholder-shown:top-0.5 peer-placeholder-shown:font-semibold peer-placeholder-shown:text-sm peer-focus:-top-2 peer-focus:text-xs peer-focus:font-medium peer-focus:text-blue-500 dark:peer-focus:text-blue-300"
         >
           {label}
         </label>

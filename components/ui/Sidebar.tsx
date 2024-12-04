@@ -9,11 +9,13 @@ export default function Sidebar() {
   let pathname = usePathname()
 
   return (
-    <aside className="hidden xl:border-r-2 dark:border-r-neutral-800 fixed z-50 min-h-full h-full w-[72px] xl:w-60 top-0 left-0 xl:pt-6 md:flex flex-col dark:bg-zinc-900">
+    <aside className="hidden xl:border-r-2 dark:border-r-neutral-800 fixed z-50 min-h-full h-full w-[72px] xl:w-60 top-0 left-0 xl:pt-6 md:flex flex-col">
       {/* logo */}
       <div className="hidden xl:flex justify-center items-center gap-2 mb-4">
         <Icon className="w-8 h-8 -ml-4" name="gluco-guide" />
-        <h3 className="font-bold text-[#0067FF]">GlucoGuide</h3>
+        <h3 className="font-bold bg-gradient-to-r text-lg from-blue-800 to-indigo-900 bg-clip-text text-transparent dark:from-indigo-500 dark:to-blue-500">
+          GlucoGuide
+        </h3>
       </div>
 
       <div className="h-full w-full flex items-center xl:items-stretch flex-col py-4 xl:px-4 xl:pb-3 xl:justify-between overflow-y-auto justify-center [@media(max-height:600px)]:justify-start no-scrollbar xl:show-scrollbar xl:custom-scroll">

@@ -103,14 +103,14 @@ export default function Form() {
 
   return (
     <div className="text-center max-w-80">
-      <h1 className="text-2xl font-semibold">
-        {pathname === "login" ? "Sign in" : "Sign up"} with email
+      <h1 className="text-2xl font-bold bg-gradient-to-r dark:from-neutral-500 dark:to-slate-600 bg-clip-text from-slate-900 to-slate-700 dark:bg-clip-text text-transparent">
+        {pathname === "login" ? "Sign in" : "Sign up"} with Email
       </h1>
-      <p className="text-sm">
+      <p className="text-sm text-gray-500">
         Enter the email address and password associated with your account to{" "}
         {pathname === "login" ? "sign in" : "sign up"}.
       </p>
-      <div className="mt-4 flex justify-between text-md bg-neutral-800 rounded-md">
+      <div className="mt-4 flex justify-between text-md bg-gray-100  dark:bg-neutral-800 text-slate-900 dark:text-neutral-400 rounded-md">
         {["login", "signup"].map((ctx, idx) => (
           <div
             key={`auth-endpoint-${idx}`}
@@ -125,7 +125,7 @@ export default function Form() {
               {ctx}
             </Link>
             {pathname === ctx && (
-              <div className="size-full rounded-md bg-neutral-600 absolute top-0 left-0" />
+              <div className="size-full rounded-md bg-neutral-200 dark:bg-neutral-600 absolute top-0 left-0" />
             )}
           </div>
         ))}
@@ -165,7 +165,7 @@ export default function Form() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="bg-neutral-800 py-2.5 rounded-md"
+            className="bg-neutral-200/50 dark:bg-neutral-800 py-2.5 rounded-md"
           >
             <p className="text-sm text-red-500 opacity-80">
               {(loginData && loginData.message) ||

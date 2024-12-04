@@ -9,7 +9,7 @@
   --primary-blue: rgb(49, 131, 253);
   --primary-red: rgb(228, 61, 61);
   --primary-green: rgb(182, 216, 127);
-  --vh: 1vh;
+  --vh: 100vh;
 }
 
 :root:has(.prevent-scroll) {

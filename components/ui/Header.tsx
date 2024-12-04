@@ -9,6 +9,7 @@ import { visibleAnimation } from "@/lib/animations"
 export default function Header() {
   const { showMenu, toggleMenu } = useAppContext()
   const [hidden, setHidden] = useState<boolean>(false)
+  const [preventScroll, setPreventScroll] = useState<boolean>(false)
   const [showProfileMenu, setShowProfileMenu] = useState<boolean>(false)
 
   const { scrollY } = useScroll()
@@ -17,6 +18,9 @@ export default function Header() {
     const prev = scrollY.getPrevious()
 
     if (prev && latest > prev && latest > 150) {
+      if (showProfileMenu) {
+        setShowProfileMenu(false)
+      }
       setHidden(true)
     } else {
       setHidden(false)
@@ -30,7 +34,7 @@ export default function Header() {
     <motion.div
       variants={visibleAnimation}
       animate={hidden ? "hidden" : "visible"}
-      className={`max-w-7xl lg:w-full lg:max-w-full m-auto sticky top-0 min-h-16 flex items-center justify-between bg-[--primary-white] px-3 xs:px-4 z-30 dark:bg-zinc-900`}
+      className={`ml-auto w-full xl:w-[calc(100%-240px)] sticky top-0 min-h-16 flex items-center justify-between bg-[--primary-white] px-3 xs:px-4 z-30 border-b dark:border-neutral-800 dark:bg-zinc-900`}
     >
       {/* hamburger menu */}
       <div

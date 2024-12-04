@@ -1,7 +1,7 @@
 import { firey } from "@/utils"
 import { cookies } from "@/utils/cookies"
 import { useRouter } from "next/navigation"
-import { useLayoutEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useState } from "react"
 
 async function refreshAccessToken(token: string) {
   const response = await fetch(
@@ -30,7 +30,7 @@ export function useToken() {
     cookies.getCookie("access_token") || cookies.getCookie("refresh_token")
   )
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     async function fetcher() {
       const accessToken = cookies.getCookie("access_token")
       const accessTokenExpired = isTokenExpired(accessToken)
