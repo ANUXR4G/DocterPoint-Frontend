@@ -38,6 +38,20 @@ select {
   }
 }
 
+
+/* background webkit prefixes */
+.bg-clip-text {
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.webkit-half-box-patern-mask {
+  -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 70%, transparent 100%);
+  mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 70%, transparent 100%);
+}
+
+
+/* component classes */
 @layer components {
   input[type="date"]::-webkit-calendar-picker-indicator {
     @apply [filter:invert(100%)] dark:[filter:invert(0%)];

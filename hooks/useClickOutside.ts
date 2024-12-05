@@ -5,8 +5,6 @@ export function useClickOutside<T extends HTMLElement>(
   handler: (event: MouseEvent | TouchEvent) => void
 ) {
   useEffect(() => {
-    if (typeof window === "undefined") return
-
     function listener(event: MouseEvent | TouchEvent) {
       // do nothing if the click was inside the ref's element or descendent elements
       if (!ref.current || ref.current.contains(event.target as Node)) {
@@ -16,12 +14,12 @@ export function useClickOutside<T extends HTMLElement>(
       handler(event)
     }
 
-    window.addEventListener("mousedown", listener)
-    window.addEventListener("touchstart", listener)
+    document.addEventListener("mousedown", listener)
+    document.addEventListener("touchstart", listener)
 
     return () => {
-      window.removeEventListener("mousedown", listener)
-      window.removeEventListener("touchstart", listener)
+      document.removeEventListener("mousedown", listener)
+      document.removeEventListener("touchstart", listener)
     }
   }, [ref, handler])
 }

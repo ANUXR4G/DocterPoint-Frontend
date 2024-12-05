@@ -42,7 +42,7 @@ export default function PopupModal({
       {open && (
         <React.Fragment>
           <div
-            className={`min-h-full min-w-full fixed top-0 right-0 bottom-0 left-0 z-[70] p-2 center prevent-scroll`}
+            className={`full w-screen fixed inset-0  z-[70] top-0 right-0 bottom-0 left-0 p-2 center prevent-scroll`}
           >
             {/* modal inner */}
             <motion.div
@@ -68,15 +68,13 @@ export default function PopupModal({
               }}
               className={`${
                 className ? `${className}` : "h-3/4 w-full max-w-[720px]"
-              } [@media(max-height:556px)]:h-full shadow-2xl bg-[--primary-white] dark:bg-zinc-800 rounded-lg [--scale-to:100%] [--scale-from:100%] sm:[--scale-from:95%] [--slide-to:0px] [--slide-from:80px] sm:[--slide-from:0px] flex flex-col dark:shadow-[inset_0_0_0_1px_rgba(248,248,248,0.2)] ${
+              } [@media(max-height:864px)]:h-5/6 [@media(max-height:768px)]:h-full shadow-2xl bg-[--primary-white] dark:bg-neutral-900 rounded-lg [--scale-to:100%] [--scale-from:100%] sm:[--scale-from:95%] [--slide-to:0px] [--slide-from:80px] sm:[--slide-from:0px] flex flex-col dark:shadow-[inset_0_0_0_1px_rgba(248,248,248,0.2)] ${
                 direction === "bottom" && `mt-auto sm:mt-0`
               }`}
             >
               {/* modal header controls */}
               <div
-                className={`w-full flex justify-between py-3 items-center px-4 dark:border-neutral-500 ${
-                  !disableDivider && `border-b`
-                }`}
+                className={`w-full flex justify-between py-3 items-center px-4`}
               >
                 <h3 className="font-bold mt-1 text-gray-800">{title}</h3>
                 <button
@@ -98,9 +96,7 @@ export default function PopupModal({
 
               {/* modal footer controls */}
               <div
-                className={`flex mt-auto w-full justify-end items-center gap-x-2 py-3 px-4 ${
-                  !disableDivider && `border-t`
-                } dark:border-neutral-500`}
+                className={`flex mt-auto w-full justify-end items-center gap-x-2 py-3 px-4 dark:border-neutral-500`}
               >
                 <Button type="outline" onClick={() => handler && handler()}>
                   Close
@@ -112,7 +108,7 @@ export default function PopupModal({
 
           {/* overlay */}
           <motion.div
-            className="min-h-full min-w-full bg-black/60 contrast-75 dark:bg-black/50 dark:contrast-70 fixed z-50 top-0 right-0 bottom-0 left-0"
+            className="size-full bg-black/80 backdrop-blur-sm inset-0 fixed z-50 top-0 right-0 bottom-0 left-0"
             variants={fadingAnimation}
             initial="initial"
             animate="animate"

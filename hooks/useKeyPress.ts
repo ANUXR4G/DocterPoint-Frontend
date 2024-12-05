@@ -2,17 +2,17 @@ import { useEffect } from "react"
 
 export function useKeyPress(key: string, handler: () => void) {
   useEffect(() => {
-    function keyUpHandler(e: globalThis.KeyboardEvent) {
+    function onKeyDown(e: globalThis.KeyboardEvent) {
       if (e.key === key) {
         e.preventDefault()
-        handler && handler()
+        handler()
       }
     }
 
-    document.addEventListener("keyup", keyUpHandler)
+    document.addEventListener("keydown", onKeyDown)
 
     return () => {
-      document.removeEventListener("keyup", keyUpHandler)
+      document.removeEventListener("keydown", onKeyDown)
     }
   }, [key, handler])
 }

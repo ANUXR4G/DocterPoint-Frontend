@@ -53,7 +53,7 @@ export default async function LoginPage() {
         </div>
         {/* cool kid asset */}
         <div className="hidden lg:flex w-3/4">
-          <CoolKid className="mb-40 [@media(max-height:768px)]:mb-10" />
+          <CoolKid className="-mt-40 [@media(max-height:768px)]:-mb-10" />
         </div>
       </div>
     </main>
