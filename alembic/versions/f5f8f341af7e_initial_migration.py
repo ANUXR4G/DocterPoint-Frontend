@@ -1,8 +1,8 @@
 """initial migration
 
-Revision ID: e13f3c1e7459
+Revision ID: f5f8f341af7e
 Revises: 
-Create Date: 2024-11-21 04:55:14.355479
+Create Date: 2024-12-09 06:10:20.457942
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'e13f3c1e7459'
+revision: str = 'f5f8f341af7e'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -84,7 +84,7 @@ def upgrade() -> None:
     sa.Column('blood_pressure_records', sa.JSON(), nullable=True),
     sa.Column('blood_glucose_records', sa.JSON(), nullable=True),
     sa.Column('body_temperature', sa.Float(), nullable=True),
-    sa.Column('blood_oxygen', sa.String(), nullable=True),
+    sa.Column('blood_oxygen', sa.Float(), nullable=True),
     sa.Column('bmi', sa.Float(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
