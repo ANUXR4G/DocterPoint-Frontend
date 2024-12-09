@@ -1,24 +1,31 @@
 "use client"
 
-import { monitorings, TYPEMONITORING } from "@/lib/dummy/health"
 import Image from "next/image"
-import React, { useState } from "react"
-import MultiHealthModal from "../modals/MultiHealthModal"
-import SingleHealthModal from "../modals/SingleHealthModal"
+import { useSocket } from "@/hooks/useSocket"
+import { useProfile } from "@/hooks/useProfile"
+import { useApi } from "@/hooks/useApi"
+import { Monitoring, TPatientHealth } from "@/types"
+import { modifyData } from "@/lib/dummy/health"
+import { healthServices } from "@/lib/services/health"
+import { MultiHealthModal, SingleHealthModal } from "@/components"
 
 type Props = {
   activeIndex: number
   openHandler: (idx: number) => void
   closeHandler(): void
+  uiData: Monitoring[]
+  patientId?: string
+  healthRecords?: TPatientHealth | []
 }
 
 export default function HumanAnatomy({
   activeIndex,
   openHandler,
   closeHandler,
+  uiData,
+  patientId,
+  healthRecords,
 }: Props) {
-  const [values, setValues] = useState<TYPEMONITORING>(monitorings)
-
   return (
     <div
       className={`relative min-h-[calc(100vh-164px)] md:min-h-[calc(100vh-124px)] flex`}
@@ -34,37 +41,30 @@ export default function HumanAnatomy({
           style={{ objectFit: "cover" }}
           priority
         />
-        {values.map((item, idx) =>
+        {uiData.map((item, idx) =>
           idx === 0 || idx === 1 ? (
             <MultiHealthModal
               key={`monitoring-indicator-${idx}`}
               open={activeIndex >= 0 && activeIndex === idx}
               idx={idx}
-              activeIndex={activeIndex}
               openHandler={openHandler}
               closeHandler={closeHandler}
-              setValues={setValues}
+              patientId={patientId}
+              healthRecords={healthRecords && healthRecords}
               direction={idx === 0 ? "right" : "left"}
-              contents={{
-                name: item.name,
-                value: item.value,
-                unit: item.unit,
-                details: item.details,
-              }}
+              data={item}
             />
           ) : (
             <SingleHealthModal
               key={`monitoring-indicator-${idx}`}
               open={activeIndex >= 0 && activeIndex === idx}
               idx={idx}
-              activeIndex={activeIndex}
               openHandler={openHandler}
               closeHandler={closeHandler}
+              patientId={patientId}
+              healthRecords={healthRecords && healthRecords}
               direction={idx === 2 ? "left" : "right"}
-              name={item.name}
-              value={item.value}
-              unit={item.unit}
-              setValues={setValues}
+              data={item}
             />
           )
         )}

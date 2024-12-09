@@ -33,7 +33,7 @@ async function signup(values: AuthValueType) {
 }
 
 async function profile(token: string) {
-  const respose = await fetch(
+  const response = await fetch(
     `${process.env.NEXT_PUBLIC_API}/users/patient/profile`,
     {
       method: "GET",
@@ -44,11 +44,11 @@ async function profile(token: string) {
     }
   )
 
-  if (!respose.ok) {
+  if (!response.ok) {
     throw new Error(`Failed to fetch user data`)
   }
 
-  return respose.json()
+  return response.json()
 }
 
 async function logout() {

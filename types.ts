@@ -105,7 +105,7 @@ export type AuthValueType = {
 }
 
 export interface User {
-  url: string
+  id: string
   email: string
   name: string | null
   profession: string | null
@@ -115,4 +115,45 @@ export interface User {
   address: string | null
   contact_number: string | null
   emergency_number: string | null
+}
+
+export type MonitoringDetail = {
+  time: string
+  value: number
+}
+
+export type BloodPressureDetail = {
+  type: string
+  data: MonitoringDetail[]
+}
+
+export type Monitoring = {
+  name: string
+  key: string
+  imgSrc: string
+  value: string | number | null
+  unit?: string
+  details?: MonitoringDetail[] | BloodPressureDetail[]
+  time?: string
+}
+
+export type TPatientHealth = {
+  id: string
+  weight: number | null
+  height: number | null
+  blood_group: string | null
+  smoking_status: string | null
+  physical_activity: string | null
+  previous_diabetes_records: string[] | null
+  body_temperature: number | null
+  blood_oxygen: number | null
+  bmi: number | null
+  blood_pressure_records: BloodPressureDetail[] | null
+  blood_glucose_records: MonitoringDetail[] | null
+}
+
+export type ApiResponse<T> = {
+  status: "successful" | "unsuccessful"
+  message: string
+  data: T
 }

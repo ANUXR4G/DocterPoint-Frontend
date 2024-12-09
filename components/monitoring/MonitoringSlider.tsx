@@ -1,27 +1,27 @@
 "use client"
 
-import { Icon, Swiper } from "@/components"
 import { motion } from "framer-motion"
 import Image from "next/image"
-import { monitorings } from "@/lib/dummy/health"
+import { Icon, Swiper } from "@/components"
+import { Monitoring } from "@/types"
 import React, { useState } from "react"
 
 type Props = {
-  handlePrompt: (idx: number) => void
-  activeIdx: number
+  openModal: (idx: number) => void
+  uiData: Monitoring[]
 }
 
-export default function MonitoringSlider({ handlePrompt, activeIdx }: Props) {
+export default function MonitoringSlider({ openModal, uiData }: Props) {
   const [isDragging, setIsDragging] = useState<boolean>(false)
 
   const handleTargetModalOpen = (idx: number) => {
     if (isDragging) return
-    handlePrompt(idx)
+    openModal(idx)
   }
 
   return (
     <React.Fragment>
-      <div className="absolute z-10 -right-12 xl:right-16  mix-blend-luminosity dark:mix-blend-overlay brightness-150 dark:brightness-150 bottom-1/4 xl:bottom-2/4 max-w-lg xl:max-w-3xl hidden 2xl:flex items-center gap-3">
+      <div className="absolute z-10 -right-12 xl:right-16 mix-blend-luminosity dark:mix-blend-overlay brightness-150 dark:brightness-150 bottom-1/4 xl:bottom-2/4 max-w-lg xl:max-w-3xl hidden 2xl:flex items-center gap-3">
         <Icon className="size-96" name="gluco-guide" />
         <h3 className="text-6xl xl:text-8xl font-extrabold text-[#0067FF] opacity-50 dark:opacity-100">
           GlucoGuide
@@ -32,7 +32,7 @@ export default function MonitoringSlider({ handlePrompt, activeIdx }: Props) {
         onDragEnd={() => setIsDragging(false)}
         className="relative flex z-20"
       >
-        {monitorings.map((item, idx) => (
+        {uiData.map((item, idx) => (
           <div
             key={`health-monitoring-${idx}`}
             className="min-w-48 size-48 md:size-64 md:min-w-64"
@@ -44,7 +44,11 @@ export default function MonitoringSlider({ handlePrompt, activeIdx }: Props) {
                 transition={{ duration: 0.2 }}
                 onClick={() => handleTargetModalOpen(idx)}
               >
-                <div className="flex items-center gap-3 p-4 h-1/2">
+                <div
+                  className={`flex items-center gap-3 p-4 h-1/2 ${
+                    !item.value && `my-auto pt-14 md:pl-8`
+                  }`}
+                >
                   {/* icon */}
                   <div
                     // sorry ik this sucks (items have diff dimensions)
@@ -102,19 +106,23 @@ export default function MonitoringSlider({ handlePrompt, activeIdx }: Props) {
 
                 {/* monitoring measurements */}
                 <div className="mt-auto text-right px-4 pb-4">
-                  <h1 className="text-3xl leading-6 md:text-5xl font-bold opacity-80">
-                    {idx === 0 || idx === 1 || idx === 5
-                      ? item.value
-                      : `${item.value}${item.unit}`}
-                    {item.unit && (idx === 0 || idx === 1) && (
-                      <p className="text-sm md:text-base opacity-80">
-                        {item.unit}
-                      </p>
-                    )}
-                  </h1>
-                  <p className="mt-2 text-xs font-semibold opacity-70">
+                  {item.value && (
+                    <h1 className="text-3xl leading-6 md:text-5xl font-bold opacity-80">
+                      {idx === 0 || idx === 1 || idx === 5
+                        ? item.value
+                        : `${item.value}${item.unit}`}
+                      {idx === 0 || idx === 1 ? (
+                        <p className="text-sm md:text-base opacity-80">
+                          {item.unit}
+                        </p>
+                      ) : (
+                        <div className="h-4" />
+                      )}
+                    </h1>
+                  )}
+                  {/* <p className="mt-2 text-xs font-semibold opacity-70">
                     {item.time}
-                  </p>
+                  </p> */}
                 </div>
 
                 {/* time */}

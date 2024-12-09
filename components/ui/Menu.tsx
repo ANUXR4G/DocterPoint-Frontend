@@ -4,7 +4,7 @@ import { useRef } from "react"
 import { motion } from "framer-motion"
 import { fadingAnimation, slideInAnimation } from "@/lib/animations"
 import { routeLinks as content } from "@/lib/dummy/routes"
-import { Icon } from "@/components"
+import { Background, Icon } from "@/components"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useClickOutside } from "@/hooks/useClickOutside"
@@ -14,6 +14,7 @@ import { useProfile } from "@/hooks/useProfile"
 export default function Menu() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const pathname = usePathname()
+
   const { closeMenu } = useAppContext()
   const { logout } = useProfile(false)
 
@@ -28,8 +29,10 @@ export default function Menu() {
         animate="animate"
         exit="exit"
         ref={containerRef}
-        className="bg-[--primary-white] dark:bg-zinc-900 fixed z-[70] min-h-full h-full w-60 top-0 left-0 pt-6 flex flex-col prevent-scroll md:hidden"
+        className="bg-[--primary-white] dark:bg-neutral-900 fixed z-[70] min-h-full h-full w-60 top-0 left-0 pt-6 flex flex-col prevent-scroll md:hidden"
       >
+        <Background name="half-box-pattern" className="hidden dark:block" />
+        <Background name="gradient-3" />
         {/* logo */}
         <div className="center gap-2 mb-8">
           <Icon className="w-8 h-8 -ml-4" name="gluco-guide" />
@@ -106,7 +109,7 @@ export default function Menu() {
 
       {/* overlay */}
       <motion.div
-        className="min-h-full min-w-full bg-black/60 contrast-75 dark:bg-black/50 dark:contrast-70 fixed z-50 top-0 right-0 bottom-0 left-0"
+        className="size-full bg-black/80 backdrop-blur-sm inset-0 fixed z-50"
         variants={fadingAnimation}
         initial="initial"
         animate="animate"

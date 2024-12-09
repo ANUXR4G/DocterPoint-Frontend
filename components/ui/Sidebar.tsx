@@ -4,12 +4,20 @@ import Link from "next/link"
 import Icon from "../icons"
 import { routeLinks as content } from "@/lib/dummy/routes"
 import { usePathname } from "next/navigation"
+import { useProfile } from "@/hooks/useProfile"
+import { useAppContext } from "@/hooks/useAppContext"
+import Background from "../bg"
 
 export default function Sidebar() {
   let pathname = usePathname()
 
+  const { closeMenu } = useAppContext()
+  const { logout } = useProfile(false)
+
   return (
     <aside className="hidden xl:border-r-2 dark:border-r-neutral-800 fixed z-50 min-h-full h-full w-[72px] xl:w-60 top-0 left-0 xl:pt-6 md:flex flex-col">
+      <Background name="half-box-pattern" className="hidden dark:xl:block" />
+      <Background name="gradient-3" />
       {/* logo */}
       <div className="hidden xl:flex justify-center items-center gap-2 mb-4">
         <Icon className="w-8 h-8 -ml-4" name="gluco-guide" />
@@ -59,6 +67,13 @@ export default function Sidebar() {
                 `xl:mt-8 xl:mb-4 [@media(max-height:800px)]:xl:mb-2`
               }`}
               key={`sidebar_bottom_link_${idx}`}
+              onClick={() => {
+                // handle user logout
+                if (idx === 2) {
+                  logout()
+                  closeMenu()
+                }
+              }}
             >
               <div className="rounded-xl w-12 h-12 flex items-center justify-center">
                 <Icon

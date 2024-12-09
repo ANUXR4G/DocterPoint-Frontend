@@ -2,30 +2,32 @@ import { useMutation, UseMutationOptions } from "react-query"
 import { useToken } from "./useToken"
 
 export function useApiMutation<
-  TMutationKey extends [string, Record<string, unknown>?],
-  TMutationFnData,
-  TError,
-  TData = TMutationFnData
+  TVariables = unknown,
+  TMutationFnData = unknown,
+  TError = unknown,
+  TContext = unknown
 >(
-  mutationKey: TMutationKey,
   mutationFn: (
-    variables: TMutationKey[1],
+    variables: TVariables,
     token: string
   ) => Promise<TMutationFnData>,
   options?: Omit<
-    UseMutationOptions<TMutationFnData, TError, TData, TMutationKey>,
-    "mutationKey" | "mutationFn"
+    UseMutationOptions<TMutationFnData, TError, TVariables, TContext>,
+    "mutationFn"
   >
 ) {
   const token = useToken()
-  return useMutation({
-    mutationKey,
-    mutationFn: async () => {
-      return mutationFn(mutationKey[1], token)
+
+  return useMutation<TMutationFnData, TError, TVariables, TContext>({
+    mutationFn: async (variables) => {
+      if (!token) {
+        throw new Error("Authentication is required")
+      }
+      return mutationFn(variables, token)
     },
     ...options,
   })
 }
 
 // usage
-// const { mutate } = useApiMutation(["user/logout"], (_, token) => userService.logout(token))
+// const { mutate } = useApiMutation<{ payload: any }>(({ payload }, token) => userService.update(token, payload))

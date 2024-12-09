@@ -1,5 +1,4 @@
 import { DoctorType } from "@/lib/dummy/doctors"
-import { TYPEMONITORING } from "@/lib/dummy/health"
 import { HospitalType } from "@/lib/dummy/hospitals"
 import { LocationType } from "@/types"
 

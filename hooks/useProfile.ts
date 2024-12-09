@@ -8,16 +8,17 @@ import { queryClient } from "@/app/providers"
 type USEPROFILERETURN = {
   data: User | null
   logout: UseMutateFunction<any, unknown, void, unknown>
+  isLoading: boolean
 }
 
 export function useProfile(allowFetching: boolean = true): USEPROFILERETURN {
-  const { data: userInfo, isError } = useApi(
-    ["user/profile"],
-    (_, token) => userService.profile(token),
-    {
-      enabled: allowFetching,
-    }
-  )
+  const {
+    data: userInfo,
+    isError,
+    isLoading,
+  } = useApi(["user/profile"], (_, token) => userService.profile(token), {
+    enabled: allowFetching,
+  })
 
   // handle user log out
   const { mutate, isSuccess: isLogoutSuccess } = useMutation({
@@ -40,11 +41,13 @@ export function useProfile(allowFetching: boolean = true): USEPROFILERETURN {
     return {
       data: null,
       logout: mutate,
+      isLoading: false,
     }
   }
 
   return {
     data: userInfo.data,
     logout: mutate,
+    isLoading,
   }
 }

@@ -185,7 +185,7 @@ export default function Medications() {
   return (
     <React.Fragment>
       <motion.div
-        className="absolute z-20 right-0 top-0 w-full max-w-xl 2xl:max-w-4xl h-96 border border-gray-300 dark:border-neutral-500 rounded-3xl overflow-hidden bg-[--primary-white] dark:bg-neutral-900 [--slide-to:0px] [--slide-from:336px] 2xl:[--slide-from:250px]"
+        className="absolute z-20 right-0 top-0 w-full max-w-xl 2xl:max-w-4xl h-96 border border-gray-300 dark:border-neutral-500 rounded-3xl overflow-hidden bg-[--primary-white] dark:bg-neutral-800 [--slide-to:0px] [--slide-from:336px] 2xl:[--slide-from:250px]"
         initial={{ x: "var(--slide-from)" }}
         animate={{
           x: isHovering ? "var(--slide-to)" : "var(--slide-from)",

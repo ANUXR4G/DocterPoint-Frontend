@@ -1,40 +1,42 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import Image from "next/image"
+import { firey } from "@/utils"
+import { queryClient } from "@/app/providers"
+import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useClicksOutside } from "@/hooks/useClicksOutside"
-import Button from "../buttons/Button"
-import Icon from "../icons"
-import { TYPEMONITORING } from "@/lib/dummy/health"
-import { firey } from "@/utils"
+import { Button, Icon, Background } from "@/components"
+import { useApiMutation } from "@/hooks/useApiMutation"
+import { healthServices } from "@/lib/services/health"
+import { ApiResponse, Monitoring, TPatientHealth } from "@/types"
 
 type Props = {
-  activeIndex: number
   idx: number
   open: boolean
   openHandler: (idx: number) => void
   closeHandler: () => void
   direction: "left" | "right"
-  name: string
-  value: string
-  unit?: string
-  setValues: React.Dispatch<React.SetStateAction<TYPEMONITORING>>
+  healthRecords?: TPatientHealth | []
+  patientId?: string
+  data: Monitoring
 }
+
+const suggestedValues = [0, 0, 37, 99, 154, 22.3] // default health record values for input
 
 export default function SingleHealthModal({
   open,
-  activeIndex,
   idx,
   closeHandler,
   openHandler,
   direction,
-  name,
-  value,
-  unit,
-  setValues,
+  data,
+  healthRecords,
+  patientId,
 }: Props) {
   const [allowNext, setAllowNext] = useState<boolean>(false)
   const [doneEditing, setDoneEditing] = useState<boolean>(false)
+  const [recordValue, setRecordValue] = useState<number>(suggestedValues[idx])
 
   const container = useRef<HTMLDivElement>(null)
   const indicatorRef = useRef<HTMLDivElement>(null)
@@ -42,13 +44,45 @@ export default function SingleHealthModal({
   // handle click outside of the modal
   useClicksOutside([container, indicatorRef], closeHandler)
 
+  // handle health record mutations
+  const { mutate: recordMutation } = useApiMutation<
+    {
+      payload: Record<string, number>
+    },
+    ApiResponse<TPatientHealth | []>
+  >(
+    ({ payload }, token) => {
+      if (!healthRecords || !patientId)
+        throw new Error("required informations are missing.")
+
+      // handle new record mutations
+      if (Array.isArray(healthRecords)) {
+        return healthServices.createPatientHealthRecord(
+          token,
+          payload,
+          patientId
+        )
+      } else {
+        // handle update mutations
+        return healthServices.updatePatientHealthRecord(
+          token,
+          payload,
+          healthRecords.id
+        )
+      }
+    },
+    {
+      onSuccess: () => {
+        // invalidate and go bact to first portion of the modal
+        queryClient.invalidateQueries(`patient_${patientId}_health_record`)
+        setAllowNext(false)
+      },
+    }
+  )
+
   // handle input change
   function handleValueChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setValues((prev) =>
-      prev.map((item, i) =>
-        i === idx ? { ...item, value: e.target.value } : item
-      )
-    )
+    setRecordValue(e.target.valueAsNumber)
   }
 
   useEffect(() => {
@@ -64,7 +98,7 @@ export default function SingleHealthModal({
 
   // item value ranges for each items
   const tempRange: [number, number] = [35.15, 37.9]
-  const oxygenRange: [number, number] = [92, 100]
+  const oxygenRange: [number, number] = [90, 100]
   const weightRange: [number, number] = [125, 168]
 
   // get the min value for each items
@@ -107,11 +141,11 @@ export default function SingleHealthModal({
   // generate a random value and store it
   function handleGenerateValue() {
     const value = generateValue()
-    setValues((prev) =>
-      prev.map((item, i) =>
-        i === idx ? { ...item, value: String(value) } : item
-      )
-    )
+    setRecordValue(Number(value))
+  }
+
+  function handleRecordValue() {
+    recordMutation({ payload: { [data.key]: recordValue } })
   }
 
   return (
@@ -134,7 +168,7 @@ export default function SingleHealthModal({
       <AnimatePresence>
         {open && (
           <motion.div
-            className={`absolute w-44 sm:w-52 h-56 rounded-lg bg-[--primary-white] dark:bg-neutral-800 top-4 origin-top center shadow-[inset_0_0_0_1px_rgba(17,17,17,0.25)] dark:shadow-[inset_0_0_0_1px_rgba(248,248,248,0.3)] overflow-hidden ${
+            className={`absolute z-10 w-44 sm:w-52 h-56 rounded-lg bg-[--primary-white] dark:bg-neutral-800 top-4 origin-top center shadow-[inset_0_0_0_1px_rgba(17,17,17,0.25)] dark:shadow-[inset_0_0_0_1px_rgba(248,248,248,0.3)] overflow-hidden ${
               direction === "left" ? `left-2` : `right-2`
             }`}
             initial={{ opacity: 0, height: 0 }}
@@ -143,6 +177,9 @@ export default function SingleHealthModal({
             transition={{ duration: 0.14 }}
             ref={container}
           >
+            {/* pattern background */}
+            <Background name="half-box-pattern" className="hidden dark:block" />
+            <Background name="dotted-patern" className="dark:hidden" />
             {/* close btn */}
             <div
               className="absolute z-10 right-2 top-2 size-6 rounded-full bg-neutral-300 hover:bg-neutral-400 transition dark:hover:bg-neutral-600 dark:bg-neutral-700 center hover:cursor-pointer"
@@ -159,11 +196,33 @@ export default function SingleHealthModal({
               {/* first container */}
               <div className="min-w-full size-full flex flex-col p-3">
                 <h3 className="text-sm max-w-24 font-semibold opacity-80">
-                  {name}
+                  {data.name}
                 </h3>
-                <h1 className="mt-auto text-4xl sm:text-5xl text-right">
-                  {`${value}${unit}`}
-                </h1>
+                {data.value ? (
+                  <h1 className="mt-auto text-4xl sm:text-5xl text-right">
+                    {`${data.value}${data.unit}`}
+                  </h1>
+                ) : (
+                  // empty record ui
+                  <div className="flex flex-col items-center">
+                    <Image
+                      width={idx === 2 ? 48 : 68}
+                      height={idx === 2 ? 48 : 68}
+                      src={data.imgSrc}
+                      alt={`${idx}_popper_empty.png`}
+                      className="object-cover contrast-75 mix-blend-luminosity opacity-60"
+                    />
+                    <div>
+                      <h1 className="bg-gradient-to-r font-semibold from-blue-500 to-cyan-500 dark:from-emerald-400 dark:to-cyan-400 bg-clip-text text-transparent">
+                        No Record
+                      </h1>
+                    </div>
+                    <p className="leading-3 sm:leading-4 opacity-90 text-xs text-center">
+                      connected with WebSocket, can be easily intregrated to an
+                      actual monitoring tracker.
+                    </p>
+                  </div>
+                )}
                 <Button
                   className="mt-2 w-full center mx-auto text-xs"
                   onClick={() => setAllowNext(true)}
@@ -173,27 +232,32 @@ export default function SingleHealthModal({
               </div>
 
               {/* second container (input container) */}
-              <div className="min-w-full size-full flex flex-col p-3 gap-2">
+              <div className="min-w-full size-full flex flex-col px-3 pb-3 gap-2">
                 <input
                   type="number"
-                  value={value}
+                  value={recordValue}
                   onChange={handleValueChange}
                   autoComplete="off"
-                  className="mt-8 text-4xl text-center bg-neutral-300 dark:bg-neutral-700 rounded-md"
+                  className="mt-8 text-4xl text-center indent-1 sm:indent-4 bg-neutral-300 dark:bg-neutral-700 rounded-md"
                 />
-                <p className="text-xs leading-3 text-center font-medium opacity-70">
-                  please select a number b/w {minVal} and {maxVal}
+                <p className="text-xs text-center font-medium opacity-70">
+                  please select a number b/w{" "}
+                  {`${minVal}${data.unit && data.unit}`} and{" "}
+                  {`${maxVal}${data.unit && data.unit}`}
                 </p>
                 <div className="flex flex-col">
                   <Button
-                    className="w-full center mx-auto text-xs"
+                    className="center w-3/4 mx-auto text-xs"
+                    onClick={handleRecordValue}
+                  >
+                    confirm
+                  </Button>
+                  <Button
+                    className="center w-3/4 mx-auto text-xs mt-2"
                     onClick={handleGenerateValue}
                   >
-                    generate value
+                    random value
                   </Button>
-                  <p className="text-xs leading-3 text-center mt-1 font-medium opacity-70">
-                    generate random value for testing
-                  </p>
                 </div>
                 <button
                   className="ml-auto mt-auto text-xs font-semibold opacity-70 leading-3"

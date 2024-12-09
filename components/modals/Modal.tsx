@@ -42,7 +42,7 @@ export default function PopupModal({
       {open && (
         <React.Fragment>
           <div
-            className={`full w-screen fixed inset-0  z-[70] top-0 right-0 bottom-0 left-0 p-2 center prevent-scroll`}
+            className={`full w-screen fixed inset-0 z-[70] p-2 center prevent-scroll`}
           >
             {/* modal inner */}
             <motion.div
@@ -108,7 +108,7 @@ export default function PopupModal({
 
           {/* overlay */}
           <motion.div
-            className="size-full bg-black/80 backdrop-blur-sm inset-0 fixed z-50 top-0 right-0 bottom-0 left-0"
+            className="size-full bg-black/80 backdrop-blur-sm inset-0 fixed z-50"
             variants={fadingAnimation}
             initial="initial"
             animate="animate"

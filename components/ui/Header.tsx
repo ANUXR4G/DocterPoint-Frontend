@@ -34,7 +34,7 @@ export default function Header() {
     <motion.div
       variants={visibleAnimation}
       animate={hidden ? "hidden" : "visible"}
-      className={`ml-auto w-full xl:w-[calc(100%-240px)] sticky top-0 min-h-16 flex items-center justify-between bg-[--primary-white] px-3 xs:px-4 z-30 border-b dark:border-neutral-800 dark:bg-zinc-900`}
+      className={`ml-auto w-full xl:w-[calc(100%-240px)] sticky top-0 min-h-16 flex items-center justify-between bg-[--primary-white]/100 px-3 xs:px-4 z-30 dark:bg-zinc-900/60 backdrop-blur-lg`}
     >
       {/* hamburger menu */}
       <div
