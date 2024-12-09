@@ -1,7 +1,6 @@
 import { firey } from "@/utils"
 import { cookies } from "@/utils/cookies"
-import { useRouter } from "next/navigation"
-import { useEffect, useLayoutEffect, useState } from "react"
+import { useEffect, useState } from "react"
 
 async function refreshAccessToken(token: string) {
   const response = await fetch(

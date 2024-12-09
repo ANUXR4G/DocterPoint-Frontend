@@ -7,7 +7,7 @@ import { useApi } from "@/hooks/useApi"
 import { Monitoring, TPatientHealth } from "@/types"
 import { modifyData } from "@/lib/dummy/health"
 import { healthServices } from "@/lib/services/health"
-import { MultiHealthModal, SingleHealthModal } from "@/components"
+import { Icon, MultiHealthModal, SingleHealthModal } from "@/components"
 
 type Props = {
   activeIndex: number
@@ -41,6 +41,7 @@ export default function HumanAnatomy({
           style={{ objectFit: "cover" }}
           priority
         />
+
         {uiData.map((item, idx) =>
           idx === 0 || idx === 1 ? (
             <MultiHealthModal

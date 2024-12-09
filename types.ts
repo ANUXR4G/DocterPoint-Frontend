@@ -23,6 +23,7 @@ export type ProfileValues = {
 export type IconNames =
   | "search"
   | "key"
+  | "energy"
   | "monitoring"
   | "bell"
   | "phone"

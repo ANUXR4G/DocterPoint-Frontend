@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { HumanAnatomy, MonitoringSlider } from "@/components"
+import { HumanAnatomy, Icon, MonitoringSlider } from "@/components"
 import { useProfile } from "@/hooks/useProfile"
 import { TPatientHealth } from "@/types"
 import { useSocket } from "@/hooks/useSocket"
@@ -45,6 +45,21 @@ export default function HealthMonitoring() {
 
   return (
     <React.Fragment>
+      <div className="flex absolute top-5 left-5 gap-1">
+        <div className="size-6">
+          <Icon
+            name="energy"
+            className={isConnected ? `fill-blue-500` : `fill-red-500`}
+          />
+        </div>
+        <span
+          className={`text-sm bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text ${
+            isConnected ? `text-transparent font-semibold` : `text-red-500`
+          }`}
+        >
+          {isConnected ? `Device Connected` : `Device Not Connected`}
+        </span>
+      </div>
       <HumanAnatomy
         activeIndex={activeIndex}
         openHandler={handleOpenModal}

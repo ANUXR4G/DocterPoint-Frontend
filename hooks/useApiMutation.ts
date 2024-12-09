@@ -20,9 +20,6 @@ export function useApiMutation<
 
   return useMutation<TMutationFnData, TError, TVariables, TContext>({
     mutationFn: async (variables) => {
-      if (!token) {
-        throw new Error("Authentication is required")
-      }
       return mutationFn(variables, token)
     },
     ...options,

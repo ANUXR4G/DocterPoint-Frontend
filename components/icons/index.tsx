@@ -52,6 +52,7 @@ import {
   EnvelopeIcon,
   KeyIcon,
   SpinningLoader,
+  EnergyIcon,
 } from "./svg"
 
 type Props = {
@@ -70,6 +71,9 @@ export default function Icon({ name, className, pathClassName }: Props) {
 
     case "monitoring":
       return <Monitoring className={className} pathClassName={pathClassName} />
+
+    case "energy":
+      return <EnergyIcon className={className} pathClassName={pathClassName} />
 
     case "spinning-loader":
       return (
