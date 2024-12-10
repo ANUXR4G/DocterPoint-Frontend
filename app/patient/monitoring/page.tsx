@@ -1,4 +1,4 @@
-import { HealthMonitoring, Icon, Medications } from "@/components"
+import { HealthMonitoring, Medications } from "@/components"
 import dynamic from "next/dynamic"
 
 const DateHeading = dynamic(

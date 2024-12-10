@@ -38,7 +38,6 @@ select {
   }
 }
 
-
 /* background webkit prefixes */
 .bg-clip-text {
   -webkit-background-clip: text;
@@ -46,10 +45,17 @@ select {
 }
 
 .webkit-half-box-patern-mask {
-  -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 70%, transparent 100%);
-  mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 70%, transparent 100%);
+  -webkit-mask-image: radial-gradient(
+    ellipse 50% 50% at 50% 50%,
+    #000 70%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 50% 50% at 50% 50%,
+    #000 70%,
+    transparent 100%
+  );
 }
-
 
 /* component classes */
 @layer components {
@@ -59,6 +65,10 @@ select {
 
   .full {
     min-height: calc(var(--vh, 1vh) * 100);
+  }
+
+  .full-h-header {
+    min-height: calc((var(--vh, 1vh) * 100) - 64px);
   }
 
   .custom-scroll-track {
