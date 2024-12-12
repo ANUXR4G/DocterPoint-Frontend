@@ -2,34 +2,45 @@
 
 import React, { Dispatch, useState } from "react"
 import { Button, Checkbox, Modal } from "@/components"
+import { TDoctorFilteringOpts } from "@/types"
+import { useQueries } from "react-query"
+import { hospitalService } from "@/lib/services/hospital"
 import { firey } from "@/utils"
-import { HOSPITALS } from "@/lib/dummy/hospitals"
-import { DoctorFilterProps } from "../ui/doctors"
 
 type Props = {
   active: boolean
-  handler: () => void
-  values: DoctorFilterProps
-  setValues: Dispatch<React.SetStateAction<DoctorFilterProps>>
+  closeHandler: () => void
+  confirmHandler: () => void
+  resetHandler: () => void
+  filters: TDoctorFilteringOpts
+  setFilters: Dispatch<React.SetStateAction<TDoctorFilteringOpts>>
 }
-
-const locations = firey.getSpecificArr(HOSPITALS.map((item) => item.city))
-const hospitals = firey.getSpecificArr(HOSPITALS.map((item) => item.name))
 
 export default function DoctorFilter({
   active,
-  handler,
-  values,
-  setValues,
+  closeHandler,
+  confirmHandler,
+  resetHandler,
+  filters,
+  setFilters,
 }: Props) {
-  const [selected, setSelected] = useState<DoctorFilterProps>({
-    locations: values.locations,
-    hospitals: values.hospitals,
-  })
+  const [url1Query, url2Query] = useQueries([
+    {
+      queryKey: ["hospital:names"],
+      queryFn: hospitalService.retrive_names,
+    },
+    {
+      queryKey: ["hospital:locations"],
+      queryFn: hospitalService.retrive_locations,
+    },
+  ])
+
+  const hospitals = url1Query.data?.data
+  const locations = url2Query.data?.data
 
   // handle location selection
   function handleLocations(e: React.ChangeEvent<HTMLInputElement>) {
-    setSelected((prev) => {
+    setFilters((prev) => {
       const value = e.target.value
       const exist = prev.locations.includes(value)
       const newLocations = exist
@@ -41,7 +52,7 @@ export default function DoctorFilter({
 
   // handle hospital selection
   function handleHospitals(e: React.ChangeEvent<HTMLInputElement>) {
-    setSelected((prev) => {
+    setFilters((prev) => {
       const value = e.target.value
       const exist = prev.hospitals.includes(value)
       const newHospitals = exist
@@ -51,30 +62,21 @@ export default function DoctorFilter({
     })
   }
 
-  // // check if the nested object containing array is empty
-  // function checkIfEmpty() {
-  //   return Object.values(selected).every((item) => item.length === 0)
-  // }
-
   // close the modal n keep the previous prefered options
   function closeModal() {
-    setSelected({
-      locations: values.locations,
-      hospitals: values.hospitals,
-    })
-
-    handler()
+    closeHandler()
   }
 
   // confirm filter options
   function confirmFilter() {
-    setValues({
-      locations: selected.locations,
-      hospitals: selected.hospitals,
-    })
-
-    handler()
+    confirmHandler()
   }
+
+  function resetFilter() {
+    resetHandler()
+  }
+
+  if (url1Query.isLoading || url2Query.isLoading) return <div />
 
   return (
     <React.Fragment>
@@ -83,57 +85,68 @@ export default function DoctorFilter({
         handler={closeModal}
         className="h-full sm:h-3/4 w-full max-w-[720px]"
         direction="center"
+        primaryBtn={
+          <Button
+            type="outline"
+            disabled={firey.objIsEmpty(filters)}
+            onClick={resetFilter}
+          >
+            Reset
+          </Button>
+        }
         secondaryBtn={<Button onClick={confirmFilter}>Confirm</Button>}
       >
         <div className="overflow-x-hidden overflow-y-auto p-4 custom-scroll">
           <div className="mb-4">
-            <h2 className="text-lg font-semibold">
-              Filter Doctors by Location or Hospital
+            <h2 className="text-4xl text-center sm:text-left font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
+              Filter Doctors by Hospital Locations or Hospital Names
             </h2>
-            <p className="text-sm font-medium opacity-85">
+            <p className="mt-3 text-sm font-medium opacity-85">
               Select a city or hospital name to find doctors that match your
               preferences. This will help you narrow down your search and
               quickly connect with the right professionals.
             </p>
           </div>
           <fieldset>
-            <legend className="text-base md:text-lg font-bold">
+            <legend className="text-base ml-1 md:text-lg font-bold">
               Nearby locations
             </legend>
 
             {/* food allergy options */}
             <div className="flex flex-col mt-2 gap-2">
-              {locations.map((name, idx) => (
-                <Checkbox
-                  key={`alergyOpt-${idx}`}
-                  name={name.toLowerCase().trim()}
-                  value={name}
-                  active={selected.locations.includes(name)}
-                  onChange={handleLocations}
-                  direction="left"
-                  className="rounded-lg"
-                />
-              ))}
+              {locations &&
+                locations.map((name, idx) => (
+                  <Checkbox
+                    key={`alergyOpt-${idx}`}
+                    name={name.toLowerCase().trim()}
+                    value={name}
+                    active={filters.locations.includes(name)}
+                    onChange={handleLocations}
+                    direction="left"
+                    className="rounded-lg py-4 !border-[1px]"
+                  />
+                ))}
             </div>
           </fieldset>
-          <fieldset className="mt-4">
+          <fieldset className="mt-8">
             <legend className="text-base md:text-lg font-bold">
               Glucoguide x Hospitals
             </legend>
 
             {/* food allergy options */}
             <div className="flex flex-col mt-2 gap-2">
-              {hospitals.map((name, idx) => (
-                <Checkbox
-                  key={`alergyOpt-${idx}`}
-                  name={name.toLowerCase().trim()}
-                  value={name}
-                  active={selected.hospitals.includes(name)}
-                  onChange={handleHospitals}
-                  direction="left"
-                  className="rounded-lg"
-                />
-              ))}
+              {hospitals &&
+                hospitals.map((name, idx) => (
+                  <Checkbox
+                    key={`alergyOpt-${idx}`}
+                    name={name.toLowerCase().trim()}
+                    value={name}
+                    active={filters.hospitals.includes(name)}
+                    onChange={handleHospitals}
+                    direction="left"
+                    className="rounded-lg py-4 !border-[1px]"
+                  />
+                ))}
             </div>
           </fieldset>
         </div>

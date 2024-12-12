@@ -7,19 +7,13 @@ import {
   DoctorFilter,
   Pagination,
 } from "@/components"
-import { doctors, DoctorType } from "@/lib/dummy/doctors"
 import { doctorServices } from "@/lib/services/doctor"
-import { ApiResponse, TDoctor } from "@/types"
+import { ApiResponse, TDoctor, TDoctorFilteringOpts } from "@/types"
 import { firey } from "@/utils"
 import Image from "next/image"
 import Link from "next/link"
 import React, { useCallback, useEffect, useState } from "react"
 import { useQuery } from "react-query"
-
-export type DoctorFilterProps = {
-  locations: string[]
-  hospitals: string[]
-}
 
 export default function Doctors() {
   const [open, setOpen] = useState<boolean>(false)
@@ -27,41 +21,40 @@ export default function Doctors() {
   const [openFilter, setOpenFilter] = useState<boolean>(false)
   const [totalPages, setTotalPages] = useState(0)
   const [page, setPage] = useState<number>(1)
-  const [limit, setLimit] = useState<number>(10)
+  const [limit] = useState<number>(10)
+  const [triggerFilter, setTriggerFilter] = useState<boolean>(false)
 
-  // retrieve all the doctor informations
-  const { data: fetchedData } = useQuery(
-    [`doctors:page:${page}`],
-    async () => doctorServices.retrive_all(page, limit),
-    {
-      select: (data) => {
-        // covert keys to camelCase
-        return firey.convertKeysToCamelCase(data) as ApiResponse<TDoctor[]>
-      },
-    }
-  )
-
-  // initial values for filtering
-  const [values, setValues] = useState<DoctorFilterProps>({
+  const [filters, setFilters] = useState<TDoctorFilteringOpts>({
     locations: [],
     hospitals: [],
   })
 
   // check if the nested object containing array is empty
-  const checkIfEmpty = useCallback(() => {
-    return Object.values(values).every((item) => item.length === 0)
-  }, [values])
+  const checkIfEmpty = useCallback(() => firey.objIsEmpty(filters), [filters])
 
-  // handle doctor filterings based on location and hospital
-  const modDoctors = fetchedData
-    ? checkIfEmpty()
-      ? fetchedData.data
-      : fetchedData.data.filter(
-          (item) =>
-            values.locations.includes(item.hospital.city) ||
-            values.hospitals.includes(item.hospital.name)
-        )
-    : []
+  const params = firey.createSearchParams({
+    page,
+    limit,
+    ...filters,
+  })
+
+  // retrieve all the doctor informations
+  const {
+    refetch,
+    data: response,
+    isLoading,
+  } = useQuery(
+    [`doctors:page:${page}`],
+    async () => doctorServices.retrive_all(params),
+    {
+      select: (data) => {
+        // covert keys to camelCase
+        return firey.convertKeysToCamelCase(data) as ApiResponse<TDoctor[]>
+      },
+      staleTime: 0, //refetch on every query mount
+      keepPreviousData: true,
+    }
+  )
 
   // close the modal
   function handleModalClose() {
@@ -95,20 +88,42 @@ export default function Doctors() {
     setPage(page)
   }
 
-  function handleFilteringOptions() {
-    if (!fetchedData || !fetchedData.total) return
+  function handleReset() {
+    setFilters({
+      locations: [],
+      hospitals: [],
+    })
     setPage(1)
+    setTriggerFilter(true)
     setOpenFilter(false)
   }
 
+  function handleConfirm() {
+    refetch()
+    setPage(1)
+    setTriggerFilter(true)
+    setOpenFilter(false)
+  }
+
+  function handleFiteringClose() {
+    setOpenFilter(false)
+  }
+
+  // trigger on filter clear
+  useEffect(() => {
+    if (triggerFilter) {
+      refetch()
+      setTriggerFilter(false)
+    }
+  }, [triggerFilter, refetch])
+
   // update the total size of page
   useEffect(() => {
-    if (fetchedData && fetchedData.total) {
-      checkIfEmpty()
-        ? setTotalPages(Math.ceil(fetchedData.total / limit))
-        : setTotalPages(Math.ceil(modDoctors.length / limit))
-    }
-  }, [fetchedData, limit, checkIfEmpty, modDoctors.length])
+    if (!response || !response.total) return
+    setTotalPages(Math.ceil(response.total / limit))
+  }, [response, limit])
+
+  if (isLoading || !response) return <div />
 
   return (
     <div className="flex flex-col">
@@ -128,13 +143,13 @@ export default function Doctors() {
       </div>
       <div
         className={
-          modDoctors.length > 0
+          response.data.length > 0
             ? `grid grid-cols-1 xxs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 3xl:grid-cols-5 gap-2 md:gap-3 md:gap-y-4 mt-0 md:mt-1`
             : `w-full`
         }
       >
-        {modDoctors.length > 0 ? (
-          modDoctors.map((props, idx) => (
+        {response.data.length > 0 ? (
+          response.data.map((props, idx) => (
             <Link
               key={`doctor_l_${idx}`}
               href={`/hospitals/doctors/profile?id=${props.id}&type=view`}
@@ -190,9 +205,11 @@ export default function Doctors() {
         {/* filter modal */}
         <DoctorFilter
           active={openFilter}
-          handler={handleFilteringOptions}
-          values={values}
-          setValues={setValues}
+          closeHandler={handleFiteringClose}
+          resetHandler={handleReset}
+          confirmHandler={handleConfirm}
+          filters={filters}
+          setFilters={setFilters}
         />
 
         {/* appointment modal */}
@@ -207,7 +224,7 @@ export default function Doctors() {
       </div>
 
       {/* pagination */}
-      {modDoctors.length > 0 && (
+      {response.data.length > 0 && (
         <Pagination
           totalPages={totalPages}
           currentPage={page}

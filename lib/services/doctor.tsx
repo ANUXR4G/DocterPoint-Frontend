@@ -1,8 +1,6 @@
-import { ApiResponse, TDoctor } from "@/types"
-
-async function retrive_all(page: number, limit: number) {
+async function retrive_all(params: URLSearchParams) {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API}/users/doctors/all?page=${page}&limit=${limit}`
+    `${process.env.NEXT_PUBLIC_API}/users/doctors/all?${params}`
   )
   if (!response.ok) {
     throw new Error("failed to retrieve doctors informations!")

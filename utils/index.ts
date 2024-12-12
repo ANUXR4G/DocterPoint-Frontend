@@ -168,6 +168,20 @@ function isHospitalType(item: any): item is HospitalType {
   return (item as HospitalType).geometry !== undefined
 }
 
+function objIsEmpty(values: Record<string, unknown[]>) {
+  return Object.values(values).every((item) => item.length === 0)
+}
+
+function createSearchParams(params: Record<string, unknown | unknown[]>) {
+  return new URLSearchParams(
+    Object.entries(params).flatMap(([key, values]) =>
+      Array.isArray(values)
+        ? values.map((value) => [key, value])
+        : [[key, values]]
+    )
+  )
+}
+
 export const firey = {
   groupByCategory,
   convertMinToHourMinFormat,
@@ -179,6 +193,8 @@ export const firey = {
   camelize,
   snakeToCamelCase,
   convertKeysToCamelCase,
+  objIsEmpty,
+  createSearchParams,
   isDoctorType,
   isHospitalType,
   isHospitalLocationType,

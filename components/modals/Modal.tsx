@@ -13,6 +13,7 @@ type Props = {
   open: boolean
   className?: string
   children?: React.ReactNode
+  primaryBtn?: React.ReactNode
   secondaryBtn?: React.ReactNode
   handler?: void | (() => void)
   title?: string
@@ -22,6 +23,7 @@ type Props = {
 
 export default function PopupModal({
   children,
+  primaryBtn,
   secondaryBtn,
   open,
   className,
@@ -98,9 +100,13 @@ export default function PopupModal({
               <div
                 className={`flex mt-auto w-full justify-end items-center gap-x-2 py-3 px-4 dark:border-neutral-500`}
               >
-                <Button type="outline" onClick={() => handler && handler()}>
-                  Close
-                </Button>
+                {primaryBtn ? (
+                  primaryBtn
+                ) : (
+                  <Button type="outline" onClick={() => handler && handler()}>
+                    Close
+                  </Button>
+                )}
                 {secondaryBtn}
               </div>
             </motion.div>

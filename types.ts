@@ -160,6 +160,11 @@ export type ApiResponse<T> = {
   total?: number
 }
 
+export type TDoctorFilteringOpts = {
+  locations: string[]
+  hospitals: string[]
+}
+
 export type TDoctor = {
   id: string
   name: string
