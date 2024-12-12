@@ -80,10 +80,15 @@ class ResponseHandler:
         raise HTTPException(status_code=403, detail=f"{message}")
 
     @staticmethod
-    def fetch_successful(msg, data):
+    def fetch_successful(msg, data, total: int | None = None):
         return JSONResponse(
             status_code=200,
-            content={"status": "successful", "message": msg, "data": data},
+            content={
+                "status": "successful",
+                "message": msg,
+                "data": data,
+                "total": total,
+            },
         )
 
     def create_successful(msg, data):
