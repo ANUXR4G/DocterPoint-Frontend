@@ -98,8 +98,10 @@ class DoctorService:
     async def retrieve_all_doctors_general(
         db: Session,
         redis: Redis,
-        page: int = 1,
-        limit: int = Query(default=10, le=100),
+        page: int,
+        limit: int,
+        hospitals: list[str] | None,
+        locations: list[str] | None,
     ):
         page = max(1, page)
         offset = (page - 1) * limit
@@ -109,7 +111,11 @@ class DoctorService:
         total_count = db.query(Doctor).count()
 
         # retrive doctors information from redis if found
-        if cached_doctors_info := redis.get(redis_key):
+        if (
+            (cached_doctors_info := redis.get(redis_key))
+            and (hospitals is None)
+            and (locations is None)
+        ):
             result = json.loads(cached_doctors_info)
             return ResponseHandler.fetch_successful(
                 f"successfully retrived doctors information #page-{page} from cache",
@@ -118,10 +124,9 @@ class DoctorService:
             )
 
         # retrive the doctors information from database
-        doctors = (
+        query = (
             db.query(Doctor)
-            .offset(offset)
-            .limit(limit)
+            .join(Hospital)
             .options(
                 defer(Doctor.password),
                 defer(Doctor.created_at),
@@ -130,8 +135,14 @@ class DoctorService:
                     Hospital.id, Hospital.name, Hospital.city, Hospital.address
                 ),
             )
-            .all()
         )
+
+        if hospitals:
+            query = query.filter(Hospital.name.in_(hospitals))
+        if locations:
+            query = query.filter(Hospital.city.in_(locations))
+
+        doctors = query.offset(offset).limit(limit).all()
 
         # restructure the result for general users (replace id w base64 string)
         doctors_info_data = jsonable_encoder(
@@ -145,8 +156,13 @@ class DoctorService:
         )
 
         # set the doctors information into redis
-        doctors_info_json = json.dumps(doctors_info_data)
-        redis.set(redis_key, doctors_info_json, 3600)
+        if not hospitals and not locations:
+            doctors_info_json = json.dumps(doctors_info_data)
+            redis.set(redis_key, doctors_info_json, 3600)
+
+        # reassign the total size of the doctor database for filtering
+        if hospitals or locations:
+            total_count = query.count()
 
         return ResponseHandler.fetch_successful(
             f"successfully retrived doctors information #page-{page}",

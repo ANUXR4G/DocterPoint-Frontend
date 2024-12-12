@@ -81,15 +81,16 @@ class ResponseHandler:
 
     @staticmethod
     def fetch_successful(msg, data, total: int | None = None):
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "successful",
-                "message": msg,
-                "data": data,
-                "total": total,
-            },
-        )
+        response_content = {
+            "status": "successful",
+            "message": msg,
+            "data": data,
+        }
+
+        if total:
+            response_content["total"] = total
+
+        return JSONResponse(status_code=200, content=response_content)
 
     def create_successful(msg, data):
         return JSONResponse(

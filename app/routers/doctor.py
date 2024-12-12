@@ -13,12 +13,16 @@ router = APIRouter()
 # retrieve all the doctor accounts for general users
 @router.get("/all")
 async def retrieve_all_doctor_informations(
-    page: int = 0,
+    page: int = 1,
     limit: int = Query(default=10, le=100),
+    hospitals: list[str] = Query(None),
+    locations: list[str] = Query(None),
     db: Session = Depends(db),
     redis: Redis = Depends(cache),
 ):
-    return await DoctorService.retrieve_all_doctors_general(db, redis, page, limit)
+    return await DoctorService.retrieve_all_doctors_general(
+        db, redis, page, limit, hospitals, locations
+    )
 
 
 # retrieve doctor account information using doctor id for general users
