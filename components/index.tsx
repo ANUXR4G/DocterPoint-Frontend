@@ -115,4 +115,8 @@ export { default as Activities } from "./tasks/Activities"
 // forms
 export { default as Form } from "./forms/Form"
 
+// background
 export { default as Background } from "./bg"
+
+//pagination
+export { default as Pagination } from "./pagination"

@@ -157,4 +157,23 @@ export type ApiResponse<T> = {
   status: "successful" | "unsuccessful"
   message: string
   data: T
+  total?: number
+}
+
+export type TDoctor = {
+  id: string
+  name: string
+  imgSrc: string
+  createdBy: string
+  description: string
+  availableTimes: string
+  emails: string[]
+  role: string
+  email: string
+  gender: string
+  address: string
+  hospitalId: string
+  experience: number
+  contactNumbers: string[]
+  hospital: { city: string; name: string; address: string; id: string }
 }

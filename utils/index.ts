@@ -117,6 +117,27 @@ function camelize(text: string): string {
   return _text
 }
 
+// Utility function to convert snake_case to camelCase
+function snakeToCamelCase(key: string): string {
+  return key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+}
+
+// Recursive function to convert object keys to camelCase
+function convertKeysToCamelCase<T>(data: T): T {
+  if (Array.isArray(data)) {
+    // Recursively convert keys in arrays
+    return data.map((item) => convertKeysToCamelCase(item)) as unknown as T
+  } else if (data !== null && typeof data === "object") {
+    // Recursively convert keys in objects
+    return Object.entries(data).reduce((acc, [key, value]) => {
+      const camelCaseKey = snakeToCamelCase(key)
+      acc[camelCaseKey] = convertKeysToCamelCase(value)
+      return acc
+    }, {} as Record<string, any>) as T
+  }
+  return data // Return the value as is for non-object types
+}
+
 // convert minutes to `h:m` format
 function convertMinToHourMinFormat(duration: number) {
   const hours = duration / 60
@@ -156,6 +177,8 @@ export const firey = {
   makeString,
   getTokenDuration,
   camelize,
+  snakeToCamelCase,
+  convertKeysToCamelCase,
   isDoctorType,
   isHospitalType,
   isHospitalLocationType,

@@ -11,8 +11,7 @@ import {
   DoctorDates,
 } from "@/components"
 import { appointmentModes, appointmentPurposes } from "@/lib/dummy/appointments"
-import { DoctorType } from "@/lib/dummy/doctors"
-import { AppointmentCreationProps } from "@/types"
+import { AppointmentCreationProps, TDoctor } from "@/types"
 import {
   eachDayOfInterval,
   endOfMonth,
@@ -24,7 +23,7 @@ import {
 type Props = {
   active: boolean
   closeHandler: () => void
-  doctor: DoctorType
+  doctor: TDoctor
   type?: "profile" | "general"
 }
 
