@@ -1,9 +1,7 @@
 from sqlalchemy import func
 from fastapi import Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload, defer
-from sqlalchemy.inspection import inspect
-from datetime import datetime
 from redis import Redis
 import json
 
@@ -13,7 +11,6 @@ from app.models import User, Doctor, Hospital
 from app.core.security import decrypt, generate_hash
 from app.core.security import uuid_to_base64, base64_to_uuid
 from app.schemas.doctor import DoctorCreateAdmin, DoctorUpdateAdmin, DoctorResponse
-from fastapi.encoders import jsonable_encoder
 
 
 class DoctorService:
@@ -102,23 +99,25 @@ class DoctorService:
         limit: int,
         hospitals: list[str] | None,
         locations: list[str] | None,
+        experience: int | None,
     ):
         page = max(1, page)
         offset = (page - 1) * limit
-        redis_key = f"hospitals:page:{page}"
+        redis_key = f"doctors:page:{page}"
 
         # get the total size of the doctor database
         total_count = db.query(Doctor).count()
 
-        # retrive doctors information from redis if found
+        # retrive doctor informations from redis if found
         if (
             (cached_doctors_info := redis.get(redis_key))
             and (hospitals is None)
             and (locations is None)
+            and (experience is None)
         ):
             result = json.loads(cached_doctors_info)
             return ResponseHandler.fetch_successful(
-                f"successfully retrived doctors information #page-{page} from cache",
+                f"successfully retrived doctor informations #page-{page} from cache",
                 result,
                 total_count,
             )
@@ -132,15 +131,18 @@ class DoctorService:
                 defer(Doctor.created_at),
                 defer(Doctor.updated_at),
                 joinedload(Doctor.hospital).load_only(
-                    Hospital.id, Hospital.name, Hospital.city, Hospital.address
+                    Hospital.name, Hospital.city, Hospital.address
                 ),
             )
         )
 
+        # handle filtering params
         if hospitals:
             query = query.filter(Hospital.name.in_(hospitals))
         if locations:
             query = query.filter(Hospital.city.in_(locations))
+        if experience:
+            query = query.filter(Doctor.experience >= experience)
 
         doctors = query.offset(offset).limit(limit).all()
 
@@ -149,14 +151,24 @@ class DoctorService:
             [
                 {
                     "id": uuid_to_base64(doctor.id),
-                    **{key: val for key, val in doctor.__dict__.items() if key != "id"},
+                    "hospital": {
+                        "id": uuid_to_base64(doctor.hospital.id),
+                        "name": doctor.hospital.name,
+                        "city": doctor.hospital.city,
+                        "address": doctor.hospital.address,
+                    },
+                    **{
+                        key: val
+                        for key, val in doctor.__dict__.items()
+                        if key != "id" and key != "hospital_id" and key != "hospital"
+                    },
                 }
                 for doctor in doctors
             ]
         )
 
         # set the doctors information into redis
-        if not hospitals and not locations:
+        if not hospitals and not locations and not experience:
             doctors_info_json = json.dumps(doctors_info_data)
             redis.set(redis_key, doctors_info_json, 3600)
 
@@ -165,53 +177,141 @@ class DoctorService:
             total_count = query.count()
 
         return ResponseHandler.fetch_successful(
-            f"successfully retrived doctors information #page-{page}",
+            f"successfully retrived doctor informations #page-{page}",
+            doctors_info_data,
+            total_count,
+        )
+
+    # retrieve doctor accounts by hospital id /general
+    @staticmethod
+    async def retrieve_doctors_by_hospital_general(
+        id: str, page: int, limit: int, db: Session, redis: Redis
+    ):
+        hospital_id = base64_to_uuid(id)  # covert base64 string to uuid
+        redis_key = f"doctor:info:hospital:{hospital_id}"
+        page = max(1, page)
+        offset = (page - 1) * limit
+
+        # get the total size of the doctor database
+        total_count = db.query(Doctor).count()
+
+        # retrive doctors information from redis if found
+        if cached_doctors_info := redis.get(redis_key):
+            result = json.loads(cached_doctors_info)
+            return ResponseHandler.fetch_successful(
+                f"successfully retrived doctors information of hospital #{hospital_id} #page-{page} from cache",
+                result,
+                total_count,
+            )
+
+        # retrive the doctors information from database
+        doctors = (
+            db.query(Doctor)
+            .where(Doctor.hospital_id == hospital_id)
+            .join(Hospital)
+            .options(
+                defer(Doctor.password),
+                defer(Doctor.created_at),
+                defer(Doctor.updated_at),
+                joinedload(Doctor.hospital).load_only(
+                    Hospital.name, Hospital.city, Hospital.address
+                ),
+            )
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        # restructure the result for general users (replace id w base64 string)
+        doctors_info_data = jsonable_encoder(
+            [
+                {
+                    "id": uuid_to_base64(doctor.id),
+                    "hospital": {
+                        "id": uuid_to_base64(doctor.hospital.id),
+                        "name": doctor.hospital.name,
+                        "city": doctor.hospital.city,
+                        "address": doctor.hospital.address,
+                    },
+                    **{
+                        key: val
+                        for key, val in doctor.__dict__.items()
+                        if key != "id" and key != "hospital_id" and key != "hospital"
+                    },
+                }
+                for doctor in doctors
+            ]
+        )
+
+        # set the doctors information into redis
+        doctors_info_json = json.dumps(doctors_info_data)
+        redis.set(redis_key, doctors_info_json, 3600)
+
+        return ResponseHandler.fetch_successful(
+            f"successfully retrived doctors information of hospital #{hospital_id} #page-{page}",
             doctors_info_data,
             total_count,
         )
 
     # retrieve doctor account information using doctor id  /general
     @staticmethod
-    async def get_doctor_information(id: str, db: Session):
-        doctor_id = base64_to_uuid(id)
+    async def get_doctor_information(id: str, db: Session, redis: Redis):
+        doctor_id = base64_to_uuid(id)  # covert base64 string to uuid
+        redis_key = f"doctor:info:{doctor_id}"  # set keys dynamically
 
+        # retrive doctors information from redis if found
+        if cached_doctor_info := redis.get(redis_key):
+            result = json.loads(cached_doctor_info)
+            return ResponseHandler.fetch_successful(
+                f"successfully retrived doctor information #{doctor_id} from cache",
+                result,
+            )
+
+        # query the doctor data w specific informations
         doctor = (
             db.query(Doctor)
             .where(Doctor.id == doctor_id)
             .options(
                 defer(Doctor.password),
                 joinedload(Doctor.hospital).load_only(
-                    Hospital.id, Hospital.name, Hospital.city, Hospital.address
+                    Hospital.name, Hospital.city, Hospital.address
                 ),
             )
             .first()
         )
 
+        # handle not found
         if not doctor:
-            raise ResponseHandler.not_found_error(f"doctor not found - {doctor_id}")
+            raise ResponseHandler.not_found_error(f"doctor not found #{doctor_id}")
 
-        return {
-            "status": "successful",
-            "message": f"successfully retrieved doctor information - {doctor.id}",
-            "data": DoctorResponse(
-                url=id,
-                name=doctor.name,
-                gender=doctor.gender,
-                img_src=doctor.img_src,
-                address=doctor.address,
-                description=doctor.description,
-                available_times=doctor.available_times,
-                experience=doctor.experience,
-                emails=doctor.emails,
-                contact_numbers=doctor.contact_numbers,
-                hospital={
-                    "url": uuid_to_base64(str(doctor.hospital.id)),
-                    "name": doctor.hospital.name,
-                    "city": doctor.hospital.city,
-                    "address": doctor.hospital.address,
-                },
-            ),
+        # restructure the doctor profile informations
+        profile_data = {
+            "id": id,
+            "name": doctor.name,
+            "gender": doctor.gender,
+            "img_src": doctor.img_src,
+            "address": doctor.address,
+            "description": doctor.description,
+            "available_times": doctor.available_times,
+            "experience": doctor.experience,
+            "emails": doctor.emails,
+            "contact_numbers": doctor.contact_numbers,
+            "hospital": {
+                "id": uuid_to_base64(doctor.hospital.id),
+                "name": doctor.hospital.name,
+                "city": doctor.hospital.city,
+                "address": doctor.hospital.address,
+            },
         }
+
+        # update the doctor information into redis caching
+        profile_json = json.dumps(profile_data)
+        redis.set(redis_key, profile_json, 3600)
+
+        return ResponseHandler.fetch_successful(
+            f"successfully retrived doctor information #{doctor_id}",
+            profile_data,
+        )
 
     # get doctor information using doctor id /admin
     @staticmethod
@@ -322,51 +422,4 @@ class DoctorService:
             "status": "successful",
             "message": f"successfully fetched all doctors from hospital - {hospital_id}",
             "data": doctors,
-        }
-
-    # retrieve doctor accounts by hospital id /general
-    @staticmethod
-    async def retrieve_doctors_by_hospital_general(
-        hospital_id: str,
-        db: Session,
-        offset: int = 0,
-        limit: int = Query(default=25, le=100),
-    ):
-        doctors = (
-            db.query(Doctor)
-            .where(Doctor.hospital_id == hospital_id)
-            .offset(offset)
-            .limit(limit)
-            .options(
-                defer(Doctor.password),
-                defer(Doctor.created_at),
-                defer(Doctor.updated_at),
-                joinedload(Doctor.hospital).load_only(
-                    Hospital.id, Hospital.name, Hospital.city, Hospital.address
-                ),
-            )
-            .all()
-        )
-
-        # transform the result for general users
-        result = [
-            {
-                "url": uuid_to_base64(str(doctor.id)),
-                **{key: val for key, val in doctor.__dict__.items() if key != "id"},
-                "hospital": {
-                    "url": uuid_to_base64(hospital_id),
-                    **{
-                        key: val
-                        for key, val in doctor.hospital.__dict__.items()
-                        if key != "id"
-                    },
-                },
-            }
-            for doctor in doctors
-        ]
-
-        return {
-            "status": "successful",
-            "message": "successfully fetched all doctors!",
-            "data": result,
         }

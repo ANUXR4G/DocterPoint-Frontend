@@ -1,6 +1,7 @@
 from typing import List
 from sqlalchemy import func
 from fastapi import Query, HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, defer
 from redis import Redis
 import json
@@ -15,7 +16,7 @@ class HospitalService:
     # retrieve all the hospital names
     @staticmethod
     async def retrieve_all_names(db: Session, redis: Redis):
-        redis_key = "hopital:names:all"
+        redis_key = "hopitals:names"
         if cached_hospital_names := redis.get(redis_key):
             result = json.loads(cached_hospital_names)
             return ResponseHandler.fetch_successful(
@@ -37,7 +38,7 @@ class HospitalService:
     # retrieve all the hospital locations
     @staticmethod
     async def retrieve_all_locations(db: Session, redis: Redis):
-        redis_key = "hopital:locations:all"
+        redis_key = "hospital:locations"
         if cached_hospital_locations := redis.get(redis_key):
             result = json.loads(cached_hospital_locations)
             return ResponseHandler.fetch_successful(
@@ -60,37 +61,83 @@ class HospitalService:
     @staticmethod
     async def retrieve_all_hospitals(
         db: Session,
-        offset: int = 0,
-        # this way it adds a layer of constraint, asking the parameter either be 100 or less than 100
-        limit: int = Query(default=100, le=100),
+        redis: Redis,
+        page: int,
+        limit: int,
+        locations: list[str] | None,
     ):
-        hospitals = (
-            db.query(Hospital)
-            .offset(offset)
-            .limit(limit)
-            .options(defer(Hospital.updated_at), defer(Hospital.created_at))
-            .all()
+        page = max(1, page)
+        offset = (page - 1) * limit
+        redis_key = f"hospitals:page:{page}"
+
+        # get the total size of the doctor database
+        total_count = db.query(Hospital).count()
+
+        # retrive hospital informations from redis if found
+        if (cached_hospitals_info := redis.get(redis_key)) and (locations is None):
+            result = json.loads(cached_hospitals_info)
+            return ResponseHandler.fetch_successful(
+                f"successfully retrived hospital informations #page-{page} from cache",
+                result,
+                total_count,
+            )
+
+        # retrive the doctors information from database
+        query = db.query(Hospital).options(
+            defer(Hospital.updated_at), defer(Hospital.created_at)
         )
 
-        # transform the result for general users
-        result = [
-            {
-                "url": uuid_to_base64(str(hospital.id)),
-                # key everything except for id
-                **{key: val for key, val in hospital.__dict__.items() if key != "id"},
-            }
-            for hospital in hospitals
-        ]
+        # handle filtering params
+        if locations:
+            query = query.filter(Hospital.city.in_(locations))
 
-        return {
-            "status": "successful",
-            "message": "successfully fetched all hospitals!",
-            "data": result,
-        }
+        hospitals = query.offset(offset).limit(limit).all()
+
+        # restructure the result for general users (replace id w base64 string)
+        hospitals_info_data = jsonable_encoder(
+            [
+                {
+                    "id": uuid_to_base64(hospital.id),
+                    # key everything except for id
+                    **{
+                        key: val
+                        for key, val in hospital.__dict__.items()
+                        if key != "id"
+                    },
+                }
+                for hospital in hospitals
+            ]
+        )
+
+        # set the doctors information into redis
+        if not locations:
+            hospitals_info_json = json.dumps(hospitals_info_data)
+            redis.set(redis_key, hospitals_info_json, 3600)
+
+        # reassign the total size of the doctor database for filtering
+        if locations:
+            total_count = query.count()
+
+        return ResponseHandler.fetch_successful(
+            f"successfully retrived hospital informations #page-{page}",
+            hospitals_info_data,
+            total_count,
+        )
 
     @staticmethod
-    async def get_hospital_information(id: str, db: Session):
-        hospital_id = base64_to_uuid(id)
+    async def retrieve_hospital_information(id: str, db: Session, redis: Redis):
+        hospital_id = base64_to_uuid(id)  # covert base64 string to uuid
+        redis_key = f"hospital:info:{hospital_id}"  # set keys dynamically
+
+        # retrive hospital information from redis if found
+        if cached_hospital_info := redis.get(redis_key):
+            result = json.loads(cached_hospital_info)
+            return ResponseHandler.fetch_successful(
+                f"successfully retrived hospital information #{hospital_id} from cache",
+                result,
+            )
+
+        # query the hospital data w specific informations
         hospital = (
             db.query(Hospital)
             .where(Hospital.id == hospital_id)
@@ -98,24 +145,31 @@ class HospitalService:
             .first()
         )
 
+        # handle not found
         if not hospital:
             raise ResponseHandler.not_found_error(f"hospital not found - {id}")
 
-        return {
-            "status": "successful",
-            "message": f"successfully retrieved hospital information - {hospital.id}",
-            "data": HospitalBase(
-                url=id,
-                name=hospital.name,
-                address=hospital.address,
-                city=hospital.city,
-                img_src=hospital.img_src,
-                description=hospital.description,
-                emails=hospital.emails,
-                contact_numbers=hospital.contact_numbers,
-                geometry=hospital.geometry,
-            ),
+        # restructure the hospital profile informations
+        hospital_data = {
+            "id": id,
+            "name": hospital.name,
+            "address": hospital.address,
+            "city": hospital.city,
+            "img_src": hospital.img_src,
+            "description": hospital.description,
+            "emails": hospital.emails,
+            "contact_numbers": hospital.contact_numbers,
+            "geometry": hospital.geometry,
         }
+
+        # update the hospital information into redis caching
+        hospital_json = json.dumps(hospital_data)
+        redis.set(redis_key, hospital_json, 3600)
+
+        return ResponseHandler.fetch_successful(
+            f"successfully retrived hospital information #{hospital_id}",
+            hospital_data,
+        )
 
     # create a new patient account /admin
     @staticmethod

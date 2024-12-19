@@ -107,13 +107,19 @@ async def websocket_monitoring(websocket: WebSocket, room_id: str):
         print(f"patient #{id} left the monitoring room!")
 
 
-# general routes
-app.include_router(auth.router, prefix=f"/auth", tags=["Users / Auth"])
-app.include_router(hospital.router, prefix=f"/hospitals", tags=["General / Hospitals"])
-app.include_router(doctor.router, prefix=f"/users/doctors", tags=["General / Doctors"])
+# general routes (authentication not required)
+app.include_router(
+    auth.router, prefix=f"/auth", tags=["Users / Authentication"]
+)  # authentication routes
+app.include_router(
+    hospital.router, prefix=f"/hospitals", tags=["General / Hospitals"]
+)  # hospital routes
+app.include_router(
+    doctor.router, prefix=f"/doctors", tags=["General / Doctors"]
+)  # doctor routes
 
 
-# patient routes
+# patient routes (authetication required)
 app.include_router(
     patients.router, prefix=f"/users/patient", tags=["Patient / Profile"]
 )
@@ -125,7 +131,7 @@ app.include_router(
 )
 
 
-# admin routes
+# admin routes (administrational authetication required)
 app.include_router(
     users.router,
     prefix=f"/admin/users",
