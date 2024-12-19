@@ -1,19 +1,18 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useLayoutEffect, useRef, useState, useCallback } from "react"
 import { motion } from "framer-motion"
 
 type Props = {
   children: React.ReactNode
   className?: string
-  dragging?: boolean
   onDragStart?: () => void
   onDragEnd?: () => void
 }
 
 export default function SwipeCarousel({
   children,
-  className,
+  className = "flex",
   onDragStart,
   onDragEnd,
 }: Props) {
@@ -23,41 +22,34 @@ export default function SwipeCarousel({
   const [carouselWidth, setCarouselWidth] = useState<number>(0)
   const [itemsWidth, setItemsWidth] = useState<number>(0)
 
-  // set the widths
-  useEffect(() => {
+  // calculate carousel and items width
+  const calculateWidths = useCallback(() => {
+    if (!wrapper.current || !items.current) return
+
+    // measure wrapper width
+    const wrapperClientWidth = wrapper.current.clientWidth
+    setCarouselWidth(wrapperClientWidth)
+
+    // measure total items width
+    const totalItemsWidth = Array.from(items.current.children).reduce(
+      (acc, child) => acc + (child as HTMLElement).offsetWidth,
+      0
+    )
+    setItemsWidth(totalItemsWidth)
+  }, [])
+
+  // recalculate on resize or when children change
+  useLayoutEffect(() => {
     if (typeof window === "undefined") return
+    calculateWidths()
 
-    // handle carousel width
-    const handleCarouselWidth = () => {
-      if (!wrapper.current) return
-      setCarouselWidth(wrapper.current.clientWidth)
-    }
-
-    // handle carousel items width
-    const handleItemsWidth = () => {
-      if (!items.current) return
-      const parentNode = items.current.childNodes as NodeListOf<HTMLDivElement>
-      const itemArr = Array.from(parentNode)
-
-      const totalWidth = itemArr.reduce(
-        (acc, node) => acc + node.clientWidth,
-        0
-      )
-
-      setItemsWidth(totalWidth)
-    }
-
-    handleCarouselWidth()
-    handleItemsWidth()
-
-    window.addEventListener("resize", handleCarouselWidth)
-    window.addEventListener("resize", handleItemsWidth)
+    const handleResize = () => calculateWidths()
+    window.addEventListener("resize", handleResize)
 
     return () => {
-      window.removeEventListener("resize", handleCarouselWidth)
-      window.removeEventListener("resize", handleItemsWidth)
+      window.removeEventListener("resize", handleResize)
     }
-  }, [])
+  }, [children, calculateWidths])
 
   return (
     <div ref={wrapper} className="relative overflow-hidden max-w-fit">
@@ -69,10 +61,10 @@ export default function SwipeCarousel({
           right: 0,
         }}
         dragElastic={0.2}
-        dragTransition={{ bounceDamping: 18 }}
+        dragTransition={{ bounceDamping: 20 }}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        className={className ? className : `flex`}
+        className={className}
       >
         {children}
       </motion.div>

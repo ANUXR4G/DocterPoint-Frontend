@@ -8,9 +8,10 @@ import Icon from "../icons"
 import { HospitalType } from "@/lib/dummy/hospitals"
 import Button from "../buttons/Button"
 import Link from "next/link"
+import { THospital } from "@/types"
 
 type Props = {
-  hospitals: HospitalType[]
+  hospitals: THospital[]
   coordinates?: number[]
   className?: string
   zoom?: number
@@ -126,9 +127,7 @@ export default function Map({
                 />
               </div>
               <div className="flex flex-col my-auto ml-2">
-                <Link
-                  href={`/hospitals/${selectedHospital.id}/details?type=view`}
-                >
+                <Link href={`/hospitals/${selectedHospital.id}/info`}>
                   <h3 className="text-sm leading-4 font-semibold opacity-80 text-[--primary-black]">
                     {selectedHospital.name}
                   </h3>

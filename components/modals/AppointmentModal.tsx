@@ -158,7 +158,9 @@ export default function AppointmentModal({
               </div>
               {/* doctor description */}
               <div className="center flex-col mt-2 ml-1 max-w-64">
-                <h4 className="text-sm font-bold">{doctor.name}</h4>
+                <h4 className="text-base ml-1 md:text-xl font-bold bg-gradient-to-r from-red-400 to-pink-500 bg-clip-text text-transparent">
+                  {doctor.name}
+                </h4>
                 <p className="text-xs text-center font-bold opacity-80 leading-4 line-clamp-3">
                   {doctor.description}
                 </p>
@@ -184,7 +186,7 @@ export default function AppointmentModal({
           <div className="px-4 w-full flex flex-col my-6">
             {/* Appointment Mode */}
             <fieldset>
-              <legend className="text-sm md:text-base font-bold opacity-70">
+              <legend className="ml-1 text-sm md:text-base font-bold opacity-70">
                 Appointment mode
               </legend>
               <div className="flex flex-col mt-1 text-sm">
@@ -195,6 +197,7 @@ export default function AppointmentModal({
                     value={item}
                     active={details.appointmentMode === item}
                     onChange={handleAppointmentMode}
+                    labelClass="ml-1"
                   />
                 ))}
               </div>
@@ -202,12 +205,12 @@ export default function AppointmentModal({
 
             {/* purpose of visit */}
             <fieldset className="mt-4">
-              <legend className="text-sm md:text-base font-bold opacity-70">
+              <legend className="ml-1 text-sm md:text-base font-bold opacity-70">
                 Purpose of visit
               </legend>
 
               {/* purpose of visit options */}
-              <div className="flex flex-col mt-1 text-sm">
+              <div className="flex flex-col mt-2 text-sm space-y-2">
                 {appointmentPurposes.map((item, idx) => (
                   <Checkbox
                     key={`alergyOpt-${idx}`}
@@ -216,8 +219,7 @@ export default function AppointmentModal({
                     active={details.purposeOfVisit.includes(item)}
                     onChange={handlePurposeOfVisit}
                     direction="left"
-                    className="-ml-[26px] border-none has-[input:checked]:bg-transparent"
-                    roundedInput
+                    className="rounded-lg py-4 !border-[1px]"
                   />
                 ))}
               </div>
@@ -233,7 +235,7 @@ export default function AppointmentModal({
               </label>
               <textarea
                 rows={4}
-                className="mt-2 p-2 w-full text-sm text-gray-900 dark:text-neutral-400 bg-gray-50 dark:bg-neutral-700 rounded-lg border border-gray-300 dark:border-neutral-500 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                className="mt-2 p-2 w-full text-sm text-gray-900 dark:text-neutral-400 bg-gray-50 dark:bg-neutral-700 rounded-lg border border-gray-300 dark:focus:border-blue-500 outline-none resize-none"
                 placeholder="Write special notes here..."
                 value={details.notes}
                 onChange={handleSpecialNotes}

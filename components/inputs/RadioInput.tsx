@@ -20,22 +20,24 @@ export default function RadioInput({
   labelClass,
 }: Props) {
   return (
-    <div className={`flex ${className}`}>
+    <label
+      htmlFor={`${name}__id__f`}
+      className={`flex items-center ${labelClass} space-y-1`}
+    >
+      {" "}
       <input
         type="radio"
         id={`${name}__id__f`}
         name={name}
         value={value}
+        className={`peer/active appearance-none ${inputClass}`}
         checked={active}
         onChange={onChange}
-        className={`peer/active ${inputClass} cursor-pointer appearance-none before:inline-block size-2.5 rounded-full bg-neutral-50 dark:bg-transparent border border-neutral-500 mt-1.5 checked:bg-blue-600 checked:ring-1 ring-offset-2 ring-blue-700`}
-      />
-      <label
-        htmlFor={`${name}__id__f`}
-        className={`ml-2 cursor-pointer font-semibold opacity-80 peer-checked/active:opacity-100 ${labelClass}`}
-      >
+      />{" "}
+      <span className="block size-3.5 mr-2 border-2 peer-checked/active:ring-1 peer-checked/active:ring-neutral-400 peer-checked/active:dark:ring-0 rounded-full peer-checked/active:bg-blue-500 cursor-pointer"></span>{" "}
+      <span className="font-medium peer-checked/active:text-blue-500 cursor-pointer">
         {value}
-      </label>
-    </div>
+      </span>{" "}
+    </label>
   )
 }

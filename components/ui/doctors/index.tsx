@@ -12,12 +12,21 @@ import { ApiResponse, TDoctor, TDoctorFilteringOpts } from "@/types"
 import { firey } from "@/utils"
 import Image from "next/image"
 import Link from "next/link"
-import React, { useCallback, useEffect, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
 import { useQuery } from "react-query"
 
 export default function Doctors() {
-  const [open, setOpen] = useState<boolean>(false)
-  const [active, setActive] = useState<TDoctor>()
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const popup = !!searchParams.get("popup")
+  const popup_doc_id = searchParams.get("id")
+  const filter_location = searchParams.get("location")
+
+  const [open, setOpen] = useState<boolean>(popup)
+  const [active, setActive] = useState<TDoctor | null>(null)
   const [openFilter, setOpenFilter] = useState<boolean>(false)
   const [totalPages, setTotalPages] = useState(0)
   const [page, setPage] = useState<number>(1)
@@ -25,12 +34,9 @@ export default function Doctors() {
   const [triggerFilter, setTriggerFilter] = useState<boolean>(false)
 
   const [filters, setFilters] = useState<TDoctorFilteringOpts>({
-    locations: [],
+    locations: filter_location ? [filter_location] : [],
     hospitals: [],
   })
-
-  // check if the nested object containing array is empty
-  const checkIfEmpty = useCallback(() => firey.objIsEmpty(filters), [filters])
 
   const params = firey.createSearchParams({
     page,
@@ -56,9 +62,32 @@ export default function Doctors() {
     }
   )
 
+  // retrieve a specific doctor information if popup is enabled
+  const _ = useQuery(
+    [`doctor:info:${popup_doc_id}`],
+    async () => {
+      if (!active && popup_doc_id) {
+        return doctorServices.profile(popup_doc_id)
+      }
+    },
+    {
+      select: (data) => {
+        // covert keys to camelCase
+        return firey.convertKeysToCamelCase(data) as ApiResponse<TDoctor>
+      },
+      onSuccess: (doctor) => {
+        if (doctor) {
+          setActive(doctor.data)
+        }
+      },
+    }
+  )
+
   // close the modal
   function handleModalClose() {
     setOpen(false)
+    setActive(null)
+    router.replace(pathname)
   }
 
   // handle booking appointment
@@ -67,20 +96,19 @@ export default function Doctors() {
     doctor: TDoctor
   ) {
     e.preventDefault()
+    router.push(`${pathname}?popup=t&id=${doctor.id}`)
     setOpen(true)
     setActive(doctor)
   }
 
   // handle prev indicator
   function handlePreviousPage() {
-    if (page === 1) return
-    setPage(page - 1)
+    setPage((prev) => Math.max(prev - 1, 1))
   }
 
   // handle next indicator
   function handleNextPage() {
-    if (page === totalPages) return
-    setPage(page + 1)
+    setPage((prev) => Math.min(prev + 1, totalPages))
   }
 
   // handle page number indicator
@@ -112,10 +140,20 @@ export default function Doctors() {
   // trigger on filter clear
   useEffect(() => {
     if (triggerFilter) {
+      // update the param if filter location exists
       refetch()
       setTriggerFilter(false)
+      // on confirmation set router to pathname if it was previously being filtered by location
+      if (filter_location) router.push(pathname)
     }
-  }, [triggerFilter, refetch])
+  }, [triggerFilter, refetch, filter_location, router, pathname])
+
+  // update filtering for location query
+  useEffect(() => {
+    if (filter_location) {
+      refetch()
+    }
+  }, [filter_location, refetch])
 
   // update the total size of page
   useEffect(() => {
@@ -152,7 +190,10 @@ export default function Doctors() {
           response.data.map((props, idx) => (
             <Link
               key={`doctor_l_${idx}`}
-              href={`/hospitals/doctors/profile?id=${props.id}&type=view`}
+              href={{
+                pathname: "/hospitals/doctors/profile",
+                query: { id: props.id },
+              }}
             >
               <div className="p-2 xl:p-2.5 bg-white dark:bg-zinc-800 shadow rounded-lg hover:shadow-md hover:cursor-pointer">
                 {/* doctor image */}

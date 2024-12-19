@@ -98,8 +98,8 @@ export default function DoctorFilter({
       >
         <div className="overflow-x-hidden overflow-y-auto p-4 custom-scroll">
           <div className="mb-4">
-            <h2 className="text-4xl text-center sm:text-left font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
-              Filter Doctors by Hospital Locations or Hospital Names
+            <h2 className="text-4xl 2xl:text-5xl text-center sm:text-left font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
+              Filter Doctors by Hospital Locations/Hospital Names
             </h2>
             <p className="mt-3 text-sm font-medium opacity-85">
               Select a city or hospital name to find doctors that match your
@@ -108,7 +108,7 @@ export default function DoctorFilter({
             </p>
           </div>
           <fieldset>
-            <legend className="text-base ml-1 md:text-lg font-bold">
+            <legend className="text-base ml-1 md:text-xl font-bold bg-gradient-to-r from-red-400 to-pink-500 bg-clip-text text-transparent">
               Nearby locations
             </legend>
 
@@ -128,8 +128,8 @@ export default function DoctorFilter({
                 ))}
             </div>
           </fieldset>
-          <fieldset className="mt-8">
-            <legend className="text-base md:text-lg font-bold">
+          <fieldset className="mt-10">
+            <legend className="text-base md:text-xl font-bold bg-gradient-to-r from-red-400 to-pink-500 bg-clip-text text-transparent">
               Glucoguide x Hospitals
             </legend>
 

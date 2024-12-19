@@ -177,8 +177,22 @@ export type TDoctor = {
   email: string
   gender: string
   address: string
-  hospitalId: string
   experience: number
   contactNumbers: string[]
   hospital: { city: string; name: string; address: string; id: string }
+}
+
+export type THospital = {
+  id: string
+  name: string
+  address: string
+  city: string
+  imgSrc: string
+  description: string
+  emails: string[]
+  contactNumbers: string[]
+  geometry: {
+    coordinates: number[]
+    type: string
+  }
 }

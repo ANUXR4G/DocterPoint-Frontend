@@ -13,7 +13,7 @@ export default function HospitalsLayout({
         name="half-box-pattern"
         className="hidden !fixed dark:block"
       />
-      <div className="relative full ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] p-4 xs:px-4">
+      <div className="ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] p-4 xs:px-4">
         {children}
       </div>
     </>

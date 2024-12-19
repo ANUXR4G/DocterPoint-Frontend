@@ -45,13 +45,19 @@ export default function HealthMonitoring() {
 
   return (
     <React.Fragment>
-      <div className="flex absolute top-5 left-5 gap-1">
-        <div className="size-6">
-          <Icon
-            name="energy"
-            className={isConnected ? `fill-blue-500` : `fill-red-500`}
-          />
-        </div>
+      <div className="flex items-center absolute top-5 left-5 gap-2">
+        <span className="relative flex size-3">
+          <span
+            className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+              isConnected ? `bg-sky-400` : `bg-red-400`
+            }`}
+          ></span>
+          <span
+            className={`relative inline-flex rounded-full size-3 ${
+              isConnected ? `bg-sky-500` : `bg-red-500`
+            }`}
+          ></span>
+        </span>
         <span
           className={`text-sm bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text ${
             isConnected ? `text-transparent font-semibold` : `text-red-500`

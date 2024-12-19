@@ -25,7 +25,7 @@ export default function CheckInput({
 }: Props) {
   return (
     <div
-      className={`border-2 has-[input:checked]:border-blue-500 dark:border-neutral-500 has-[input:checked]:bg-blue-50 dark:has-[input:checked]:bg-blue-600/20 px-4 py-2 rounded-full ${className}`}
+      className={`border-2 border-neutral-300/90 has-[input:checked]:border-blue-500 dark:border-neutral-500 has-[input:checked]:bg-blue-50 dark:has-[input:checked]:bg-blue-600/15 px-4 py-2 rounded-full ${className}`}
     >
       <label
         className={`cursor-pointer group flex items-center text-sm font-semibold select-none ${

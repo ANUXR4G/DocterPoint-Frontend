@@ -6,8 +6,13 @@ import Image from "next/image"
 import { useState } from "react"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
+import { THospital } from "@/types"
 
-export default function HospitalsSwiper() {
+type Props = {
+  hospitals: THospital[]
+}
+
+export default function HospitalsSwiper({ hospitals }: Props) {
   const [dragging, setDragging] = useState<boolean>(false)
 
   const router = useRouter()
@@ -26,9 +31,9 @@ export default function HospitalsSwiper() {
       e.preventDefault()
 
       if (e.ctrlKey) {
-        window.open(`/hospitals/${id}/details?type=view`, `_blank`)
+        window.open(`/hospitals/${id}/info`, `_blank`)
       } else {
-        router.push(`/hospitals/${id}/details?type=view`)
+        router.push(`/hospitals/${id}/info`)
       }
     }
   }
@@ -38,7 +43,7 @@ export default function HospitalsSwiper() {
       onDragStart={() => setDragging(true)}
       onDragEnd={() => setDragging(false)}
     >
-      {HOSPITALS.map((hospital, idx) => (
+      {hospitals.map((hospital, idx) => (
         <div
           key={`carousel-${idx}`}
           className="w-80 h-96 2xl:size-96 min-w-80 2xl:min-w-96"

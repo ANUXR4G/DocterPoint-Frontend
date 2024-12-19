@@ -1,24 +1,24 @@
-import { Map, Hospitals, SuggestedDoctors } from "@/components"
-import { HOSPITALS } from "@/lib/dummy/hospitals"
-import { firey } from "@/utils"
+import React from "react"
 
-const locations = firey.getSpecificArr(HOSPITALS.map((item) => item.city))
+import { SuggestedDoctors, NearbyHospitals } from "@/components"
 
 export default function HospitalsPage() {
   return (
-    <div className="flex flex-col gap-3 pb-6">
-      <h1 className="text-center text-5xl md:text-6xl leading-[60px] md:leading-[74px] max-w-[778px] tracking-tighter font-extrabold fancy mx-auto mb-1 lg:mb-2">
-        We are now located at {locations.length} cities in Dhaka.
-      </h1>
-      <Map hospitals={HOSPITALS} />
-      <h3 className="ml-2 font-extrabold text-2xl lg:text-3xl mt-3 lg:mt-6 -mb-2">
-        Nearby Hospitals
-      </h3>
-      <Hospitals />
-      <h3 className="ml-2 font-extrabold text-2xl lg:text-3xl mt-4 lg:mt-6 -mb-2">
-        Recommended Doctors
-      </h3>
-      <SuggestedDoctors experience={6} />
+    <div className="pb-4 lg:pb-6">
+      {/* nearby hospitals */}
+      <NearbyHospitals />
+
+      {/* doctor suggestions */}
+      <div className="mt-8">
+        <SuggestedDoctors experience={6}>
+          <h1 className="flex gap-2 text-2xl lg:text-3xl leading-tight font-bold opacity-90 ml-2 mb-1">
+            Top rated x{" "}
+            <span className="bg-gradient-to-r from-red-400 to-pink-500 bg-clip-text text-transparent">
+              GlucoGuide{" "}
+            </span>
+          </h1>
+        </SuggestedDoctors>
+      </div>
     </div>
   )
 }

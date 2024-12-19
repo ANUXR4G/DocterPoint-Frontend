@@ -30,11 +30,14 @@ export { default as DietPreference } from "./ui/patients/diet/Preferences"
 // doctors ui
 export { default as Doctors } from "./ui/doctors"
 export { default as SuggestedDoctors } from "./ui/doctors/SuggestedDoctors"
-export { default as DoctorDets } from "./ui/doctors/DoctorDets"
+export { default as DoctorDetails } from "./ui/doctors/DoctorDetails"
 
 // hospitals ui
 export { default as Hospitals } from "./ui/hospitals"
+export { default as HospitalDetails } from "./ui/hospitals/HospitalDetails"
 export { default as ContactInformation } from "./ui/hospitals/ContactInformation"
+export { default as HospitalSuggestions } from "./ui/hospitals/HospitalSuggestions"
+export { default as NearbyHospitals } from "./ui/hospitals/NearbyHospitals"
 
 // lottie
 export { default as CoolKid } from "./fancy/CoolKid"
