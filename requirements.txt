@@ -10,3 +10,5 @@ bcrypt
 pyjwt
 pycryptodome
 requests
+asyncpg
+openai

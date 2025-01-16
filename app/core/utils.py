@@ -6,50 +6,59 @@ scopes = {
         "patient:read",
         "patient:write",
         "patient:update",
-        "health:read",
-        "health:write",
-        "health:update",
-        "health:delete",
+        "monitoring:read",
+        "monitoring:write",
+        "monitoring:update",
+        "appointment:read",
+        "appointment:write",
+        "appointment:update",
+        "medication:read",
+        "medication:write",
+        "medication:update",
     ],
     "doctor": [
         "patient:read",
-        "patient:update",
         "doctor:read",
         "doctor:update",
-        "health:read",
-    ],
-    "staff": [
-        "staff:read",
-        "staff:update",
-        "doctor:read",
-        "doctor:write",
-        "doctor:update",
-        "doctor:delete",
-        "health:read",
+        "monitoring:read",
+        "medication:read",
+        "medication:update",
+        "appointment:read",
+        "appointment:write",
+        "appointment:update",
     ],
     "admin": [
-        "patient:read",
-        "patient:write",
-        "patient:update",
-        "patient:delete",
-        "doctor:read",
-        "doctor:write",
-        "doctor:update",
-        "doctor:delete",
-        "staff:read",
-        "staff:write",
-        "staff:update",
-        "staff:delete",
-        "admin:read",
-        "admin:write",
-        "admin:update",
-        "admin:delete",
-        "health:read",
-        "health:write",
-        "health:update",
-        "health:delete",
+        "users:read",
+        "users:write",
+        "users:update",
+        "users:delete",
+        "appointment:read",
+        "appointment:write",
+        "appointment:update",
+        "appointment:delete",
+        "monitoring:read",
+        "monitoring:delete",
+        "medication:read",
+        "medication:delete",
     ],
 }
+
+
+def get_age_group(age: int):
+    if 18 <= age <= 24:
+        return ("18-24",)
+    elif 25 <= age <= 34:
+        return "25-34"
+    elif 35 <= age <= 44:
+        return "35-44"
+    elif 45 <= age <= 54:
+        return "45-54"
+    elif 55 <= age <= 64:
+        return "55-64"
+    elif age >= 65:
+        return "65+"
+    else:
+        return "firey"
 
 
 class Custom:
@@ -60,15 +69,15 @@ class Custom:
 
 class ResponseHandler:
     @staticmethod
-    def invalid_token():
+    def invalid_token(msg: str | None = "invalid token."):
         raise HTTPException(
             status_code=401,
-            detail=f"invalid token!",
+            detail=f"{msg}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     @staticmethod
-    def not_found_error(warning=""):
+    def not_found_error(warning: str | None = "not found."):
         raise HTTPException(status_code=404, detail=f"{warning}")
 
     @staticmethod
@@ -92,6 +101,7 @@ class ResponseHandler:
 
         return JSONResponse(status_code=200, content=response_content)
 
+    @staticmethod
     def create_successful(msg, data):
         return JSONResponse(
             status_code=201,

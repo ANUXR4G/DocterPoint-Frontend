@@ -1,32 +1,36 @@
 from fastapi import (
     FastAPI,
-    Depends,
     HTTPException,
     Request,
-    WebSocket,
-    WebSocketDisconnect,
-    Security,
 )
-from websockets.exceptions import ConnectionClosed
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import patients, auth, health, hospital, doctor
+from app.core.security import origins
+from app.core.config import settings
+
+from app.routers import (
+    auth,
+    meals,
+    healths,
+    doctors,
+    patients,
+    hospitals,
+    websockets,
+    medications,
+    appointments,
+)
+
 from app.routers.admin import (
     patients as patients_admin,
-    users,
     hospitals as hospitals_admin,
     doctors as doctors_admin,
+    users,
 )
-from app.core.security import origins
-from app.core.dependecies import include_admin, include_auth
-from app.models import Patient
 
-from app.core.config import settings
+
 from app.workers.celery import celery
 from app.workers.tasks import send_email_task
-from app.core.socket import WebSocketManager
-from app.core.socket import socket_manager
 
 
 version = "v1"
@@ -60,14 +64,13 @@ async def custom_http_exception_handler(_: Request, exc: HTTPException):
     )
 
 
-socket = WebSocketManager()
-
-
 @app.get("/")
 async def root():
-    return JSONResponse(
-        content={"status": "successful", "contact": f"{settings.owner_email}"}
-    )
+    return {
+        "name": "firedev99",
+        "email": "firethedev@gmail.com",
+        "about": "Gluco Guide is an integrated health monitoring app for diabetic care, featuring separate dashboards for patients, doctors, and admins. It enables doctor bookings, maps to nearby hospitals, real-time health tracking, and AI-powered recommendations for diet, exercise, and lifestyle, ensuring effective diabetes management and wellness.",
+    }
 
 
 # celery tasks testing apis
@@ -95,67 +98,73 @@ async def get_task_status(task_id: str):
     return {"task_id": task_id, "status": task.status, "result": task.result}
 
 
-# endpoint to monitor real time health records
-@app.websocket("/ws/monitoring/{room_id}")
-async def websocket_monitoring(websocket: WebSocket, room_id: str):
-    await socket_manager.connect(websocket, room_id)
-    try:
-        while True:
-            await websocket.receive_text()  # keep the connection alive
-    except WebSocketDisconnect:
-        socket_manager.disconnect(websocket, room_id)
-        print(f"patient #{id} left the monitoring room!")
-
-
 # general routes (authentication not required)
-app.include_router(
-    auth.router, prefix=f"/auth", tags=["Users / Authentication"]
-)  # authentication routes
-app.include_router(
-    hospital.router, prefix=f"/hospitals", tags=["General / Hospitals"]
-)  # hospital routes
-app.include_router(
-    doctor.router, prefix=f"/doctors", tags=["General / Doctors"]
-)  # doctor routes
+app.include_router(auth.router, prefix=f"/auth", tags=["Users / Authentication"])
+app.include_router(hospitals.router, prefix=f"/hospitals", tags=["General / Hospitals"])
+app.include_router(doctors.router, prefix=f"/doctors", tags=["General / Doctors"])
 
 
-# patient routes (authetication required)
-app.include_router(
-    patients.router, prefix=f"/users/patient", tags=["Patient / Profile"]
-)
+# patient profile routes (authetication required)
+app.include_router(patients.router, prefix=f"/patient", tags=["Patient / Profile"])
 
+# patient health records routes (authetication required)
 app.include_router(
-    health.router,
-    prefix=f"/users/patient/health",
+    healths.router,
+    prefix=f"/patient/health",
     tags=["Patient / Health Monitoring Records"],
 )
 
-
-# admin routes (administrational authetication required)
+# patient appointments routes (authetication required)
 app.include_router(
-    users.router,
-    prefix=f"/admin/users",
-    tags=["Admin / Users"],
-    dependencies=[Depends(include_admin)],
+    appointments.router,
+    prefix=f"/patient/appointments",
+    tags=["Patient / Appointments"],
 )
 
+
+# patient appointments routes (authetication required)
 app.include_router(
-    patients_admin.router,
-    prefix=f"/admin/users/patients",
-    tags=["Admin / Patients"],
-    dependencies=[Depends(include_admin)],
+    medications.router,
+    prefix=f"/patient/medication",
+    tags=["Patient / Medications"],
 )
 
+# meal details (authentication required)
 app.include_router(
-    doctors_admin.router,
-    prefix=f"/admin/users/doctors",
-    tags=["Admin / Doctors"],
-    dependencies=[Depends(include_admin)],
+    meals.router,
+    prefix=f"/diet",
+    tags=["Diet / Meals"],
 )
 
-app.include_router(
-    hospitals_admin.router,
-    prefix=f"/admin/hospitals",
-    tags=["Admin / Hospitals"],
-    dependencies=[Depends(include_admin)],
-)
+# websocket routes (for realtime health tracker simulation)
+app.include_router(websockets.router, prefix="/ws")
+
+
+# # a dmin routes (administrational authetication required)
+# app.include_router(
+#     users.router,
+#     prefix=f"/admin/users",
+#     tags=["Admin / Users"],
+#     dependencies=[Depends(include_admin)],
+# )
+
+# app.include_router(
+#     patients_admin.router,
+#     prefix=f"/admin/users/patients",
+#     tags=["Admin / Patients"],
+#     dependencies=[Depends(include_admin)],
+# )
+
+# app.include_router(
+#     doctors_admin.router,
+#     prefix=f"/admin/users/doctors",
+#     tags=["Admin / Doctors"],
+#     dependencies=[Depends(include_admin)],
+# )
+
+# app.include_router(
+#     hospitals_admin.router,
+#     prefix=f"/admin/hospitals",
+#     tags=["Admin / Hospitals"],
+#     dependencies=[Depends(include_admin)],
+# )

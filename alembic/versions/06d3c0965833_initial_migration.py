@@ -1,8 +1,8 @@
 """initial migration
 
-Revision ID: f5f8f341af7e
+Revision ID: 06d3c0965833
 Revises: 
-Create Date: 2024-12-09 06:10:20.457942
+Create Date: 2025-01-16 18:20:15.468411
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'f5f8f341af7e'
+revision: str = '06d3c0965833'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -30,6 +30,26 @@ def upgrade() -> None:
     sa.Column('emails', sa.JSON(), nullable=False),
     sa.Column('contact_numbers', sa.JSON(), nullable=False),
     sa.Column('geometry', sa.JSON(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
+    )
+    op.create_table('meals',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('category', sa.String(), nullable=False),
+    sa.Column('description', sa.String(length=256), nullable=False),
+    sa.Column('ingredients', sa.JSON(), nullable=False),
+    sa.Column('time', sa.String(), nullable=False),
+    sa.Column('calories', sa.Float(), nullable=False),
+    sa.Column('protein', sa.Float(), nullable=False),
+    sa.Column('fat', sa.Float(), nullable=False),
+    sa.Column('carbs', sa.Float(), nullable=False),
+    sa.Column('blog', sa.String(), nullable=False),
+    sa.Column('img_src', sa.String(), nullable=False),
+    sa.Column('cooking_type', sa.String(), nullable=True),
+    sa.Column('cuisine', sa.String(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id'),
@@ -72,6 +92,28 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('appointments',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('patient_id', sa.UUID(), nullable=False),
+    sa.Column('doctor_id', sa.UUID(), nullable=False),
+    sa.Column('test_name', sa.String(), nullable=True),
+    sa.Column('referred_by', sa.JSON(), nullable=True),
+    sa.Column('purpose_of_visit', sa.JSON(), nullable=True),
+    sa.Column('patient_note', sa.String(), nullable=True),
+    sa.Column('doctor_note', sa.String(), nullable=True),
+    sa.Column('appointment_date', sa.Date(), nullable=False),
+    sa.Column('appointment_time', sa.String(), nullable=False),
+    sa.Column('mode', sa.String(), nullable=False),
+    sa.Column('type', sa.String(), nullable=False),
+    sa.Column('status', sa.String(), nullable=False),
+    sa.Column('serial_number', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['doctor_id'], ['doctors.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
+    )
     op.create_table('health_records',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('patient_id', sa.UUID(), nullable=False),
@@ -92,14 +134,45 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('id')
     )
+    op.create_table('medications',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('patient_id', sa.UUID(), nullable=False),
+    sa.Column('doctor_id', sa.UUID(), nullable=True),
+    sa.Column('appointment_id', sa.UUID(), nullable=True),
+    sa.Column('primary_goals', sa.String(), nullable=False),
+    sa.Column('medications', sa.JSON(), nullable=True),
+    sa.Column('dietary', sa.JSON(), nullable=True),
+    sa.Column('nutritions', sa.JSON(), nullable=True),
+    sa.Column('energy_goal', sa.Float(), nullable=True),
+    sa.Column('bmi_goal', sa.Float(), nullable=True),
+    sa.Column('hydration', sa.String(), nullable=True),
+    sa.Column('sleep', sa.String(), nullable=True),
+    sa.Column('exercises', sa.JSON(), nullable=True),
+    sa.Column('monitoring', sa.JSON(), nullable=True),
+    sa.Column('expiry', sa.Float(), nullable=True),
+    sa.Column('allergies', sa.JSON(), nullable=True),
+    sa.Column('recommended_ingredients', sa.JSON(), nullable=True),
+    sa.Column('preferred_cuisine', sa.String(), nullable=True),
+    sa.Column('generated_by', sa.String(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['appointment_id'], ['appointments.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['doctor_id'], ['doctors.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
+    )
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('medications')
     op.drop_table('health_records')
+    op.drop_table('appointments')
     op.drop_table('patients')
     op.drop_table('doctors')
     op.drop_table('users')
+    op.drop_table('meals')
     op.drop_table('hospitals')
     # ### end Alembic commands ###
