@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation"
 import { firey } from "@/utils"
 import { useQuery } from "react-query"
 import { doctorServices } from "@/lib/services/doctor"
-import { ApiResponse, TDoctor } from "@/types"
+import { TDoctor } from "@/types"
 
 type Props = {
   experience?: number
@@ -39,8 +39,8 @@ export default function SuggestedDoctors({
   })
 
   const paramsOfExperience = firey.createSearchParams({
-    page,
-    limit,
+    page: 1,
+    limit: 12,
     experience,
   })
 
@@ -52,13 +52,19 @@ export default function SuggestedDoctors({
         throw new Error(`failed to retrieve doctors information!`)
       }
 
-      return doctorServices.from_hospital_all(hospitalId, params)
+      return doctorServices.getDoctorsFromHospital(
+        hospitalId,
+        params.toString()
+      )
     },
     {
       enabled: !!hospitalId,
       select: (data) => {
         // covert keys to camelCase
-        return firey.convertKeysToCamelCase(data) as ApiResponse<TDoctor[]>
+        return firey.convertKeysToCamelCase(data) as {
+          total: number
+          doctors: TDoctor[]
+        }
       },
     }
   )
@@ -71,13 +77,16 @@ export default function SuggestedDoctors({
         throw new Error(`failed to retrieve doctors information!`)
       }
 
-      return doctorServices.retrive_all(paramsOfExperience)
+      return doctorServices.getDoctors(paramsOfExperience.toString())
     },
     {
       enabled: !!experience,
       select: (data) => {
         // covert keys to camelCase
-        return firey.convertKeysToCamelCase(data) as ApiResponse<TDoctor[]>
+        return firey.convertKeysToCamelCase(data) as {
+          total: number
+          doctors: TDoctor[]
+        }
       },
     }
   )
@@ -85,21 +94,23 @@ export default function SuggestedDoctors({
   // retrieve all the doctor informations
   const { data: retrievedDoctors } = useQuery(
     [`doctors:page:${page}`],
-    async () => doctorServices.retrive_all(params),
+    async () => doctorServices.getDoctors(params.toString()),
     {
       select: (data) => {
         // covert keys to camelCase
-        return firey.convertKeysToCamelCase(data) as ApiResponse<TDoctor[]>
+        return firey.convertKeysToCamelCase(data) as {
+          total: number
+          doctors: TDoctor[]
+        }
       },
     }
   )
 
-  // filter doctors list based on requirements
   const doctorsInfo = doctorsOfHospital
-    ? doctorsOfHospital.data
+    ? doctorsOfHospital.doctors
     : experiencedDoctors
-    ? experiencedDoctors.data
-    : retrievedDoctors?.data
+    ? experiencedDoctors.doctors
+    : retrievedDoctors?.doctors
 
   const modDoctors =
     doctorsInfo &&
@@ -118,9 +129,9 @@ export default function SuggestedDoctors({
       e.preventDefault()
 
       if (e.ctrlKey) {
-        window.open(`/hospitals/doctors/profile?id=${id}`, `_blank`)
+        window.open(`/hospitals/doctors/info?id=${id}`, `_blank`)
       } else {
-        router.push(`/hospitals/doctors/profile?id=${id}`)
+        router.push(`/hospitals/doctors/info?id=${id}`)
       }
     }
   }

@@ -13,9 +13,9 @@ export type MealType = {
 }
 
 export const nutrientsChartData = [
-  { name: "Protein", value: 50 },
-  { name: "Fat", value: 78 },
-  { name: "Carbs", value: 275 },
+  { name: "Protein", amount: 50 },
+  { name: "Fat", amount: 78 },
+  { name: "Carbs", amount: 275 },
 ]
 
 export const mealRecommendationOptions = [

@@ -188,3 +188,52 @@ export const RECOMMENDATIONS: TYPERECOMMENDATIONS[] = [
     generatedBy: "doctor",
   },
 ]
+
+// {
+//   "doctor_id": "62317b9c-ed03-43d1-8ea3-4a477644dac8",
+//   "appointment_id": "fb536fb9-1751-4f08-a503-52628677cbe3",
+//   "primary_goal": "Manage weight and improve overall metabolic health.",
+//   "medications": {
+//     "medicine": [
+//         { "name": "Metformin 500mg", "amount": 1, "times": ["morning"] },
+//         { "name": "Vitamin D", "amount": 1, "times": ["morning", "night"] }
+//     ],
+//     "expiry": 15
+//   },
+//   "dietary": [
+//     {
+//       "time": "breakfast",
+//       "energy": 580
+//     },
+//     {
+//       "time": "lunch",
+//       "energy": 700
+//     },
+//     {
+//       "time": "snacks",
+//       "energy": 120
+//     },
+//     {
+//       "time": "dinner",
+//       "energy": 700
+//     }
+//   ],
+//   "nutritions": [
+//     { "name": "protein", "amount": 50 },
+//     { "name": "fat", "amount": 78 },
+//     { "name": "carbs", "amount": 275 }
+//   ],
+//   "energy_goal": 2100,
+//   "hydration": "8",
+//   "sleep": "7-8",
+//   "exercises": [
+//     { "name": "Running", "times": ["morning", "evening"], "duration": "30-45mins" },
+//     { "name": "Rowing", "times": ["morning"], "duration": "15-20mins" },
+//     { "name": "Play Tennis", "times": ["evening"], "duration": "1-2hrs" },
+//     { "name": "Cycling", "times": ["evening"], "duration": "40-50mins" }
+//   ],
+//   "expiry": 30,
+//   "restrictions": ["Sugar", "Refined carbs"],
+//   "recommended_ingredients": ["berries", "bananas", "nuts", "avacado", "eggs"],
+//   "generated_by": "app"
+// }

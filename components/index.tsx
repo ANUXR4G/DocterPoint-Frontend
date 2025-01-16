@@ -12,6 +12,7 @@ export { default as Button } from "./buttons/Button"
 
 // links (fancy)
 export { default as FireyLink } from "./links/SimpleLink"
+export { default as CityScene } from "./fancy/CityScene"
 
 // patient dashboard ui
 export { default as BloodGlucose } from "./ui/patients/dashboard/BloodGlucose"
@@ -25,7 +26,7 @@ export { default as ConsultDoctors } from "./ui/patients/dashboard/ConsultDoctor
 export { default as FoodRecommendations } from "./ui/patients/diet/FoodRecommendations"
 export { default as Meal } from "./ui/patients/diet/Meal"
 export { default as NutrientsRecommendationChart } from "./ui/patients/diet/NutrientsRecommendationChart"
-export { default as DietPreference } from "./ui/patients/diet/Preferences"
+export { default as DietPreference } from "./ui/patients/diet/DietPreference"
 
 // doctors ui
 export { default as Doctors } from "./ui/doctors"
@@ -47,14 +48,20 @@ export { default as WalkingDog } from "./fancy/WalkingDog"
 export { default as AlignContent } from "./contents/AlignContent"
 export { default as ListContent } from "./contents/ListContent"
 
-// no data / not found
+// no data / not found / empty data
 export { default as NoData } from "./ui/NoData"
+export { default as EmptyAppointment } from "./fancy/EmptyAppointment"
+export { default as EmptySuggestions } from "./fancy/EmptySuggestions"
 
 // menus
 export { default as ProfileMenu } from "./menu/ProfileMenu"
+export { default as DietCategory } from "./menu/DietCategory"
 
 // switches
 export { default as ThemeSwitch } from "./switch/ThemeSwitch"
+
+// greeting
+export { default as Greeting } from "./greeting/LandingGreeting"
 
 // modals
 export { default as Modal } from "./modals/Modal"
@@ -62,7 +69,7 @@ export { default as PopoverModal } from "./modals/PopoverModal"
 export { default as SimpleModal } from "./modals/SimpleModal"
 export { default as AppointmentModal } from "./modals/AppointmentModal"
 export { default as DoctorFilter } from "./modals/DoctorFilter"
-export { default as AppoinmentDetailsModal } from "./modals/AppoinmentDetailsModal"
+export { default as AppointmentDetailsModal } from "./modals/AppoinmentDetailsModal"
 export { default as BookAppointmentModal } from "./modals/BookAppointmentModal"
 export { default as ProfileEditModal } from "./modals/ProfileEditModal"
 export { default as MultiHealthModal } from "./modals/MultiHealthModal"
@@ -70,7 +77,7 @@ export { default as SingleHealthModal } from "./modals/SingleHealthModal"
 export { default as ActivityModal } from "./modals/ActivityModal"
 
 // searchbox
-export { default as CustomSearchbox } from "./searchbox/CustomSearchbox"
+export { default as BookingSearchbox } from "./searchbox/BookingSearchbox"
 
 // selects
 export { default as BasicSelect } from "./selects/BasicSelect"
@@ -123,3 +130,7 @@ export { default as Background } from "./bg"
 
 //pagination
 export { default as Pagination } from "./pagination"
+
+// loader
+export { default as SimpleSpinner } from "./loader/SimpleSinner"
+export { default as Loader } from "./loader/Loader"

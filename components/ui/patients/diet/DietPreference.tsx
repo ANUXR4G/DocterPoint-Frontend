@@ -1,61 +1,99 @@
 "use client"
 
-import React, { useState } from "react"
-import {
-  Button,
-  Checkbox,
-  Icon,
-  Modal,
-  PopoverModal,
-  RadioInput,
-} from "@/components"
+import React, { useEffect, useRef, useState } from "react"
+import { Button, Checkbox, Icon, Modal, PopoverModal } from "@/components"
 import {
   allergyOpts,
   cookingPreferenceOpts,
   cusineOpts,
   diertaryPreferenceOpts,
-  foodAvoidanceOpts,
   generalPurposeOpt,
   healthGoalOpts,
   ingredientPreferenceOpts,
-  mealPerDayOpts,
 } from "@/lib/dummy/preferences"
+import { useProfile } from "@/hooks/useProfile"
+import { useApi } from "@/hooks/useApi"
+import { patientService } from "@/lib/services/patient"
+import { firey } from "@/utils"
+import { TMedications } from "@/types"
+import { useApiMutation } from "@/hooks/useApiMutation"
+import { queryClient } from "@/app/providers"
+import { useRouter } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 
 type OptionProps = {
-  mealPerDay: string
   generalPurpose: string[]
   healthGoals: string[]
   diertaryPreferences: string[]
   foodAllergies: string[]
   foodAvoidanecs: string[]
   ingredientPreferences: string[]
-  cookingPreferences: string[]
-  cusinePreferences: string[]
+  cusinePreferences: string
 }
 
-export default function Preferences() {
+const initialPreferences: OptionProps = {
+  generalPurpose: ["Regular Meals"],
+  healthGoals: [],
+  diertaryPreferences: [],
+  foodAllergies: [],
+  foodAvoidanecs: [],
+  ingredientPreferences: [],
+  cusinePreferences: "",
+}
+
+export default function DietPreferences() {
   const [active, setActive] = useState<boolean>(false)
+  const hasRun = useRef(false)
+
   const [values, setValues] = useState<OptionProps>({
-    mealPerDay: "3-4 times",
-    generalPurpose: ["Regular Meals"],
-    healthGoals: ["Weight Gain", "Diabetes Management"],
-    diertaryPreferences: [
-      "Omnivore",
-      "Low Glycemic Index",
-      "High Fiber",
-      "Low-Carbs",
-    ],
-    foodAllergies: [],
-    foodAvoidanecs: ["Sugar", "Artifical Sweeteners"],
-    ingredientPreferences: [
-      "Fruits",
-      "Vegetables",
-      "Proteins",
-      "Grains",
-      "Herbs and Spices",
-    ],
-    cookingPreferences: ["Quick and Easy", "Baking", "Grilling", "Stir-Fry"],
-    cusinePreferences: ["All"],
+    ...initialPreferences,
+  })
+
+  const router = useRouter()
+  const pathName = usePathname()
+  const searchParams = useSearchParams()
+
+  const isEmpty = Object.values(values).flatMap((item) => item).length === 0
+
+  // retrieve medication details
+  const { data: profile } = useProfile()
+  const { data: suggestions } = useApi(
+    [`patients:medications:${profile?.id}`],
+    (_, token) => patientService.getMedications(token),
+    {
+      select: (data) => firey.convertKeysToCamelCase(data) as TMedications | [],
+    }
+  )
+
+  // geenrate suggestions if no medication record was found
+  const { mutate } = useApiMutation<{
+    payload: Record<string, number>
+  }>(
+    ({ payload }, token) => patientService.generateSuggestions(token, payload),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(`patients:medications:${profile?.id}`)
+      },
+    }
+  )
+
+  // update medication preferences if already exists
+  const { mutate: updateMutate } = useApiMutation<{
+    payload: Record<string, unknown>
+  }>(({ payload }, token) => patientService.updateMedications(token, payload), {
+    onSuccess: () => {
+      queryClient.invalidateQueries(`patients:medications:${profile?.id}`)
+      // invalidate old query keys to refetch the meal list again
+      const queryKeys = queryClient
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.queryKey)
+      queryKeys.forEach((key) => {
+        if (Array.isArray(key) && key[0].startsWith("patients:meals")) {
+          queryClient.invalidateQueries(key)
+        }
+      })
+    },
   })
 
   function handleModalClose() {
@@ -66,12 +104,18 @@ export default function Preferences() {
     setActive(true)
   }
 
-  // handle meal amount selection
-  function handleMealAmount(e: React.ChangeEvent<HTMLInputElement>) {
-    setValues((prev) => ({
-      ...prev,
-      mealPerDay: e.target.value,
-    }))
+  function handleReset() {
+    if (suggestions && !Array.isArray(suggestions)) {
+      setValues((prev) => ({
+        ...initialPreferences,
+        foodAllergies: suggestions.allergies ? suggestions.allergies : [],
+        ingredientPreferences: suggestions.recommendedIngredients
+          ? suggestions.recommendedIngredients
+          : [],
+      }))
+    } else {
+      setValues(initialPreferences)
+    }
   }
 
   // handle general purpose selection
@@ -113,7 +157,7 @@ export default function Preferences() {
   // handle food allergies selection
   function handleFoodAllergies(e: React.ChangeEvent<HTMLInputElement>) {
     setValues((prev) => {
-      const value = e.target.value
+      const value = e.target.value.toLowerCase()
       const exist = prev.foodAllergies.includes(value)
       const newAllergies = exist
         ? prev.foodAllergies.filter((item) => item !== value)
@@ -122,22 +166,10 @@ export default function Preferences() {
     })
   }
 
-  // handle food avoidance selection
-  function handleFoodAvoidances(e: React.ChangeEvent<HTMLInputElement>) {
-    setValues((prev) => {
-      const value = e.target.value
-      const exist = prev.foodAvoidanecs.includes(value)
-      const newAvoidances = exist
-        ? prev.foodAvoidanecs.filter((item) => item !== value)
-        : prev.foodAvoidanecs.concat(value)
-      return { ...prev, foodAvoidanecs: newAvoidances }
-    })
-  }
-
   // handle ingredient preferences selection
   function handleIngredients(e: React.ChangeEvent<HTMLInputElement>) {
     setValues((prev) => {
-      const value = e.target.value
+      const value = e.target.value.toLowerCase()
       const exist = prev.ingredientPreferences.includes(value)
       const newIngredients = exist
         ? prev.ingredientPreferences.filter((item) => item !== value)
@@ -146,29 +178,60 @@ export default function Preferences() {
     })
   }
 
-  // handle cooking preferences selection
-  function handleCookingPref(e: React.ChangeEvent<HTMLInputElement>) {
-    setValues((prev) => {
-      const value = e.target.value
-      const exist = prev.cookingPreferences.includes(value)
-      const newCookingPref = exist
-        ? prev.cookingPreferences.filter((item) => item !== value)
-        : prev.cookingPreferences.concat(value)
-      return { ...prev, cookingPreferences: newCookingPref }
-    })
-  }
-
   // handle cusine preferences selection
   function handleCusinePref(e: React.ChangeEvent<HTMLInputElement>) {
     setValues((prev) => {
       const value = e.target.value
-      const exist = prev.cusinePreferences.includes(value)
-      const newCusines = exist
-        ? prev.cusinePreferences.filter((item) => item !== value)
-        : prev.cusinePreferences.concat(value)
-      return { ...prev, cusinePreferences: newCusines }
+      const cuisineAlreadyExists = prev.cusinePreferences === value
+      return { ...prev, cusinePreferences: cuisineAlreadyExists ? "" : value }
     })
   }
+
+  // handle preferences confirmation
+  function handleConfirm() {
+    const payload = {
+      allergies: values.foodAllergies.length > 0 ? values.foodAllergies : [],
+      recommended_ingredients:
+        values.ingredientPreferences.length > 0
+          ? values.ingredientPreferences
+          : [],
+
+      preferred_cuisine: values.cusinePreferences,
+    }
+
+    // update patients diet preferences
+    const payloadSize = Object.keys(payload).length
+    if (payloadSize > 0) {
+      updateMutate({ payload })
+    }
+
+    // close the modal
+    handleModalClose()
+  }
+
+  // automatically generate suggestions based on age
+  useEffect(() => {
+    if (hasRun.current) return
+    if (!profile?.dateOfBirth || !suggestions) return
+    const age = firey.calculateAge(profile.dateOfBirth)
+    if (Array.isArray(suggestions) || suggestions.expiry === 0) {
+      mutate({ payload: { age: age } })
+    } else {
+      // update the preferences if a record already exists
+      setValues((prev) => ({
+        ...prev,
+        foodAllergies: suggestions.allergies ? suggestions.allergies : [],
+        ingredientPreferences: suggestions.recommendedIngredients
+          ? suggestions.recommendedIngredients
+          : [],
+        ...(suggestions.preferredCuisine && {
+          cusinePreferences: suggestions.preferredCuisine,
+        }),
+      }))
+    }
+
+    hasRun.current = true
+  }, [profile?.dateOfBirth, mutate, suggestions])
 
   return (
     <React.Fragment>
@@ -176,7 +239,16 @@ export default function Preferences() {
         className="h-full sm:h-3/4 w-full max-w-[720px]"
         open={active}
         handler={handleModalClose}
-        secondaryBtn={<Button>Save changes</Button>}
+        primaryBtn={
+          <Button type="outline" onClick={handleReset}>
+            Reset
+          </Button>
+        }
+        secondaryBtn={
+          <Button disabled={isEmpty} onClick={handleConfirm}>
+            Save changes
+          </Button>
+        }
       >
         <div className="px-4 py-4 space-y-5 h-full overflow-x-hidden overflow-y-auto custom-scroll">
           {/* intro */}
@@ -191,24 +263,6 @@ export default function Preferences() {
               save your changes once you&apos;re done!
             </p>
           </div>
-          {/* meal per day */}
-          <fieldset>
-            <legend className="text-base md:text-lg font-bold">
-              {mealPerDayOpts.title}
-            </legend>
-            {/* meal per day options */}
-            <div className="flex flex-col mt-1">
-              {mealPerDayOpts.data.map(({ name, value }, idx) => (
-                <RadioInput
-                  key={`mealPerDayOpts-${idx}`}
-                  name={name}
-                  value={value}
-                  active={values.mealPerDay === value}
-                  onChange={handleMealAmount}
-                />
-              ))}
-            </div>
-          </fieldset>
 
           {/* general purposes */}
           <fieldset>
@@ -343,28 +397,8 @@ export default function Preferences() {
                   key={`alergyOpt-${idx}`}
                   name={name}
                   value={value}
-                  active={values.foodAllergies.includes(value)}
+                  active={values.foodAllergies.includes(value.toLowerCase())}
                   onChange={handleFoodAllergies}
-                />
-              ))}
-            </div>
-          </fieldset>
-
-          {/* food avoidances */}
-          <fieldset>
-            <legend className="text-base md:text-lg font-bold">
-              {foodAvoidanceOpts.title}
-            </legend>
-
-            {/* food avoidance options */}
-            <div className="flex flex-wrap mt-2 gap-2">
-              {foodAvoidanceOpts.data.map(({ name, value }, idx) => (
-                <Checkbox
-                  key={`avoidancesOpt-${idx}`}
-                  name={name}
-                  value={value}
-                  active={values.foodAvoidanecs.includes(value)}
-                  onChange={handleFoodAvoidances}
                 />
               ))}
             </div>
@@ -383,7 +417,9 @@ export default function Preferences() {
                   key={`piOpt-${idx}`}
                   name={name}
                   value={value}
-                  active={values.ingredientPreferences.includes(value)}
+                  active={values.ingredientPreferences.includes(
+                    value.toLowerCase()
+                  )}
                   onChange={handleIngredients}
                 />
               ))}
@@ -391,13 +427,13 @@ export default function Preferences() {
           </fieldset>
 
           {/* cooking preferences */}
-          <fieldset>
-            <legend className="text-base md:text-lg font-bold">
+          {/* <fieldset> */}
+          {/* <legend className="text-base md:text-lg font-bold">
               {cookingPreferenceOpts.title}
-            </legend>
+            </legend> */}
 
-            {/* cooking preference options */}
-            <div className="flex flex-wrap mt-2 gap-2">
+          {/* cooking preference options */}
+          {/* <div className="flex flex-wrap mt-2 gap-2">
               {cookingPreferenceOpts.data.map(({ name, value }, idx) => (
                 <Checkbox
                   key={`ciOpt-${idx}`}
@@ -407,8 +443,8 @@ export default function Preferences() {
                   onChange={handleCookingPref}
                 />
               ))}
-            </div>
-          </fieldset>
+            </div> */}
+          {/* </fieldset> */}
 
           {/* cuisine preferences */}
           <fieldset>
@@ -423,7 +459,7 @@ export default function Preferences() {
                   key={`cusineOpts-${idx}`}
                   name={name}
                   value={value}
-                  active={values.cusinePreferences.includes(value)}
+                  active={values.cusinePreferences === value}
                   onChange={handleCusinePref}
                 />
               ))}
@@ -434,16 +470,16 @@ export default function Preferences() {
 
       {/* customize preferences */}
       <div
-        className="flex items-center bg-zinc-200 hover:bg-zinc-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 transition duration-300 px-2.5 py-2 rounded-md w-fit ml-[2px] mt-2 cursor-pointer"
+        className="flex items-center bg-zinc-200 hover:bg-zinc-300 dark:bg-neutral-800/70 dark:hover:bg-neutral-700 transition duration-300 px-2.5 py-2 rounded-md w-fit ml-[2px] mt-2 cursor-pointer"
         onClick={handleOpenModal}
       >
         <div>
           <Icon
             name="edit-icon"
-            className="w-4 h-4 opacity-80 md:w-5 md:h-5 mt-1 fill-neutral-400"
+            className="size-[18px] opacity-80 mt-0.5 fill-neutral-500 dark:fill-neutral-400"
           />
         </div>
-        <span className="text-sm ml-1 font-semibold opacity-80">
+        <span className="text-sm ml-1 -mt-0.5 font-semibold opacity-80">
           customize preference
         </span>
       </div>

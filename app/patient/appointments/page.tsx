@@ -1,76 +1,91 @@
+"use client"
+
 import {
   BookAppointment,
   RecentAppointments,
   UpcomingAppointments,
 } from "@/components"
-import { APPOINTMENTS } from "@/lib/dummy/appointments"
-import { isSameDay, startOfToday, startOfTomorrow } from "date-fns"
+import { useApi } from "@/hooks/useApi"
+import { patientService } from "@/lib/services/patient"
+import { TAppointment } from "@/types"
+import { firey } from "@/utils"
+import {
+  addDays,
+  isSameDay,
+  isWithinInterval,
+  parseISO,
+  startOfToday,
+  startOfTomorrow,
+} from "date-fns"
 import React from "react"
 
-const today = startOfToday()
-const tomorrow = startOfTomorrow()
-
 export default function AppointmentPage() {
-  // get all the appointments for today
-  const appointmentsToday = APPOINTMENTS.filter((item) =>
-    isSameDay(today, item.date)
+  const { data: upcomingAppointments } = useApi(
+    [`patients:appointments:upcoming`],
+    (_, token) => patientService.upcoming_appointments(token),
+    {
+      select: (data) => {
+        return firey.convertKeysToCamelCase(data) as TAppointment[] // covert keys to camelCase
+      },
+    }
   )
+
+  const today = startOfToday()
+  const tomorrow = startOfTomorrow()
+  const endOfCurrentWeek = addDays(today, 6)
+
+  // get all the appointments for today
+  const appointmentsToday = upcomingAppointments
+    ? upcomingAppointments.filter((info) =>
+        isSameDay(today, parseISO(info.appointmentDate))
+      )
+    : []
 
   // get all the appointments for tomorrow
-  const appointmentsTomorrow = APPOINTMENTS.filter((item) =>
-    isSameDay(tomorrow, item.date)
-  )
+  const appointmentsTomorrow = upcomingAppointments
+    ? upcomingAppointments.filter((info) =>
+        isSameDay(tomorrow, parseISO(info.appointmentDate))
+      )
+    : []
 
-  const upcomingAppointments = [...appointmentsToday, ...appointmentsTomorrow]
+  // get all the upcoming appointments on this week
+  const currentWeekAppointments = upcomingAppointments
+    ? upcomingAppointments.filter((appointment) => {
+        const appointmentDate = parseISO(appointment.appointmentDate)
+        return isWithinInterval(appointmentDate, {
+          start: today,
+          end: endOfCurrentWeek,
+        })
+      })
+    : []
 
   return (
     <div className="pb-8">
       {/* upcoming appointments */}
-      <div className="flex md:gap-4">
-        <div
-          className={
-            upcomingAppointments.length > 0
-              ? `w-full md:w-1/3 md:min-w-96`
-              : `hidden`
-          }
-        >
-          <UpcomingAppointments
-            appointmentsToday={appointmentsToday}
-            appointmentsTomorrow={appointmentsTomorrow}
-          />
-        </div>
-        <div
-          className={
-            upcomingAppointments.length > 0
-              ? `md:w-2/3 md:bg-pattern dark:md:bg-pattern-dark rounded-lg mb-4 pb-16 md:border`
-              : `ml-auto`
-          }
-        >
-          <BookAppointment
+      {upcomingAppointments && (
+        <div className="flex md:gap-4">
+          <div
             className={
-              upcomingAppointments.length > 0 ? `md:center md:top-1/2` : `mb-4`
+              upcomingAppointments.length > 0
+                ? `w-full md:w-1/3 md:min-w-96`
+                : `hidden`
             }
-          />
+          >
+            <UpcomingAppointments
+              appointmentsToday={appointmentsToday}
+              appointmentsTomorrow={appointmentsTomorrow}
+              appointmentsCurrentWeek={currentWeekAppointments}
+            />
+          </div>
+          <div />
         </div>
-      </div>
+      )}
 
       {/* recent appointments */}
-      {APPOINTMENTS.length > 0 && (
-        <React.Fragment>
-          <h1
-            className={`${
-              upcomingAppointments.length > 0 && `mt-2`
-            } ml-2 mb-3 text-2xl font-bold`}
-          >
-            Recent Appointments
-          </h1>
-          <RecentAppointments
-            appointments={APPOINTMENTS}
-            appointmentsToday={appointmentsToday}
-            appointmentsTomorrow={appointmentsTomorrow}
-          />
-        </React.Fragment>
-      )}
+      <div className="flex w-full mb-3 relative">
+        <BookAppointment />
+      </div>
+      <RecentAppointments />
     </div>
   )
 }

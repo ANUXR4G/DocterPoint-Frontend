@@ -19,6 +19,11 @@ import {
   startOfMonth,
   startOfToday,
 } from "date-fns"
+import { useApiMutation } from "@/hooks/useApiMutation"
+import { patientService } from "@/lib/services/patient"
+import { queryClient } from "@/app/providers"
+import { useProfile } from "@/hooks/useProfile"
+import { usePathname, useRouter } from "next/navigation"
 
 type Props = {
   active: boolean
@@ -27,24 +32,22 @@ type Props = {
   type?: "profile" | "general"
 }
 
-// get current day
-const today = startOfToday()
-
-// get the first day of the current month
-const firstDayCurrentMonth = startOfMonth(today)
-
-// loop through the current month and get a preview of the dates
-const previewDays = eachDayOfInterval({
-  start: startOfMonth(firstDayCurrentMonth),
-  end: endOfMonth(firstDayCurrentMonth),
-})
-
 export default function AppointmentModal({
   active,
   closeHandler,
   doctor,
   type = "general",
 }: Props) {
+  // get current day
+  const today = startOfToday()
+  // get the first day of the current month
+  const firstDayCurrentMonth = startOfMonth(today)
+  // loop through the current month and get a preview of the dates
+  const previewDays = eachDayOfInterval({
+    start: startOfMonth(firstDayCurrentMonth),
+    end: endOfMonth(firstDayCurrentMonth),
+  })
+
   const [details, setDetails] = useState<AppointmentCreationProps>({
     doctor: doctor.name,
     hospital: doctor.hospital.name,
@@ -57,6 +60,21 @@ export default function AppointmentModal({
     notes: "",
     availableDays: doctor.availableTimes.split(":")[0].split(", "),
     time: doctor.availableTimes.split(": ")[1],
+  })
+
+  const pathname = usePathname()
+  const router = useRouter()
+  const { data } = useProfile()
+
+  // create appointment
+  const { mutate } = useApiMutation<{
+    payload: Record<string, unknown>
+  }>(({ payload }, token) => patientService.createAppointment(token, payload), {
+    onSuccess: () => {
+      queryClient.invalidateQueries(`patients:appointments:upcoming`)
+      queryClient.invalidateQueries(`patients:appointments:page:1`)
+      handleModalClose()
+    },
   })
 
   // handle month selection
@@ -113,13 +131,33 @@ export default function AppointmentModal({
     setDetails((prev) => ({ ...prev, notes: e.target.value }))
   }
 
+  // handle modal close
   function handleModalClose() {
-    setDetails((prev) => ({ ...prev, purposeOfVisit: ["General Checkup"] }))
+    setDetails((prev) => ({ ...prev, purposeOfVisit: ["General Checkup"] })) // set back to initial state
     closeHandler()
   }
 
-  // update the available time of doctors
+  // handle modal confirmation
+  function handleConfirmation(details: AppointmentCreationProps) {
+    // restructure payload for api
+    const payload = {
+      doctor_id: doctor.id,
+      mode: details.appointmentMode.startsWith("Telemedicine")
+        ? "online"
+        : "in-person",
+      purpose_of_visit: details.purposeOfVisit,
+      appointment_date: format(details.selectedDate, "yyyy-MM-dd"),
+      appointment_time: details.time,
+      ...(details.notes.length > 0 && { patient_note: details.notes }), // add notes conditionally
+    }
+
+    mutate({ payload })
+  }
+
+  // update the available time of doctors (selected date carousel)
   useEffect(() => {
+    const today = startOfToday()
+
     setDetails((prev) => ({
       ...prev,
       selectedDate: today,
@@ -137,7 +175,21 @@ export default function AppointmentModal({
         className="h-full sm:h-3/4 w-full max-w-[720px]"
         direction="center"
         secondaryBtn={
-          <Button onClick={() => console.log(details)}>Confirm</Button>
+          data ? (
+            <Button onClick={() => handleConfirmation(details)}>Confirm</Button>
+          ) : (
+            <Button
+              onClick={() => {
+                router.push(
+                  `/login?callback=${pathname}?${encodeURIComponent(
+                    `reload=t&popup=t&id=${doctor.id}`
+                  )}`
+                )
+              }}
+            >
+              Login
+            </Button>
+          )
         }
       >
         <div className="overflow-x-hidden overflow-y-auto custom-scroll">
@@ -239,7 +291,7 @@ export default function AppointmentModal({
                 placeholder="Write special notes here..."
                 value={details.notes}
                 onChange={handleSpecialNotes}
-              ></textarea>
+              />
             </div>
 
             {/* appointment details */}

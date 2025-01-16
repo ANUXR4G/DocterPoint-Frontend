@@ -1,16 +1,14 @@
-import { ApiResponse } from "@/types"
-
-async function retrive_names(): Promise<ApiResponse<string[]>> {
+async function getHospitalNames(): Promise<string[]> {
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API}/hospitals/tags/names`
   )
   if (!response.ok) {
-    throw new Error("failed to retrieve hosptial names!")
+    throw new Error("failed to retrieve hosptial names.")
   }
   return response.json()
 }
 
-async function retrive_locations(): Promise<ApiResponse<string[]>> {
+async function getHospitalLocations(): Promise<string[]> {
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API}/hospitals/tags/cities`
   )
@@ -20,19 +18,19 @@ async function retrive_locations(): Promise<ApiResponse<string[]>> {
   return response.json()
 }
 
-async function information(id: string) {
+async function getHospitalInfo(hospitalId: string) {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API}/hospitals/info?id=${id}`
+    `${process.env.NEXT_PUBLIC_API}/hospitals/${hospitalId}/info`
   )
   if (!response.ok) {
-    throw new Error(`failed to retrieve hospital #${id} information!`)
+    throw new Error(`failed to retrieve hospital #${hospitalId} information.`)
   }
   return response.json()
 }
 
-async function retrive_all(params: URLSearchParams) {
+async function getHospitals(params: string) {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API}/hospitals/info/all?${params}`
+    `${process.env.NEXT_PUBLIC_API}/hospitals/info?${params}`
   )
   if (!response.ok) {
     throw new Error("failed to retrieve hospital informations!")
@@ -40,9 +38,20 @@ async function retrive_all(params: URLSearchParams) {
   return response.json()
 }
 
+async function search(q: string) {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API}/hospitals/info?q=${q}`
+  )
+  if (!response.ok) {
+    throw new Error("failed to search hospital informations.")
+  }
+  return response.json()
+}
+
 export const hospitalService = {
-  retrive_names,
-  retrive_locations,
-  information,
-  retrive_all,
+  search,
+  getHospitalNames,
+  getHospitalLocations,
+  getHospitalInfo,
+  getHospitals,
 }

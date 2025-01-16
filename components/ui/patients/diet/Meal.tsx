@@ -2,14 +2,14 @@
 
 import { Button } from "@/components"
 import Icon from "@/components/icons"
-import { MealType } from "@/lib/dummy/diets"
+import { TMeal } from "@/types"
 import { motion } from "framer-motion"
 import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
 
 type Props = {
-  meal: MealType
+  meal: TMeal
   idx: number
 }
 

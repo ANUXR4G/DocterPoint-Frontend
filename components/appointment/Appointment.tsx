@@ -1,20 +1,24 @@
 "use client"
 
-import { TYPEAPPOINTMENT } from "@/lib/dummy/appointments"
-import { useState } from "react"
+import React, { useState } from "react"
 import { SimpleModal, Icon } from "@/components"
 import Link from "next/link"
 import { format } from "date-fns"
+import { TAppointment } from "@/types"
+import { useApiMutation } from "@/hooks/useApiMutation"
+import { patientService } from "@/lib/services/patient"
+import { queryClient } from "@/app/providers"
 
 type Props = {
-  appointment: TYPEAPPOINTMENT
-  openModal: (id: string) => void
+  appointment: TAppointment
+  openModal: (info: TAppointment) => void
 }
 
-export default function UpcomingAppointmentComponent({
+export default function SmallViewAppointment({
   appointment,
   openModal,
 }: Props) {
+  const ongoingStatuses = ["upcoming", "resheduled"]
   const [openOptions, setOpenOptions] = useState<boolean>(false)
 
   // toggle see more button controls
@@ -22,7 +26,28 @@ export default function UpcomingAppointmentComponent({
 
   // handle view button click
   function handleViewBtn() {
-    openModal(appointment.id)
+    openModal(appointment)
+    setOpenOptions(false)
+  }
+
+  // api for cancelling the current appointment its ongoing
+  const { mutate } = useApiMutation<{
+    payload: Record<string, unknown>
+  }>(
+    ({ payload }, token) =>
+      patientService.updateAppointmentInfo(token, appointment.id, payload),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(`patients:appointments:upcoming`)
+        queryClient.invalidateQueries(`patients:appointments:page:1`)
+      },
+    }
+  )
+
+  // handle cancel appointment
+  function handleAppointmentCancel() {
+    if (!ongoingStatuses.includes(appointment.status)) return
+    mutate({ payload: { status: "cancelled" } })
     setOpenOptions(false)
   }
 
@@ -31,26 +56,43 @@ export default function UpcomingAppointmentComponent({
       {/* time and type of the appointment */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 md:gap-2.5">
+          {ongoingStatuses.includes(appointment.status) && (
+            <React.Fragment>
+              <div className="center relative">
+                <div
+                  className={`size-3 center rounded-full ${
+                    appointment.status !== "upcoming" &&
+                    `bg-zinc-300 dark:bg-neutral-600 `
+                  } ${
+                    appointment.status === "upcoming" &&
+                    (appointment.type === "consultation"
+                      ? `bg-orange-400/80 dark:bg-orange-400/50 animate-ping`
+                      : `bg-blue-500/80 dark:bg-blue-500/50 animate-ping`)
+                  }`}
+                />
+                <div
+                  className={`absolute size-[12px] rounded-full ${
+                    appointment.status !== "upcoming" &&
+                    `bg-zinc-300 dark:bg-neutral-600 `
+                  } ${
+                    appointment.type === "consultation"
+                      ? `bg-orange-400`
+                      : `bg-blue-500`
+                  }`}
+                />
+              </div>
+              <span className="mt-0.5 md:mt-0 text-xs md:text-sm font-bold opacity-90">
+                {appointment.appointmentTime}
+              </span>
+            </React.Fragment>
+          )}
           <div
-            className={`size-3 rounded-full ${
-              appointment.status !== "upcoming" &&
-              `bg-zinc-300 dark:bg-neutral-600 `
-            } ${
-              appointment.type === "consultation"
-                ? `bg-orange-400`
-                : `bg-blue-500`
-            }`}
-          />
-          <span className="mt-0.5 md:mt-0 text-xs md:text-sm font-bold opacity-90">
-            {appointment.time}
-          </span>
-          <div
-            className={`text-xs font-bold px-1.5 md:px-2 py-0.5 md:py-1  rounded-sm ${
+            className={`text-xs font-bold px-1.5 md:px-2 py-0.5 text-zinc-950/70 md:py-1 rounded-sm ${
               appointment.status !== "upcoming"
-                ? `bg-zinc-400 text-neutral-800/70`
+                ? `bg-zinc-400`
                 : appointment.type === "consultation"
-                ? `bg-orange-300/80 text-orange-800/70`
-                : `bg-blue-300/80 text-blue-950/70`
+                ? `bg-orange-300/80`
+                : `bg-blue-300/80`
             }
             `}
           >
@@ -74,14 +116,19 @@ export default function UpcomingAppointmentComponent({
           }
         >
           <button
-            className="py-1 size-full hover:bg-zinc-200/70 dark:hover:bg-neutral-700 rounded-md"
+            className="py-1.5 size-full hover:bg-zinc-200/70 dark:hover:bg-neutral-700 rounded-md"
             onClick={handleViewBtn}
           >
             <span className="text-sm font-bold">View</span>
           </button>
-          <button className="py-1 hover:bg-zinc-200/70 dark:hover:bg-neutral-700 rounded-md size-full">
-            <span className="text-sm font-bold">Cancel</span>
-          </button>
+          {ongoingStatuses.includes(appointment.status) && (
+            <button
+              onClick={handleAppointmentCancel}
+              className="py-1.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700 rounded-md size-full"
+            >
+              <span className="text-sm font-bold">Cancel</span>
+            </button>
+          )}
         </SimpleModal>
       </div>
 
@@ -93,29 +140,29 @@ export default function UpcomingAppointmentComponent({
           </h4>
         ) : (
           <Link
-            className="text-sm md:text-base font-bold opacity-95 hover:opacity-100 dark:hover:text-white/80 size-fit"
-            href={`/hospitals/doctors/profile?id=${appointment.doctor.id}&type=view`}
+            className="text-sm md:text-base font-bold opacity-95 hover:opacity-100 size-fit"
+            href={`/hospitals/doctors/info?id=${appointment.doctor.id}`}
           >
             {appointment.doctor.name}
           </Link>
         )}
         <Link
-          className="text-xs md:text-sm font-semibold leading-4 md:leading-4 size-fit opacity-95 hover:opacity-100 dark:hover:text-white/80"
-          href={`/hospitals/${appointment.hospital.id}/details?type=view`}
+          className="text-xs md:text-sm font-semibold leading-4 md:leading-4 size-fit opacity-95 hover:opacity-100"
+          href={`/hospitals/${appointment.hospital.id}/info`}
         >
           {appointment.hospital.name}
         </Link>
         <p className="text-xs md:text-sm font-semibold opacity-90 leading-3 md:leading-4">
           {appointment.hospital.address}
         </p>
-        {appointment.status !== "upcoming" && (
-          <div className="flex mt-1.5 flex-col text-xs font-semibold opacity-75">
-            <span className="leading-3">{appointment.time}</span>
-            <span className="leading-3">
-              {format(appointment.date, "d/MM/yyy")}
-            </span>
-          </div>
-        )}
+        <div className="flex mt-1.5 flex-col text-xs font-semibold opacity-75">
+          {!ongoingStatuses.includes(appointment.status) && (
+            <span className="leading-3">{appointment.appointmentTime}</span>
+          )}
+          <span className="leading-3">
+            {format(appointment.appointmentDate, "dd/MM/yyy")}
+          </span>
+        </div>
       </div>
     </div>
   )

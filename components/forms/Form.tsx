@@ -43,6 +43,7 @@ export default function Form() {
   const {
     data: loginData,
     isLoading: loginIsLoading,
+    isSuccess: loginSuccess,
     error: loginError,
     mutate: loginMutate,
   } = useMutation({
@@ -52,6 +53,7 @@ export default function Form() {
   const {
     data: signupData,
     isLoading: signupIsLoading,
+    isSuccess: signupSuccess,
     error: signupError,
     mutate: signupMutate,
   } = useMutation({
@@ -61,25 +63,22 @@ export default function Form() {
   // push to dashboard after an successful authetication
   useEffect(() => {
     // based on role redirect to specific dashboard
-    if (
-      (loginData && loginData.status === "successful") ||
-      (signupData && signupData.status === "successful")
-    ) {
+    if ((loginData && loginSuccess) || (signupData && signupSuccess)) {
       if (callbackURL) {
-        // redirect to callback url if there is any n then return
+        // redirect to callback url if there is any
         router.push(`${process.env.NEXT_PUBLIC_URL}/${callbackURL}`)
         return
       }
       router.push(
         `/${
-          (loginData && loginData.data.role === "user" && "patient") ||
-          (signupData && signupData.data.role === "user" && "patient") ||
-          (loginData && loginData.data.role) ||
-          (signupData && signupData.data.role)
+          (loginData && loginData.role === "user" && "patient") ||
+          (signupData && signupData.role === "user" && "patient") ||
+          (loginData && loginData.role) ||
+          (signupData && signupData.role)
         }/dashboard`
       )
     }
-  }, [loginData, signupData, router, callbackURL])
+  }, [loginData, signupData, router, callbackURL, signupSuccess, loginSuccess])
 
   // handle authentication
   async function handleAuthentication(values: AuthValueType) {
@@ -110,7 +109,7 @@ export default function Form() {
         Enter the email address and password associated with your account to{" "}
         {pathname === "login" ? "sign in" : "sign up"}.
       </p>
-      <div className="mt-4 flex justify-between text-md bg-gray-100  dark:bg-neutral-800 text-slate-900 dark:text-neutral-400 rounded-md">
+      <div className="mt-4 flex justify-between text-md bg-gray-100  dark:bg-neutral-800 text-slate-600 dark:text-neutral-400 rounded-md">
         {["login", "signup"].map((ctx, idx) => (
           <div
             key={`auth-endpoint-${idx}`}

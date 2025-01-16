@@ -40,7 +40,7 @@ export default function Background({ name, className }: Props) {
       return (
         <div className={className}>
           <div className="absolute right-0 top-0 -z-10 m-auto size-[310px] lg:size-[500px] md rounded-full bg-fuchsia-400 opacity-20 dark:opacity-10 blur-[100px]" />
-          <div className="hidden dark:block absolute right-0 top-10 -z-10 m-auto size-[310px] lg:size-[800px] md rounded-full bg-blue-400 opacity-10 blur-[100px]" />
+          <div className="hidden dark:block absolute right-0 top-10 -z-10 m-auto size-[310px] xxl:size-[800px] md rounded-full bg-blue-400 opacity-10 blur-[100px]" />
         </div>
       )
 

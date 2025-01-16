@@ -89,11 +89,6 @@ export type AppointmentCreationProps = {
   time: string
 }
 
-export type LocationType = {
-  id: string
-  cityName: string
-}
-
 export type BookingModalProps = {
   doctor: string
   location: string
@@ -128,7 +123,7 @@ export type BloodPressureDetail = {
   data: MonitoringDetail[]
 }
 
-export type Monitoring = {
+export type TMonitoring = {
   name: string
   key: string
   imgSrc: string
@@ -153,13 +148,6 @@ export type TPatientHealth = {
   blood_glucose_records: MonitoringDetail[] | null
 }
 
-export type ApiResponse<T> = {
-  status: "successful" | "unsuccessful"
-  message: string
-  data: T
-  total?: number
-}
-
 export type TDoctorFilteringOpts = {
   locations: string[]
   hospitals: string[]
@@ -182,6 +170,20 @@ export type TDoctor = {
   hospital: { city: string; name: string; address: string; id: string }
 }
 
+export type TPatient = {
+  id: string
+  email: string
+  role: string
+  gender: string | null
+  imgSrc: string | null
+  dateOfBirth: string | null
+  emergencyNumber: string | null
+  name: string | null
+  address: string | null
+  profession: string | null
+  contactNumber: string | null
+}
+
 export type THospital = {
   id: string
   name: string
@@ -195,4 +197,102 @@ export type THospital = {
     coordinates: number[]
     type: string
   }
+}
+
+type TAppointmentDoc = {
+  id: string
+  name: string
+}
+
+export type TAppointment = {
+  id: string
+  serialNumber: number
+  mode: string
+  type: string
+  status: string
+  appointmentDate: string
+  appointmentTime: string
+  purposeOfVisit: string[]
+  testName: string | null
+  referredBy: TAppointmentDoc | null
+  doctor: TAppointmentDoc
+  hospital: TAppointmentDoc & {
+    address: string
+  }
+  patientNote: string | null
+  doctorNote: string | null
+}
+
+export type TBookingAppointment = {
+  doctor: string
+  doctorId: string
+  hospital: string
+  address: string
+  appointmentMode: string
+  purposeOfVisit: string[]
+  selectedDate: Date
+  selectedMonth: string
+  selectedMonthDays: Date[]
+  notes: string
+  availableDays: string[]
+  time: string
+}
+
+export type TBookingPrompt = {
+  doctor: string
+  location: string
+  hospital: string
+}
+
+export type TMedications = {
+  id: string
+  patientId: string
+  doctorId: string | null
+  appointmentId: string | null
+  primaryGoals: string
+  medications: {
+    medicine: { name: string; amount: number; times: string[] }[]
+    expiry: number
+  } | null
+  dietary: {
+    time: "breakfast" | "lunch" | "dinner" | "snacks"
+    energy: number
+  }[]
+  nutritions: {
+    name: "protein" | "fat" | "carbs"
+    amount: number
+  }[]
+  bmiGoal: number | null
+  energyGoal: number
+  hydration: string
+  sleep: string
+  exercises:
+    | {
+        name: string
+        times: ("morning" | "afternoon" | "evening" | "night" | "morning")[]
+        duration: string
+      }[]
+    | null
+  monitoring: { name: string; times: string }[] | null
+  expiry: number
+  allergies: string[] | null
+  recommendedIngredients: string[] | null
+  preferredCuisine: string | null
+  generatedBy: "doctor" | "system"
+  createdAt: string
+}
+
+export type TMeal = {
+  id: string
+  name: string
+  ingredients: string[]
+  calories: number
+  fat: number
+  carbs: number
+  imgSrc: string
+  description: string
+  category: string
+  time: string
+  protein: number
+  blog: string
 }

@@ -1,13 +1,17 @@
 "use client"
 
-import { Menu, Header, Sidebar } from "@/components"
+import { Menu, Header, Sidebar, CoolKid, Modal } from "@/components"
 import { AnimatePresence } from "framer-motion"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import { useAppContext } from "@/hooks/useAppContext"
+import { useProfile } from "@/hooks/useProfile"
 
 export default function Navigation() {
   const { showMenu, closeMenu } = useAppContext()
+  const { data } = useProfile()
+
+  const [shouldAllow, setShouldAllow] = useState<boolean>(!!data?.name)
 
   let pathname = usePathname()
 
@@ -22,6 +26,7 @@ export default function Navigation() {
       <Header />
       <AnimatePresence>{showMenu && <Menu />}</AnimatePresence>
       <Sidebar />
+      {/* <Modal open={!shouldAllow} /> */}
     </>
   )
 }

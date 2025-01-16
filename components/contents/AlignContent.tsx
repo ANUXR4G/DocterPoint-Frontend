@@ -30,7 +30,7 @@ export default function AlignContent({
         {hrefs ? (
           <Link
             href={hrefs[0]}
-            className="text-sm xxs:text-base font-semibold hover:text-blue-800"
+            className="text-sm xxs:text-base font-semibold opacity-90 hover:opacity-100"
           >
             {values[0]}
           </Link>

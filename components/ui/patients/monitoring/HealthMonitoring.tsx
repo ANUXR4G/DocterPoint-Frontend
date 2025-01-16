@@ -1,40 +1,46 @@
 "use client"
 
-import React, { useState } from "react"
-import { HumanAnatomy, Icon, MonitoringSlider } from "@/components"
-import { useProfile } from "@/hooks/useProfile"
 import { TPatientHealth } from "@/types"
-import { useSocket } from "@/hooks/useSocket"
+import React, { useState } from "react"
 import { useApi } from "@/hooks/useApi"
-import { healthServices } from "@/lib/services/health"
+import { useSocket } from "@/hooks/useSocket"
+import { useProfile } from "@/hooks/useProfile"
 import { modifyData } from "@/lib/dummy/health"
+import { patientService } from "@/lib/services/patient"
+import { HumanAnatomy, MonitoringSlider } from "@/components"
 
 export default function HealthMonitoring() {
-  const [activeIndex, setActiveIndex] = useState<number>(-1)
+  const [activeIndex, setActiveIndex] = useState<number>(3)
 
   const { data: userInfo } = useProfile()
 
+  // define the url of the socket url using the users id
   const socketURL = userInfo
     ? `ws://localhost:8000/api/v1/ws/monitoring/${userInfo.id}`
     : null
 
-  const { values: healthMonitoringsWS, isConnected } =
-    useSocket<TPatientHealth>(socketURL)
+  // connect the socket through the hook
+  const {
+    values: healthMonitoringsWS,
+    isConnected,
+    isReconnecting,
+  } = useSocket<TPatientHealth>(socketURL)
 
   // retrieve patient health record informations
   const { data: healthRecords } = useApi(
-    [`patient_${userInfo?.id}_health_record`],
-    (_, token) => healthServices.getPatientHealthRecord(token, userInfo?.id),
+    [`patients:monitorings:${userInfo?.id}`],
+    (_, token) => patientService.getPatientHealthRecord(token),
     {
       enabled: !!userInfo?.id,
     }
   )
 
+  // select which value to display based on the sockets connectivity
   const healthRecordValues = healthMonitoringsWS
     ? healthMonitoringsWS
-    : Array.isArray(healthRecords?.data)
+    : Array.isArray(healthRecords)
     ? undefined
-    : healthRecords?.data
+    : healthRecords
 
   // modified data based on websocket and fetching condition
   const uiData = modifyData(healthRecordValues)
@@ -45,6 +51,7 @@ export default function HealthMonitoring() {
 
   return (
     <React.Fragment>
+      {/* connection status */}
       <div className="flex items-center absolute top-5 left-5 gap-2">
         <span className="relative flex size-3">
           <span
@@ -63,17 +70,25 @@ export default function HealthMonitoring() {
             isConnected ? `text-transparent font-semibold` : `text-red-500`
           }`}
         >
-          {isConnected ? `Device Connected` : `Device Not Connected`}
+          {isConnected
+            ? `Device Connected`
+            : isReconnecting
+            ? `Device Reconnecting`
+            : `Device Not Connected`}
         </span>
       </div>
+
+      {/* human antomy object and modals for each records*/}
       <HumanAnatomy
         activeIndex={activeIndex}
         openHandler={handleOpenModal}
         closeHandler={handleCloseModal}
         uiData={uiData}
         patientId={userInfo?.id}
-        healthRecords={healthRecords && healthRecords.data}
+        healthRecords={healthRecords}
       />
+
+      {/* monitoring slider (also modal indicators) */}
       <div className="absolute left-6 bottom-5 right-0">
         <MonitoringSlider openModal={handleOpenModal} uiData={uiData} />
       </div>

@@ -1,17 +1,40 @@
 "use client"
 
-import { useState } from "react"
 import Image from "next/image"
-import { PieChart, Pie, ResponsiveContainer } from "recharts"
+import React, { useState } from "react"
 import { nutrientsChartData } from "@/lib/dummy/diets"
+import { PieChart, Pie, ResponsiveContainer } from "recharts"
 import { RenderNutritionChart, Icon } from "@/components"
+import { useProfile } from "@/hooks/useProfile"
+import { useApi } from "@/hooks/useApi"
+import { patientService } from "@/lib/services/patient"
+import { firey } from "@/utils"
+import { TMedications } from "@/types"
 
 export default function NutrientsRecommendationChart() {
   const [activeNutrient, setActiveNutrient] = useState<number>(2)
+  const [nutritions, setNutritions] =
+    useState<{ name: string; amount: number }[]>(nutrientsChartData)
+  // retrieve medication details
+  const { data: profile } = useProfile()
+  const { data: suggestions, isLoading } = useApi(
+    [`patients:medications:${profile?.id}`],
+    (_, token) => patientService.getMedications(token),
+    {
+      select: (data) => firey.convertKeysToCamelCase(data) as TMedications | [],
+      onSuccess: (data) => {
+        if (!Array.isArray(data)) {
+          setNutritions(data.nutritions)
+        }
+      },
+    }
+  )
 
   function handleMouseEnter(_: any, index: number, e: React.MouseEvent) {
     setActiveNutrient(index)
   }
+
+  if (isLoading) return <div />
 
   return (
     <div>
@@ -23,7 +46,10 @@ export default function NutrientsRecommendationChart() {
               <Pie
                 activeIndex={activeNutrient}
                 activeShape={RenderNutritionChart}
-                data={nutrientsChartData}
+                data={nutritions.map((item) => ({
+                  name: item.name,
+                  value: item.amount,
+                }))}
                 cx="50%"
                 cy="50%"
                 innerRadius={60}
@@ -39,26 +65,30 @@ export default function NutrientsRecommendationChart() {
         <div className="flex w-40 items-center flex-col text-[--primary-white] mt-0 ml-0 mr-0 mb-0 xs:-mt-36 xs:mb-4 xs:ml-auto xs:mr-4 lg:mr-10">
           <div>
             <div className="flex flex-col mb-3">
-              {nutrientsChartData.map((nutrient, idx) => (
+              {nutritions.map((nutrient, idx) => (
                 <span
                   className="text-nowrap text-base font-bold leading-5"
                   key={`nutrient_${idx}`}
                 >
-                  &#x2022; {nutrient.name} &#8212; {nutrient.value}g
+                  &#x2022; {nutrient.name} &#8212; {nutrient.amount}g
                 </span>
               ))}
             </div>
           </div>
-          <div className="flex items-center -ml-4">
-            <Icon name="fire" className="w-8 h-8 mr-0.5" />
-            <h3 className="text-[24px] lg:text-3xl font-extrabold">
-              2100 Kcal
-            </h3>
-          </div>
+          {suggestions && !Array.isArray(suggestions) && (
+            <React.Fragment>
+              <div className="flex items-center -ml-4">
+                <Icon name="fire" className="w-8 h-8 mr-0.5" />
+                <h3 className="text-[24px] lg:text-2xl font-extrabold">
+                  {`${suggestions.energyGoal} Kcal`}
+                </h3>
+              </div>
 
-          <span className="font-semibold text-sm opacity-70 ml-2">
-            Goal &#x2022; Today
-          </span>
+              <span className="font-semibold text-sm opacity-70 ml-2">
+                Goal &#x2022; Energy
+              </span>
+            </React.Fragment>
+          )}
         </div>
 
         {/* bg images */}

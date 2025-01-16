@@ -1,4 +1,4 @@
-import { AuthValueType, User } from "@/types"
+import { AuthValueType } from "@/types"
 
 async function login(values: AuthValueType) {
   try {
@@ -34,7 +34,7 @@ async function signup(values: AuthValueType) {
 
 async function profile(token: string) {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API}/users/patient/profile`,
+    `${process.env.NEXT_PUBLIC_API}/patient/profile`,
     {
       method: "GET",
       headers: {
@@ -45,7 +45,7 @@ async function profile(token: string) {
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch user data`)
+    throw new Error(`failed to fetch patient profile.`)
   }
 
   return response.json()
@@ -60,10 +60,8 @@ async function logout() {
   })
 
   if (!response.ok) {
-    throw new Error("unable to log out rn, try again later!")
+    throw new Error("failed to log out rn, try again later.")
   }
-
-  return response.json()
 }
 
 export const userService = {

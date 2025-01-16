@@ -1,30 +1,45 @@
 import { userService } from "@/lib/services/user"
 import { useApi } from "./useApi"
-import { User } from "@/types"
+import { TPatient } from "@/types"
 import { UseMutateFunction, useMutation } from "react-query"
 import { useEffect } from "react"
 import { queryClient } from "@/app/providers"
+import { firey } from "@/utils"
+import { useRouter } from "next/navigation"
 
 type USEPROFILERETURN = {
-  data: User | null
+  data?: TPatient
   logout: UseMutateFunction<any, unknown, void, unknown>
   isLoading: boolean
 }
 
 export function useProfile(allowFetching: boolean = true): USEPROFILERETURN {
+  const router = useRouter()
   const {
     data: userInfo,
     isError,
     isLoading,
-  } = useApi(["user/profile"], (_, token) => userService.profile(token), {
-    enabled: allowFetching,
-  })
+  } = useApi(
+    ["users:profile"],
+    async (_, token) => {
+      if (token) return userService.profile(token)
+    },
+    {
+      enabled: allowFetching,
+      onError: async () => {
+        await userService.logout()
+        router.refresh()
+      },
+      select: (data) => firey.convertKeysToCamelCase(data) as TPatient,
+    }
+  )
 
   // handle user log out
   const { mutate, isSuccess: isLogoutSuccess } = useMutation({
     mutationFn: () => userService.logout(),
     onSuccess: () => {
-      queryClient.removeQueries(["user/profile"])
+      queryClient.clear()
+      // queryClient.removeQueries(["users:profile"])
     },
   })
 
@@ -37,16 +52,15 @@ export function useProfile(allowFetching: boolean = true): USEPROFILERETURN {
     }
   }, [isLogoutSuccess])
 
-  if (isError || !userInfo) {
-    return {
-      data: null,
-      logout: mutate,
-      isLoading: false,
-    }
-  }
+  // if (isError || !userInfo) {
+  //   return {
+  //     logout: mutate,
+  //     isLoading: false,
+  //   }
+  // }
 
   return {
-    data: userInfo.data,
+    data: userInfo,
     logout: mutate,
     isLoading,
   }

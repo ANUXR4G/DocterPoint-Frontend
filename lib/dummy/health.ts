@@ -1,4 +1,4 @@
-import { Monitoring, TPatientHealth } from "@/types"
+import { TMonitoring, TPatientHealth } from "@/types"
 
 export const bloodGlucoseData = [
   {
@@ -71,7 +71,7 @@ export function modifyData(values?: TPatientHealth) {
         ).toFixed()}`
       : null
 
-  const modifiedValues: Monitoring[] = [
+  const modifiedValues: TMonitoring[] = [
     {
       name: "Blood Glucose",
       key: "blood_glucose_records",

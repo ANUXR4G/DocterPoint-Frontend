@@ -6,9 +6,11 @@ import {
   Icon,
   DoctorFilter,
   Pagination,
+  NoData,
+  Loader,
 } from "@/components"
 import { doctorServices } from "@/lib/services/doctor"
-import { ApiResponse, TDoctor, TDoctorFilteringOpts } from "@/types"
+import { TDoctor, TDoctorFilteringOpts } from "@/types"
 import { firey } from "@/utils"
 import Image from "next/image"
 import Link from "next/link"
@@ -24,15 +26,15 @@ export default function Doctors() {
   const popup = !!searchParams.get("popup")
   const popup_doc_id = searchParams.get("id")
   const filter_location = searchParams.get("location")
+  const page = Number(searchParams.get("page")) || 1
+  const [limit] = useState<number>(10)
+  const [totalPages, setTotalPages] = useState(1)
 
   const [open, setOpen] = useState<boolean>(popup)
   const [active, setActive] = useState<TDoctor | null>(null)
   const [openFilter, setOpenFilter] = useState<boolean>(false)
-  const [totalPages, setTotalPages] = useState(0)
-  const [page, setPage] = useState<number>(1)
-  const [limit] = useState<number>(10)
+  // const [page, setPage] = useState<number>(1)
   const [triggerFilter, setTriggerFilter] = useState<boolean>(false)
-
   const [filters, setFilters] = useState<TDoctorFilteringOpts>({
     locations: filter_location ? [filter_location] : [],
     hospitals: [],
@@ -45,17 +47,16 @@ export default function Doctors() {
   })
 
   // retrieve all the doctor informations
-  const {
-    refetch,
-    data: response,
-    isLoading,
-  } = useQuery(
+  const { refetch, data, isLoading } = useQuery(
     [`doctors:page:${page}`],
-    async () => doctorServices.retrive_all(params),
+    async () => doctorServices.getDoctors(params.toString()),
     {
       select: (data) => {
         // covert keys to camelCase
-        return firey.convertKeysToCamelCase(data) as ApiResponse<TDoctor[]>
+        return firey.convertKeysToCamelCase(data) as {
+          total: number
+          doctors: TDoctor[]
+        }
       },
       staleTime: 0, //refetch on every query mount
       keepPreviousData: true,
@@ -63,22 +64,20 @@ export default function Doctors() {
   )
 
   // retrieve a specific doctor information if popup is enabled
-  const _ = useQuery(
-    [`doctor:info:${popup_doc_id}`],
+  const { isLoading: infoLoading } = useQuery(
+    [`doctors:info:${popup_doc_id}`],
     async () => {
       if (!active && popup_doc_id) {
-        return doctorServices.profile(popup_doc_id)
+        return doctorServices.getDoctorInfo(popup_doc_id)
       }
     },
     {
       select: (data) => {
         // covert keys to camelCase
-        return firey.convertKeysToCamelCase(data) as ApiResponse<TDoctor>
+        return firey.convertKeysToCamelCase(data) as TDoctor
       },
       onSuccess: (doctor) => {
-        if (doctor) {
-          setActive(doctor.data)
-        }
+        if (doctor) setActive(doctor)
       },
     }
   )
@@ -103,17 +102,20 @@ export default function Doctors() {
 
   // handle prev indicator
   function handlePreviousPage() {
-    setPage((prev) => Math.max(prev - 1, 1))
+    // setPage((prev) => Math.max(prev - 1, 1))
+    router.push(`?page=${Math.min(page + 1, totalPages)}`)
   }
 
   // handle next indicator
   function handleNextPage() {
-    setPage((prev) => Math.min(prev + 1, totalPages))
+    // setPage((prev) => Math.min(prev + 1, totalPages))
+    router.push(`?page=${Math.min(page + 1, totalPages)}`)
   }
 
   // handle page number indicator
   function handlePageChange(page: number) {
-    setPage(page)
+    // setPage(page)
+    router.push(`?page=${page}`)
   }
 
   function handleReset() {
@@ -121,14 +123,12 @@ export default function Doctors() {
       locations: [],
       hospitals: [],
     })
-    setPage(1)
     setTriggerFilter(true)
     setOpenFilter(false)
   }
 
   function handleConfirm() {
     refetch()
-    setPage(1)
     setTriggerFilter(true)
     setOpenFilter(false)
   }
@@ -157,11 +157,14 @@ export default function Doctors() {
 
   // update the total size of page
   useEffect(() => {
-    if (!response || !response.total) return
-    setTotalPages(Math.ceil(response.total / limit))
-  }, [response, limit])
+    if (!data) return
+    setTotalPages(Math.ceil(data.total / limit))
+  }, [data, limit])
 
-  if (isLoading || !response) return <div />
+  if (isLoading || infoLoading) return <Loader />
+
+  // handle inaccurate information
+  if (!data) return <NoData content="oops, something went wrong." />
 
   return (
     <div className="flex flex-col">
@@ -181,17 +184,17 @@ export default function Doctors() {
       </div>
       <div
         className={
-          response.data.length > 0
+          data.doctors.length > 0
             ? `grid grid-cols-1 xxs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 3xl:grid-cols-5 gap-2 md:gap-3 md:gap-y-4 mt-0 md:mt-1`
             : `w-full`
         }
       >
-        {response.data.length > 0 ? (
-          response.data.map((props, idx) => (
+        {data.doctors.length > 0 ? (
+          data.doctors.map((props, idx) => (
             <Link
               key={`doctor_l_${idx}`}
               href={{
-                pathname: "/hospitals/doctors/profile",
+                pathname: "/hospitals/doctors/info",
                 query: { id: props.id },
               }}
             >
@@ -265,7 +268,7 @@ export default function Doctors() {
       </div>
 
       {/* pagination */}
-      {response.data.length > 0 && (
+      {totalPages > 1 && (
         <Pagination
           totalPages={totalPages}
           currentPage={page}

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { Dispatch, useState } from "react"
+import React, { Dispatch } from "react"
 import { Button, Checkbox, Modal } from "@/components"
 import { TDoctorFilteringOpts } from "@/types"
 import { useQueries } from "react-query"
@@ -26,17 +26,17 @@ export default function DoctorFilter({
 }: Props) {
   const [url1Query, url2Query] = useQueries([
     {
-      queryKey: ["hospital:names"],
-      queryFn: hospitalService.retrive_names,
+      queryKey: ["hospitals:names"],
+      queryFn: hospitalService.getHospitalNames,
     },
     {
-      queryKey: ["hospital:locations"],
-      queryFn: hospitalService.retrive_locations,
+      queryKey: ["hospitals:locations"],
+      queryFn: hospitalService.getHospitalLocations,
     },
   ])
 
-  const hospitals = url1Query.data?.data
-  const locations = url2Query.data?.data
+  const hospitals = url1Query.data
+  const locations = url2Query.data
 
   // handle location selection
   function handleLocations(e: React.ChangeEvent<HTMLInputElement>) {

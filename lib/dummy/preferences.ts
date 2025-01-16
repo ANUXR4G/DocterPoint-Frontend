@@ -128,26 +128,22 @@ export const allergyOpts = {
   data: [
     {
       name: "allergy_1",
-      value: "Peanut Allergy",
+      value: "Nuts",
     },
     {
       name: "allergy_2",
-      value: "Tree Nut Allergy",
+      value: "Fish",
     },
     {
       name: "allergy_3",
-      value: "Fish Allergy",
+      value: "Eggs",
     },
     {
       name: "allergy_4",
-      value: "Egg Allergy",
-    },
-    {
-      name: "allergy_5",
       value: "Gluten Intolerance",
     },
     {
-      name: "allergy_6",
+      name: "allergy_5",
       value: "Lactose Intolerance",
     },
   ],
@@ -200,11 +196,7 @@ export const ingredientPreferenceOpts = {
     },
     {
       name: "ip_5",
-      value: "Dairy Alternatives",
-    },
-    {
-      name: "ip_6",
-      value: "Herbs and Spices",
+      value: "Dairy",
     },
   ],
 }

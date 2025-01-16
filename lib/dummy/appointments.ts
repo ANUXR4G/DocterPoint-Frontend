@@ -1,5 +1,3 @@
-import { IconNames } from "@/types"
-
 type AppointmentProps = {
   name: string
   type: string

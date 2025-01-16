@@ -1,19 +1,14 @@
 "use client"
 
 import Image from "next/image"
-import { useSocket } from "@/hooks/useSocket"
-import { useProfile } from "@/hooks/useProfile"
-import { useApi } from "@/hooks/useApi"
-import { Monitoring, TPatientHealth } from "@/types"
-import { modifyData } from "@/lib/dummy/health"
-import { healthServices } from "@/lib/services/health"
-import { Icon, MultiHealthModal, SingleHealthModal } from "@/components"
+import { TMonitoring, TPatientHealth } from "@/types"
+import { MultiHealthModal, SingleHealthModal } from "@/components"
 
 type Props = {
   activeIndex: number
   openHandler: (idx: number) => void
   closeHandler(): void
-  uiData: Monitoring[]
+  uiData: TMonitoring[]
   patientId?: string
   healthRecords?: TPatientHealth | []
 }
@@ -44,6 +39,7 @@ export default function HumanAnatomy({
 
         {uiData.map((item, idx) =>
           idx === 0 || idx === 1 ? (
+            // modals that has nested values (like blood glucose and blood pressure records)
             <MultiHealthModal
               key={`monitoring-indicator-${idx}`}
               open={activeIndex >= 0 && activeIndex === idx}
@@ -56,6 +52,7 @@ export default function HumanAnatomy({
               data={item}
             />
           ) : (
+            // modals that has a single value record (the rest of the types)
             <SingleHealthModal
               key={`monitoring-indicator-${idx}`}
               open={activeIndex >= 0 && activeIndex === idx}

@@ -2,8 +2,8 @@ import { firey } from "@/utils"
 
 type DietCategoryOptions = {
   activity: number
-  water: number
-  sleep: number
+  water: string
+  sleep: string
 }
 
 type RecommendedCalories = {
@@ -90,7 +90,7 @@ export function recommendedCategoryOptions({
       imgSrc:
         "https://res.cloudinary.com/dwhlynqj3/image/upload/v1720447731/glucoguide/diet/diet-sleep.png",
       position: "top",
-      info: firey.convertMinToHourMinFormat(sleep),
+      info: sleep,
       size: "larger",
     },
   ] as DietOptionProps[]

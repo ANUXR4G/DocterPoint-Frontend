@@ -1,21 +1,16 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import dynamic from "next/dynamic"
-import {
-  mealRecommendationOptions,
-  mealRecommendations,
-  MealType,
-} from "@/lib/dummy/diets"
+import { mealRecommendationOptions } from "@/lib/dummy/diets"
 import { firey } from "@/utils"
-import { Meal } from "@/components"
+import { CityScene, Meal, Pagination } from "@/components"
 import { partsOfDay } from "@/lib/dummy/recommededOptData"
-
-const WalkingDog = dynamic(() => import("../../../fancy/WalkingDog"), {
-  ssr: false,
-})
+import { useApi } from "@/hooks/useApi"
+import { mealService } from "@/lib/services/meal"
+import { TMeal } from "@/types"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 export default function FoodRecommendations() {
   const options = partsOfDay({
@@ -24,8 +19,14 @@ export default function FoodRecommendations() {
     snacks: 120,
     dinner: 700,
   })
-  // get current date in hours
-  const time = new Date().getHours()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const page = Number(searchParams.get("page")) || 1
+  const [limit] = useState<number>(10)
+  const [totalPages, setTotalPages] = useState<number>(1)
+
+  const time = new Date().getHours() // get current date in hours
 
   // get the current part of the day
   const currentPOD = options.filter(
@@ -33,16 +34,84 @@ export default function FoodRecommendations() {
   )[0]
 
   // get the recommeded meals based on category, e.g - breakfast, lunch, dinner
-  const mealData = firey.groupByCategory(mealRecommendations, "category")
-  const [active, setActive] = useState<string>(currentPOD.status)
-  const [activeMeals, setActiveMeals] = useState<MealType[]>(
-    mealData[currentPOD.status] || []
+  const category = searchParams.get("category") || currentPOD.status
+
+  // retrieve all the meals based on the selected category
+  const { data, isLoading } = useApi(
+    [
+      `${
+        totalPages > 1
+          ? `patients:meals:${category}:page:${page}`
+          : `patients:meals:${category}`
+      }`,
+    ],
+    async (_, token) => {
+      const params = firey.createSearchParams({
+        page: totalPages > 1 ? String(page) : String(1),
+        limit,
+        category,
+      })
+      return mealService.getMeals(token, params.toString())
+    },
+    {
+      // reconstruct the response to have keys with camelCasing
+      select: (data) => {
+        if (data) {
+          return firey.convertKeysToCamelCase(data) as {
+            total: number
+            meals: TMeal[]
+          }
+        }
+      },
+    }
   )
 
-  // handle meal selection
-  function selectMealCategory(category: string) {
-    setActiveMeals(mealData[category])
+  // handle page number indicator (pagination)
+  function handlePageChange(page: number) {
+    const oldParams = new URLSearchParams(searchParams)
+    oldParams.delete("page")
+    router.push(
+      `${
+        oldParams.size === 0
+          ? `?page=${page}`
+          : `?${oldParams.toString()}&page=${page}`
+      }`
+    )
   }
+
+  // handle previous page (pagination btn)
+  function handlePreviousPage() {
+    const oldParams = new URLSearchParams(searchParams)
+    oldParams.delete("page")
+    const prevPageKey = `page=${Math.max(page - 1, 1)}`
+    router.push(
+      `${
+        oldParams.size === 0
+          ? `?${prevPageKey}`
+          : `?${oldParams.toString()}&${prevPageKey}`
+      }`
+    )
+  }
+
+  // handle next page (pagination btn)
+  function handleNextPage() {
+    const oldParams = new URLSearchParams(searchParams)
+    oldParams.delete("page")
+    const prevNextKey = `page=${Math.min(page + 1, totalPages)}`
+    router.push(
+      `${
+        oldParams.size === 0
+          ? `?${prevNextKey}`
+          : `?${oldParams.toString()}&${prevNextKey}`
+      }`
+    )
+  }
+
+  // update the total size of page
+  useEffect(() => {
+    if (!data) return
+    setTotalPages(Math.ceil(data.total / limit))
+  }, [data, limit])
 
   return (
     <React.Fragment>
@@ -57,11 +126,21 @@ export default function FoodRecommendations() {
           <div
             key={`recommended_meal_option_${idx}`}
             onClick={() => {
-              setActive(option.category)
-              selectMealCategory(option.category)
+              const oldParams = new URLSearchParams(searchParams)
+              oldParams.delete("category")
+              oldParams.delete("page")
+              router.push(
+                `${
+                  oldParams.size === 0
+                    ? `?category=${option.category}&page=1`
+                    : `?category=${
+                        option.category
+                      }&page=1&${oldParams.toString()}`
+                }`
+              )
             }}
             className={`min-w-14 shadow-sm min-h-12 lg:min-w-36 lg:min-h-32 center cursor-pointer rounded-2xl flex items-center ml-1 ${
-              active === option.category
+              category === option.category
                 ? `outline outline-offset-4 outline-2 outline-blue-500`
                 : `hover:shadow-md`
             }`}
@@ -98,50 +177,58 @@ export default function FoodRecommendations() {
       {/* meal recommendations */}
       <div className="ml-2 mt-8 opacity-90 overflow-hidden xl:mt-9">
         <motion.div
-          key={active}
+          key={category}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
         >
           <h3 className="text-lg uppercase font-extrabold tracking[0.2px]">
-            {active}
+            {category}
           </h3>
         </motion.div>
       </div>
 
       <div className="ml-1.5 overflow-hidden">
         <motion.div
-          key={options.filter((opt) => opt.status === active)[0].calories}
+          key={options.filter((opt) => opt.status === category)[0].calories}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}
           exit={{ opacity: 0 }}
           className="flex items-end"
         >
           <h3 className="text-4xl leading-8 lg:leading-9 font-extrabold tracking[0.2px]">
-            {options.filter((opt) => opt.status === active)[0].calories}kcal
+            {options.filter((opt) => opt.status === category)[0].calories}kcal
           </h3>
           <span className="leading-7 font-bold opacity-80">(goal)</span>
         </motion.div>
       </div>
 
       <motion.div className="mt-4 mb-4 grid grid-cols-1 xxs:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5 gap-2 md:gap-2.5 lg:gap-3 2xl:gap-4">
-        {activeMeals && activeMeals.length > 0 ? (
-          activeMeals.map((meal, idx) => (
+        {data &&
+          data.meals.length > 0 &&
+          data.meals.map((meal: any, idx: number) => (
             <Meal
               meal={meal}
               idx={idx}
               key={`meal-recommendation-${meal.category}-${idx}`}
             />
-          ))
-        ) : (
-          <div className="center flex-col mb-4">
-            <WalkingDog className="w-full h-full max-w-80" />
-            <span className="text-sm xxs:text-base font-semibold lg:font-bold text-center opacity-70 -mt-4">
-              no {active} recommendations found!
-            </span>
-          </div>
-        )}
+          ))}
       </motion.div>
+
+      {/* pagination controls */}
+      {totalPages > 1 && (
+        <Pagination
+          totalPages={totalPages}
+          currentPage={page}
+          handlePreviousPage={handlePreviousPage}
+          handleNextPage={handleNextPage}
+          onPageChange={handlePageChange}
+        />
+      )}
+
+      {/* empty data and loading state */}
+      {isLoading && <CityScene content="Loading..." />}
+      {data && data.total === 0 && <CityScene content="No Meal Found" />}
     </React.Fragment>
   )
 }

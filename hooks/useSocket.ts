@@ -1,59 +1,57 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 export function useSocket<T>(url: string | null, retryInterval: number = 5000) {
   const [values, setValues] = useState<T | null>(null)
   const [isConnected, setIsConnected] = useState<boolean>(false)
+  const [isReconnecting, setIsReconnecting] = useState<boolean>(false)
   const socketRef = useRef<WebSocket | null>(null)
   const retryTimeout = useRef<NodeJS.Timeout | null>(null)
 
-  function connect() {
+  const connect = useCallback(() => {
     if (!url) return
 
     socketRef.current = new WebSocket(url)
 
     socketRef.current.onopen = () => {
       setIsConnected(true)
-      console.log("websocket connected!")
+      setIsReconnecting(false)
+      console.log("websocket connected.")
     }
 
     socketRef.current.onclose = () => {
       setIsConnected(false)
-      console.log("websocket disconnected!")
-      retryConnection()
+      console.log("websocket disconnected.")
+      setIsReconnecting(true)
+
+      // retry to connect again
+      if (retryTimeout.current) clearTimeout(retryTimeout.current)
+      retryTimeout.current = setTimeout(() => {
+        console.log("reconnecting to websocket...")
+        connect()
+      }, retryInterval)
     }
 
     socketRef.current.onmessage = (event: MessageEvent) => {
       setValues(JSON.parse(event.data))
     }
 
-    socketRef.current.onerror = (error: Event) => {
-      // console.error("webSocket error: ", error)
-      socketRef.current?.close() // close connection to trigger onclose
+    socketRef.current.onerror = () => {
+      if (!socketRef.current) return
+      socketRef.current.close() // close connection to trigger onclose
     }
-  }
-
-  function retryConnection() {
-    if (retryTimeout.current) clearTimeout(retryTimeout.current)
-    retryTimeout.current = setTimeout(() => {
-      console.log("reconnecting to websocket...")
-      connect()
-    }, retryInterval)
-  }
+  }, [retryInterval, url])
 
   useEffect(() => {
-    connect()
+    if (url) connect()
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.close()
-      }
-
       if (retryTimeout.current) clearTimeout(retryTimeout.current)
     }
-  }, [url])
+  }, [url, connect])
 
   return {
     values,
     isConnected,
+    isReconnecting,
   }
 }

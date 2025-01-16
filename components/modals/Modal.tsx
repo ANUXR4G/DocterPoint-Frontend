@@ -87,7 +87,7 @@ export default function PopupModal({
                   <span className="sr-only">Close</span>
                   <Icon
                     name="cross"
-                    className="size-4 tl-[0.5px] -ml-[0.5px]"
+                    className="size-4 tl-[0.5px]"
                     pathClassName="dark:stroke-neutral-300"
                   />
                 </button>

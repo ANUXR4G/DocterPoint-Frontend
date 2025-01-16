@@ -1,16 +1,21 @@
 "use client"
 
-import { AppoinmentDetailsModal, Appointment, Modal } from "@/components"
-import { TYPEAPPOINTMENT } from "@/lib/dummy/appointments"
+import {
+  AppointmentDetailsModal,
+  Appointment,
+  Modal,
+  EmptyAppointment,
+  Pagination,
+} from "@/components"
+import { useApi } from "@/hooks/useApi"
+import { patientService } from "@/lib/services/patient"
+import { TAppointment } from "@/types"
+import { firey } from "@/utils"
 import { format } from "date-fns"
+import Image from "next/image"
 import Link from "next/link"
-import React, { useState } from "react"
-
-type Props = {
-  appointments: TYPEAPPOINTMENT[]
-  appointmentsToday: TYPEAPPOINTMENT[]
-  appointmentsTomorrow: TYPEAPPOINTMENT[]
-}
+import { useRouter, useSearchParams } from "next/navigation"
+import React, { useEffect, useState } from "react"
 
 const tableFields = [
   "serial",
@@ -24,37 +29,98 @@ const tableFields = [
   "details",
 ]
 
-export default function RecentAppointments({
-  appointments,
-  appointmentsToday,
-  appointmentsTomorrow,
-}: Props) {
-  const [selected, setSelected] = useState<string | null>(null)
-  const [openDetailsModal, setOpenDetailsModal] = useState<boolean>(false)
+export default function RecentAppointments() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  const popup = !!searchParams.get("popup")
+  const page = Number(searchParams.get("page")) || 1
+  const [limit] = useState<number>(10)
+  const [totalPages, setTotalPages] = useState<number>(1)
+
+  const [selected, setSelected] = useState<TAppointment | null>(null)
+  const [openDetailsModal, setOpenDetailsModal] = useState<boolean>(popup)
   const [openTestsModal, setOpenTestsModal] = useState<boolean>(false)
 
+  const [query, setQuery] = useState<string>("")
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setQuery(e.target.value)
+
+  const { data, isLoading } = useApi(
+    [`patients:appointments:page:${page}`],
+    (_, token) =>
+      patientService.getAllAppointments(token, searchParams.toString()),
+    {
+      select: (data) => {
+        return firey.convertKeysToCamelCase(data) as {
+          total: number
+          appointments: TAppointment[]
+        } // covert keys to camelCase
+      },
+      staleTime: 0,
+    }
+  )
+
   // handle appointment details modal opening
-  function handleOpenDetailsModal(id: string) {
-    setSelected(id)
+  function handleOpenDetailsModal(info: TAppointment, idx: number) {
+    if (!searchParams.get("popup") && !searchParams.get("id")) {
+      router.push(`?${searchParams}&popup=t&id=${info.id}`)
+    }
+    setSelected(info)
     setOpenDetailsModal(true)
   }
 
   // handle appointment details modal closing
   function closeDetailsModal() {
-    setSelected(null)
+    router.push(`?page=${page}`)
     setOpenDetailsModal(false)
+    setSelected(null)
   }
 
-  const upcomingAppointments = [...appointmentsToday, ...appointmentsTomorrow]
+  // handle page number indicator
+  function handlePageChange(page: number) {
+    setQuery("")
+    router.push(`?page=${page}`)
+  }
 
-  // get only the appointments that is not ongoing
-  const upcomingAppointmentIds = upcomingAppointments.map((item) => item.id)
-  const previousAppointments = appointments.filter(
-    (item) => !upcomingAppointmentIds.includes(item.id)
-  )
+  // handle previous page
+  function handlePreviousPage() {
+    setQuery("")
+    router.push(`?page=${Math.max(page - 1, 1)}`)
+  }
+
+  // handle next page
+  function handleNextPage() {
+    setQuery("")
+    router.push(`?page=${Math.min(page + 1, totalPages)}`)
+  }
+
+  // update queries
+  useEffect(() => {
+    const encodedQuery = encodeURIComponent(query).replace(/%20/g, "+")
+    if (query.length > 0) {
+      router.push(`?q=${encodedQuery}&page=${page}`)
+    }
+  }, [searchParams, router, page, limit, query])
+
+  // update the total size of page
+  useEffect(() => {
+    if (!data) return
+    setTotalPages(Math.ceil(data.total / limit))
+  }, [data, limit])
+
+  // serial number based on offset (page) and limit
+  // const getSerial = (idx: number) => (page - 1) * limit + idx + 1
+
+  if (!data || isLoading) return <div />
+  if (data.appointments.length === 0) return <EmptyAppointment />
 
   return (
     <React.Fragment>
+      <h1 className={`mt-6 ml-2 mb-3 text-2xl font-bold`}>
+        Recent Appointments
+      </h1>
       <div className="border rounded-lg overflow-x-auto hidden md:block">
         <table className="table-auto min-w-full divide-y divide-gray-200">
           <thead className="bg-zinc-200/50 dark:bg-neutral-500/50">
@@ -70,118 +136,118 @@ export default function RecentAppointments({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 ">
-            {previousAppointments.map((item, idx) => (
-              <tr key={`recent-table-body-${idx}`}>
-                {/* serial */}
-                <td className="p-2 text-sm text-center font-semibold text-gray-800 dark:text-neutral-300 opacity-80">
-                  #{item.serial}
-                </td>
+          <tbody className="divide-y divide-gray-200">
+            {data.appointments.length > 0 &&
+              data.appointments.map((item, idx) => (
+                <tr key={`recent-table-body-${idx}`}>
+                  {/* serial */}
+                  <td className="p-2 text-sm text-center font-semibold text-gray-800 dark:text-neutral-300 opacity-80">
+                    #{item.serialNumber}
+                  </td>
 
-                {/* time */}
-                <td className="p-2 text-sm font-medium text-gray-800 dark:text-neutral-300 whitespace-nowrap">
-                  <div className="flex flex-col">
-                    <span>{item.time}</span>
-                    <span className="text-xs font-semibold opacity-75">
-                      {format(item.date, "d/MM/yyy")}
-                    </span>
-                  </div>
-                </td>
+                  {/* time */}
+                  <td className="p-2 text-sm font-medium text-gray-800 dark:text-neutral-300 whitespace-nowrap">
+                    <div className="flex flex-col">
+                      <span>{item.appointmentTime}</span>
+                      <span className="text-xs font-semibold opacity-75">
+                        {format(item.appointmentDate, "dd/MM/yyyy")}
+                      </span>
+                    </div>
+                  </td>
 
-                {/* status */}
-                <td className="w-28 p-2 text-xs font-bold text-gray-800/70 dark:text-neutral-300/70">
-                  <div className="px-2 py-1.5 text-center whitespace-nowrap rounded-lg flex items-center gap-2">
-                    <div
-                      className={`size-3 rounded-full ${
-                        item.status === "upcoming"
-                          ? `bg-green-200 dark:bg-green-300`
-                          : `bg-blue-200 dark:bg-blue-300`
-                      }`}
-                    />
-                    <span>{item.status}</span>
-                  </div>
-                </td>
+                  {/* status */}
+                  <td className="w-28 p-2 text-xs font-bold text-gray-800/70 dark:text-neutral-300/70">
+                    <div className="px-2 py-1.5 text-center whitespace-nowrap rounded-lg flex items-center gap-2">
+                      <div
+                        className={`size-3 rounded-full ${
+                          item.status === "upcoming"
+                            ? `bg-green-200 dark:bg-green-300`
+                            : `bg-blue-200 dark:bg-blue-300`
+                        }`}
+                      />
+                      <span>{item.status}</span>
+                    </div>
+                  </td>
 
-                {/* doctor */}
-                <td className="p-2 text-sm font-medium text-gray-800 dark:text-neutral-300 min-w-32 max-w-36">
-                  <div>
-                    <Link
-                      href={`/hospitals/doctors/profile?id=${item.doctor.id}&type=view`}
-                    >
-                      {item.doctor.name}
-                    </Link>
-                  </div>
-                </td>
+                  {/* doctor */}
+                  <td className="p-2 text-sm font-medium text-gray-800 dark:text-neutral-300 min-w-32 max-w-36">
+                    <div>
+                      <Link
+                        href={`/hospitals/doctors/info?id=${item.doctor.id}`}
+                      >
+                        {item.doctor.name}
+                      </Link>
+                    </div>
+                  </td>
 
-                {/* hospital details */}
-                <td className="p-2 text-sm font-medium text-gray-800 dark:text-neutral-300 min-w-36">
-                  <div>
-                    <Link
-                      href={`hospitals/${item.hospital.id}/details?type=view`}
-                    >
-                      {item.hospital.name}
-                    </Link>
-                    <p className="text-xs font-semibold opacity-80">
-                      {item.hospital.address}
-                    </p>
-                  </div>
-                </td>
+                  {/* hospital details */}
+                  <td className="p-2 text-sm font-medium text-gray-800 dark:text-neutral-300 min-w-36">
+                    <div>
+                      <Link href={`/hospitals/${item.hospital.id}/info`}>
+                        {item.hospital.name}
+                      </Link>
+                      <p className="text-xs font-semibold opacity-80">
+                        {item.hospital.address}
+                      </p>
+                    </div>
+                  </td>
 
-                {/* visit reason */}
-                <td className="min-w-40 p-2 text-xs font-semibold text-gray-800 dark:text-neutral-300 opacity-80">
-                  {item.purposeOfVisit.join(", ")}.
-                </td>
+                  {/* visit reason */}
+                  <td className="min-w-40 p-2 text-xs font-semibold text-gray-800 dark:text-neutral-300 opacity-80">
+                    {item.purposeOfVisit.join(", ")}.
+                  </td>
 
-                {/* type */}
-                <td
-                  className={`p-2 w-28 text-xs font-bold text-gray-800/70 dark:text-neutral-300`}
-                >
-                  <div className="px-2 py-1.5 text-center whitespace-nowrap rounded-lg flex gap-2 items-center">
-                    <div className="size-3 rounded-full bg-zinc-300" />
-                    <span>{item.mode}</span>
-                  </div>
-                </td>
-
-                <td className="p-2 text-center text-sm font-medium text-gray-800">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent text-blue-600 hover:text-blue-800 focus:outline-none focus:text-blue-800 disabled:opacity-50 disabled:pointer-events-none"
-                    onClick={() => setOpenTestsModal(true)}
+                  {/* type */}
+                  <td
+                    className={`p-2 w-28 text-xs font-bold text-gray-800/70 dark:text-neutral-300`}
                   >
-                    view
-                  </button>
-                </td>
-                <td className="text-center px-2 py-4  text-sm font-medium text-gray-800">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent text-blue-600 hover:text-blue-800 focus:outline-none focus:text-blue-800 disabled:opacity-50 disabled:pointer-events-none"
-                    onClick={() => handleOpenDetailsModal(item.id)}
-                  >
-                    view
-                  </button>
-                </td>
-              </tr>
-            ))}
+                    <div className="px-2 py-1.5 text-center whitespace-nowrap rounded-lg flex gap-2 items-center">
+                      <div className="size-3 rounded-full bg-zinc-300" />
+                      <span>{item.mode}</span>
+                    </div>
+                  </td>
+
+                  <td className="p-2 text-center text-sm font-medium text-gray-800">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent text-blue-600 hover:text-blue-800 focus:outline-none focus:text-blue-800 disabled:opacity-50 disabled:pointer-events-none"
+                      onClick={() => setOpenTestsModal(true)}
+                    >
+                      view
+                    </button>
+                  </td>
+                  <td className="text-center px-2 py-4  text-sm font-medium text-gray-800">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-x-2 text-sm font-semibold rounded-lg border border-transparent text-blue-600 hover:text-blue-800 focus:outline-none focus:text-blue-800 disabled:opacity-50 disabled:pointer-events-none"
+                      onClick={() => handleOpenDetailsModal(item, idx)}
+                    >
+                      view
+                    </button>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
 
       {/* for smaller viewport */}
       <div className="bg-slate-200/50 dark:bg-neutral-700 p-4 pb-5 rounded-lg flex flex-col gap-4 md:hidden">
-        {previousAppointments.map((item, idx) => (
+        {data.appointments.map((item, idx) => (
           <Appointment
             key={`appointment-today-${idx}`}
             appointment={item}
-            openModal={handleOpenDetailsModal}
+            openModal={() => handleOpenDetailsModal(item, idx)}
           />
         ))}
       </div>
 
       {/* appointment modal details */}
-      <AppoinmentDetailsModal
+      <AppointmentDetailsModal
         isOpen={openDetailsModal}
         closeModal={closeDetailsModal}
         selected={selected}
+        setSelected={setSelected}
       />
 
       {/* tests */}
@@ -192,6 +258,17 @@ export default function RecentAppointments({
           </span>
         </div>
       </Modal>
+
+      {/* pagination */}
+      {totalPages > 1 && (
+        <Pagination
+          totalPages={totalPages}
+          currentPage={page}
+          handlePreviousPage={handlePreviousPage}
+          handleNextPage={handleNextPage}
+          onPageChange={handlePageChange}
+        />
+      )}
     </React.Fragment>
   )
 }

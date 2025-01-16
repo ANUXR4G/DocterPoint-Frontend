@@ -3,12 +3,12 @@
 import { motion } from "framer-motion"
 import Image from "next/image"
 import { Icon, Swiper } from "@/components"
-import { Monitoring } from "@/types"
+import { TMonitoring } from "@/types"
 import React, { useState } from "react"
 
 type Props = {
   openModal: (idx: number) => void
-  uiData: Monitoring[]
+  uiData: TMonitoring[]
 }
 
 export default function MonitoringSlider({ openModal, uiData }: Props) {

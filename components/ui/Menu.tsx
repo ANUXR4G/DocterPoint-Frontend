@@ -50,6 +50,7 @@ export default function Menu() {
             {content.slice(0, 6).map(({ name, icon, dest }, idx) => (
               <Link
                 href={dest ?? "#"}
+                onClick={() => closeMenu()}
                 className={`flex transition duration-200 items-center py-2 px-2 gap-2 rounded-md ${
                   pathname === dest
                     ? `bg-[--primary-blue] dark:bg-neutral-800 hover:bg-[--primary-blue] text-[--primary-white]`

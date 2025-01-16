@@ -6,10 +6,10 @@ import { queryClient } from "@/app/providers"
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useClicksOutside } from "@/hooks/useClicksOutside"
-import { Button, Icon, Background } from "@/components"
 import { useApiMutation } from "@/hooks/useApiMutation"
-import { healthServices } from "@/lib/services/health"
-import { ApiResponse, Monitoring, TPatientHealth } from "@/types"
+import { patientService } from "@/lib/services/patient"
+import { Button, Icon, Background } from "@/components"
+import { TMonitoring, TPatientHealth } from "@/types"
 
 type Props = {
   idx: number
@@ -19,7 +19,7 @@ type Props = {
   direction: "left" | "right"
   healthRecords?: TPatientHealth | []
   patientId?: string
-  data: Monitoring
+  data: TMonitoring
 }
 
 const suggestedValues = [0, 0, 37, 99, 154, 22.3] // default health record values for input
@@ -45,26 +45,17 @@ export default function SingleHealthModal({
   useClicksOutside([container, indicatorRef], closeHandler)
 
   // handle health record mutations
-  const { mutate: recordMutation } = useApiMutation<
-    {
-      payload: Record<string, number>
-    },
-    ApiResponse<TPatientHealth | []>
-  >(
+  const { mutate } = useApiMutation<{
+    payload: Record<string, number>
+  }>(
     ({ payload }, token) => {
-      if (!healthRecords || !patientId)
-        throw new Error("required informations are missing.")
-
+      if (!healthRecords) throw new Error("required informations are missing.")
       // handle new record mutations
       if (Array.isArray(healthRecords)) {
-        return healthServices.createPatientHealthRecord(
-          token,
-          payload,
-          patientId
-        )
+        return patientService.createPatientHealthRecord(token, payload)
       } else {
         // handle update mutations
-        return healthServices.updatePatientHealthRecord(
+        return patientService.updatePatientHealthRecord(
           token,
           payload,
           healthRecords.id
@@ -73,9 +64,8 @@ export default function SingleHealthModal({
     },
     {
       onSuccess: () => {
-        // invalidate and go bact to first portion of the modal
-        queryClient.invalidateQueries(`patient_${patientId}_health_record`)
-        setAllowNext(false)
+        queryClient.invalidateQueries(`patients:monitorings:${patientId}`)
+        setAllowNext(false) // go back to initial view of the modal
       },
     }
   )
@@ -145,7 +135,7 @@ export default function SingleHealthModal({
   }
 
   function handleRecordValue() {
-    recordMutation({ payload: { [data.key]: recordValue } })
+    mutate({ payload: { [data.key]: recordValue } })
   }
 
   return (
@@ -217,7 +207,7 @@ export default function SingleHealthModal({
                         No Record
                       </h1>
                     </div>
-                    <p className="leading-3 sm:leading-4 opacity-90 text-xs text-center">
+                    <p className="leading-3 sm:leading-4 text-neutral-600/80 dark:text-neutral-400/80 text-xs text-center">
                       connected with WebSocket, can be easily intregrated to an
                       actual monitoring tracker.
                     </p>

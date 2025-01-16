@@ -4,14 +4,14 @@ import Image from "next/image"
 import { firey } from "@/utils"
 import { queryClient } from "@/app/providers"
 import { useEffect, useRef, useState } from "react"
-import { healthServices } from "@/lib/services/health"
-import { useApiMutation } from "@/hooks/useApiMutation"
 import { AnimatePresence, motion } from "framer-motion"
+import { patientService } from "@/lib/services/patient"
+import { useApiMutation } from "@/hooks/useApiMutation"
 import { useClicksOutside } from "@/hooks/useClicksOutside"
 import { Button, Icon, BasicSelect, Background } from "@/components"
 import {
   BloodPressureDetail,
-  Monitoring,
+  TMonitoring,
   MonitoringDetail,
   TPatientHealth,
 } from "@/types"
@@ -27,7 +27,7 @@ function isBloodPressureType(item: any): item is BloodPressureDetail {
 type Props = {
   idx: number
   open: boolean
-  data: Monitoring
+  data: TMonitoring
   healthRecords?: TPatientHealth | []
   patientId?: string
   openHandler: (idx: number) => void
@@ -117,16 +117,13 @@ export default function MultiHealthModal({
     payload: Record<string, MonitoringDetail[] | BloodPressureDetail[]>
   }>(
     ({ payload }, token) => {
-      if (!healthRecords || !patientId)
-        throw new Error("required informations are missing.")
+      if (!healthRecords) throw new Error("required informations are missing.")
+      // handle new record mutations
       if (Array.isArray(healthRecords)) {
-        return healthServices.createPatientHealthRecord(
-          token,
-          payload,
-          patientId
-        )
+        return patientService.createPatientHealthRecord(token, payload)
       } else {
-        return healthServices.updatePatientHealthRecord(
+        // handle update mutations
+        return patientService.updatePatientHealthRecord(
           token,
           payload,
           healthRecords.id
@@ -136,7 +133,7 @@ export default function MultiHealthModal({
     {
       onSuccess: () => {
         // invalidate and go bact to first portion of the modal
-        queryClient.invalidateQueries(`patient_${patientId}_health_record`)
+        queryClient.invalidateQueries(`patients:monitorings:${patientId}`)
         setAllowNext(false)
       },
     }
@@ -240,24 +237,34 @@ export default function MultiHealthModal({
               {/* first container */}
               <div className="min-w-full size-full flex flex-col p-3">
                 <div>
-                  <h3 className="text-sm max-w-24 leading-4 font-semibold opacity-80">
+                  <h3
+                    className={`text-sm max-w-28 leading-4 font-semibold opacity-80 ${
+                      data.details && data.details.length === 1 && "mb-2"
+                    }`}
+                  >
                     {data.name}
                   </h3>
-                  <div className="flex justify-between">
-                    {data.value && (
-                      <p className="text-sm mb-1 medium opacity-70">
-                        {`${data.value} ${data.unit}`}
-                      </p>
-                    )}
-
-                    {/* pressure switch control */}
-                    {isPressure && data.value && (
+                  {/* pressure switch control */}
+                  {isPressure && data.details && data.details.length > 1 && (
+                    <div className="flex mt-3 justify-end">
                       <button
-                        className="mb-1 text-xs font-semibold text-neutral-600 dark:text-neutral-400 py-0.5 rounded-sm px-1.5 bg-neutral-400/30"
+                        className="text-xs font-medium text-neutral-500 dark:text-neutral-400 py-0.5 rounded-sm px-1.5 bg-neutral-400/30"
                         onClick={togglePressure}
                       >
                         {pressure === "diastolic" ? "systolic" : "diastolic"}
                       </button>
+                    </div>
+                  )}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                    {isPressure && data.value && (
+                      <p className="text-neutral-500 dark:text-neutral-400 text-xs mt-1 mb-0 sm:mb-2 font-medium uppercase">
+                        {pressure} DATA
+                      </p>
+                    )}
+                    {data.value && (
+                      <p className="text-sm mb-1 medium opacity-70">
+                        {`${data.value} ${data.unit}`}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -271,12 +278,6 @@ export default function MultiHealthModal({
                     `overflow-y-auto custom-scroll`
                   } ${isPressure && `overflow-y-auto custom-scroll`}`}
                 >
-                  {/* for blood glucose */}
-                  {isPressure && data.value && (
-                    <p className="text-neutral-500 dark:text-neutral-400 text-xs mt-1 mb-2 font-medium uppercase">
-                      {pressure} DATA
-                    </p>
-                  )}
                   {data.details && data.details.length > 0 ? (
                     data.details.map(
                       (item, idx) =>
@@ -285,7 +286,7 @@ export default function MultiHealthModal({
                             key={`monitoring-blood-glucose-content-${idx}`}
                             className="mt-1 flex gap-2 items-start"
                           >
-                            <div className="min-w-2.5 size-2.5 rounded-full bg-blue-500" />
+                            <div className="min-w-2.5 size-2.5 rounded-full bg-blue-400" />
                             <p className="text-neutral-500 dark:text-neutral-400 text-xs -mt-0.5">{`${item.value}${data.unit} has been monitored at ${item.time}`}</p>
                           </div>
                         )
@@ -305,7 +306,7 @@ export default function MultiHealthModal({
                           No Record
                         </h1>
                       </div>
-                      <p className="leading-3 sm:leading-4 opacity-90 text-xs text-center">
+                      <p className="leading-3 sm:leading-4 text-neutral-600/80 dark:text-neutral-400/80 opacity-90 text-xs text-center">
                         connected with WebSocket, can be easily intregrated to
                         an actual monitoring tracker.
                       </p>
@@ -323,7 +324,7 @@ export default function MultiHealthModal({
                             className="mb-1 flex gap-2 items-start"
                             key={`monitoring-blood-pressure-${pressure}-${_idx}`}
                           >
-                            <div className="min-w-2.5 size-2.5 rounded-full bg-blue-500" />
+                            <div className="min-w-2.5 size-2.5 rounded-full bg-blue-400" />
                             <p className="text-neutral-500 dark:text-neutral-400 text-xs -mt-0.5">{`${item.value}${data.unit} has been monitored at ${item.time}`}</p>
                           </div>
                         ))

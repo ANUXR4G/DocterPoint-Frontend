@@ -1,7 +1,3 @@
-import { DoctorType } from "@/lib/dummy/doctors"
-import { HospitalType } from "@/lib/dummy/hospitals"
-import { LocationType } from "@/types"
-
 // handle encrypting text using aes in gcm mode
 async function generateEncryptionAES(content: string): Promise<string> {
   if (typeof window === "undefined") return ""
@@ -34,6 +30,29 @@ async function generateEncryptionAES(content: string): Promise<string> {
 
   // encrypt everything in a single base64 string
   return Buffer.concat([iv, ciphertext, tag]).toString("base64")
+}
+
+function calculateAge(dateString: string): number {
+  // parse the date string in the format "DD/MM/YYYY"
+  const [day, month, year] = dateString.split("/").map(Number)
+  const birthDate = new Date(year, month - 1, day) // month is 0-indexed
+
+  // Get today's date
+  const today = new Date()
+
+  // calculate the age
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const monthDiff = today.getMonth() - birthDate.getMonth()
+
+  // adjust age if the birthday hasn't occurred yet this year
+  if (
+    monthDiff < 0 ||
+    (monthDiff === 0 && today.getDate() < birthDate.getDate())
+  ) {
+    age--
+  }
+
+  return age
 }
 
 // generate a string e.g - a, b and c
@@ -122,10 +141,10 @@ function snakeToCamelCase(key: string): string {
   return key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
 }
 
-// Recursive function to convert object keys to camelCase
+// recursive function to convert object keys to camelCase
 function convertKeysToCamelCase<T>(data: T): T {
   if (Array.isArray(data)) {
-    // Recursively convert keys in arrays
+    // recursively convert keys in arrays
     return data.map((item) => convertKeysToCamelCase(item)) as unknown as T
   } else if (data !== null && typeof data === "object") {
     // Recursively convert keys in objects
@@ -135,7 +154,7 @@ function convertKeysToCamelCase<T>(data: T): T {
       return acc
     }, {} as Record<string, any>) as T
   }
-  return data // Return the value as is for non-object types
+  return data // return the value as is for non object types
 }
 
 // convert minutes to `h:m` format
@@ -153,19 +172,6 @@ function getTokenDuration(token: string) {
   if (!payload) return 0
   const decodedPayload = JSON.parse(atob(payload))
   return decodedPayload.exp
-}
-
-// custom type checker
-function isDoctorType(item: any): item is DoctorType {
-  return (item as DoctorType).gender !== undefined
-}
-
-function isHospitalLocationType(item: any): item is LocationType {
-  return (item as LocationType).cityName !== undefined
-}
-
-function isHospitalType(item: any): item is HospitalType {
-  return (item as HospitalType).geometry !== undefined
 }
 
 function objIsEmpty(values: Record<string, unknown[]>) {
@@ -187,6 +193,7 @@ export const firey = {
   convertMinToHourMinFormat,
   getSpecificArr,
   getID,
+  calculateAge,
   generateRandomNum,
   makeString,
   getTokenDuration,
@@ -195,8 +202,5 @@ export const firey = {
   convertKeysToCamelCase,
   objIsEmpty,
   createSearchParams,
-  isDoctorType,
-  isHospitalType,
-  isHospitalLocationType,
   generateEncryption: generateEncryptionAES,
 }

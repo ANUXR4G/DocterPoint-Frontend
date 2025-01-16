@@ -2,17 +2,31 @@
 
 import Button from "@/components/buttons/Button"
 import { hours } from "@/lib/dummy/health"
-import { RECOMMENDATIONS } from "@/lib/dummy/recommendations"
 import React, { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import { useClickOutside } from "@/hooks/useClickOutside"
-import { ActivityModal } from "@/components"
+import { ActivityModal, EmptySuggestions } from "@/components"
+import { useApi } from "@/hooks/useApi"
+import { useProfile } from "@/hooks/useProfile"
+import { patientService } from "@/lib/services/patient"
+import { firey } from "@/utils"
+import { TMedications } from "@/types"
 
 export default function Medications() {
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [isHovering, setIsHovering] = useState<boolean>(false)
 
   const container = useRef<HTMLDivElement>(null)
+
+  // retrieve medication details
+  const { data: profile } = useProfile()
+  const { data: suggestions } = useApi(
+    [`patients:medications:${profile?.id}`],
+    (_, token) => patientService.getMedications(token),
+    {
+      select: (data) => firey.convertKeysToCamelCase(data) as TMedications | [],
+    }
+  )
 
   // convert hours as the keys of a new object with an empty array
   const newObj = hours.reduce<Record<string, any>>(
@@ -76,6 +90,9 @@ export default function Medications() {
 
   // handle activity timings
   useEffect(() => {
+    if (!suggestions) return
+    if (suggestions && Array.isArray(suggestions)) return
+
     // get length of activities on different hours
     const morningActLen = countSizeOfNestedArrObject(morningActivities)
     const noonActLen = countSizeOfNestedArrObject(noonActivities)
@@ -83,58 +100,60 @@ export default function Medications() {
     const nightActLen = countSizeOfNestedArrObject(nightActivities)
 
     // get all the recommended exercises
-    const exercises = RECOMMENDATIONS.map((item) =>
-      item.exercises?.map((item) => item)
-    ).flat()
+    const exercises = suggestions.exercises ? suggestions.exercises : []
 
     // get the exercises on morning
-    const morningExercises = exercises.filter((item) =>
-      item?.times.includes("morning")
+    const morningExercises = exercises.filter((exercise) =>
+      exercise.times.includes("morning")
     )
 
     // get the exercises on afternoon
-    const noonExercises = exercises.filter((item) =>
-      item?.times.includes("afternoon")
+    const noonExercises = exercises.filter((exercise) =>
+      exercise.times.includes("afternoon")
     )
 
     // get the exercises on evening
-    const eveningExercises = exercises.filter((item) =>
-      item?.times.includes("evening")
+    const eveningExercises = exercises.filter((exercise) =>
+      exercise.times.includes("evening")
     )
 
     // get the exercises on night
-    const nightExercises = exercises.filter((item) =>
-      item?.times.includes("night")
+    const nightExercises = exercises.filter((exercise) =>
+      exercise.times.includes("night")
     )
 
     // get all the recommended medicines
-    const medicines = RECOMMENDATIONS.map((item) =>
-      item.medications?.medicine.map((item) => item)
-    ).flat()
+    const medicines = suggestions.medications
+      ? suggestions.medications.medicine
+      : []
 
     // get the medicines on morning
-    const morningMeds = medicines.filter((item) =>
-      item?.times.includes("morning")
+    const morningMeds = medicines.filter((medicine) =>
+      medicine.times.includes("morning")
     )
 
     // get the medicines on afternoon
-    const noonMeds = medicines.filter((item) =>
-      item?.times.includes("afternoon")
+    const noonMeds = medicines.filter((medicine) =>
+      medicine.times.includes("afternoon")
     )
 
     // get the medicines on evening
-    const eveningMeds = medicines.filter((item) =>
-      item?.times.includes("evening")
+    const eveningMeds = medicines.filter((medicine) =>
+      medicine.times.includes("evening")
     )
 
     // get the medicines on night
-    const nightMeds = medicines.filter((item) => item?.times.includes("night"))
+    const nightMeds = medicines.filter((medicine) =>
+      medicine.times.includes("night")
+    )
 
     // food intake timings
-    const breakfast = RECOMMENDATIONS[0].dietary[0]
-    const lunch = RECOMMENDATIONS[0].dietary[1]
-    const snack = RECOMMENDATIONS[0].dietary[2]
-    const dinner = RECOMMENDATIONS[0].dietary[3]
+    const breakfast = suggestions.dietary.find(
+      (meal) => meal.time === "breakfast"
+    )
+    const lunch = suggestions.dietary.find((meal) => meal.time === "lunch")
+    const snacks = suggestions.dietary.find((meal) => meal.time === "snacks")
+    const dinner = suggestions.dietary.find((meal) => meal.time === "dinner")
 
     // combine the total activities based on different hours
     const totalMorningActivities = [
@@ -143,7 +162,7 @@ export default function Medications() {
       breakfast,
     ]
     const totalNoonActivities = [...noonExercises, ...noonMeds, lunch]
-    const totalEveningActivities = [snack, ...eveningExercises, ...eveningMeds]
+    const totalEveningActivities = [snacks, ...eveningExercises, ...eveningMeds]
     const totalNightActivities = [...nightExercises, dinner, ...nightMeds]
 
     if (totalMorningActivities.length !== morningActLen) {
@@ -174,6 +193,7 @@ export default function Medications() {
     }
   }, [
     data,
+    suggestions,
     eveningActivies,
     morningActivities,
     noonActivities,
@@ -195,52 +215,59 @@ export default function Medications() {
         onTapStart={() => setIsHovering(true)}
         ref={container}
       >
-        {/* headings */}
-        <div className="ml-4 mt-5 flex justify-between mr-4">
-          <h2 className="text-xl font-semibold opacity-80">Activity</h2>
-          <Button
-            className="text-xs relative z-10"
-            onClick={() => setIsOpen(true)}
-          >
-            add activity
-          </Button>
-        </div>
+        {suggestions &&
+          (!Array.isArray(suggestions) ? (
+            <React.Fragment>
+              {/* headings */}
+              <div className="ml-4 mt-5 flex justify-between mr-4">
+                <h2 className="text-xl font-semibold opacity-80">Activity</h2>
+                <Button
+                  className="text-xs relative z-10"
+                  onClick={() => setIsOpen(true)}
+                >
+                  add activity
+                </Button>
+              </div>
 
-        {/* medications/activities */}
-        <div className="h-full overflow-y-auto custom-scroll -mt-2 p-4 pb-16">
-          {Object.keys(data).map((item, idx) => (
-            <div
-              key={`activity-m-${idx}`}
-              className="py-3 relative flex items-center"
-            >
-              {data[item].length !== 0 && (
-                <React.Fragment>
-                  <div className="after:absolute after:contents[''] after:w-[85%] sm:after:w-[90%] after:h-0.5 after:bg-transparent after:-mt-0.5 after:top-1/2 after:left-12 sm:after:left-14 after:border-b after:border-gray-400/60 dark:after:border-neutral-500 after:border-dashed flex">
-                    <span className="text-sm sm:text-base inline-block">
-                      {item}
-                    </span>
+              {/* medications/activities */}
+              <div className="h-full overflow-y-auto custom-scroll -mt-2 p-4 pb-16">
+                {Object.keys(data).map((item, idx) => (
+                  <div
+                    key={`activity-m-${idx}`}
+                    className="py-3 relative flex items-center"
+                  >
+                    {data[item].length !== 0 && (
+                      <React.Fragment>
+                        <div className="after:absolute after:contents[''] after:w-[85%] sm:after:w-[90%] after:h-0.5 after:bg-transparent after:-mt-0.5 after:top-1/2 after:left-12 sm:after:left-14 after:border-b after:border-gray-400/60 dark:after:border-neutral-500 after:border-dashed flex">
+                          <span className="text-sm sm:text-base inline-block">
+                            {item}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:gap-2.5 mx-auto">
+                          {data[item].map((activity: any, aIdx: number) => (
+                            <div
+                              key={`${
+                                activity.name
+                                  ? activity.name.toLowerCase().trim()
+                                  : activity.time.toLowerCase().trim()
+                              }-${aIdx}`}
+                              className={`py-1 px-3.5 text-sm font-medium border rounded-full w-fit z-10 bg-neutral-200 dark:bg-neutral-800 shadow-[inset_0_0_0_1px_rgba(56,56,56,0.3)] ${`ml-${
+                                aIdx * 5
+                              }`}`}
+                            >
+                              {activity.name ? activity.name : activity.time}
+                            </div>
+                          ))}
+                        </div>
+                      </React.Fragment>
+                    )}
                   </div>
-                  <div className="flex flex-col gap-2 sm:gap-2.5 mx-auto">
-                    {data[item].map((activity: any, aIdx: number) => (
-                      <div
-                        key={`${
-                          activity.name
-                            ? activity.name.toLowerCase().trim()
-                            : activity.time.toLowerCase().trim()
-                        }-${aIdx}`}
-                        className={`py-1 px-3.5 text-sm font-medium border rounded-full w-fit z-10 bg-neutral-200 dark:bg-neutral-800 shadow-[inset_0_0_0_1px_rgba(56,56,56,0.3)] ${`ml-${
-                          aIdx * 5
-                        }`}`}
-                      >
-                        {activity.name ? activity.name : activity.time}
-                      </div>
-                    ))}
-                  </div>
-                </React.Fragment>
-              )}
-            </div>
+                ))}
+              </div>
+            </React.Fragment>
+          ) : (
+            <EmptySuggestions />
           ))}
-        </div>
       </motion.div>
 
       {/* activity adding modal */}
