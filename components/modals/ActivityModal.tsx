@@ -15,19 +15,22 @@ type Props = {
   setData: React.Dispatch<React.SetStateAction<Record<string, any>>>
 }
 
+const initialValues = {
+  type: "Exercise 🏃🏼‍♂️",
+  name: "",
+  times: ["morning"],
+  amount: "",
+  duration: "10-15mins",
+  description: "",
+}
+
 export default function AddActivity({
   active,
   closeHandler,
   details,
   setData,
 }: Props) {
-  const [values, setValues] = useState({
-    type: "Exercise 🏃🏼‍♂️",
-    name: "",
-    times: ["morning"],
-    duration: "10-15mins",
-    description: "",
-  })
+  const [values, setValues] = useState({ ...initialValues })
 
   // retrieve profile details
   const { data: profile } = useProfile()
@@ -54,30 +57,55 @@ export default function AddActivity({
   }
 
   const isExercise = values.type === "Exercise 🏃🏼‍♂️"
+  const disableForExercise = isExercise && values.name.length <= 1
+  const disableForMedicine =
+    !isExercise && (values.name.length <= 1 || values.amount.length === 0)
 
   function handleConfirmation() {
     if (details && Array.isArray(details)) return
     // update exercise timings
     if (isExercise) {
-      const { type, description, ...rest } = values
-      // reconstruct the payload for updating
+      const { type, description, amount, ...rest } = values
       const exerciseDetails = {
         ...rest,
         ...(description.length > 1 && { description }),
-      }
+      } // reconstruct the payload for updating
 
       const oldData = details?.exercises ? details.exercises : []
       const newData = oldData.concat(exerciseDetails)
 
       mutate({ payload: { exercises: newData } })
+    } else {
+      const { name, amount, description, times } = values
+      const medicineDetails = {
+        name,
+        amount: Number(amount),
+        times,
+        ...(description.length > 1 && { description }),
+      } // reconstruct the payload for updating
+
+      const oldData = details?.medications ? details.medications : []
+      const newData = oldData.concat(medicineDetails)
+
+      mutate({ payload: { medications: newData } })
     }
+
+    setValues({ ...initialValues })
+    closeHandler()
   }
 
   return (
     <Modal
       open={active}
       handler={closeHandler}
-      secondaryBtn={<Button onClick={handleConfirmation}>Save Activity</Button>}
+      secondaryBtn={
+        <Button
+          disabled={disableForExercise || disableForMedicine}
+          onClick={handleConfirmation}
+        >
+          Save Activity
+        </Button>
+      }
       className="w-full max-w-xl"
       direction="center"
     >
@@ -105,6 +133,25 @@ export default function AddActivity({
               e.g, {isExercise ? `Cycling` : `Vitamin D`}
             </p>
           </div>
+
+          {!isExercise && (
+            <div>
+              <TextInput
+                name={`Dose Amount`}
+                value={values.amount}
+                indent="indent-2.5"
+                onChange={(e) =>
+                  setValues((prev) => ({
+                    ...prev,
+                    amount: e.target.value,
+                  }))
+                }
+              />
+              <p className="text-xs font-medium opacity-70 mt-1">
+                e.g, Twice a day = 2
+              </p>
+            </div>
+          )}
 
           {/* time */}
           <fieldset>

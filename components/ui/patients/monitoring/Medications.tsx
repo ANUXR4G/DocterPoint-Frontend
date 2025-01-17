@@ -66,7 +66,7 @@ export default function Medications() {
 
     // get all the recommended exercises and medicines
     const exercises = suggestions.exercises || []
-    const medicines = suggestions.medications?.medicine || []
+    const medicines = suggestions.medications || []
 
     const filterByTime = (items: any[], time: string) =>
       items.filter((item) => item.times.includes(time))
@@ -204,7 +204,7 @@ export default function Medications() {
                               }`}`}
                             >
                               <PopoverModal
-                                modalClass={`-mt-5 p-2 ml-12 z-40 min-w-36 ${
+                                modalClass={`-mt-5 p-2 ml-12 z-40 min-w-36 sm:min-w-44 text-center ${
                                   !activity.duration &&
                                   !activity.times &&
                                   `group-hover:hidden`
@@ -213,22 +213,25 @@ export default function Medications() {
                                   activity.name ? activity.name : activity.time
                                 }
                               >
-                                <div className="flex flex-col">
-                                  <span className="text-xs">
+                                <div className="flex flex-col text-xs">
+                                  <span>
                                     {activity.duration ? `Duration` : `Amount`}:{" "}
-                                    {activity.duration
-                                      ? activity.duration
-                                      : activity.times}
+                                    {activity.amount
+                                      ? `${activity.amount} ${
+                                          activity.times.length > 1
+                                            ? `, every ${activity.times.join(
+                                                " and "
+                                              )}.`
+                                            : ``
+                                        }`
+                                      : activity.duration}
                                   </span>
+
                                   {activity.description && (
-                                    <span className="text-xs">
-                                      Note: {activity.description}
-                                    </span>
+                                    <span>Note: {activity.description}</span>
                                   )}
                                 </div>
                               </PopoverModal>
-
-                              {/* {activity.name ? activity.name : activity.time} */}
                             </div>
                           ))}
                         </div>

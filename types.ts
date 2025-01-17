@@ -250,10 +250,14 @@ export type TMedications = {
   doctorId: string | null
   appointmentId: string | null
   primaryGoals: string
-  medications: {
-    medicine: { name: string; amount: number; times: string[] }[]
-    expiry: number
-  } | null
+  medications:
+    | {
+        name: string
+        amount: number
+        times: string[]
+        description?: string
+      }[]
+    | null
   dietary: {
     time: "breakfast" | "lunch" | "dinner" | "snacks"
     energy: number
@@ -271,6 +275,7 @@ export type TMedications = {
         name: string
         times: string[]
         duration: string
+        description?: string
       }[]
     | null
   monitoring: { name: string; times: string }[] | null
