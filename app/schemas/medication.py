@@ -12,15 +12,11 @@ class MedicationBase(BaseModel):
     pass
 
 
-class Medicine(BaseModel):
+class Medicines(BaseModel):
     name: str
     amount: int
     times: List[str]
-
-
-class Medications(BaseModel):
-    medicine: List[Medicine]
-    expiry: int
+    description: str | None = None
 
 
 class Dietary(BaseModel):
@@ -52,7 +48,7 @@ class CreateMedication(MedicationBase):
     sleep: str
     doctor_id: Optional[str] = None
     appointment_id: Optional[str] = None
-    medications: Optional[Medications] = None
+    medications: Optional[List[Medicines]] = None
     dietary: List[Dietary] = None
     nutritions: List[Nutritions] = None
     bmi_goal: float = None
@@ -68,7 +64,7 @@ class UpdateMedication(MedicationBase):
     doctor_id: Optional[str] = None
     appointment_id: Optional[str] = None
     primary_goals: str = None
-    medications: Optional[Medications] = None
+    medications: Optional[List[Medicines]] = None
     dietary: List[Dietary] = None
     nutritions: List[Nutritions] = None
     energy_goal: float = None
