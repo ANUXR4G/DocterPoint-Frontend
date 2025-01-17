@@ -1,27 +1,50 @@
 "use client"
 
 import React, { useState } from "react"
-import { BasicSelect, Checkbox, Modal, TextInput } from ".."
+import { BasicSelect, Button, Checkbox, Modal, TextInput } from ".."
+import { useApiMutation } from "@/hooks/useApiMutation"
+import { patientService } from "@/lib/services/patient"
+import { useProfile } from "@/hooks/useProfile"
+import { queryClient } from "@/app/providers"
+import { TMedications } from "@/types"
 
 type Props = {
   active: boolean
   closeHandler: () => void
+  details?: TMedications | []
   setData: React.Dispatch<React.SetStateAction<Record<string, any>>>
 }
 
-export default function AddActivity({ active, closeHandler, setData }: Props) {
+export default function AddActivity({
+  active,
+  closeHandler,
+  details,
+  setData,
+}: Props) {
   const [values, setValues] = useState({
     type: "Exercise 🏃🏼‍♂️",
     name: "",
-    times: ["Morning"],
+    times: ["morning"],
     duration: "10-15mins",
     description: "",
+  })
+
+  // retrieve profile details
+  const { data: profile } = useProfile()
+
+  // update medication preferences if already exists
+  const { mutate } = useApiMutation<{
+    payload: Record<string, unknown>
+  }>(({ payload }, token) => patientService.updateMedications(token, payload), {
+    onSuccess: () => {
+      queryClient.invalidateQueries(`patients:medications:${profile?.id}`)
+    },
   })
 
   // handle times selection
   function handleTimeSelection(e: React.ChangeEvent<HTMLInputElement>) {
     setValues((prev) => {
-      const value = e.target.value
+      const value = e.target.value.toLowerCase()
       const exist = prev.times.includes(value)
       const times = exist
         ? prev.times.filter((item) => item !== value)
@@ -32,10 +55,29 @@ export default function AddActivity({ active, closeHandler, setData }: Props) {
 
   const isExercise = values.type === "Exercise 🏃🏼‍♂️"
 
+  function handleConfirmation() {
+    if (details && Array.isArray(details)) return
+    // update exercise timings
+    if (isExercise) {
+      const { type, description, ...rest } = values
+      // reconstruct the payload for updating
+      const exerciseDetails = {
+        ...rest,
+        ...(description.length > 1 && { description }),
+      }
+
+      const oldData = details?.exercises ? details.exercises : []
+      const newData = oldData.concat(exerciseDetails)
+
+      mutate({ payload: { exercises: newData } })
+    }
+  }
+
   return (
     <Modal
       open={active}
       handler={closeHandler}
+      secondaryBtn={<Button onClick={handleConfirmation}>Save Activity</Button>}
       className="w-full max-w-xl"
       direction="center"
     >
@@ -54,6 +96,7 @@ export default function AddActivity({ active, closeHandler, setData }: Props) {
             <TextInput
               name={`${isExercise ? `Exercise` : `Medicine`} Name`}
               value={values.name}
+              indent="indent-2.5"
               onChange={(e) =>
                 setValues((prev) => ({ ...prev, name: e.target.value }))
               }
@@ -73,7 +116,7 @@ export default function AddActivity({ active, closeHandler, setData }: Props) {
                   key={`activity_time_${idx}`}
                   name={`activity_time_${idx}_option`}
                   value={item}
-                  active={values.times.includes(item)}
+                  active={values.times.includes(item.toLowerCase())}
                   onChange={handleTimeSelection}
                   direction="left"
                 />

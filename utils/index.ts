@@ -188,6 +188,46 @@ function createSearchParams(params: Record<string, unknown | unknown[]>) {
   )
 }
 
+function distributeItems(dataObj: any, items: any) {
+  // get the keys of the data object
+  const keys = Object.keys(dataObj)
+  let currentKeyIndex = 0
+
+  // find the next empty array in the data
+  const findNextEmptyKey = () => {
+    for (let i = 0; i < keys.length; i++) {
+      if (dataObj[keys[i]].length === 0) {
+        return i
+      }
+    }
+    return -1
+  }
+
+  const newData = { ...dataObj }
+
+  // fill empty items first
+  for (const item of items) {
+    const emptyKeyIndex = findNextEmptyKey()
+    if (emptyKeyIndex !== -1) {
+      newData[keys[emptyKeyIndex]].push(item)
+    } else {
+      // distribute in a round-robin manner
+      newData[keys[currentKeyIndex]].push(item)
+      currentKeyIndex = (currentKeyIndex + 1) % keys.length
+    }
+  }
+
+  return newData
+}
+
+// get the size of a nested object which contains arrays
+function countSizeOfNestedArrObject(givenObj: { [key: string]: any }) {
+  return Object.keys(givenObj).reduce(
+    (acc, key) => acc + givenObj[key].length,
+    0
+  )
+}
+
 export const firey = {
   groupByCategory,
   convertMinToHourMinFormat,
@@ -203,4 +243,6 @@ export const firey = {
   objIsEmpty,
   createSearchParams,
   generateEncryption: generateEncryptionAES,
+  distributeItems,
+  countSizeOfNestedArrObject,
 }

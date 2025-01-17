@@ -84,9 +84,16 @@ export default function NutrientsRecommendationChart() {
                 </h3>
               </div>
 
-              <span className="font-semibold text-sm opacity-70 ml-2">
+              <span className="font-semibold text-sm opacity-70 ml-1">
                 Goal &#x2022; Energy
               </span>
+
+              <div className="font-semibold text-xs text-slate-300">
+                generated via{" "}
+                <span className="font-extrabold text-slate-200">
+                  {suggestions.generatedBy}
+                </span>
+              </div>
             </React.Fragment>
           )}
         </div>

@@ -426,26 +426,6 @@ export default function DietPreferences() {
             </div>
           </fieldset>
 
-          {/* cooking preferences */}
-          {/* <fieldset> */}
-          {/* <legend className="text-base md:text-lg font-bold">
-              {cookingPreferenceOpts.title}
-            </legend> */}
-
-          {/* cooking preference options */}
-          {/* <div className="flex flex-wrap mt-2 gap-2">
-              {cookingPreferenceOpts.data.map(({ name, value }, idx) => (
-                <Checkbox
-                  key={`ciOpt-${idx}`}
-                  name={name}
-                  value={value}
-                  active={values.cookingPreferences.includes(value)}
-                  onChange={handleCookingPref}
-                />
-              ))}
-            </div> */}
-          {/* </fieldset> */}
-
           {/* cuisine preferences */}
           <fieldset>
             <legend className="text-base md:text-lg font-bold">

@@ -1,16 +1,20 @@
 "use client"
 
-import Button from "@/components/buttons/Button"
-import { hours } from "@/lib/dummy/health"
-import React, { useEffect, useRef, useState } from "react"
-import { motion } from "framer-motion"
-import { useClickOutside } from "@/hooks/useClickOutside"
-import { ActivityModal, EmptySuggestions } from "@/components"
-import { useApi } from "@/hooks/useApi"
-import { useProfile } from "@/hooks/useProfile"
-import { patientService } from "@/lib/services/patient"
 import { firey } from "@/utils"
 import { TMedications } from "@/types"
+import { motion } from "framer-motion"
+import { useApi } from "@/hooks/useApi"
+import { useProfile } from "@/hooks/useProfile"
+import { useClickOutside } from "@/hooks/useClickOutside"
+import { patientService } from "@/lib/services/patient"
+import { hours } from "@/lib/dummy/health"
+import {
+  ActivityModal,
+  EmptySuggestions,
+  Button,
+  PopoverModal,
+} from "@/components"
+import React, { useEffect, useRef, useState } from "react"
 
 export default function Medications() {
   const [isOpen, setIsOpen] = useState<boolean>(false)
@@ -36,176 +40,122 @@ export default function Medications() {
 
   const [data, setData] = useState<Record<string, any>>(newObj)
 
-  function distributeItems(dataObj: any, items: any) {
-    // get the keys of the data object
-    const keys = Object.keys(dataObj)
-    let currentKeyIndex = 0
-
-    // find the next empty array in the data
-    const findNextEmptyKey = () => {
-      for (let i = 0; i < keys.length; i++) {
-        if (dataObj[keys[i]].length === 0) {
-          return i
-        }
-      }
-      return -1
-    }
-
-    const newData = { ...dataObj }
-
-    // fill empty items first
-    for (const item of items) {
-      const emptyKeyIndex = findNextEmptyKey()
-      if (emptyKeyIndex !== -1) {
-        newData[keys[emptyKeyIndex]].push(item)
-      } else {
-        // distribute in a round-robin manner
-        newData[keys[currentKeyIndex]].push(item)
-        currentKeyIndex = (currentKeyIndex + 1) % keys.length
-      }
-    }
-
-    return newData
+  // remove all the duplicate items from the updated time due to stale
+  const removeDuplicates = (existing: any[], incoming: any[]) => {
+    const existingNames = new Set(existing.map((item) => item.name))
+    return incoming.filter((item) => !existingNames.has(item.name))
   }
-
-  // get the size of a nested object which contains arrays
-  function countSizeOfNestedArrObject(givenObj: { [key: string]: any }) {
-    return Object.keys(givenObj).reduce(
-      (acc, key) => acc + givenObj[key].length,
-      0
-    )
-  }
-
-  // split morning hour activities
-  const morningActivities = Object.fromEntries(Object.entries(data).slice(0, 3))
-
-  // split afternoon hour activities
-  const noonActivities = Object.fromEntries(Object.entries(data).slice(3, 5))
-
-  // split evening hour activities
-  const eveningActivies = Object.fromEntries(Object.entries(data).slice(5, 7))
-
-  // split night hour activities
-  const nightActivities = Object.fromEntries(Object.entries(data).slice(7, 9))
 
   // handle activity timings
   useEffect(() => {
-    if (!suggestions) return
-    if (suggestions && Array.isArray(suggestions)) return
+    if (!suggestions || Array.isArray(suggestions)) return
+
+    // split activities based on hours
+    const morningActivities = Object.fromEntries(
+      Object.entries(data).slice(0, 3)
+    )
+    const noonActivities = Object.fromEntries(Object.entries(data).slice(3, 5))
+    const eveningActivies = Object.fromEntries(Object.entries(data).slice(5, 7))
+    const nightActivities = Object.fromEntries(Object.entries(data).slice(7, 9))
 
     // get length of activities on different hours
-    const morningActLen = countSizeOfNestedArrObject(morningActivities)
-    const noonActLen = countSizeOfNestedArrObject(noonActivities)
-    const eveningActLen = countSizeOfNestedArrObject(eveningActivies)
-    const nightActLen = countSizeOfNestedArrObject(nightActivities)
+    const morningActLen = firey.countSizeOfNestedArrObject(morningActivities)
+    const noonActLen = firey.countSizeOfNestedArrObject(noonActivities)
+    const eveningActLen = firey.countSizeOfNestedArrObject(eveningActivies)
+    const nightActLen = firey.countSizeOfNestedArrObject(nightActivities)
 
-    // get all the recommended exercises
-    const exercises = suggestions.exercises ? suggestions.exercises : []
+    // get all the recommended exercises and medicines
+    const exercises = suggestions.exercises || []
+    const medicines = suggestions.medications?.medicine || []
 
-    // get the exercises on morning
-    const morningExercises = exercises.filter((exercise) =>
-      exercise.times.includes("morning")
-    )
-
-    // get the exercises on afternoon
-    const noonExercises = exercises.filter((exercise) =>
-      exercise.times.includes("afternoon")
-    )
-
-    // get the exercises on evening
-    const eveningExercises = exercises.filter((exercise) =>
-      exercise.times.includes("evening")
-    )
-
-    // get the exercises on night
-    const nightExercises = exercises.filter((exercise) =>
-      exercise.times.includes("night")
-    )
-
-    // get all the recommended medicines
-    const medicines = suggestions.medications
-      ? suggestions.medications.medicine
-      : []
-
-    // get the medicines on morning
-    const morningMeds = medicines.filter((medicine) =>
-      medicine.times.includes("morning")
-    )
-
-    // get the medicines on afternoon
-    const noonMeds = medicines.filter((medicine) =>
-      medicine.times.includes("afternoon")
-    )
-
-    // get the medicines on evening
-    const eveningMeds = medicines.filter((medicine) =>
-      medicine.times.includes("evening")
-    )
-
-    // get the medicines on night
-    const nightMeds = medicines.filter((medicine) =>
-      medicine.times.includes("night")
-    )
-
-    // food intake timings
-    const breakfast = suggestions.dietary.find(
-      (meal) => meal.time === "breakfast"
-    )
-    const lunch = suggestions.dietary.find((meal) => meal.time === "lunch")
-    const snacks = suggestions.dietary.find((meal) => meal.time === "snacks")
-    const dinner = suggestions.dietary.find((meal) => meal.time === "dinner")
+    const filterByTime = (items: any[], time: string) =>
+      items.filter((item) => item.times.includes(time))
 
     // combine the total activities based on different hours
-    const totalMorningActivities = [
-      ...morningExercises,
-      ...morningMeds,
-      breakfast,
-    ]
-    const totalNoonActivities = [...noonExercises, ...noonMeds, lunch]
-    const totalEveningActivities = [snacks, ...eveningExercises, ...eveningMeds]
-    const totalNightActivities = [...nightExercises, dinner, ...nightMeds]
+    const totalMorningActivities = removeDuplicates(
+      Object.values(morningActivities).flat(),
+      [
+        ...filterByTime(exercises, "morning"),
+        ...filterByTime(medicines, "morning"),
+        suggestions.dietary.find((meal) => meal.time === "breakfast"),
+      ]
+    )
+    const totalNoonActivities = removeDuplicates(
+      Object.values(noonActivities).flat(),
+      [
+        ...filterByTime(exercises, "afternoon"),
+        ...filterByTime(medicines, "afternoon"),
+        suggestions.dietary.find((meal) => meal.time === "lunch"),
+      ]
+    )
+    const totalEveningActivities = removeDuplicates(
+      Object.values(eveningActivies).flat(),
+      [
+        ...filterByTime(exercises, "evening"),
+        ...filterByTime(medicines, "evening"),
+        suggestions.dietary.find((meal) => meal.time === "snacks"),
+      ]
+    )
+    const totalNightActivities = removeDuplicates(
+      Object.values(nightActivities).flat(),
+      [
+        ...filterByTime(exercises, "night"),
+        ...filterByTime(medicines, "night"),
+        suggestions.dietary.find((meal) => meal.time === "dinner"),
+      ]
+    )
+
+    // distribute the activities based on the hours
+    let updatedData = { ...data }
+    let needsUpdate = false
 
     if (totalMorningActivities.length !== morningActLen) {
-      const updatedData = distributeItems(
-        morningActivities,
-        totalMorningActivities
-      )
-      setData((prev) => ({ ...prev, ...updatedData }))
+      updatedData = {
+        ...updatedData,
+        ...firey.distributeItems(morningActivities, totalMorningActivities),
+      }
+      needsUpdate = true // manually trigger to update
     }
 
     if (totalNoonActivities.length !== noonActLen) {
-      const updatedData = distributeItems(noonActivities, totalNoonActivities)
-      setData((prev) => ({ ...prev, ...updatedData }))
+      updatedData = {
+        ...updatedData,
+        ...firey.distributeItems(noonActivities, totalNoonActivities),
+      }
+      needsUpdate = true // manually trigger to update
     }
 
     if (totalEveningActivities.length !== eveningActLen) {
-      const updatedData = distributeItems(
-        eveningActivies,
-        totalEveningActivities
-      )
-
-      setData((prev) => ({ ...prev, ...updatedData }))
+      updatedData = {
+        ...updatedData,
+        ...firey.distributeItems(eveningActivies, totalEveningActivities),
+      }
+      needsUpdate = true // manually trigger to update
     }
 
     if (totalNightActivities.length !== nightActLen) {
-      const updatedData = distributeItems(nightActivities, totalNightActivities)
-      setData((prev) => ({ ...prev, ...updatedData }))
+      updatedData = {
+        ...updatedData,
+        ...firey.distributeItems(nightActivities, totalNightActivities),
+      }
+      needsUpdate = true // manually trigger to update
     }
-  }, [
-    data,
-    suggestions,
-    eveningActivies,
-    morningActivities,
-    noonActivities,
-    nightActivities,
-  ])
 
+    // only update the data if necessary (triggered due to new activity insertion)
+    if (needsUpdate) {
+      setData(updatedData)
+    }
+    // eslint-disable-next-line
+  }, [suggestions])
+
+  // utilizes the hook to handle hovering outside the referred modal
   useClickOutside(container, () => setIsHovering(false))
 
   return (
     <React.Fragment>
       <motion.div
-        className="absolute z-20 right-0 top-0 w-full max-w-xl 2xl:max-w-4xl h-96 border border-gray-300 dark:border-neutral-500 rounded-3xl overflow-hidden bg-[--primary-white] dark:bg-neutral-800 [--slide-to:0px] [--slide-from:336px] 2xl:[--slide-from:250px]"
+        ref={container}
+        className="absolute z-20 right-0 top-0 w-full max-w-xl 2xl:max-w-4xl h-96 border border-gray-300 dark:border-neutral-500 rounded-3xl overflow-hidden  dark:bg-neutral-800 [--slide-to:0px] [--slide-from:336px] 2xl:[--slide-from:250px]"
         initial={{ x: "var(--slide-from)" }}
         animate={{
           x: isHovering ? "var(--slide-to)" : "var(--slide-from)",
@@ -213,12 +163,10 @@ export default function Medications() {
         onHoverStart={() => setIsHovering(true)}
         onHoverEnd={() => setIsHovering(false)}
         onTapStart={() => setIsHovering(true)}
-        ref={container}
       >
         {suggestions &&
           (!Array.isArray(suggestions) ? (
             <React.Fragment>
-              {/* headings */}
               <div className="ml-4 mt-5 flex justify-between mr-4">
                 <h2 className="text-xl font-semibold opacity-80">Activity</h2>
                 <Button
@@ -251,11 +199,36 @@ export default function Medications() {
                                   ? activity.name.toLowerCase().trim()
                                   : activity.time.toLowerCase().trim()
                               }-${aIdx}`}
-                              className={`py-1 px-3.5 text-sm font-medium border rounded-full w-fit z-10 bg-neutral-200 dark:bg-neutral-800 shadow-[inset_0_0_0_1px_rgba(56,56,56,0.3)] ${`ml-${
+                              className={`py-1 px-3.5 text-sm font-medium border rounded-full w-fit z-10 bg-neutral-200/70 dark:bg-neutral-800 shadow-[inset_0_0_0_1px_rgba(56,56,56,0.3)] ${`ml-${
                                 aIdx * 5
                               }`}`}
                             >
-                              {activity.name ? activity.name : activity.time}
+                              <PopoverModal
+                                modalClass={`-mt-5 p-2 ml-12 z-40 min-w-36 ${
+                                  !activity.duration &&
+                                  !activity.times &&
+                                  `group-hover:hidden`
+                                }`}
+                                content={
+                                  activity.name ? activity.name : activity.time
+                                }
+                              >
+                                <div className="flex flex-col">
+                                  <span className="text-xs">
+                                    {activity.duration ? `Duration` : `Amount`}:{" "}
+                                    {activity.duration
+                                      ? activity.duration
+                                      : activity.times}
+                                  </span>
+                                  {activity.description && (
+                                    <span className="text-xs">
+                                      Note: {activity.description}
+                                    </span>
+                                  )}
+                                </div>
+                              </PopoverModal>
+
+                              {/* {activity.name ? activity.name : activity.time} */}
                             </div>
                           ))}
                         </div>
@@ -273,6 +246,7 @@ export default function Medications() {
       {/* activity adding modal */}
       <ActivityModal
         active={isOpen}
+        details={suggestions}
         closeHandler={() => setIsOpen(false)}
         setData={setData}
       />

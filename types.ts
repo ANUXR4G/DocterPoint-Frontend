@@ -269,7 +269,7 @@ export type TMedications = {
   exercises:
     | {
         name: string
-        times: ("morning" | "afternoon" | "evening" | "night" | "morning")[]
+        times: string[]
         duration: string
       }[]
     | null
