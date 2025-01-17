@@ -37,6 +37,7 @@ class Exercises(BaseModel):
     name: str
     times: List[str]
     duration: str
+    description: str | None = None
 
 
 class Monitoring(BaseModel):

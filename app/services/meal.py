@@ -86,7 +86,8 @@ class MealService:
             filter_args.extend(filter_conditions)
 
         if preferred_cuisine and not q:
-            filter_args.append(Meal.cuisine == preferred_cuisine)
+            if not preferred_cuisine == "All":
+                filter_args.append(Meal.cuisine == preferred_cuisine)
 
         # get the result and the count of the query based on condition
         if filter_args:
