@@ -1,6 +1,5 @@
 "use client"
 
-import React, { useEffect } from "react"
 import {
   AlignContent,
   Button,
@@ -11,11 +10,16 @@ import {
 } from "@/components"
 import { format } from "date-fns"
 import { firey } from "@/utils"
-import { useRouter, useSearchParams } from "next/navigation"
+
+import React, { useEffect } from "react"
+
 import { useQuery } from "react-query"
 import { queryClient } from "@/app/providers"
+import { useRouter, useSearchParams } from "next/navigation"
+
 import { useApi } from "@/hooks/useApi"
 import { useApiMutation } from "@/hooks/useApiMutation"
+
 import { patientService } from "@/lib/services/patient"
 import { hospitalService } from "@/lib/services/hospital"
 import { TAppointment, THospital, TMedications } from "@/types"
@@ -229,10 +233,10 @@ export default function AppointmentDetailsModal({
               {prescription.medications && (
                 <ListContent
                   title="Medications 💊"
-                  keys={prescription.medications.medicine.map(
+                  keys={prescription.medications.map(
                     (item) => `${item.name}: `
                   )}
-                  values={prescription.medications.medicine.map(
+                  values={prescription.medications.map(
                     (item) =>
                       `${item.amount} unit at ${firey.makeString(item.times)}.`
                   )}
@@ -264,18 +268,24 @@ export default function AppointmentDetailsModal({
               />
 
               {/* recommeded ingredients */}
-              <ListContent
-                title="Recommended Ingredients 🥛"
-                keys={prescription.recommendedIngredients.map((_) => ``)}
-                values={prescription.recommendedIngredients.map((item) => item)}
-              />
+              {prescription.recommendedIngredients && (
+                <ListContent
+                  title="Recommended Ingredients 🥛"
+                  keys={prescription.recommendedIngredients.map((_) => ``)}
+                  values={prescription.recommendedIngredients.map(
+                    (item) => item
+                  )}
+                />
+              )}
 
               {/* rescrictied ingredients */}
-              <ListContent
-                title="Must Avoid ❌"
-                keys={prescription.allergies.map((_) => ``)}
-                values={prescription.allergies.map((item) => item)}
-              />
+              {prescription.allergies && (
+                <ListContent
+                  title="Must Avoid ❌"
+                  keys={prescription.allergies.map((_) => ``)}
+                  values={prescription.allergies.map((item) => item)}
+                />
+              )}
 
               {/* lifestyle recommendations */}
               <ListContent

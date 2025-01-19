@@ -1,11 +1,17 @@
 "use client"
 
 import Image from "next/image"
-import { ShinnyEfBtn } from "@/components"
+import { ConnectDeviceSkeleton, ShinnyEfBtn } from "@/components"
 import { useRouter } from "next/navigation"
 
-export default function ConnectDevice() {
+type Props = {
+  isLoading: boolean
+}
+
+export default function ConnectDevice({ isLoading }: Props) {
   const router = useRouter()
+
+  if (isLoading) return <ConnectDeviceSkeleton />
 
   return (
     <div className="bg-gradient-to-tl relative to-[#9bdcc1] center from-[#00AB59] lg:col-span-1 lg:order-6 h-64 rounded-xl overflow-hidden">

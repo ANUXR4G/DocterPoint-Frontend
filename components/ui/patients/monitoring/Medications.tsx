@@ -7,19 +7,18 @@ import { useApi } from "@/hooks/useApi"
 import { useProfile } from "@/hooks/useProfile"
 import { useClickOutside } from "@/hooks/useClickOutside"
 import { patientService } from "@/lib/services/patient"
-import { hours } from "@/lib/dummy/health"
 import {
   ActivityModal,
   EmptySuggestions,
   Button,
   PopoverModal,
 } from "@/components"
-import React, { useEffect, useRef, useState } from "react"
+import React, { useRef, useState } from "react"
+import { useActivities } from "@/hooks/useActivities"
 
 export default function Medications() {
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [isHovering, setIsHovering] = useState<boolean>(false)
-
   const container = useRef<HTMLDivElement>(null)
 
   // retrieve medication details
@@ -32,121 +31,8 @@ export default function Medications() {
     }
   )
 
-  // convert hours as the keys of a new object with an empty array
-  const newObj = hours.reduce<Record<string, any>>(
-    (acc, key) => ((acc[key] = []), acc),
-    {}
-  )
-
-  const [data, setData] = useState<Record<string, any>>(newObj)
-
-  // remove all the duplicate items from the updated time due to stale
-  const removeDuplicates = (existing: any[], incoming: any[]) => {
-    const existingNames = new Set(existing.map((item) => item.name))
-    return incoming.filter((item) => !existingNames.has(item.name))
-  }
-
-  // handle activity timings
-  useEffect(() => {
-    if (!suggestions || Array.isArray(suggestions)) return
-
-    // split activities based on hours
-    const morningActivities = Object.fromEntries(
-      Object.entries(data).slice(0, 3)
-    )
-    const noonActivities = Object.fromEntries(Object.entries(data).slice(3, 5))
-    const eveningActivies = Object.fromEntries(Object.entries(data).slice(5, 7))
-    const nightActivities = Object.fromEntries(Object.entries(data).slice(7, 9))
-
-    // get length of activities on different hours
-    const morningActLen = firey.countSizeOfNestedArrObject(morningActivities)
-    const noonActLen = firey.countSizeOfNestedArrObject(noonActivities)
-    const eveningActLen = firey.countSizeOfNestedArrObject(eveningActivies)
-    const nightActLen = firey.countSizeOfNestedArrObject(nightActivities)
-
-    // get all the recommended exercises and medicines
-    const exercises = suggestions.exercises || []
-    const medicines = suggestions.medications || []
-
-    const filterByTime = (items: any[], time: string) =>
-      items.filter((item) => item.times.includes(time))
-
-    // combine the total activities based on different hours
-    const totalMorningActivities = removeDuplicates(
-      Object.values(morningActivities).flat(),
-      [
-        ...filterByTime(exercises, "morning"),
-        ...filterByTime(medicines, "morning"),
-        suggestions.dietary.find((meal) => meal.time === "breakfast"),
-      ]
-    )
-    const totalNoonActivities = removeDuplicates(
-      Object.values(noonActivities).flat(),
-      [
-        ...filterByTime(exercises, "afternoon"),
-        ...filterByTime(medicines, "afternoon"),
-        suggestions.dietary.find((meal) => meal.time === "lunch"),
-      ]
-    )
-    const totalEveningActivities = removeDuplicates(
-      Object.values(eveningActivies).flat(),
-      [
-        ...filterByTime(exercises, "evening"),
-        ...filterByTime(medicines, "evening"),
-        suggestions.dietary.find((meal) => meal.time === "snacks"),
-      ]
-    )
-    const totalNightActivities = removeDuplicates(
-      Object.values(nightActivities).flat(),
-      [
-        ...filterByTime(exercises, "night"),
-        ...filterByTime(medicines, "night"),
-        suggestions.dietary.find((meal) => meal.time === "dinner"),
-      ]
-    )
-
-    // distribute the activities based on the hours
-    let updatedData = { ...data }
-    let needsUpdate = false
-
-    if (totalMorningActivities.length !== morningActLen) {
-      updatedData = {
-        ...updatedData,
-        ...firey.distributeItems(morningActivities, totalMorningActivities),
-      }
-      needsUpdate = true // manually trigger to update
-    }
-
-    if (totalNoonActivities.length !== noonActLen) {
-      updatedData = {
-        ...updatedData,
-        ...firey.distributeItems(noonActivities, totalNoonActivities),
-      }
-      needsUpdate = true // manually trigger to update
-    }
-
-    if (totalEveningActivities.length !== eveningActLen) {
-      updatedData = {
-        ...updatedData,
-        ...firey.distributeItems(eveningActivies, totalEveningActivities),
-      }
-      needsUpdate = true // manually trigger to update
-    }
-
-    if (totalNightActivities.length !== nightActLen) {
-      updatedData = {
-        ...updatedData,
-        ...firey.distributeItems(nightActivities, totalNightActivities),
-      }
-      needsUpdate = true // manually trigger to update
-    }
-
-    // only update the data if necessary (triggered due to new activity insertion)
-    if (needsUpdate) {
-      setData(updatedData)
-    }
-    // eslint-disable-next-line
-  }, [suggestions])
+  // distribute all the activities based on hours
+  const { data } = useActivities(suggestions)
 
   // utilizes the hook to handle hovering outside the referred modal
   useClickOutside(container, () => setIsHovering(false))
@@ -155,7 +41,7 @@ export default function Medications() {
     <React.Fragment>
       <motion.div
         ref={container}
-        className="absolute z-20 right-0 top-0 w-full max-w-xl 2xl:max-w-4xl h-96 border border-gray-300 dark:border-neutral-500 rounded-3xl overflow-hidden  dark:bg-neutral-800 [--slide-to:0px] [--slide-from:336px] 2xl:[--slide-from:250px]"
+        className="absolute z-20 right-0 top-0 w-full max-w-xl 2xl:max-w-4xl h-96 border border-gray-300 dark:border-neutral-500 rounded-3xl overflow-hidden  bg-neutral-100 dark:bg-neutral-800 [--slide-to:0px] [--slide-from:336px] 2xl:[--slide-from:250px]"
         initial={{ x: "var(--slide-from)" }}
         animate={{
           x: isHovering ? "var(--slide-to)" : "var(--slide-from)",
@@ -251,7 +137,6 @@ export default function Medications() {
         active={isOpen}
         details={suggestions}
         closeHandler={() => setIsOpen(false)}
-        setData={setData}
       />
     </React.Fragment>
   )

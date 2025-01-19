@@ -12,7 +12,6 @@ import { patientService } from "@/lib/services/patient"
 import { TAppointment } from "@/types"
 import { firey } from "@/utils"
 import { format } from "date-fns"
-import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import React, { useEffect, useState } from "react"
@@ -65,7 +64,7 @@ export default function RecentAppointments() {
   // handle appointment details modal opening
   function handleOpenDetailsModal(info: TAppointment, idx: number) {
     if (!searchParams.get("popup") && !searchParams.get("id")) {
-      router.push(`?${searchParams}&popup=t&id=${info.id}`)
+      router.push(`?popup=t&id=${info.id}&${searchParams}`)
     }
     setSelected(info)
     setOpenDetailsModal(true)

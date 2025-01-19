@@ -49,10 +49,6 @@ export default function DietPreferences() {
     ...initialPreferences,
   })
 
-  const router = useRouter()
-  const pathName = usePathname()
-  const searchParams = useSearchParams()
-
   const isEmpty = Object.values(values).flatMap((item) => item).length === 0
 
   // retrieve medication details

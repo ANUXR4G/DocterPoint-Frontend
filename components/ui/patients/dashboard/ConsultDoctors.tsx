@@ -1,10 +1,16 @@
 import Image from "next/image"
-import { FlipEfButton } from "@/components"
+import { ConsultBannerSkeleton, FlipEfButton } from "@/components"
 
-export default function ConsultDoctors() {
+type Props = {
+  isLoading: boolean
+}
+
+export default function ConsultDoctors({ isLoading }: Props) {
+  if (isLoading) return <ConsultBannerSkeleton />
+
   return (
     <div className="bg-gradient-to-tr flex flex-col from-[#38567e] to-[#4c8bde] min-h-64 lg:col-span-1 lg:row-span-2 lg:order-4 rounded-xl relative">
-      <div className="w-32 h-32 xs:w-40 xs:h-40 md:w-72 md:h-72 rounded-full absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 bg-gradient-to-br from-[rgb(255,255,255)]/10 to-transparent" />
+      <div className="size-32 xs:size-40 md:size-56 xl:size-64 rounded-full absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 bg-gradient-to-br from-[rgb(255,255,255)]/10 to-transparent" />
       <div className="mt-[72px] xxs:mt-16 xs:mt-10 lg:mt-24 2xl:mt-20 mx-auto xs:ml-8 md:ml-4 2xl:ml-10 flex flex-col text-[--primary-white]">
         <h3 className="text-sm md:text-base xl:text-2xl font-extrabold">
           Consult Doctors

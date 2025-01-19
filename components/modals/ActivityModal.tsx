@@ -12,7 +12,6 @@ type Props = {
   active: boolean
   closeHandler: () => void
   details?: TMedications | []
-  setData: React.Dispatch<React.SetStateAction<Record<string, any>>>
 }
 
 const initialValues = {
@@ -24,12 +23,7 @@ const initialValues = {
   description: "",
 }
 
-export default function AddActivity({
-  active,
-  closeHandler,
-  details,
-  setData,
-}: Props) {
+export default function AddActivity({ active, closeHandler, details }: Props) {
   const [values, setValues] = useState({ ...initialValues })
 
   // retrieve profile details

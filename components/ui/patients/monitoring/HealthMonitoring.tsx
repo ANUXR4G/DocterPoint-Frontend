@@ -8,9 +8,15 @@ import { useProfile } from "@/hooks/useProfile"
 import { modifyData } from "@/lib/dummy/health"
 import { patientService } from "@/lib/services/patient"
 import { HumanAnatomy, MonitoringSlider } from "@/components"
+import { useRouter, useSearchParams } from "next/navigation"
 
 export default function HealthMonitoring() {
-  const [activeIndex, setActiveIndex] = useState<number>(3)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const paramsExists = searchParams.size !== 0
+
+  const metricsActive = searchParams.get("metrics") || 3
+  const [activeIndex, setActiveIndex] = useState<number>(Number(metricsActive))
 
   const { data: userInfo } = useProfile()
 
@@ -46,8 +52,18 @@ export default function HealthMonitoring() {
   const uiData = modifyData(healthRecordValues)
 
   // toggle modals
-  const handleOpenModal = (idx: number) => setActiveIndex(idx)
-  const handleCloseModal = () => setActiveIndex(-1)
+  const handleOpenModal = (idx: number) => {
+    if (paramsExists) {
+      router.push("?")
+    }
+    setActiveIndex(idx)
+  }
+  const handleCloseModal = () => {
+    if (paramsExists) {
+      router.push("?")
+    }
+    setActiveIndex(-1)
+  }
 
   return (
     <React.Fragment>

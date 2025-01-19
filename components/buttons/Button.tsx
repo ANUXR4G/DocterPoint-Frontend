@@ -29,7 +29,7 @@ export default function Button({
         `bg-blue-600 dark:bg-blue-700 text-white border-transparent hover:bg-blue-700`
       } ${
         type === "outline" &&
-        ` bg-white dark:bg-neutral-300 text-gray-800 shadow-sm hover:bg-gray-50 dark:hover:bg-neutral-200`
+        ` bg-white dark:bg-neutral-300 text-neutral-500 shadow-sm hover:bg-gray-50 dark:hover:bg-neutral-200`
       } ${
         type === "secondary" &&
         `text-white bg-gradient-to-r from-red-400 via-red-500 to-red-600 hover:bg-gradient-to-br dark:border-neutral-300`

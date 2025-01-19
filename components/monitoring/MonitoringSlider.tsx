@@ -1,10 +1,10 @@
 "use client"
 
-import { motion } from "framer-motion"
 import Image from "next/image"
+import { motion } from "framer-motion"
+import React, { useState } from "react"
 import { Icon, Swiper } from "@/components"
 import { TMonitoring } from "@/types"
-import React, { useState } from "react"
 
 type Props = {
   openModal: (idx: number) => void
@@ -52,7 +52,7 @@ export default function MonitoringSlider({ openModal, uiData }: Props) {
                   {/* icon */}
                   <div
                     // sorry ik this sucks (items have diff dimensions)
-                    className={`relative  ${
+                    className={`relative ${
                       idx === 0 &&
                       `-ml-4 mt-2 min-w-[68px] size-[68px] md:min-w-24 md:size-24`
                     } ${
@@ -120,12 +120,7 @@ export default function MonitoringSlider({ openModal, uiData }: Props) {
                       )}
                     </h1>
                   )}
-                  {/* <p className="mt-2 text-xs font-semibold opacity-70">
-                    {item.time}
-                  </p> */}
                 </div>
-
-                {/* time */}
               </motion.div>
             </div>
           </div>

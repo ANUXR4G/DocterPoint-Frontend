@@ -1,24 +1,25 @@
 "use client"
 
-import { motion } from "framer-motion"
-import Icon from "../icons"
-import { format } from "date-fns"
 import { useState } from "react"
-import SimpleModal from "../modals/SimpleModal"
-import { useKeyPress } from "@/hooks/useKeyPress"
+import { format } from "date-fns"
+import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
+import { useKeyPress } from "@/hooks/useKeyPress"
+import Icon from "../icons"
 
 type Props = {
   data: {
     type: "consultation" | "test" | "exercise" | "meal" | "medication"
-    time: string
-    date?: string
     duration?: string
-    name?: string
+    time: string
     id?: string
+    name?: string
+    appointmentDate?: string
     doctor?: {
+      id: string
       name: string
       hospital: {
+        id: string
         name: string
         address: string
       }
@@ -28,10 +29,12 @@ type Props = {
 
 export default function Tasks({ data }: Props) {
   const [openOptions, setOpenOptions] = useState<boolean>(false)
+  const [isHovering, setIsHovering] = useState<boolean>(false)
 
   const router = useRouter()
 
   const time = new Date()
+
   // get the time in 12 hours format
   const hour12Format = time
     .toLocaleString("en-US", {
@@ -43,16 +46,13 @@ export default function Tasks({ data }: Props) {
 
   // check if the task is currently running
   function currentlyRunning(time: string) {
-    // get the current hour in number
-    const currentHour = Number(hour12Format[0].split(":")[0])
-    // get the part of the day
-    const currentPOD = hour12Format[1]
+    const currentHour = Number(hour12Format[0].split(":")[0]) // get the current hour in number
+    const currentPOD = hour12Format[1] // get the part of the day
 
     // get the hours in backwards 2 times
     for (let curr = currentHour; curr > currentHour - 2; curr--) {
       if (`${curr}${currentPOD}` === time) {
-        // found the task that matches w the current time
-        return true
+        return true // found the task that matches w the current time
       }
     }
 
@@ -69,127 +69,105 @@ export default function Tasks({ data }: Props) {
   // handle view upcoming appointments
   function handleAppointmentView(
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>,
-    id: string
+    id?: string
   ) {
+    let appointmentLink = `/patient/appointments?popup=t&id=${id}`
     if (typeof window !== "undefined" && id) {
       e.preventDefault()
       if (e.ctrlKey) {
-        window.open(
-          `/patient/appointments?id=${id}&type=view&popup=t`,
-          `_blank`
-        )
+        window.open(appointmentLink, `_blank`)
       } else {
-        router.push(`/patient/appointments?id=${id}&type=view&popup=t`)
+        router.push(appointmentLink)
       }
     }
   }
 
-  return data.map(({ type, id, date, name, time, doctor, duration }, idx) => (
-    <div className="ml-6 relative" key={`activities-${idx}`}>
-      <div
-        className={`absolute -left-6 top-0.5 flex center ${
-          !currentlyRunning(time) && type !== "consultation" && `hidden`
-        }`}
+  return data.map(
+    ({ id, type, appointmentDate, name, time, doctor, duration }, idx) => (
+      <motion.div
+        className="ml-6 relative"
+        key={`activities-${idx}`}
+        onHoverStart={() => setIsHovering(true)}
+        onHoverEnd={() => setIsHovering(false)}
       >
-        <motion.div
-          initial={{ scale: 0.6 }}
-          animate={{
-            scale: 1,
-            transition: { repeat: Infinity, duration: 0.8 },
-          }}
-          className={`rounded-full size-[18px] backdrop-blur-sm ${
-            type === "test" ||
-            (type === "consultation" && `bg-blue-400/25`) ||
-            (type === "medication" && `bg-blue-300/25`)
-          } ${type === "exercise" && `bg-orange-400/25`} ${
-            type === "meal" && `bg-red-400/25`
-          }`}
-        />
+        {/* currently running indicator */}
         <div
-          className={`absolute size-1.5 rounded-full ${
-            type === "test" ||
-            (type === "consultation" && `bg-blue-400`) ||
-            (type === "medication" && `bg-blue-300`)
-          } ${type === "exercise" && `bg-orange-400`} ${
-            type === "meal" && `bg-red-400`
+          className={`absolute -left-6 top-0.5 flex center ${
+            !currentlyRunning(time) && type !== "consultation" && `hidden`
           }`}
-        />
-      </div>
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-bold">
-          {name ? name : `Apppointment for ${type.toUpperCase()}`}
-        </h3>
-        {type === "consultation" ||
-          (type === "test" && (
-            <div className="ml-auto">
-              <SimpleModal
-                open={openOptions}
-                closeModal={() => setOpenOptions(false)}
-                className="border dark:border-none dark:shadow-[inset_0_0_0_1px_rgba(248,248,248,0.2)] shadow-md rounded-lg right-0 top-10 flex flex-col w-40 bg-[--primary-white] dark:bg-neutral-800"
-                content={
-                  <button
-                    className={`top-0 relative size-8 center ${
-                      openOptions && `bg-zinc-200/80 dark:bg-neutral-700`
-                    } hover:bg-zinc-200/80 dark:hover:bg-neutral-700 rounded-full`}
-                    onClick={() => setOpenOptions(true)}
-                  >
-                    <Icon name="ellipsis" className="size-6" />
-                  </button>
-                }
-              >
-                <button
-                  className="py-1 size-full hover:bg-zinc-200/70 dark:hover:bg-neutral-700 rounded-md"
-                  onClick={(e) => id && handleAppointmentView(e, id)}
-                >
-                  <span className="text-sm font-bold">View</span>
-                </button>
-                <button className="py-1 hover:bg-zinc-200/70 dark:hover:bg-neutral-700 rounded-md size-full">
-                  <span className="text-sm font-bold">Cancel</span>
-                </button>
-              </SimpleModal>
-            </div>
-          ))}
-        <div className={(type === "consultation" || "test") && `hidden`}>
-          <Icon
-            name={
-              type === "meal"
-                ? "soup-bowl"
-                : type === "exercise"
-                ? "human-yoga"
-                : type === "medication"
-                ? "capsule-pill"
-                : "written-page"
-            }
+        >
+          <motion.div
+            initial={{ scale: 0.6 }}
+            animate={{
+              scale: 1,
+              transition: { repeat: Infinity, duration: 0.8 },
+            }}
+            className={`rounded-full size-[18px] backdrop-blur-sm ${
+              type === "test" ||
+              (type === "consultation" && `bg-blue-400/25`) ||
+              (type === "medication" && `bg-blue-300/25`)
+            } ${type === "exercise" && `bg-orange-400/25`} ${
+              type === "meal" && `bg-red-400/25`
+            }`}
+          />
+          <div
+            className={`absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 size-2 rounded-full ${
+              type === "test" ||
+              (type === "consultation" && `bg-blue-400`) ||
+              (type === "medication" && `bg-blue-300`)
+            } ${type === "exercise" && `bg-orange-400`} ${
+              type === "meal" && `bg-red-400`
+            }`}
           />
         </div>
-      </div>
-      <div className="mt-1 text-sm flex flex-col font-semibold">
-        {date && (
-          <h5 className="opacity-70 leading-4">
-            {format(date as string, "do MMMM, yyy")}
-          </h5>
-        )}
-        <h5 className="opacity-70 text-nowrap leading-4">{time}</h5>
+
+        {/* name of the pending task */}
+        <div className="flex justify-between">
+          <h3
+            className={`text-sm font-bold capitalize ${!name && `opacity-70`}`}
+          >
+            {name
+              ? name
+              : `${type} at ${format(
+                  appointmentDate as string,
+                  "do MMMM, yyy"
+                )}`}
+          </h3>
+          {!name && (
+            <motion.button
+              animate={{ opacity: isHovering ? 1 : 0 }}
+              onClick={(e) => handleAppointmentView(e, id)}
+            >
+              <Icon
+                className="size-[18px]"
+                name="right-arrow"
+                pathClassName="fill-neutral-500"
+              />
+            </motion.button>
+          )}
+        </div>
+
+        {/* doctor and hospital details for appointment pendings */}
         {doctor && (
-          <h5 className="opacity-70 leading-4">{doctor.hospital.address}</h5>
-        )}
-      </div>
-      {duration && (
-        <h5 className="text-xs mt-1 font-semibold opacity-70 leading-4">
-          {duration} (duration)
-        </h5>
-      )}
-      {doctor && (
-        <div className="mt-2 flex items-center -ml-1 gap-2.5">
-          <div className="min-w-9 size-9 rounded-full bg-slate-600" />
-          <div className="text-sm">
+          <div className="mt-2 flex flex-col text-sm">
             <h4 className="font-bold">{doctor.name}</h4>
             <h5 className="font-semibold opacity-70 leading-4">
               {doctor.hospital.name}
             </h5>
+            <h5 className="font-semibold opacity-70 leading-4">
+              {doctor.hospital.address}
+            </h5>
           </div>
-        </div>
-      )}
-    </div>
-  ))
+        )}
+        <h5 className="text-sm font-semibold opacity-70 text-nowrap leading-4">
+          {time}
+        </h5>
+        {duration && (
+          <h5 className="text-xs mt-1 font-semibold opacity-70 leading-4">
+            {duration} (duration)
+          </h5>
+        )}
+      </motion.div>
+    )
+  )
 }

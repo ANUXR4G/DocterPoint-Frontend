@@ -134,3 +134,13 @@ export { default as Pagination } from "./pagination"
 // loader
 export { default as SimpleSpinner } from "./loader/SimpleSinner"
 export { default as Loader } from "./loader/Loader"
+
+// skeletons
+export { default as PendingAppointmentSkeleton } from "./skeletons/PendingAppointments"
+export { default as PendingActivitiesSkeleton } from "./skeletons/PendingActivities"
+export { default as GreetingSkeleton } from "./skeletons/GreetingSkeleton"
+export { default as BloodGlucoseSkeleton } from "./skeletons/BloodGlucoseSkeleton"
+export { default as BloodPressureSkeleton } from "./skeletons/BloodPressureSkeleton"
+export { default as ConsultBannerSkeleton } from "./skeletons/ConsultBannerSkeleton"
+export { default as ConnectDeviceSkeleton } from "./skeletons/ConnectDeviceSkeleton"
+export { default as HealthInfoSkeleton } from "./skeletons/HealthInfoSkeleton"
