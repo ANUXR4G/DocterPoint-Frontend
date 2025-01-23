@@ -1,7 +1,14 @@
 "use client"
 
 import React, { useState } from "react"
-import { BasicSelect, Button, Checkbox, Modal, TextInput } from ".."
+import {
+  BasicSelect,
+  Button,
+  Checkbox,
+  Modal,
+  MultiOptions,
+  TextInput,
+} from ".."
 import { useApiMutation } from "@/hooks/useApiMutation"
 import { patientService } from "@/lib/services/patient"
 import { useProfile } from "@/hooks/useProfile"
@@ -40,12 +47,14 @@ export default function AddActivity({ active, closeHandler, details }: Props) {
 
   // handle times selection
   function handleTimeSelection(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value.toLowerCase()
+
     setValues((prev) => {
-      const value = e.target.value.toLowerCase()
-      const exist = prev.times.includes(value)
-      const times = exist
-        ? prev.times.filter((item) => item !== value)
-        : prev.times.concat(value)
+      const times = prev.times.includes(value)
+        ? prev.times.length > 1
+          ? prev.times.filter((item) => item !== value)
+          : prev.times
+        : [...prev.times, value]
       return { ...prev, times }
     })
   }
@@ -148,52 +157,32 @@ export default function AddActivity({ active, closeHandler, details }: Props) {
           )}
 
           {/* time */}
-          <fieldset>
-            <legend className="text-sm font-semibold opacity-90">Time</legend>
-
-            <div className="flex flex-wrap mt-2 -ml-1 gap-2">
-              {["Morning", "Afternoon", "Evening", "Night"].map((item, idx) => (
-                <Checkbox
-                  key={`activity_time_${idx}`}
-                  name={`activity_time_${idx}_option`}
-                  value={item}
-                  active={values.times.includes(item.toLowerCase())}
-                  onChange={handleTimeSelection}
-                  direction="left"
-                />
-              ))}
-            </div>
-          </fieldset>
+          <MultiOptions
+            title="time"
+            values={["morning", "afternoon", "evening", "night"]}
+            options={values.times}
+            onChange={handleTimeSelection}
+            innerClassName="-ml-0.5"
+          />
 
           {/* duration */}
           {values.type === "Exercise 🏃🏼‍♂️" && (
-            <fieldset>
-              <legend className="text-sm font-semibold opacity-90">
-                Duration
-              </legend>
-
-              <div className="flex flex-wrap mt-2 -ml-1 gap-2">
-                {[
-                  "10-15mins",
-                  "15min-20mins",
-                  "15min-30mins",
-                  "30-45mins",
-                  "40-50mins",
-                  "1-2hrs",
-                ].map((item, idx) => (
-                  <Checkbox
-                    key={`activity_time_${idx}`}
-                    name={`activity_time_${idx}_option`}
-                    value={item}
-                    active={values.duration === item}
-                    onChange={(e) =>
-                      setValues((prev) => ({ ...prev, duration: item }))
-                    }
-                    direction="left"
-                  />
-                ))}
-              </div>
-            </fieldset>
+            <MultiOptions
+              title="time"
+              values={[
+                "10-15mins",
+                "15min-20mins",
+                "15min-30mins",
+                "30-45mins",
+                "40-50mins",
+                "1-2hrs",
+              ]}
+              options={[values.duration]}
+              onChange={(e) =>
+                setValues((prev) => ({ ...prev, duration: e.target.value }))
+              }
+              innerClassName="-ml-0.5"
+            />
           )}
 
           <div>

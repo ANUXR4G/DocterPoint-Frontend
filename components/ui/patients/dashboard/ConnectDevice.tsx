@@ -14,7 +14,7 @@ export default function ConnectDevice({ isLoading }: Props) {
   if (isLoading) return <ConnectDeviceSkeleton />
 
   return (
-    <div className="bg-gradient-to-tl relative to-[#9bdcc1] center from-[#00AB59] lg:col-span-1 lg:order-6 h-64 rounded-xl overflow-hidden">
+    <div className="bg-gradient-to-tl relative to-[#9bdcc1] center from-[#00AB59] lg:col-span-1 lg:order-6 min-h-64 rounded-xl overflow-hidden">
       <div className="absolute w-full h-full bg-black/10 z-[5]" />
       <div className="relative xs:w-4/5 left-0 xs:left-20 2xl:left-16 md:left-28 w-full h-full -scale-x-100">
         <Image

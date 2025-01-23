@@ -1,5 +1,5 @@
 export const physicalActivities = ["Light", "Moderate", "Active", "Very Active"]
-export const smokingStatuses = ["Light", "Occasionally", "Daily", "None Smoker"]
+export const smokingStatuses = ["None Smoker", "Light", "Daily"]
 export const familyHistoryStatuses = [
   "Father",
   "Mother",

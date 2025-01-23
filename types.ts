@@ -52,6 +52,7 @@ export type IconNames =
   | "weight-machine"
   | "up-arrow"
   | "up-chevron"
+  | "down-chevron"
   | "ellipsis"
   | "mail"
   | "right-arrow"
@@ -174,14 +175,14 @@ export type TPatient = {
   id: string
   email: string
   role: string
+  name: string | null
   gender: string | null
   imgSrc: string | null
-  dateOfBirth: string | null
-  emergencyNumber: string | null
-  name: string | null
   address: string | null
   profession: string | null
+  dateOfBirth: string | null
   contactNumber: string | null
+  emergencyNumber: string | null
 }
 
 export type THospital = {
@@ -300,4 +301,21 @@ export type TMeal = {
   time: string
   protein: number
   blog: string
+}
+
+export type TInfoOptions = {
+  name: string
+  gender: string
+  imgSrc: string
+  address: string
+  profession: string
+  dateOfBirth: Date | null
+  contactNumber: string
+  emergencyNumber: string
+  weight: number | string
+  height: number | string
+  bloodGroup: string
+  smokingStatus: string
+  physicalActivity: string
+  previousDiabetesRecords: string[]
 }

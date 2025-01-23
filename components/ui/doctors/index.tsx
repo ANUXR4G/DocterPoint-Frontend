@@ -103,7 +103,7 @@ export default function Doctors() {
   // handle prev indicator
   function handlePreviousPage() {
     // setPage((prev) => Math.max(prev - 1, 1))
-    router.push(`?page=${Math.min(page + 1, totalPages)}`)
+    router.push(`?page=${Math.max(page - 1, 1)}`)
   }
 
   // handle next indicator

@@ -86,7 +86,11 @@ export { default as BasicSelect } from "./selects/BasicSelect"
 export { default as RadioInput } from "./inputs/RadioInput"
 export { default as Checkbox } from "./inputs/Checkbox"
 export { default as TextInput } from "./inputs/TextInput"
+export { default as Input } from "./inputs/SimpleInput"
 export { default as IconInput } from "./inputs/IconInput"
+
+// options
+export { default as MultiOptions } from "./options/MultiOptions"
 
 // medications
 export { default as Medications } from "./ui/patients/monitoring/Medications"
@@ -124,6 +128,7 @@ export { default as Activities } from "./tasks/Activities"
 
 // forms
 export { default as Form } from "./forms/Form"
+export { default as InfoForm } from "./forms/InfoForm"
 
 // background
 export { default as Background } from "./bg"
@@ -144,3 +149,8 @@ export { default as BloodPressureSkeleton } from "./skeletons/BloodPressureSkele
 export { default as ConsultBannerSkeleton } from "./skeletons/ConsultBannerSkeleton"
 export { default as ConnectDeviceSkeleton } from "./skeletons/ConnectDeviceSkeleton"
 export { default as HealthInfoSkeleton } from "./skeletons/HealthInfoSkeleton"
+export { default as PatientInfoSkeleton } from "./skeletons/PatientInfoSkeleton"
+
+// info ui
+export { default as BasicInfo } from "./ui/patients/info/BasicInfo"
+export { default as MedicalRecords } from "./ui/patients/info/MedicalRecords"

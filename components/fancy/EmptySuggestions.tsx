@@ -9,8 +9,15 @@ import { useApi } from "@/hooks/useApi"
 import { TMedications } from "@/types"
 import { firey } from "@/utils"
 import { queryClient } from "@/app/providers"
+import { useRouter } from "next/navigation"
 
-export default function EmptySuggestions() {
+type Props = {
+  onClick?: () => void
+}
+
+export default function EmptySuggestions({ onClick }: Props) {
+  const router = useRouter()
+
   // retrieve patient and medication details
   const { data: profile } = useProfile()
   const { data: suggestions } = useApi(
@@ -53,7 +60,16 @@ export default function EmptySuggestions() {
           priority
         />
       </div>
-      <Button className="mt-2 max-w-48" onClick={generateSuggestions}>
+      <Button
+        className="mt-2 max-w-48"
+        onClick={
+          onClick
+            ? onClick
+            : !profile?.dateOfBirth
+            ? () => router.push("/patient/info")
+            : generateSuggestions
+        }
+      >
         Generate Recommendations
       </Button>
     </div>

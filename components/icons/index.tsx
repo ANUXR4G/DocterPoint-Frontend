@@ -53,6 +53,7 @@ import {
   KeyIcon,
   SpinningLoader,
   EnergyIcon,
+  DownChevron,
 } from "./svg"
 
 type Props = {
@@ -65,6 +66,9 @@ export default function Icon({ name, className, pathClassName }: Props) {
   switch (name) {
     case "search":
       return <SearchIcon className={className} pathClassName={pathClassName} />
+
+    case "down-chevron":
+      return <DownChevron className={className} pathClassName={pathClassName} />
 
     case "key":
       return <KeyIcon className={className} pathClassName={pathClassName} />

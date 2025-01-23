@@ -11,10 +11,17 @@ import { firey } from "@/utils"
 import { TMedications } from "@/types"
 import { queryClient } from "@/app/providers"
 import { patientService } from "@/lib/services/patient"
-import { PendingActivitiesSkeleton, Tasks } from "@/components"
+import {
+  EmptySuggestions,
+  PendingActivitiesSkeleton,
+  Tasks,
+} from "@/components"
+import { useRouter } from "next/navigation"
 
 export default function Activities() {
   const hasRun = useRef(false)
+
+  const router = useRouter()
 
   // retrieve medication details
   const { data: profile } = useProfile()
@@ -82,6 +89,13 @@ export default function Activities() {
             </div>
           </div>
         </React.Fragment>
+      )}
+
+      {/* if required details are unavailable to generate suggestions */}
+      {Array.isArray(suggestions) && (
+        <div className="pt-9">
+          <EmptySuggestions onClick={() => router.push("/patient/info")} />
+        </div>
       )}
       <div className={`mt-3 flex flex-col gap-3`}>
         {isLoading ? (

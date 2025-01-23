@@ -141,20 +141,62 @@ function snakeToCamelCase(key: string): string {
   return key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
 }
 
+/**
+ * Splits an array into subarrays of specified size and optionally keys them.
+ *
+ * @param array - The array to be split into chunks.
+ * @param size - The size of each chunk.
+ * @param key - Boolean flag indicating if custom keys should be added.
+ *              If true and array elements are strings or numbers, keys are
+ *              based on the first and last elements of each chunk.
+ *              If false, keys are based on chunk index.
+ * @returns A record of chunks, where each key is either the chunk index
+ *          or a custom key based on the chunk values.
+ */
+function chunkArray<T>(
+  array: T[],
+  size: number,
+  key: boolean = false
+): Record<string, T[]> {
+  return array.reduce((acc: Record<string, T[]>, _, i) => {
+    // process every chunk based on size
+    if (i % size === 0) {
+      let subArray = array.slice(i, i + size) // create a subarray of the specified size
+      // determine the chunk key based on the type of array elements and the key flag
+      let chunkKey = key
+        ? `${subArray[subArray.length - 1]}-${subArray[0]}`
+        : `${Math.floor(i / size)}`
+
+      // add the subarray to the accumulator with the determined key
+      acc[chunkKey] = subArray
+    }
+    return acc
+  }, {})
+}
+
 // recursive function to convert object keys to camelCase
 function convertKeysToCamelCase<T>(data: T): T {
   if (Array.isArray(data)) {
     // recursively convert keys in arrays
-    return data.map((item) => convertKeysToCamelCase(item)) as unknown as T
+    return data.map((item) => convertKeysToCamelCase(item)) as T
   } else if (data !== null && typeof data === "object") {
     // Recursively convert keys in objects
     return Object.entries(data).reduce((acc, [key, value]) => {
       const camelCaseKey = snakeToCamelCase(key)
       acc[camelCaseKey] = convertKeysToCamelCase(value)
       return acc
-    }, {} as Record<string, any>) as T
+    }, {} as Record<string, unknown>) as T
   }
   return data // return the value as is for non object types
+}
+
+function camelToCapitalize(camelCaseString: string): string {
+  return camelCaseString
+    .replace(/([a-z])([A-Z])/g, "$1 $2") // add space before each capital letter
+    .replace(/([A-Z])/g, " $1") // add space before each capital letter
+    .replace(/\s+/g, " ") // replace multiple spaces with a single space
+    .trim() // remove leading and trailing spaces
+    .replace(/^\w/, (match) => match.toUpperCase()) // capitalize the first letter
 }
 
 // convert minutes to `h:m` format
@@ -245,4 +287,6 @@ export const firey = {
   generateEncryption: generateEncryptionAES,
   distributeItems,
   countSizeOfNestedArrObject,
+  camelToCapitalize,
+  chunkArray,
 }

@@ -55,7 +55,7 @@ export default function PendingTasks({ isLoading: recordLoading }: Props) {
   const isLoading = appointmentLoading || recordLoading
 
   return (
-    <div className="hidden py-6 max-h-[742px] overflow-hidden overflow-y-auto custom-scroll lg:block bg-[#F0F0F0] dark:bg-neutral-800 rounded-xl col-span-2 lg:order-3 lg:col-span-1 lg:row-span-3">
+    <div className="hidden py-6 max-h-[874px] overflow-hidden overflow-y-auto custom-scroll lg:block bg-[#F0F0F0] dark:bg-neutral-800 rounded-xl col-span-2 lg:order-3 lg:col-span-1 lg:row-span-3">
       <div className="flex flex-col">
         <div className="flex flex-col px-3 pt-4">
           {/* date header for selected day */}

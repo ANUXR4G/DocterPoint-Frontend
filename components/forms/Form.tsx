@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import React, { useEffect } from "react"
+import React, { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { useMutation } from "react-query"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -21,6 +21,8 @@ export default function Form() {
   const pathname = usePathname().replace("/", "")
   const searchParams = useSearchParams()
   const router = useRouter()
+
+  const [authSuccess, setAuthSuccess] = useState<boolean>(false)
 
   const callbackURL = searchParams.get("callback")
   const googleStatus = searchParams.get("status")
@@ -48,6 +50,13 @@ export default function Form() {
     mutate: loginMutate,
   } = useMutation({
     mutationFn: (credentials: AuthValueType) => userService.login(credentials),
+    onSuccess: (data) => {
+      if (data.status) {
+        setAuthSuccess(false)
+      } else {
+        setAuthSuccess(true)
+      }
+    },
   })
 
   const {
@@ -58,27 +67,38 @@ export default function Form() {
     mutate: signupMutate,
   } = useMutation({
     mutationFn: (credentials: AuthValueType) => userService.signup(credentials),
+    onSuccess: (data) => {
+      if (data.status) {
+        setAuthSuccess(false)
+      } else {
+        setAuthSuccess(true)
+      }
+    },
   })
 
-  // push to dashboard after an successful authetication
+  // redirect to dashboard after successful authetication
   useEffect(() => {
-    // based on role redirect to specific dashboard
-    if ((loginData && loginSuccess) || (signupData && signupSuccess)) {
+    if (authSuccess) {
+      const role = loginData?.role || signupData?.role
+      const name = loginData?.name || signupData?.name
+      const dateOfBith = loginData?.date_of_birth || signupData?.date_of_birth
+
       if (callbackURL) {
-        // redirect to callback url if there is any
+        // redirect to callback url was provided
         router.push(`${process.env.NEXT_PUBLIC_URL}/${callbackURL}`)
-        return
+      } else if (role === "user") {
+        // redirect based on the user role
+        if (!name && !dateOfBith) {
+          router.push(`/patient/info`)
+        } else {
+          router.push("/patient/dashboard")
+        }
+      } else {
+        // fallback for other roles
+        router.push(`/${role}/dashboard`)
       }
-      router.push(
-        `/${
-          (loginData && loginData.role === "user" && "patient") ||
-          (signupData && signupData.role === "user" && "patient") ||
-          (loginData && loginData.role) ||
-          (signupData && signupData.role)
-        }/dashboard`
-      )
     }
-  }, [loginData, signupData, router, callbackURL, signupSuccess, loginSuccess])
+  }, [loginData, signupData, router, callbackURL, authSuccess])
 
   // handle authentication
   async function handleAuthentication(values: AuthValueType) {

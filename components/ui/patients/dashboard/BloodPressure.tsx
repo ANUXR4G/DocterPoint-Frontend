@@ -63,16 +63,18 @@ export default function BloodPressure({
   if (isLoading) return <BloodPressureSkeleton />
 
   return (
-    <div className="col-span-2 lg:order-5 lg:row-span-2 py-6 md:py-8 px-4 relative border-2 dark:border-neutral-600 rounded-xl">
+    <div className="col-span-2 lg:order-5 lg:row-span-2 py-6 md:py-8 px-4 relative border-2 dark:border-neutral-600 min-h-[406px] max-h-[532px] rounded-xl">
       {/* for empty pressure informations */}
       {isEmpty && (
-        <div className="absolute center left-0 top-0 z-20 size-full rounded-xl bg-black/80 dark:bg-black/50 backdrop-blur-sm">
-          <ShinnyEfBtn
-            className="text-neutral-100 text-xs xxs:text-sm px-5 xs:px-8 py-3 xs:text-lg  gradient-border-green rounded-3xl z-10 backdrop-blur-[20px]"
-            onClick={() => router.push("/patient/monitoring?metrics=1")}
-          >
-            Start Monitoring Blood Pressures
-          </ShinnyEfBtn>
+        <div>
+          <div className="absolute center left-0 top-0 z-20 size-full rounded-xl bg-black/80 dark:bg-black/50 backdrop-blur-sm">
+            <ShinnyEfBtn
+              className="text-neutral-100 text-xs xxs:text-sm px-5 xs:px-8 py-3 xs:text-lg  gradient-border-green rounded-3xl z-10 backdrop-blur-[20px]"
+              onClick={() => router.push("/patient/monitoring?metrics=1")}
+            >
+              Start Monitoring Blood Pressures
+            </ShinnyEfBtn>
+          </div>
         </div>
       )}
 
@@ -82,7 +84,7 @@ export default function BloodPressure({
           <div className="flex flex-col px-4">
             <div className="flex flex-col items-start -ml-4 md:ml-0">
               <h4 className="text-base md:text-xl font-bold">Blood Pressure</h4>
-              {bloodPressureDetails.value && (
+              {bloodPressureDetails.value ? (
                 <div className="flex items-center mt-1">
                   <Icon
                     name="heart-w-pulse"
@@ -99,18 +101,33 @@ export default function BloodPressure({
                     BPM
                   </span>
                 </div>
-              )}
-            </div>
-            {bloodPressureDetails.value && (
-              <div className="self-end">
-                <div className="mt-4 md:mt-0 text-[--primary-red] flex">
-                  <h2 className="text-4xl xxs:text-5xl md:text-6xl font-extrabold">
-                    {bloodPressureDetails.value}
-                  </h2>
-                  <span className="text-sm xxs:text-xl font-bold self-end mb-0.5 xxs:mb-0 md:mb-1 ml-0.5 md:ml-1">
-                    {bloodPressureDetails.unit}
+              ) : (
+                <div className="flex items-center mt-1">
+                  <Icon
+                    name="heart-w-pulse"
+                    pathClassName="dark:stroke-neutral-400"
+                  />
+                  <span className="ml-2 opacity-75 text-sm font-bold">
+                    Pulse: 46BPM
                   </span>
                 </div>
+              )}
+            </div>
+            <div className="self-end">
+              <div className="mt-4 md:mt-0 text-[--primary-red] flex">
+                <h2 className="text-4xl xxs:text-5xl md:text-6xl font-extrabold">
+                  {bloodPressureDetails.value
+                    ? bloodPressureDetails.value
+                    : `112/80`}
+                </h2>
+                <span className="text-sm xxs:text-xl font-bold self-end mb-0.5 xxs:mb-0 md:mb-1 ml-0.5 md:ml-1">
+                  {bloodPressureDetails.unit
+                    ? bloodPressureDetails.unit
+                    : `mmHG`}
+                </span>
+              </div>
+
+              {bloodPressureDetails.value && (
                 <div className="flex flex-col items-end mt-2 xxs:mt-3 md:mt-2">
                   <div
                     onClick={showSystolicRecords}
@@ -135,8 +152,8 @@ export default function BloodPressure({
                     </span>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* blood pressure graph */}

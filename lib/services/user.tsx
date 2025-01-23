@@ -51,6 +51,26 @@ async function profile(token: string) {
   return response.json()
 }
 
+async function update(token: string, payload: Record<string, unknown>) {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API}/patient/profile`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(`failed to update patient information.`)
+  }
+
+  return response.json()
+}
+
 async function logout() {
   const response = await fetch(`${process.env.NEXT_PUBLIC_API}/auth/logout`, {
     method: "POST",
@@ -68,5 +88,6 @@ export const userService = {
   login,
   signup,
   profile,
+  update,
   logout,
 }
