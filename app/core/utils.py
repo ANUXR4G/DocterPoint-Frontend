@@ -46,7 +46,7 @@ scopes = {
 
 def get_age_group(age: int):
     if 18 <= age <= 24:
-        return ("18-24",)
+        return "18-24"
     elif 25 <= age <= 34:
         return "25-34"
     elif 35 <= age <= 44:

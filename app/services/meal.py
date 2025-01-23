@@ -57,9 +57,19 @@ class MealService:
             )
             medication_result = await db.execute(medication_query)
             medication_result = medication_result.scalar_one_or_none()
-            ingredients = medication_result.recommended_ingredients or None
-            allergies = medication_result.allergies or None
-            preferred_cuisine = medication_result.preferred_cuisine or None
+            ingredients = (
+                medication_result.recommended_ingredients
+                if medication_result is not None
+                else None
+            )
+            allergies = (
+                medication_result.allergies if medication_result is not None else None
+            )
+            preferred_cuisine = (
+                medication_result.preferred_cuisine
+                if medication_result is not None
+                else None
+            )
 
         # apply filtering arguments if provided (q, ingredients, category, allergies, cusine)
         if q:
