@@ -20,10 +20,11 @@ class UserCredentials(UserBase):
 class UserUpdate(UserBase):
     email: EmailStr = None
     name: str = None
-    profession: str = None
     gender: str = None
-    date_of_birth: str = None
     address: str = None
+    img_src: str = None
+    date_of_birth: str = None
+    profession: str = None
     contact_number: str = None
     emergency_number: str = None
 
@@ -31,18 +32,6 @@ class UserUpdate(UserBase):
 class UserPasswordChange(BaseModel):
     old_password: str
     new_password: str
-
-
-class UserResponse(BaseModel):
-    url: str
-    email: EmailStr
-    name: str | None = None
-    profession: str | None = None
-    gender: str | None = None
-    date_of_birth: str | None = None
-    address: str | None = None
-    contact_number: str | None = None
-    emergency_number: str | None = None
 
 
 # google user
