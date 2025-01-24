@@ -35,7 +35,9 @@ export default function AlignContent({
             {values[0]}
           </Link>
         ) : (
-          <h5 className="text-sm xxs:text-base font-semibold">{values[0]}</h5>
+          <h5 className="text-sm line-clamp-1 xxs:text-base font-semibold">
+            {values[0]}
+          </h5>
         )}
       </div>
 

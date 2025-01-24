@@ -150,6 +150,7 @@ export { default as ConsultBannerSkeleton } from "./skeletons/ConsultBannerSkele
 export { default as ConnectDeviceSkeleton } from "./skeletons/ConnectDeviceSkeleton"
 export { default as HealthInfoSkeleton } from "./skeletons/HealthInfoSkeleton"
 export { default as PatientInfoSkeleton } from "./skeletons/PatientInfoSkeleton"
+export { default as ProfileSkeleton } from "./skeletons/ProfileSkeleton"
 
 // info ui
 export { default as BasicInfo } from "./ui/patients/info/BasicInfo"

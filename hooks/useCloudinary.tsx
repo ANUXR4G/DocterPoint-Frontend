@@ -6,8 +6,6 @@ export function useCloudinary(
   onSuccess?: (imgSrc: string) => Promise<any> | void
 ) {
   const [isUploading, setIsUploading] = useState<boolean>(false)
-  const [isUploaded, setUploaded] = useState<boolean>(false)
-
   async function handleImgUpload() {
     if (!imgFile) return
     setIsUploading(true)
@@ -31,14 +29,9 @@ export function useCloudinary(
       throw new Error(`failed to upload image to cloudinary.`)
     }
 
-    const result = await data.json()
-    if (onSuccess) {
-      await onSuccess(result.secure_url)
-    }
-
     setIsUploading(false)
-    setUploaded(true)
+    return await data.json()
   }
 
-  return { handleImgUpload, isUploading, isUploaded }
+  return { handleImgUpload, isUploading }
 }

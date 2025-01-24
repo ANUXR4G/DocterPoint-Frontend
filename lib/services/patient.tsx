@@ -154,8 +154,10 @@ async function createPatientHealthRecord(
 async function updatePatientHealthRecord(
   token: string,
   payload: any,
-  recordId: string
+  recordId?: string
 ): Promise<TPatientHealth> {
+  if (!recordId) throw new Error(`record id was not provided.`)
+
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API}/patient/health/records?id=${recordId}`,
     {

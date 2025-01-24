@@ -17,7 +17,8 @@ type Props = {
   ) => void
   setImgFile: React.Dispatch<React.SetStateAction<File | null>>
   infoKeys: string[]
-  allowNext: boolean
+  allowNext?: boolean
+  enableModalMode?: boolean
 }
 
 export default function BasicInfo({
@@ -27,6 +28,7 @@ export default function BasicInfo({
   handleChange,
   infoKeys,
   allowNext,
+  enableModalMode = false,
 }: Props) {
   const [imgBlob, setImgBlob] = useState<string | null>(null)
 
@@ -53,7 +55,7 @@ export default function BasicInfo({
     <React.Fragment>
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: allowNext ? 0 : 1 }}
+        animate={{ opacity: !!allowNext ? 0 : 1 }}
         className="min-w-full mt-5 w-full flex flex-col"
       >
         {/* profile picture */}
@@ -98,13 +100,27 @@ export default function BasicInfo({
         </div>
 
         {/* basics informations */}
-        <div className="p-2 w-full mt-3 flex flex-col gap-2">
-          <h1 className="text-lg 2xl:text-2xl mt-2 font-bold opacity-75 dark:text-neutral-200">
+        <div
+          className={`p-2 w-full mt-3 flex flex-col gap-2 ${
+            enableModalMode && `divide-y dark:divide-neutral-500`
+          }`}
+        >
+          <h1
+            className={`text-lg ${
+              !enableModalMode && `2xl:text-2xl`
+            } mt-2 font-bold opacity-75 dark:text-neutral-200`}
+          >
             Basic information
           </h1>
 
           {/* basic info options */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 2xl:gap-y-4">
+          <div
+            className={`grid grid-cols-2 gap-x-4 ${
+              enableModalMode
+                ? `pt-3 2xl:pt-5 gap-y-2.5`
+                : `gap-y-3 2xl:gap-y-4`
+            }`}
+          >
             <Input
               name={infoKeys[0]}
               value={values.name}
@@ -112,14 +128,16 @@ export default function BasicInfo({
               autoComplete="new-name"
               tabIndex={2}
               placeholder="John Doe"
-              className="2xl:text-base"
+              className={enableModalMode ? `2xl:h-8` : `2xl:text-base`}
             />
 
             <DatePicker
               name={infoKeys[1]}
               selectedDay={values.dateOfBirth}
               onChange={handleDayChange}
-              containerClassName="mt-[3px] 2xl:[&_span]:text-base"
+              containerClassName={
+                enableModalMode ? `mt-[3px]` : `2xl:[&_span]:text-base`
+              }
               modalClassName="right-2"
               containerProps={{ tabIndex: 3 }}
             />
@@ -128,8 +146,9 @@ export default function BasicInfo({
               name="Gender"
               values={["male", "female", "others"]}
               onChange={handleChange}
+              selected={values.gender}
               props={{ tabIndex: 4 }}
-              className="2xl:[&_select]:text-base"
+              className={`${!enableModalMode && `2xl:[&_select]:text-base`}`}
             />
 
             <Input
@@ -140,7 +159,7 @@ export default function BasicInfo({
               containerClassName="-mt-[3px]"
               tabIndex={5}
               placeholder="Accountant"
-              className="2xl:text-base"
+              className={enableModalMode ? `2xl:h-8` : `2xl:text-base`}
             />
 
             <Input
@@ -151,7 +170,7 @@ export default function BasicInfo({
               autoComplete="new-contact"
               tabIndex={6}
               placeholder="01883999999"
-              className="2xl:text-base"
+              className={enableModalMode ? `2xl:h-8` : `2xl:text-base`}
             />
 
             <Input
@@ -162,7 +181,7 @@ export default function BasicInfo({
               autoComplete="off"
               tabIndex={7}
               placeholder="01993888888"
-              className="2xl:text-base"
+              className={enableModalMode ? `2xl:h-8` : `2xl:text-base`}
             />
 
             {/* address */}
@@ -173,7 +192,9 @@ export default function BasicInfo({
               <textarea
                 tabIndex={8}
                 rows={3}
-                className="-ml-0.5 mt-0.5 p-2 w-full text-sm 2xl:text-base text-neutral-600 dark:text-neutral-400 bg-transparent rounded-sm font-medium outline outline-1 outline-neutral-300 dark:outline-neutral-600 focus:outline-blue-400 resize-none"
+                className={`-ml-0.5 mt-0.5 p-2 w-full text-sm ${
+                  !enableModalMode && `2xl:text-base`
+                } text-neutral-600 dark:text-neutral-400 bg-transparent rounded-sm font-medium outline outline-1 outline-neutral-300 dark:outline-neutral-600 focus:outline-blue-400 resize-none`}
                 placeholder="Write your address here..."
                 name={infoKeys[7]}
                 value={values.address}

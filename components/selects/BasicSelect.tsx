@@ -5,6 +5,7 @@ type Props = {
   name: string
   customName?: string
   values: string[]
+  selected?: string
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void
   className?: string
   props?: React.SelectHTMLAttributes<HTMLSelectElement>
@@ -15,6 +16,7 @@ export default function BasicSelection({
   customName,
   className,
   values,
+  selected,
   props,
   onChange,
 }: Props) {
@@ -26,6 +28,7 @@ export default function BasicSelection({
       </legend>
       <select
         onChange={onChange}
+        value={selected}
         {...props}
         name={newName}
         className="py-1.5 px-1.5 pe-9 block w-full border border-neutral-300 dark:border-neutral-600 text-sm rounded-sm disabled:opacity-50 disabled:pointer-events-none dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-blue-400 focus:outline focus:ring-blue-400"
@@ -35,7 +38,6 @@ export default function BasicSelection({
             key={`selection-${newName.toLowerCase().trim()}-${idx}`}
             value={item}
             className="bg-neutral-100 dark:bg-neutral-800"
-            // selected={item === selected}
           >
             {item}
           </option>

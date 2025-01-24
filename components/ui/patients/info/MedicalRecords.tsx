@@ -18,9 +18,10 @@ type Props = {
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
     >
   ) => void
-  handleGoBack: () => void
+  handleGoBack?: () => void
   infoKeys: string[]
-  allowNext: boolean
+  allowNext?: boolean
+  enableModalMode?: boolean
 }
 
 export default function MedicalRecords({
@@ -30,6 +31,7 @@ export default function MedicalRecords({
   handleGoBack,
   infoKeys,
   allowNext,
+  enableModalMode = false,
 }: Props) {
   // handle weight change
   function handleWeightChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -73,24 +75,40 @@ export default function MedicalRecords({
 
   return (
     <motion.div
-      className={`size-full flex flex-col mt-5 min-w-full`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: allowNext ? 1 : 0 }}
+      className={`size-full flex flex-col ${
+        !enableModalMode && `mt-5 `
+      } min-w-full`}
+      initial={{ opacity: enableModalMode ? 1 : 0 }}
+      animate={{ opacity: enableModalMode ? 1 : !!allowNext ? 1 : 0 }}
       exit={{ opacity: 0 }}
     >
       {/* go back button */}
-      <Button type="outline" className="ml-auto" onClick={handleGoBack}>
-        Go Back
-      </Button>
+      {!enableModalMode && (
+        <Button type="outline" className="ml-auto" onClick={handleGoBack}>
+          Go Back
+        </Button>
+      )}
 
-      {allowNext && (
-        <div className="p-2 w-full flex flex-col gap-2">
-          <h1 className="text-lg mt-2 font-bold opacity-75 dark:text-neutral-200">
+      {(!!allowNext || enableModalMode) && (
+        <div
+          className={`p-2 w-full flex flex-col gap-2 ${
+            enableModalMode && `divide-y dark:divide-neutral-500`
+          }`}
+        >
+          <h1
+            className={`text-lg ${
+              !enableModalMode && `2xl:text-2xl`
+            } mt-2 font-bold opacity-75 dark:text-neutral-200`}
+          >
             Medical History
           </h1>
 
           {/* medical history options */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 2xl:gap-y-3">
+          <div
+            className={`grid grid-cols-2 gap-x-4 ${
+              enableModalMode ? `pt-3 2xl:pt-5 gap-y-1` : `2xl:gap-y-3`
+            }`}
+          >
             <Input
               type="number"
               placeholder="165"
@@ -114,6 +132,7 @@ export default function MedicalRecords({
             <BasicSelect
               name="Blood Group"
               values={bloodGroups}
+              selected={values.bloodGroup}
               onChange={handleChange}
               className="2xl:[&_select]:text-base"
             />

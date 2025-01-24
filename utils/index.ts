@@ -190,6 +190,17 @@ function convertKeysToCamelCase<T>(data: T): T {
   return data // return the value as is for non object types
 }
 
+function filterNullValues(obj: {
+  [key: string]:
+    | string
+    | number
+    | Date
+    | null
+    | (string | number | Date | null)[]
+}) {
+  return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== null))
+}
+
 function camelToCapitalize(camelCaseString: string): string {
   return camelCaseString
     .replace(/([a-z])([A-Z])/g, "$1 $2") // add space before each capital letter
@@ -278,6 +289,7 @@ export const firey = {
   calculateAge,
   generateRandomNum,
   makeString,
+  filterNullValues,
   getTokenDuration,
   camelize,
   snakeToCamelCase,
