@@ -1,9 +1,9 @@
 "use client"
 
-import { createContext, useEffect, useLayoutEffect, useState } from "react"
+import { createContext, useEffect, useState } from "react"
 import { QueryClient, QueryClientProvider } from "react-query"
 
-type ThemeProps = "light" | "dark" | "system"
+export type ThemeOptions = "light" | "dark" | "system"
 
 type AppState = {
   showMenu: boolean
@@ -11,8 +11,8 @@ type AppState = {
   toggleMenu: () => void
   expandSidebar: () => void
   closeMenu: () => void
-  theme: ThemeProps | null
-  changeTheme: (theme: ThemeProps) => void
+  theme: ThemeOptions | null
+  changeTheme: (theme: ThemeOptions) => void
 }
 
 const initialState: AppState = {
@@ -38,7 +38,7 @@ const queryClient = new QueryClient({
 })
 
 function Providers({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<ThemeProps | null>(null)
+  const [theme, setTheme] = useState<ThemeOptions | null>(null)
   const [showMenu, setShowMenu] = useState<boolean>(false)
   const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(false)
 
@@ -57,7 +57,7 @@ function Providers({ children }: { children: React.ReactNode }) {
     setShowMenu(false)
   }
 
-  function changeTheme(theme: ThemeProps) {
+  function changeTheme(theme: ThemeOptions) {
     // changes to dark mode if the current mode is light
     if (
       theme === "dark" ||
@@ -66,22 +66,26 @@ function Providers({ children }: { children: React.ReactNode }) {
         window.matchMedia("(prefers-color-scheme: dark)").matches)
     ) {
       document.documentElement.classList.add("dark")
-      localStorage.setItem("qqq", "xxx")
+      localStorage.setItem("theme", "dark")
     }
 
     // changes to light mode if the current mode is dark
     if (theme === "light") {
       document.documentElement.classList.remove("dark")
-      localStorage.setItem("qqq", "yyy")
+      localStorage.setItem("theme", "light")
+    }
+
+    if (theme === "system") {
+      localStorage.removeItem("theme")
     }
   }
 
   useEffect(() => {
-    const currentTheme = localStorage.getItem("qqq")
-    if (currentTheme === "xxx") {
-      setTheme("dark")
-    } else if (currentTheme === "yyy") {
+    const currentTheme = localStorage.getItem("theme")
+    if (currentTheme === "light") {
       setTheme("light")
+    } else if (currentTheme === "dark") {
+      setTheme("dark")
     } else {
       setTheme("system")
     }

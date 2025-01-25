@@ -40,6 +40,7 @@ export const routeLinks: Props[] = [
   {
     name: "Settings",
     icon: "settings",
+    dest: "/patient/settings",
   },
   {
     name: "Help",

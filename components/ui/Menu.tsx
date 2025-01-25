@@ -2,14 +2,17 @@
 
 import { useRef } from "react"
 import { motion } from "framer-motion"
+
 import { fadingAnimation, slideInAnimation } from "@/lib/animations"
 import { routeLinks as content } from "@/lib/dummy/routes"
+
 import { Background, Icon } from "@/components"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useClickOutside } from "@/hooks/useClickOutside"
 import { useAppContext } from "@/hooks/useAppContext"
 import { useProfile } from "@/hooks/useProfile"
+
+import Link from "next/link"
 
 export default function Menu() {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -17,6 +20,8 @@ export default function Menu() {
 
   const { closeMenu } = useAppContext()
   const { logout } = useProfile(false)
+
+  const router = useRouter()
 
   useClickOutside(containerRef, () => closeMenu())
 
@@ -78,32 +83,38 @@ export default function Menu() {
             <span className="text-xs text-opacity-70 ml-2  font-medium">
               Support
             </span>
-            {content.slice(6, content.length).map(({ name, icon }, idx) => (
-              <button
-                key={`sidebar_bottom_link_${idx}`}
-                onClick={() => {
-                  // handle user logout
-                  if (idx === 2) {
-                    logout()
-                    closeMenu()
-                  }
-                }}
-              >
-                <div
-                  className={`flex items-center transition duration-200 py-2 px-2 gap-2 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 ${
-                    idx === 2 && `mt-8`
-                  }`}
+            {content
+              .slice(6, content.length)
+              .map(({ name, icon, dest }, idx) => (
+                <button
+                  key={`sidebar_bottom_link_${idx}`}
+                  onClick={() => {
+                    // handle user logout
+                    if (idx === 2) {
+                      logout()
+                      closeMenu()
+                    } else if (dest) {
+                      router.push(dest)
+                    } else {
+                      // help section goes here
+                    }
+                  }}
                 >
-                  <div>
-                    <Icon
-                      pathClassName="opacity-90 dark:stroke-neutral-300"
-                      name={icon}
-                    />
+                  <div
+                    className={`flex items-center transition duration-200 py-2 px-2 gap-2 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 ${
+                      idx === 2 && `mt-8`
+                    }`}
+                  >
+                    <div>
+                      <Icon
+                        pathClassName="opacity-90 dark:stroke-neutral-300"
+                        name={icon}
+                      />
+                    </div>
+                    <span className="text-sm font-bold">{name}</span>
                   </div>
-                  <span className="text-sm font-bold">{name}</span>
-                </div>
-              </button>
-            ))}
+                </button>
+              ))}
           </div>
         </div>
       </motion.nav>

@@ -1,11 +1,13 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
-import Icon from "../icons"
+import { useEffect, useState } from "react"
+
+import { Icon } from "@/components"
 import { useAppContext } from "@/hooks/useAppContext"
 
 export default function ThemeSwitch() {
   const [checked, setChecked] = useState<boolean>(false)
+
   const { changeTheme } = useAppContext()
 
   function handleThemeChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -35,7 +37,7 @@ export default function ThemeSwitch() {
 
   return (
     <div
-      className="py-1 px-2 rounded-md flex items-center gap-2 hover:bg-zinc-200/70 dark:hover:bg-neutral-700 hover:cursor-pointer"
+      className="py-1 px-2 rounded-md flex items-center gap-2 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60 hover:cursor-pointer group"
       onClick={toggleInput}
     >
       <div className="w-16 relative">
@@ -56,7 +58,9 @@ export default function ThemeSwitch() {
           <Icon className="size-4 mt-[1px]" name="moon" />
         </div>
       </div>
-      <span className="-mt-0.5 text-sm font-semibold opacity-80"> Theme</span>
+      <span className="-mt-0.5 text-sm font-semibold opacity-80 group-hover:opacity-100">
+        Theme
+      </span>
     </div>
   )
 }

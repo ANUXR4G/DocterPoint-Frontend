@@ -155,3 +155,6 @@ export { default as ProfileSkeleton } from "./skeletons/ProfileSkeleton"
 // info ui
 export { default as BasicInfo } from "./ui/patients/info/BasicInfo"
 export { default as MedicalRecords } from "./ui/patients/info/MedicalRecords"
+
+// theme
+export { default as ThemeUI } from "./theme"

@@ -1,15 +1,19 @@
 "use client"
 
-import Link from "next/link"
-import Icon from "../icons"
+import { usePathname, useRouter } from "next/navigation"
+
+import { Icon, Background } from "@/components"
 import { routeLinks as content } from "@/lib/dummy/routes"
-import { usePathname } from "next/navigation"
+
 import { useProfile } from "@/hooks/useProfile"
 import { useAppContext } from "@/hooks/useAppContext"
-import Background from "../bg"
+
+import Link from "next/link"
 
 export default function Sidebar() {
   let pathname = usePathname()
+
+  const router = useRouter()
 
   const { closeMenu } = useAppContext()
   const { logout } = useProfile(false)
@@ -60,7 +64,7 @@ export default function Sidebar() {
           <span className="hidden xl:block text-xs text-opacity-70 ml-2  font-medium">
             Support
           </span>
-          {content.slice(6, content.length).map(({ name, icon }, idx) => (
+          {content.slice(6, content.length).map(({ name, icon, dest }, idx) => (
             <button
               className={`flex items-center transition duration-200 gap-2 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 ${
                 idx === 2 &&
@@ -72,6 +76,10 @@ export default function Sidebar() {
                 if (idx === 2) {
                   logout()
                   closeMenu()
+                } else if (dest) {
+                  router.push(dest)
+                } else {
+                  // help section goes here
                 }
               }}
             >
