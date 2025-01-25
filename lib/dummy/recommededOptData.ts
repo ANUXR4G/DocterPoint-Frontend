@@ -28,6 +28,33 @@ type PartOfDayProps = {
   end: number
 }
 
+export const dietaryRecommendations = [
+  {
+    status: "breakfast",
+    calories: 580,
+    start: 0,
+    end: 11,
+  },
+  {
+    status: "lunch",
+    calories: 700,
+    start: 12,
+    end: 16,
+  },
+  {
+    status: "snacks",
+    calories: 120,
+    start: 17,
+    end: 19,
+  },
+  {
+    status: "dinner",
+    calories: 700,
+    start: 20,
+    end: 23,
+  },
+]
+
 export function partsOfDay({
   breakfast,
   lunch,
@@ -50,7 +77,6 @@ export function partsOfDay({
     {
       status: "snacks",
       calories: snacks,
-
       start: 17,
       end: 19,
     },

@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useEffect, useState } from "react"
 
 import {
   format,
@@ -21,12 +21,15 @@ type Props = {
 }
 
 export default function PendingTasks({ isLoading: recordLoading }: Props) {
-  const today = startOfToday()
-  const tomorrow = startOfTomorrow()
+  // const today = startOfToday()
+  // const tomorrow = startOfTomorrow()
+  const [today, setToday] = useState<Date | null>(null)
+  const [tomorrow, setTomorrow] = useState<Date | null>(null)
 
-  const dayDate = format(today, "d")
-  const day = format(today, "iiii")
-  const month = format(today, "MMMM")
+  useEffect(() => {
+    setToday(startOfToday())
+    setTomorrow(startOfTomorrow)
+  }, [])
 
   const { data: upcomingAppointments, isLoading: appointmentLoading } = useApi(
     [`patients:appointments:upcoming`],
@@ -39,18 +42,20 @@ export default function PendingTasks({ isLoading: recordLoading }: Props) {
   )
 
   // get all the appointments for today
-  const appointmentsToday = upcomingAppointments
-    ? upcomingAppointments.filter((info) =>
-        isSameDay(today, parseISO(info.appointmentDate))
-      )
-    : []
+  const appointmentsToday =
+    upcomingAppointments && today
+      ? upcomingAppointments.filter((info) =>
+          isSameDay(today, parseISO(info.appointmentDate))
+        )
+      : []
 
   // get all the appointments for tomorrow
-  const appointmentsTomorrow = upcomingAppointments
-    ? upcomingAppointments.filter((info) =>
-        isSameDay(tomorrow, parseISO(info.appointmentDate))
-      )
-    : []
+  const appointmentsTomorrow =
+    upcomingAppointments && tomorrow
+      ? upcomingAppointments.filter((info) =>
+          isSameDay(tomorrow, parseISO(info.appointmentDate))
+        )
+      : []
 
   const isLoading = appointmentLoading || recordLoading
 
@@ -60,15 +65,21 @@ export default function PendingTasks({ isLoading: recordLoading }: Props) {
         <div className="flex flex-col px-3 pt-4">
           {/* date header for selected day */}
           <div className="flex items-center">
-            <h3 className="text-5xl 2xl:text-6xl font-bold">{dayDate}</h3>
-            <div className="flex flex-col ml-2 2xl:mb-1 2xl:mt-1">
-              <span className="text-2xl 2xl:text-4xl 2xl:leading-9 font-bold">
-                {day}
-              </span>
-              <span className="ml-1 text-sm font-semibold opacity-65 -mt-0.5 2xl:mt-0 leading-4">
-                {month}
-              </span>
-            </div>
+            {today && (
+              <React.Fragment>
+                <h3 className="text-5xl 2xl:text-6xl font-bold">
+                  {format(today, "d")}
+                </h3>
+                <div className="flex flex-col ml-2 2xl:mb-1 2xl:mt-1">
+                  <span className="text-2xl 2xl:text-4xl 2xl:leading-9 font-bold">
+                    {format(today, "iiii")}
+                  </span>
+                  <span className="ml-1 text-sm font-semibold opacity-65 -mt-0.5 2xl:mt-0 leading-4">
+                    {format(today, "MMMM")}
+                  </span>
+                </div>
+              </React.Fragment>
+            )}
           </div>
 
           {/* upcoming appointments */}

@@ -6,19 +6,20 @@ import { motion } from "framer-motion"
 import { mealRecommendationOptions } from "@/lib/dummy/diets"
 import { firey } from "@/utils"
 import { CityScene, Meal, Pagination } from "@/components"
-import { partsOfDay } from "@/lib/dummy/recommededOptData"
+import {
+  dietaryRecommendations,
+  partsOfDay,
+} from "@/lib/dummy/recommededOptData"
 import { useApi } from "@/hooks/useApi"
 import { mealService } from "@/lib/services/meal"
-import { TMeal } from "@/types"
+import { TMeal, TMedications } from "@/types"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useProfile } from "@/hooks/useProfile"
+import { patientService } from "@/lib/services/patient"
 
 export default function FoodRecommendations() {
-  const options = partsOfDay({
-    breakfast: 580,
-    lunch: 700,
-    snacks: 120,
-    dinner: 700,
-  })
+  const [options, setOptions] = useState(dietaryRecommendations)
+
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -35,8 +36,10 @@ export default function FoodRecommendations() {
 
   // get the recommeded meals based on category, e.g - breakfast, lunch, dinner
   const category = searchParams.get("category") || currentPOD.status
+  // const category = searchParams.get("category")
 
   // retrieve all the meals based on the selected category
+  const { data: profile } = useProfile()
   const { data, isLoading } = useApi(
     [
       `${
@@ -63,10 +66,50 @@ export default function FoodRecommendations() {
           }
         }
       },
+      enabled: !!profile?.id,
     }
   )
 
-  // handle page number indicator (pagination)
+  const { data: suggestion, isLoading: isSuggestionLoading } = useApi(
+    [`patients:medications:${profile?.id}`],
+    (_, token) => patientService.getMedications(token),
+    {
+      select: (data) => firey.convertKeysToCamelCase(data) as TMedications | [],
+    }
+  )
+
+  useEffect(() => {
+    if (!suggestion || Array.isArray(suggestion)) return
+    const extractCalorie = (name: string) =>
+      suggestion.dietary
+        ? suggestion.dietary.find((item) => item.time === name)?.energy
+        : null
+
+    const extractedData = {
+      ...(!!extractCalorie("breakfast") && {
+        breakfast: extractCalorie("breakfast"),
+      }),
+      ...(!!extractCalorie("lunch") && {
+        lunch: extractCalorie("lunch"),
+      }),
+      ...(!!extractCalorie("snacks") && {
+        snacks: extractCalorie("snacks"),
+      }),
+      ...(!!extractCalorie("dinner") && {
+        dinner: extractCalorie("dinner"),
+      }),
+    }
+
+    setOptions((prev) => {
+      return prev.map((item) => ({
+        ...item,
+        calories:
+          extractedData[item.status as keyof typeof extractedData] ??
+          item.calories,
+      }))
+    })
+  }, [suggestion])
+
   function handlePageChange(page: number) {
     const oldParams = new URLSearchParams(searchParams)
     oldParams.delete("page")

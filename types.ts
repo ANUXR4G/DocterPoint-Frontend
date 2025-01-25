@@ -259,14 +259,18 @@ export type TMedications = {
         description?: string
       }[]
     | null
-  dietary: {
-    time: "breakfast" | "lunch" | "dinner" | "snacks"
-    energy: number
-  }[]
-  nutritions: {
-    name: "protein" | "fat" | "carbs"
-    amount: number
-  }[]
+  dietary:
+    | {
+        time: "breakfast" | "lunch" | "dinner" | "snacks"
+        energy: number
+      }[]
+    | null
+  nutritions:
+    | {
+        name: "protein" | "fat" | "carbs"
+        amount: number
+      }[]
+    | null
   bmiGoal: number | null
   energyGoal: number
   hydration: string
