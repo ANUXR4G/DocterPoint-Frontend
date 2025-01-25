@@ -8,9 +8,9 @@ import { useAppContext } from "@/hooks/useAppContext"
 import { ThemeOptions } from "@/app/providers"
 
 const themes = [
-  { name: "light", component: <LigthMode /> },
-  { name: "dark", component: <DarkMode /> },
   { name: "system", component: <SystemMode /> },
+  { name: "dark", component: <DarkMode /> },
+  { name: "light", component: <LigthMode /> },
 ]
 
 export default function ThemeUI() {
@@ -31,16 +31,18 @@ export default function ThemeUI() {
   }, [theme])
 
   return (
-    <div className="-ml-1.5 mt-5 lg:mt-4 center md:justify-start flex-wrap gap-8 lg:gap-7">
+    <div className="-ml-1.5 mt-5 lg:mt-4 center md:justify-start flex-wrap gap-7 pb-8">
       {themes.map(({ name, component }, idx) => (
-        <div
-          key={`apperance-mode-${idx}`}
-          className={`cursor-pointer [&_svg]:rounded-xl outline-offset-4 rounded-xl border dark:border-transparent shadow-md ${
-            !loading && currentTheme === name && `outline outline-indigo-600`
-          }`}
-          onClick={() => handleThemeChange(name as ThemeOptions)}
-        >
-          {component}
+        <div key={`apperance-mode-${idx}`} className="flex flex-col">
+          <div
+            className={`cursor-pointer [&_svg]:rounded-xl outline-offset-4 rounded-xl border dark:border-transparent shadow-md flex flex-col ${
+              !loading && currentTheme === name && `outline outline-indigo-600`
+            }`}
+            onClick={() => handleThemeChange(name as ThemeOptions)}
+          >
+            {component}
+          </div>
+          <span className={`font-bold text-center mt-2`}>{name}</span>
         </div>
       ))}
     </div>

@@ -6,46 +6,34 @@ import { Icon } from "@/components"
 import { useAppContext } from "@/hooks/useAppContext"
 
 export default function ThemeSwitch() {
+  const { changeTheme, theme } = useAppContext()
   const [checked, setChecked] = useState<boolean>(false)
 
-  const { changeTheme } = useAppContext()
-
-  function handleThemeChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // handle changing theme on input change
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const isDarkSelected = e.target.checked
     setChecked(e.target.checked)
-    if (e.target.checked) {
+    if (isDarkSelected) {
       changeTheme("dark")
     } else {
       changeTheme("light")
     }
   }
 
-  const toggleInput = () =>
-    setChecked((prev) => {
-      if (prev) {
-        changeTheme("light")
-      } else {
-        changeTheme("dark")
-      }
-      return !prev
-    })
-
+  // update the switch state
   useEffect(() => {
-    if (typeof document !== "undefined") {
-      setChecked(!!document.documentElement.classList.contains("dark"))
-    }
+    const root = document.documentElement
+    setChecked(!!root.classList.contains("dark"))
   }, [])
 
   return (
-    <div
-      className="py-1 px-2 rounded-md flex items-center gap-2 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60 hover:cursor-pointer group"
-      onClick={toggleInput}
-    >
+    <div className="py-1 px-2 rounded-md flex items-center gap-2 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60 hover:cursor-pointer group">
       <div className="w-16 relative">
         <input
           type="checkbox"
           id="theme-switch"
           className="appearance-none hover:cursor-pointer w-full disabled:pointer-events-none border border-gray-300 dark:border-neutral-500 h-8 px-1 rounded-full before:inline-block before:size-6 before:mt-1 before:bg-white before:translate-x-0 checked:before:translate-x-[125%] before:rounded-full before:shadow before:transform before:ring-0 before:transition before:ease-in-out before:duration-200 dark:before:bg-neutral-200 dark:checked:before:bg-neutral-200"
-          onChange={handleThemeChange}
+          onChange={handleChange}
           checked={checked}
         />
         <label htmlFor="theme-switch" className="sr-only">

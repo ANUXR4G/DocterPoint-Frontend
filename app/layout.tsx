@@ -22,11 +22,19 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `if (localStorage.qqq === 'xxx' || (!('qqq' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-  document.documentElement.classList.add('dark')
-} else {
-  document.documentElement.classList.remove('dark')
-}`,
+            __html: `
+            (function() {
+              const userTheme = localStorage.getItem('theme');
+              const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+              const theme = userTheme || 'system';
+              const isDark = theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
+              if (isDark) {
+                document.documentElement.classList.add('dark');
+              } else {
+                document.documentElement.classList.remove('dark');
+              }
+            })();
+          `,
           }}
         />
       </head>

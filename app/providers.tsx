@@ -18,7 +18,7 @@ type AppState = {
 const initialState: AppState = {
   showMenu: false,
   sidebarExpanded: false,
-  theme: null,
+  theme: "system",
   toggleMenu: () => {},
   expandSidebar: () => {},
   closeMenu: () => {},
@@ -38,7 +38,7 @@ const queryClient = new QueryClient({
 })
 
 function Providers({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<ThemeOptions | null>(null)
+  const [theme, setTheme] = useState<ThemeOptions>("system")
   const [showMenu, setShowMenu] = useState<boolean>(false)
   const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(false)
 
@@ -58,40 +58,43 @@ function Providers({ children }: { children: React.ReactNode }) {
   }
 
   function changeTheme(theme: ThemeOptions) {
-    // changes to dark mode if the current mode is light
-    if (
-      theme === "dark" ||
-      (theme === "system" &&
-        !("theme" in localStorage) &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches)
-    ) {
-      document.documentElement.classList.add("dark")
-      localStorage.setItem("theme", "dark")
-    }
-
-    // changes to light mode if the current mode is dark
-    if (theme === "light") {
-      document.documentElement.classList.remove("dark")
-      localStorage.setItem("theme", "light")
-    }
-
     if (theme === "system") {
       localStorage.removeItem("theme")
     }
+
+    setTheme(theme)
   }
 
   useEffect(() => {
-    const currentTheme = localStorage.getItem("theme")
-    if (currentTheme === "light") {
-      setTheme("light")
-    } else if (currentTheme === "dark") {
-      setTheme("dark")
-    } else {
-      setTheme("system")
-    }
+    const storedTheme = (localStorage.getItem("theme") ||
+      "system") as ThemeOptions
+    setTheme(storedTheme)
   }, [])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const root = document.documentElement
+    const systemPrefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches
+
+    const isDark = theme === "dark" || (theme === "system" && systemPrefersDark)
+
+    if (isDark) {
+      root.classList.add("dark")
+    } else {
+      root.classList.remove("dark")
+    }
+
+    if (theme !== "system") {
+      localStorage.setItem("theme", theme)
+    }
+  }, [theme])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
     function setVH() {
       const vh = window.innerHeight * 0.01
       document.documentElement.style.setProperty("--vh", `${vh}px`)
