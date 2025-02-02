@@ -2,12 +2,19 @@ import Image from "next/image"
 
 type Props = {
   content: string
+  className?: string
 }
 
-export default function CityScene({ content }: Props) {
+export default function CityScene({ content, className }: Props) {
   return (
-    <div className="center flex-col">
-      <div className="relative size-48 [@media(max-height:442px)]:size-36 [@media(min-height:768px)]:size-72">
+    <div className={`center flex-col`}>
+      <div
+        className={
+          className
+            ? className
+            : `relative size-48 [@media(max-height:442px)]:size-36 [@media(min-height:768px)]:size-72`
+        }
+      >
         <Image
           fill
           src="https://res.cloudinary.com/dwhlynqj3/image/upload/v1736629615/glucoguide/city.svg"

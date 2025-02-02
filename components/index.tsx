@@ -75,6 +75,7 @@ export { default as ProfileEditModal } from "./modals/ProfileEditModal"
 export { default as MultiHealthModal } from "./modals/MultiHealthModal"
 export { default as SingleHealthModal } from "./modals/SingleHealthModal"
 export { default as ActivityModal } from "./modals/ActivityModal"
+export { default as ChatModal } from "./modals/ChatModal"
 
 // searchbox
 export { default as BookingSearchbox } from "./searchbox/BookingSearchbox"

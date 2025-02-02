@@ -51,6 +51,7 @@ export function useSocket<T>(url: string | null, retryInterval: number = 5000) {
 
   return {
     values,
+    socketRef,
     isConnected,
     isReconnecting,
   }

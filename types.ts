@@ -323,3 +323,23 @@ export type TInfoOptions = {
   physicalActivity: string
   previousDiabetesRecords: string[]
 }
+
+export type TSocketMessage = {
+  id: string
+  type: string
+  content: string
+  created_at: string
+  is_seen: boolean
+  sender_id: string
+  receiver_id?: string
+}
+
+export type TMessage = {
+  id: string
+  type: string
+  content: string
+  createdAt: Date
+  isSeen: boolean
+  senderId: string
+  receiverId?: string
+}

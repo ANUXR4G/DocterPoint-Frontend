@@ -7,8 +7,10 @@ export type ThemeOptions = "light" | "dark" | "system"
 
 type AppState = {
   showMenu: boolean
+  showChat: boolean
   sidebarExpanded: boolean
   toggleMenu: () => void
+  toggleChat: () => void
   expandSidebar: () => void
   closeMenu: () => void
   theme: ThemeOptions | null
@@ -17,9 +19,11 @@ type AppState = {
 
 const initialState: AppState = {
   showMenu: false,
+  showChat: false,
   sidebarExpanded: false,
   theme: "system",
   toggleMenu: () => {},
+  toggleChat: () => {},
   expandSidebar: () => {},
   closeMenu: () => {},
   changeTheme: () => {},
@@ -40,6 +44,7 @@ const queryClient = new QueryClient({
 function Providers({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeOptions>("system")
   const [showMenu, setShowMenu] = useState<boolean>(false)
+  const [showChat, setShowChat] = useState<boolean>(false)
   const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(false)
 
   // open sidebar
@@ -57,6 +62,12 @@ function Providers({ children }: { children: React.ReactNode }) {
     setShowMenu(false)
   }
 
+  // show help modal
+  function toggleChat() {
+    setShowChat((prev) => !prev)
+  }
+
+  // change theme
   function changeTheme(theme: ThemeOptions) {
     if (theme === "system") {
       localStorage.removeItem("theme")
@@ -111,8 +122,10 @@ function Providers({ children }: { children: React.ReactNode }) {
       <AppContext.Provider
         value={{
           showMenu,
+          showChat,
           sidebarExpanded,
           toggleMenu,
+          toggleChat,
           expandSidebar,
           closeMenu,
           changeTheme,

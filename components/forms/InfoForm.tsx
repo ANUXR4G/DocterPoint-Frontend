@@ -30,6 +30,7 @@ export default function InfoForm() {
 
   const {
     profile,
+    healthRecord,
     values,
     infoKeys,
     imgFile,
@@ -51,12 +52,19 @@ export default function InfoForm() {
     setAllowNext(true)
   }
 
+  const metricsFullFilled = !!(
+    healthRecord &&
+    !Array.isArray(healthRecord) &&
+    healthRecord.height &&
+    healthRecord.weight
+  )
+
   // redirect to patient dashboard if date of birth already provided
   useEffect(() => {
-    if (profile && profile.dateOfBirth) {
+    if (profile && profile.dateOfBirth && metricsFullFilled) {
       router.push("/patient/dashboard")
     }
-  }, [profile, router])
+  }, [profile, metricsFullFilled, router])
 
   // show skeleton while retrieve profile info
   if (isInfoLoading) return <PatientInfoSkeleton />

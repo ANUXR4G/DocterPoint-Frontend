@@ -18,8 +18,13 @@ export default function Menu() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const pathname = usePathname()
 
-  const { closeMenu } = useAppContext()
+  const { closeMenu, toggleChat } = useAppContext()
   const { logout } = useProfile(false)
+
+  function handleHelpModal() {
+    closeMenu()
+    toggleChat()
+  }
 
   const router = useRouter()
 
@@ -94,9 +99,9 @@ export default function Menu() {
                       logout()
                       closeMenu()
                     } else if (dest) {
-                      router.push(dest)
+                      router.push(dest) // handle settings
                     } else {
-                      // help section goes here
+                      handleHelpModal() // handle help modal
                     }
                   }}
                 >

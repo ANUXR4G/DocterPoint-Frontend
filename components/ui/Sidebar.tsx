@@ -15,8 +15,13 @@ export default function Sidebar() {
 
   const router = useRouter()
 
-  const { closeMenu } = useAppContext()
+  const { closeMenu, toggleChat } = useAppContext()
   const { logout } = useProfile(false)
+
+  function handleHelpModal() {
+    closeMenu()
+    toggleChat()
+  }
 
   return (
     <aside className="hidden xl:border-r-2 dark:border-r-neutral-800 fixed z-50 min-h-full h-full w-[72px] xl:w-60 top-0 left-0 xl:pt-6 md:flex flex-col">
@@ -77,9 +82,9 @@ export default function Sidebar() {
                   logout()
                   closeMenu()
                 } else if (dest) {
-                  router.push(dest)
+                  router.push(dest) // handle settings
                 } else {
-                  // help section goes here
+                  handleHelpModal() // handle help modal
                 }
               }}
             >

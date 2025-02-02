@@ -5,6 +5,7 @@ import Link from "next/link"
 
 import { Icon, SimpleModal, ThemeSwitch } from "@/components"
 import { useProfile } from "@/hooks/useProfile"
+import { useAppContext } from "@/hooks/useAppContext"
 
 type Props = {
   open: boolean
@@ -13,7 +14,18 @@ type Props = {
 }
 
 export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
+  const { toggleChat } = useAppContext()
   const { data, logout } = useProfile()
+
+  function handleSupport() {
+    toggleChat()
+    closeModal()
+  }
+
+  function handleLogout() {
+    logout()
+    closeModal()
+  }
 
   if (!data) return <div />
 
@@ -24,45 +36,41 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
       className="border dark:border-transparent shadow-md dark:shadow-[inset_0_0_0_1px_rgba(248,248,248,0.2)] px-3 py-2 rounded-lg right-4 top-14 flex flex-col bg-[--primary-white] dark:bg-neutral-800 select-none"
       content={
         <div
-          className="w-9 h-9 rounded-full hover:cursor-pointer bg-slate-600"
+          className="relative w-9 h-9 border-2 dark:border-neutral-200 border-neutral-800 rounded-full hover:cursor-pointer bg-slate-600"
           onClick={toggleModal}
-        />
+        >
+          <Image
+            fill
+            src={
+              data.imgSrc ||
+              `${`https://res.cloudinary.com/firey/image/upload/v1708816390/iub/${
+                data.gender
+                  ? data.gender === `male`
+                    ? `male`
+                    : `female`
+                  : `male`
+              }_12.jpg`}`
+            }
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            alt={`${data.id}.jpg`}
+            style={{ objectFit: "cover" }}
+            priority
+            className="rounded-full"
+          />
+          {/* overlay */}
+          <div className="min-h-full min-w-full bg-black/25 absolute top-0 right-0 bottom-0 left-0 rounded-full" />
+        </div>
       }
     >
       <div className="min-w-44 lg:min-w-48 flex flex-col divide-y-2 dark:divide-neutral-700">
         {/* user basic information */}
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          {/* picture */}
-          <div className="relative size-9 min-w-9 rounded-full border border-neutral-400 dark:border-neutral-600">
-            <Image
-              fill
-              src={
-                data.imgSrc ||
-                `${`https://res.cloudinary.com/firey/image/upload/v1708816390/iub/${
-                  data.gender
-                    ? data.gender === `male`
-                      ? `male`
-                      : `female`
-                    : `male`
-                }_12.jpg`}`
-              }
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              alt={`${data.id}.jpg`}
-              style={{ objectFit: "cover" }}
-              priority
-              className="rounded-full"
-            />
-            {/* overlay */}
-            <div className="min-h-full min-w-full bg-black/25 absolute top-0 right-0 bottom-0 left-0 rounded-full" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold leading-4">
-              {data?.name || "Guest Account"}
-            </h3>
-            <p className="text-xs font-medium lg:font-bold line-clamp-1 opacity-70">
-              {data?.email || "tripinsinceidk"}
-            </p>
-          </div>
+        <div className="px-2 py-1.5">
+          <h3 className="text-sm font-semibold leading-4">
+            {data?.name || "Guest Account"}
+          </h3>
+          <p className="text-xs font-medium lg:font-bold line-clamp-1 opacity-70">
+            {data?.email || "tripinsinceidk"}
+          </p>
         </div>
 
         {/* route options */}
@@ -104,7 +112,10 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
         {/* support option and theme switcher */}
         <div className="py-1">
           <ThemeSwitch />
-          <button className="group w-full flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60">
+          <button
+            className="group w-full flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60"
+            onClick={handleSupport}
+          >
             <div>
               <Icon
                 name="two-people"
@@ -121,7 +132,7 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
         {/* logout */}
         <div className="py-1">
           <button
-            onClick={() => logout()}
+            onClick={handleLogout}
             className="group w-full flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60"
           >
             <div>
