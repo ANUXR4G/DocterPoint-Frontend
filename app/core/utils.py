@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 scopes = {
     "user": [
+        "users:chat",
         "patient:read",
         "patient:write",
         "patient:update",
@@ -17,6 +18,7 @@ scopes = {
         "medication:update",
     ],
     "doctor": [
+        "users:chat",
         "patient:read",
         "doctor:read",
         "doctor:update",
@@ -28,6 +30,7 @@ scopes = {
         "appointment:update",
     ],
     "admin": [
+        "users:chat",
         "users:read",
         "users:write",
         "users:update",

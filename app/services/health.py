@@ -116,10 +116,18 @@ class HealthMonitorings:
 
         updated_payload = {"updated_at": func.now(), **updated_data.none_excluded()}
 
-        # update the bmi if both weight and height was provided
+        # update the bmi if both weight and height was provided,
         if updated_data.height and updated_data.weight:
             height_mtr = updated_data.height * 0.3048
             updated_payload["bmi"] = round(updated_data.weight / (height_mtr**2), 2)
+        # update the bmi if height aleready exist and weight was provided,
+        elif db_heath_record.height and updated_data.weight:
+            height_mtr = db_heath_record.height * 0.3048
+            updated_payload["bmi"] = round(updated_data.weight / (height_mtr**2), 2)
+        # update the bmi if weight aleready exist and height was provided
+        elif db_heath_record.weight and updated_data.height:
+            height_mtr = db_heath_record.height * 0.3048
+            updated_payload["bmi"] = round(db_heath_record.weight / (height_mtr**2), 2)
 
         for key, value in updated_payload.items():
             setattr(db_heath_record, key, value)

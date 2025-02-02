@@ -6,6 +6,7 @@ from sqlalchemy import (
     JSON,
     ForeignKey,
     String,
+    Boolean,
     DateTime,
     func,
 )
@@ -44,6 +45,7 @@ class Patient(User):
     contact_number = Column(String)
     emergency_number = Column(String)
 
+    # relationships w other entities
     health_records = relationship("HealthRecord", back_populates="patient")
     appointments = relationship("Appointment", back_populates="patient")
     medication = relationship("Medication", back_populates="patient")
@@ -66,6 +68,7 @@ class Doctor(User):
     emails = Column(JSON, nullable=False)
     contact_numbers = Column(JSON, nullable=False)
 
+    # relationships w other entities
     hospital = relationship("Hospital", back_populates="doctors")
     appointments = relationship("Appointment", back_populates="doctor")
     medications = relationship("Medication", back_populates="doctor")
@@ -94,6 +97,7 @@ class HealthRecord(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # relationships w other entities
     patient = relationship("Patient", back_populates="health_records")
 
 
@@ -128,6 +132,7 @@ class Appointment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # relationships w other entities
     patient = relationship("Patient", back_populates="appointments")
     doctor = relationship("Doctor", back_populates="appointments")
     medication = relationship("Medication", back_populates="appointment")
@@ -138,7 +143,6 @@ class Medication(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4, unique=True)
 
-    # relationships w other entities
     patient_id = Column(
         UUID(as_uuid=True),
         ForeignKey("patients.id", ondelete="CASCADE"),
@@ -195,6 +199,7 @@ class Hospital(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # relationships w other entities
     doctors = relationship("Doctor", back_populates="hospital")
 
 
@@ -218,3 +223,24 @@ class Meal(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4, unique=True)
+    sender_id = Column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    receiver_id = Column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    content = Column(String, nullable=False)
+    is_seen = Column(Boolean, default=False)
+    type = Column(String, default="help")  # 'help', 'reply', 'direct'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # relationships w other entities
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])

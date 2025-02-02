@@ -1,8 +1,8 @@
 """initial migration
 
-Revision ID: 06d3c0965833
+Revision ID: 4fad6dcc9b89
 Revises: 
-Create Date: 2025-01-16 18:20:15.468411
+Create Date: 2025-02-03 02:19:53.995076
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '06d3c0965833'
+revision: str = '4fad6dcc9b89'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -82,6 +82,19 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['hospital_id'], ['hospitals.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('messages',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('sender_id', sa.UUID(), nullable=False),
+    sa.Column('receiver_id', sa.UUID(), nullable=True),
+    sa.Column('content', sa.String(), nullable=False),
+    sa.Column('is_seen', sa.Boolean(), nullable=True),
+    sa.Column('type', sa.String(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
     )
     op.create_table('patients',
     sa.Column('id', sa.UUID(), nullable=False),
@@ -171,6 +184,7 @@ def downgrade() -> None:
     op.drop_table('health_records')
     op.drop_table('appointments')
     op.drop_table('patients')
+    op.drop_table('messages')
     op.drop_table('doctors')
     op.drop_table('users')
     op.drop_table('meals')

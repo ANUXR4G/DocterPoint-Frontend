@@ -11,6 +11,7 @@ from app.core.config import settings
 
 from app.routers import (
     auth,
+    chats,
     meals,
     healths,
     doctors,
@@ -135,6 +136,9 @@ app.include_router(
     prefix=f"/diet",
     tags=["Diet / Meals"],
 )
+
+# patient chats
+app.include_router(chats.router, prefix="/chats", tags=["Patient / Chats"])
 
 # websocket routes (for realtime health tracker simulation)
 app.include_router(websockets.router, prefix="/ws")
