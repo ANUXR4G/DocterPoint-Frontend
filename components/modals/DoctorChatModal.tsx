@@ -15,8 +15,17 @@ import { TMessage, TSocketMessage } from "@/types"
 
 import { CityScene, Icon, Modal } from "@/components"
 
-export default function ChatModal() {
-  const { showChat, toggleChat } = useAppContext()
+type Props = {
+  isOpen: boolean
+  receiverId: string
+  closeHandler: () => void
+}
+
+export default function DoctorChatModal({
+  isOpen,
+  receiverId,
+  closeHandler,
+}: Props) {
   const { data: userInfo } = useProfile()
 
   const [page, setPage] = useState<number>(1)
@@ -38,10 +47,15 @@ export default function ChatModal() {
     [`user:chats:${userInfo?.id}:page:${page}`],
     (_, token) => {
       if (!userInfo) throw new Error(`Failed to retrieve user chats.`)
-      return chatService.getUserHelpChats(token, userInfo.id, params.toString())
+      return chatService.getUserDirectChats(
+        token,
+        userInfo.id,
+        receiverId,
+        params.toString()
+      )
     },
     {
-      enabled: !!userInfo?.id && showChat,
+      enabled: !!userInfo?.id && isOpen,
       staleTime: 0,
       select: (data) =>
         firey.convertKeysToCamelCase(data) as {
@@ -55,6 +69,7 @@ export default function ChatModal() {
           content: msg.content,
           isSeen: msg.isSeen,
           senderId: msg.senderId,
+          receiverId: msg.receiverId,
           createdAt: new Date(msg.createdAt),
         }))
 
@@ -87,9 +102,10 @@ export default function ChatModal() {
     // Only send the message if the conditions on the top gets fullfilled
     socketRef.current.send(
       JSON.stringify({
-        type: "help",
+        type: "direct",
         content: value,
         sender_id: userInfo.id,
+        receiver_id: receiverId,
       })
     )
 
@@ -120,6 +136,7 @@ export default function ChatModal() {
               content: values.content,
               isSeen: values.is_seen,
               senderId: values.sender_id,
+              receiverId: values.receiver_id,
               createdAt: new Date(values.created_at),
             },
             ...prev,
@@ -141,7 +158,7 @@ export default function ChatModal() {
 
   // Close the modal and Reset everything
   function handleCloseModal() {
-    toggleChat()
+    closeHandler()
     setPage(1)
     setMessages([])
     setAllowFetching(false)
@@ -164,7 +181,7 @@ export default function ChatModal() {
     <Modal
       className="h-3/4 sm:h-3/4 w-full max-w-[720px]"
       direction="center"
-      open={showChat}
+      open={isOpen}
       handler={handleCloseModal}
       primaryBtn={
         <button

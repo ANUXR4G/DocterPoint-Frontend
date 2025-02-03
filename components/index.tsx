@@ -76,6 +76,7 @@ export { default as MultiHealthModal } from "./modals/MultiHealthModal"
 export { default as SingleHealthModal } from "./modals/SingleHealthModal"
 export { default as ActivityModal } from "./modals/ActivityModal"
 export { default as ChatModal } from "./modals/ChatModal"
+export { default as ChatWithDoctorUI } from "./modals/DoctorChatModal"
 
 // searchbox
 export { default as BookingSearchbox } from "./searchbox/BookingSearchbox"
@@ -152,6 +153,7 @@ export { default as ConnectDeviceSkeleton } from "./skeletons/ConnectDeviceSkele
 export { default as HealthInfoSkeleton } from "./skeletons/HealthInfoSkeleton"
 export { default as PatientInfoSkeleton } from "./skeletons/PatientInfoSkeleton"
 export { default as ProfileSkeleton } from "./skeletons/ProfileSkeleton"
+export { default as DoctorInfoSkeleton } from "./skeletons/DoctorInfoSkeleton"
 
 // info ui
 export { default as BasicInfo } from "./ui/patients/info/BasicInfo"

@@ -23,6 +23,8 @@ export type ProfileValues = {
 export type IconNames =
   | "search"
   | "key"
+  | "navigation"
+  | "mail-upload"
   | "energy"
   | "monitoring"
   | "bell"
@@ -331,7 +333,7 @@ export type TSocketMessage = {
   created_at: string
   is_seen: boolean
   sender_id: string
-  receiver_id?: string
+  receiver_id?: string | null
 }
 
 export type TMessage = {
@@ -341,5 +343,5 @@ export type TMessage = {
   createdAt: Date
   isSeen: boolean
   senderId: string
-  receiverId?: string
+  receiverId?: string | null
 }

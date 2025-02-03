@@ -100,7 +100,7 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
               <Icon
                 name="settings"
                 className="size-5 opacity-80 group-hover:opacity-100"
-                pathClassName="dark:stroke-neutral-500 group-hover:dark:stroke-neutral-400"
+                pathClassName="stroke-neutral-700 dark:stroke-neutral-500 group-hover:dark:stroke-neutral-400"
               />
             </div>
             <span className="text-sm font-semibold opacity-80 group-hover:opacity-100">

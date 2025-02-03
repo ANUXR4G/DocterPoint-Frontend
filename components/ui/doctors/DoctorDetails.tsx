@@ -10,8 +10,8 @@ import {
   AppointmentModal,
   SuggestedDoctors,
   NoData,
-  CoolKid,
-  Loader,
+  ChatWithDoctorUI,
+  DoctorInfoSkeleton,
 } from "@/components"
 import { useQuery } from "react-query"
 import { doctorServices } from "@/lib/services/doctor"
@@ -21,29 +21,31 @@ import { TDoctor, THospital } from "@/types"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
-export default function DoctorDets() {
+export default function DoctorInfoPage() {
+  const searchParams = useSearchParams()
+  const id = searchParams.get("id")
+  const popup = searchParams.get("popup")
+
+  const [isOpen, setIsOpen] = useState<boolean>(false)
+  const [openContact, setOpenContact] = useState<boolean>(false)
+  const [openAppointment, setOpenAppointment] = useState<boolean>(!!popup)
+
   const pathname = usePathname()
   const router = useRouter()
-  const searchParams = useSearchParams()
 
-  const popup = !!searchParams.get("popup")
-  const id = searchParams.get("id")
-
-  const [openAppointment, setOpenAppointment] = useState(popup)
-  const [openContact, setOpenContact] = useState(false)
-
-  // retrieve the doctor information
+  // Retrieve the Doctor Informations
   const { data: information, isLoading: isDoctorLoading } = useQuery(
     [`doctors:info:${id}`],
     async () => {
       if (id) return doctorServices.getDoctorInfo(id)
     },
     {
+      enabled: !!id,
       select: (data) => firey.convertKeysToCamelCase(data) as TDoctor, // restructure the response data,
     }
   )
 
-  // retrieve the hospital information
+  // Retrieve the Hospital Informations
   const { data: hospitalInfo, isLoading: isHospitalLoading } = useQuery(
     [`hospitals:info:${information?.hospital.id}`],
     async () => {
@@ -52,33 +54,44 @@ export default function DoctorDets() {
       }
     },
     {
+      enabled: !!information,
       select: (data) => firey.convertKeysToCamelCase(data) as THospital,
     }
   )
 
-  // open modal along with adding required params
+  // Open Modal and Add Doctor Id to the query param
   function handleModalOpen() {
     if (!information) return
     setOpenAppointment(true)
     router.push(`${pathname}?id=${information.id}&popup=t`)
   }
 
+  // Handle Modal close and also Update the query params
   function handleModalClose() {
     if (!information) return
     setOpenAppointment(false)
     router.replace(`/hospitals/doctors/info?id=${information.id}`)
   }
 
-  // handle fetch request loading states
-  if (isDoctorLoading || isHospitalLoading) return <Loader />
+  // Doctor Not Found
+  if (!id) return <NoData content="OOPS, Doctor Not Found." />
 
-  // handle inaccurate information
-  if (!id || !information || !hospitalInfo)
-    return <NoData content="oops, doctor not found." />
+  // Loader Skeleton UI
+  if (!information || !hospitalInfo || isDoctorLoading || isHospitalLoading)
+    return <DoctorInfoSkeleton />
 
   return (
     <React.Fragment>
       <div className="pt-4">
+        <button
+          className="absolute z-[5] top-16 right-3 md:right-4 center size-9 md:size-10 bg-neutral-200/60 rounded-xl hover:bg-neutral-200/100"
+          onClick={() => setIsOpen(true)}
+        >
+          <Icon
+            name="mail-upload"
+            className="size-5 md:size-6 text-neutral-600 dark:text-neutral-200"
+          />
+        </button>
         {/* landing contents */}
         <div className="flex flex-col items-center md:gap-6">
           {/* doctor image */}
@@ -92,6 +105,7 @@ export default function DoctorDets() {
               priority
               className="rounded-full md:rounded-lg"
             />
+
             {/* overlay */}
             <div className="min-h-full min-w-full bg-black/25 absolute top-0 right-0 bottom-0 left-0 rounded-full md:rounded-lg" />
           </div>
@@ -199,7 +213,7 @@ export default function DoctorDets() {
         )}
       </div>
 
-      {/* appointment modal */}
+      {/* Appointment Booking Modal */}
       <AppointmentModal
         active={openAppointment}
         closeHandler={handleModalClose}
@@ -207,7 +221,7 @@ export default function DoctorDets() {
         type="profile"
       />
 
-      {/* open contact */}
+      {/* Contact information Modal UI */}
       <Modal
         className="w-full max-w-[420px] center"
         open={openContact}
@@ -232,6 +246,13 @@ export default function DoctorDets() {
           ))}
         </div>
       </Modal>
+
+      {/* Chat With Doctor UI */}
+      <ChatWithDoctorUI
+        isOpen={isOpen}
+        receiverId={information.id}
+        closeHandler={() => setIsOpen(false)}
+      />
     </React.Fragment>
   )
 }

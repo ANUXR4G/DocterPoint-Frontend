@@ -74,7 +74,7 @@ export default function Sidebar() {
               className={`flex items-center transition duration-200 gap-2 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 ${
                 idx === 2 &&
                 `xl:mt-8 xl:mb-4 [@media(max-height:800px)]:xl:mb-2`
-              }`}
+              } ${idx === 0 && `stroke-neutral-700`}`}
               key={`sidebar_bottom_link_${idx}`}
               onClick={() => {
                 // handle user logout

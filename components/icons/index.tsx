@@ -54,6 +54,8 @@ import {
   SpinningLoader,
   EnergyIcon,
   DownChevron,
+  NavigationIcon,
+  MailUploadIcon,
 } from "./svg"
 
 type Props = {
@@ -66,6 +68,16 @@ export default function Icon({ name, className, pathClassName }: Props) {
   switch (name) {
     case "search":
       return <SearchIcon className={className} pathClassName={pathClassName} />
+
+    case "mail-upload":
+      return (
+        <MailUploadIcon className={className} pathClassName={pathClassName} />
+      )
+
+    case "navigation":
+      return (
+        <NavigationIcon className={className} pathClassName={pathClassName} />
+      )
 
     case "down-chevron":
       return <DownChevron className={className} pathClassName={pathClassName} />
