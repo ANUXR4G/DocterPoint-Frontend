@@ -167,12 +167,14 @@ export default function ChatModal() {
       open={showChat}
       handler={handleCloseModal}
       primaryBtn={
-        <button
+        <motion.button
           className="mr-0.5 py-3 px-5 bg-gradient-to-l from-blue-500 to-indigo-500 text-neutral-100 text-sm font-medium rounded-lg disabled:opacity-50 disabled:pointer-events-none"
           disabled={value.trim() === ""}
+          onClick={sendMessage}
+          whileHover={{ scale: 0.985 }}
         >
           Send Now
-        </button>
+        </motion.button>
       }
     >
       <div className="flex flex-col size-full gap-3 overflow-hidden">

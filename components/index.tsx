@@ -154,6 +154,7 @@ export { default as HealthInfoSkeleton } from "./skeletons/HealthInfoSkeleton"
 export { default as PatientInfoSkeleton } from "./skeletons/PatientInfoSkeleton"
 export { default as ProfileSkeleton } from "./skeletons/ProfileSkeleton"
 export { default as DoctorInfoSkeleton } from "./skeletons/DoctorInfoSkeleton"
+export { default as AppointmentSkeleton } from "./skeletons/AppointmentSkeleton"
 
 // info ui
 export { default as BasicInfo } from "./ui/patients/info/BasicInfo"

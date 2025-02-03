@@ -84,7 +84,7 @@ export default function DoctorInfoPage() {
     <React.Fragment>
       <div className="pt-4">
         <button
-          className="absolute z-[5] top-16 right-3 md:right-4 center size-9 md:size-10 bg-neutral-200/60 rounded-xl hover:bg-neutral-200/100"
+          className="absolute z-[5] top-16 right-3 md:right-4 center size-9 md:size-10 bg-neutral-200/60 rounded-xl hover:bg-neutral-200/100 dark:bg-neutral-700 dark:hover:bg-neutral-600 transition"
           onClick={() => setIsOpen(true)}
         >
           <Icon

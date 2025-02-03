@@ -1,14 +1,6 @@
 "use client"
 
-import {
-  BookAppointment,
-  RecentAppointments,
-  UpcomingAppointments,
-} from "@/components"
-import { useApi } from "@/hooks/useApi"
-import { patientService } from "@/lib/services/patient"
-import { TAppointment } from "@/types"
-import { firey } from "@/utils"
+import React from "react"
 import {
   addDays,
   isSameDay,
@@ -17,10 +9,22 @@ import {
   startOfToday,
   startOfTomorrow,
 } from "date-fns"
-import React from "react"
+
+import { firey } from "@/utils"
+import { TAppointment } from "@/types"
+import { patientService } from "@/lib/services/patient"
+
+import { useApi } from "@/hooks/useApi"
+
+import {
+  AppointmentSkeleton,
+  BookAppointment,
+  RecentAppointments,
+  UpcomingAppointments,
+} from "@/components"
 
 export default function AppointmentPage() {
-  const { data: upcomingAppointments } = useApi(
+  const { data: upcomingAppointments, isLoading } = useApi(
     [`patients:appointments:upcoming`],
     (_, token) => patientService.upcoming_appointments(token),
     {
@@ -58,6 +62,8 @@ export default function AppointmentPage() {
         })
       })
     : []
+
+  if (isLoading) return <AppointmentSkeleton />
 
   return (
     <div className="pb-8">
