@@ -28,6 +28,7 @@ async def websocket_monitoring(
         print(f"User #{user_id} left the monitoring room.")
 
 
+# WebSocket Connection to for general chatting w doctors and support
 @router.websocket("/chats/{user_id}")
 async def websocket_chatting(
     ws: WebSocket,
@@ -60,11 +61,38 @@ async def websocket_chatting(
                 # Broadcast the message data to User as well
                 await socket_manager.send_private_msg(f"{user_id}_CHAT", new_help_msg)
 
+            # Communication B/W Patient and Doctor
+            if data["type"] == "direct":
+                new_direct_msg_db = Message(
+                    type="direct",
+                    sender_id=base64_to_uuid(user_id),
+                    receiver_id=base64_to_uuid(data["receiver_id"]),
+                    content=data["content"],
+                    created_at=datetime.now(timezone.utc),
+                )
+
+                # Store messages to database
+                db.add(new_direct_msg_db)
+                await db.commit()
+                await db.refresh(new_direct_msg_db)
+
+                new_direct_msg = serialized_data(new_direct_msg_db)
+
+                print(f"User Message -> , {new_direct_msg}", flush=True)
+
+                # Broadcast the message data to the doctor (receiver)
+                await socket_manager.send_private_msg(
+                    f"{data["receiver_id"]}_CHAT", new_direct_msg
+                )
+                # Broadcast the message data to the User (sender) as well
+                await socket_manager.send_private_msg(f"{user_id}_CHAT", new_direct_msg)
+
     except WebSocketDisconnect:
         socket_manager.disconnect(ws, f"{user_id}_CHAT")
         print(f"User #{user_id} left the help room.")
 
 
+# WebSocket Connection to handle broadcasts of the Admins
 @router.websocket("/admin/help")
 async def admin_websocket(
     ws: WebSocket,
@@ -118,7 +146,7 @@ def get_original_user_id_monitoring(room_id: str) -> str:
 
 
 def serialized_data(msg: Message):
-    return {
+    data = {
         "type": msg.type,
         "id": uuid_to_base64(msg.id),
         "sender_id": uuid_to_base64(msg.sender_id),
@@ -126,3 +154,7 @@ def serialized_data(msg: Message):
         "is_seen": msg.is_seen,
         "created_at": msg.created_at,
     }
+    if msg.receiver_id:
+        data["receiver_id"] = uuid_to_base64(msg.receiver_id)
+
+    return data
