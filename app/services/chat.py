@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select, desc, or_
+from sqlalchemy import func, select, desc, and_, or_
 
 from app.models import Message
 from app.core.security import base64_to_uuid, uuid_to_base64
@@ -62,9 +62,16 @@ class ChatService:
             select(Message)
             .where(
                 or_(
-                    Message.sender_id == base64_to_uuid(user_id),
-                    Message.receiver_id == base64_to_uuid(receiver_id),
-                    Message.type == "direct",
+                    and_(
+                        Message.sender_id == base64_to_uuid(user_id),
+                        Message.receiver_id == base64_to_uuid(receiver_id),
+                        Message.type == "direct",
+                    ),
+                    and_(
+                        Message.sender_id == base64_to_uuid(receiver_id),
+                        Message.receiver_id == base64_to_uuid(user_id),
+                        Message.type == "direct",
+                    ),
                 )
             )
             .offset(offset)
