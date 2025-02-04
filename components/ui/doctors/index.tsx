@@ -16,7 +16,7 @@ import {
   DoctorFilter,
   Pagination,
   NoData,
-  Loader,
+  DoctorPageSkeleton,
 } from "@/components"
 
 export default function Doctors() {
@@ -42,7 +42,7 @@ export default function Doctors() {
     ...filters,
   })
 
-  // retrieve all the doctor informations
+  // Retrieve all the doctor informations
   const { refetch, data, isLoading } = useQuery(
     [`doctors:page:${page}`],
     async () => doctorServices.getDoctors(params.toString()),
@@ -54,12 +54,12 @@ export default function Doctors() {
           doctors: TDoctor[]
         }
       },
-      staleTime: 0, //refetch on every query mount
+      staleTime: 0, // Refetch on every query mount
       keepPreviousData: true,
     }
   )
 
-  // handle booking appointment
+  // Handle booking appointment
   function handleBookAppointment(
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>,
     doctor: TDoctor
@@ -68,19 +68,19 @@ export default function Doctors() {
     router.push(`/hospitals/doctors/info?id=${doctor.id}&popup=t`)
   }
 
-  // handle prev indicator
+  // Handle prev indicator
   function handlePreviousPage() {
     // setPage((prev) => Math.max(prev - 1, 1))
     router.push(`?page=${Math.max(page - 1, 1)}`)
   }
 
-  // handle next indicator
+  // Handle next indicator
   function handleNextPage() {
     // setPage((prev) => Math.min(prev + 1, totalPages))
     router.push(`?page=${Math.min(page + 1, totalPages)}`)
   }
 
-  // handle page number indicator
+  // Handle page number indicator
   function handlePageChange(page: number) {
     // setPage(page)
     router.push(`?page=${page}`)
@@ -105,34 +105,33 @@ export default function Doctors() {
     setOpenFilter(false)
   }
 
-  // trigger on filter clear
+  // Trigger on filter clear
   useEffect(() => {
     if (triggerFilter) {
-      // update the param if filter location exists
+      // Update the param if filter location exists
       refetch()
       setTriggerFilter(false)
-      // on confirmation set router to pathname if it was previously being filtered by location
+      // On confirmation set router to pathname if it was previously being filtered by location
       if (filter_location) router.push(pathname)
     }
   }, [triggerFilter, refetch, filter_location, router, pathname])
 
-  // update filtering for location query
+  // Update filtering for location query
   useEffect(() => {
     if (filter_location) {
       refetch()
     }
   }, [filter_location, refetch])
 
-  // update the total size of page
+  // Update the total size of page
   useEffect(() => {
     if (!data) return
     setTotalPages(Math.ceil(data.total / limit))
   }, [data, limit])
 
-  // if (isLoading || infoLoading) return <Loader />
-  if (isLoading) return <Loader />
+  if (isLoading) return <DoctorPageSkeleton />
 
-  // handle inaccurate information
+  // Handle inaccurate information
   if (!data) return <NoData content="oops, something went wrong." />
 
   return (
