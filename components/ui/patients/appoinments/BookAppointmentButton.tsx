@@ -14,6 +14,8 @@ export default function BookAppointment({ className }: Props) {
 
   const { scrollY } = useScroll()
 
+  // Track the scrolling postition
+  // Based on that on scrolling position update the hiding state of the btn
   useMotionValueEvent(scrollY, "change", (latest) => {
     const prev = scrollY.getPrevious()
 
@@ -45,6 +47,7 @@ export default function BookAppointment({ className }: Props) {
         animate={hidden ? "hidden" : "visible"}
         className={`fixed md:relative z-10 bottom-5 left-1/2 -translate-x-1/2 [--translate-x:-50%] md:bottom-0 md:left-0 md:translate-x-0 md:[--translate-x:0%] md:ml-auto md:mt-4 [--y-from:80px] [--y-to:0px] md:[--y-from:0px] ${className}`}
       >
+        {/* Button */}
         <Button className="px-5 py-2.5 md:py-2">
           <span>Book an appointment</span>
         </Button>

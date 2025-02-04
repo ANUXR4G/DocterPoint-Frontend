@@ -23,7 +23,8 @@ import {
   UpcomingAppointments,
 } from "@/components"
 
-export default function AppointmentPage() {
+export default function AppointmentsPage() {
+  // Retrieve all the upcoming appointments
   const { data: upcomingAppointments, isLoading } = useApi(
     [`patients:appointments:upcoming`],
     (_, token) => patientService.upcoming_appointments(token),
@@ -38,21 +39,21 @@ export default function AppointmentPage() {
   const tomorrow = startOfTomorrow()
   const endOfCurrentWeek = addDays(today, 6)
 
-  // get all the appointments for today
+  // Sort out all the appointments for today
   const appointmentsToday = upcomingAppointments
     ? upcomingAppointments.filter((info) =>
         isSameDay(today, parseISO(info.appointmentDate))
       )
     : []
 
-  // get all the appointments for tomorrow
+  // Sort out all the appointments for tomorrow
   const appointmentsTomorrow = upcomingAppointments
     ? upcomingAppointments.filter((info) =>
         isSameDay(tomorrow, parseISO(info.appointmentDate))
       )
     : []
 
-  // get all the upcoming appointments on this week
+  // Sort out all the upcoming appointments on this week
   const currentWeekAppointments = upcomingAppointments
     ? upcomingAppointments.filter((appointment) => {
         const appointmentDate = parseISO(appointment.appointmentDate)
@@ -63,11 +64,12 @@ export default function AppointmentPage() {
       })
     : []
 
+  // Appointment Loading Skeleton
   if (isLoading) return <AppointmentSkeleton />
 
   return (
     <div className="pb-8">
-      {/* upcoming appointments */}
+      {/* Upcoming appointments */}
       {upcomingAppointments && (
         <div className="flex md:gap-4">
           <div
@@ -87,10 +89,12 @@ export default function AppointmentPage() {
         </div>
       )}
 
-      {/* recent appointments */}
+      {/* Book appointment Modal and btn */}
       <div className="flex w-full mb-3 relative">
         <BookAppointment />
       </div>
+
+      {/* Recent appointments */}
       <RecentAppointments />
     </div>
   )

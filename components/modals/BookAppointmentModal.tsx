@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import {
   Button,
   Checkbox,
@@ -9,6 +9,7 @@ import {
   Map,
   Modal,
   RadioInput,
+  Icon,
 } from "@/components"
 import { firey } from "@/utils"
 import {
@@ -81,7 +82,8 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
   const { data: userInfo } = useProfile()
   const router = useRouter()
 
-  const { data: nearbyHospitals } = useQuery(
+  // Retrieve all the Hospital informations
+  const { data: nearbyHospitals, isLoading } = useQuery(
     [`hospitals:nearby`],
     async () => hospitalService.getHospitals(hospitalParams.toString()),
     {
@@ -93,6 +95,7 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     }
   )
 
+  // Retrieve the selected doctors informations
   const { data: searchResult, isLoading: isSearchLoading } = useQuery(
     [`doctors:search`, selected.doctor],
     async () => doctorServices.search(selected.doctor),
@@ -121,7 +124,7 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     }
   )
 
-  // create a new appointment
+  // Create a new appointment
   const { mutate } = useApiMutation<{
     payload: Record<string, unknown>
   }>(({ payload }, token) => patientService.createAppointment(token, payload), {
@@ -133,17 +136,17 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     },
   })
 
-  // handle doctor on change handler
+  // Handle doctor the doctor onchange
   function handleDoctorChange(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value
-    setSelected((prev) => ({ ...prev, doctor: value })) // update selected state
+    setSelected((prev) => ({ ...prev, doctor: value })) // Update selected state
 
-    // if there was any left over from previous timer make sure to clean that
+    // If there was any left over from previous timer make sure to clean that
     if (searchingTimeout.current) {
       clearTimeout(searchingTimeout.current)
     }
 
-    // set state for typing status based on the length of the prompt
+    // Set state for typing status based on the length of the prompt
     if (value.length >= 2) {
       searchingTimeout.current = setTimeout(() => setIsSearching(true), 300)
     } else {
@@ -151,7 +154,7 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     }
   }
 
-  // handle doctor selection
+  // Handle doctor selection
   function handleDoctorSelection(info: TDoctor | string) {
     if (typeof info !== "string") {
       setHospitalId(info.hospital.id)
@@ -196,12 +199,12 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     }
   }
 
-  // handle hospital location on change handler
+  // Handle hospital location on change handler
   function handleLocationChange(e: React.ChangeEvent<HTMLInputElement>) {
     setSelected((prev) => ({ ...prev, location: e.target.value }))
   }
 
-  // handle hospital selection
+  // Handle hospital selection
   function handleLocationSelection(hopsitalLocation: TDoctor | string) {
     if (typeof hopsitalLocation === "string") {
       setMapDetails(null)
@@ -213,19 +216,19 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     }
   }
 
-  // reset doctor and hospital selection
+  // Reset doctor and hospital selection
   const clearAll = () => {
     setMapDetails(null)
     setSelected({ doctor: "", hospital: "", location: "" })
   }
 
-  // reset location selection
+  // Reset location selection
   const clearLocation = () => {
     setMapDetails(null)
     setSelected((prev) => ({ ...prev, location: "" }))
   }
 
-  // handle month selection
+  // Handle month selection
   function handleMonthSelection(month: string) {
     const newDate = new Date(`${month} 1 ${format(today, "y")}`)
     const newPreviewDays = eachDayOfInterval({
@@ -240,7 +243,7 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     }))
   }
 
-  // handle date selection
+  // Handle date selection
   function handleDateSelection(date: Date, month?: string) {
     const newPreviewDays = eachDayOfInterval({
       start: startOfMonth(date),
@@ -254,7 +257,7 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     }))
   }
 
-  // handle appointment mode
+  // Handle appointment mode
   function handleAppointmentMode(e: React.ChangeEvent<HTMLInputElement>) {
     setDetails((prev) => ({
       ...prev,
@@ -262,7 +265,7 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     }))
   }
 
-  // handle purpose selection
+  // Handle purpose selection
   function handlePurposeOfVisit(e: React.ChangeEvent<HTMLInputElement>) {
     setDetails((prev) => {
       const value = e.target.value
@@ -274,12 +277,14 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     })
   }
 
-  // handle special notes
+  // Handle special notes
   function handleSpecialNotes(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setDetails((prev) => ({ ...prev, notes: e.target.value }))
   }
 
+  // Handle booking confirmation
   function handleConfirmation() {
+    // Redirect to update information if necessary information is was not provided
     if (!userInfo?.name) return router.push("/patient/info")
 
     const payload = {
@@ -295,7 +300,7 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     mutate({ payload })
   }
 
-  // clear doctor searching timeout
+  // Clear doctor searching timeout
   useEffect(() => {
     return () => {
       if (searchingTimeout.current) {
@@ -303,6 +308,8 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
       }
     }
   }, [])
+
+  // Show loading skeleton when retrieving hospital info
 
   return (
     <Modal
@@ -318,217 +325,230 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
         </Button>
       }
     >
-      <div className="flex flex-col gap-3 p-4 overflow-x-hidden overflow-y-auto custom-scroll">
-        {/* doctor searching options */}
-        <div className="mb-3">
-          <h2 className="text-lg font-semibold">Book an Appointment</h2>
-          <p className="text-sm font-medium opacity-85">
-            Choose a doctor and schedule your appointment with just a few taps.
-            Select a time that works best for you!
-          </p>
-        </div>
-        <div>
-          <h4 className="text-xs font-bold opacity-85 uppercase mb-1">
-            Doctor
-          </h4>
-          <BookingSearchbox
-            name="doctors"
-            containerClassName="z-30"
-            selection={handleDoctorSelection}
-            onChange={handleDoctorChange}
-            searchResult={searchResult?.doctors}
-            isSearchLoading={isSearchLoading}
-            value={selected.doctor}
-            clear={clearAll}
+      {isLoading ? (
+        <div className="center mt-auto">
+          <Icon
+            name="spinning-loader"
+            className="size-9 lg:size-11 fill-neutral-600 dark:fill-neutral-300"
           />
         </div>
-
-        {/* hospital searching options */}
-        <div>
-          <h4 className="text-xs font-bold opacity-85 uppercase mb-1">
-            Hospital
-          </h4>
-          <BookingSearchbox
-            name="hospitals"
-            containerClassName="z-30"
-            selection={handleHospitalSelection}
-            onChange={handleHospitalChange}
-            value={selected.hospital}
-            clear={clearAll}
-          />
-        </div>
-
-        {/* location searching options */}
-        <div>
-          <h4 className="text-xs font-bold opacity-85 uppercase mb-1">
-            Location
-          </h4>
-          <BookingSearchbox
-            name="locations"
-            containerClassName="z-10"
-            selection={handleLocationSelection}
-            onChange={handleLocationChange}
-            value={selected.location}
-            clear={clearLocation}
-          />
-        </div>
-
-        {/* hospital map */}
-        {nearbyHospitals?.hospitals && (
-          <div className="mt-2.5">
-            <h4 className="text-xs font-bold opacity-75 uppercase mb-1 max-w-80">
-              {mapDetails ? mapDetails.address : `GlucoGuide X Hospitals`}
-            </h4>
-            <Map
-              hospitals={mapDetails ? [mapDetails] : nearbyHospitals.hospitals}
-              coordinates={
-                mapDetails ? mapDetails.geometry.coordinates : [90.4, 23.79]
-              }
-              className="sm:h-72"
-              zoom={10}
-              disableResetBtn
-            />
-          </div>
-        )}
-
-        {/* about doctor's availablity */}
-        {details.availableDays.length !== 0 && (
-          <>
-            <div>
-              <h4 className="text-xs font-bold opacity-75 uppercase mb-1 max-w-80">
-                Consultation Hour
-              </h4>
-              <p className="text-sm font-semibold opacity-75">
-                {details.time} on every{" "}
-                {firey.makeString(details.availableDays)}.
+      ) : (
+        <React.Fragment>
+          <div className="flex flex-col gap-3 p-4 overflow-x-hidden overflow-y-auto custom-scroll">
+            {/* Doctor searching options */}
+            <div className="mb-3">
+              <h2 className="text-lg font-semibold">Book an Appointment</h2>
+              <p className="text-sm font-medium opacity-85">
+                Choose a doctor and schedule your appointment with just a few
+                taps. Select a time that works best for you!
               </p>
             </div>
-            {/* booking dates */}
-            <div className="mt-3">
-              <DoctorDates
-                values={details}
-                dateSelection={handleDateSelection}
-                monthSelection={handleMonthSelection}
+            <div>
+              <h4 className="text-xs font-bold opacity-85 uppercase mb-1">
+                Doctor
+              </h4>
+              <BookingSearchbox
+                name="doctors"
+                containerClassName="z-30"
+                selection={handleDoctorSelection}
+                onChange={handleDoctorChange}
+                searchResult={searchResult?.doctors}
+                isSearchLoading={isSearchLoading}
+                value={selected.doctor}
+                clear={clearAll}
               />
             </div>
-          </>
-        )}
 
-        {/* appointment selection options */}
-        <div className="w-full flex flex-col mt-3">
-          {/* appointment mode */}
-          <fieldset>
-            <legend className="text-sm  font-semibold md:font-bold opacity-70">
-              Appointment mode
-            </legend>
-            <div className="flex flex-col mt-1 text-sm">
-              {appointmentModes.map((item, idx) => (
-                <RadioInput
-                  key={`mealPerDayOpts-${idx}`}
-                  name={`appointment_mode_${idx}`}
-                  value={item}
-                  active={details.appointmentMode === item}
-                  onChange={handleAppointmentMode}
-                />
-              ))}
-            </div>
-          </fieldset>
-
-          {/* purpose of visit */}
-          <fieldset className="mt-3">
-            <legend className="text-sm  font-semibold md:font-bold opacity-70">
-              Purpose of visit
-            </legend>
-
-            {/* purpose of visit options */}
-            <div className="flex flex-wrap mt-2 -ml-1 gap-2">
-              {appointmentPurposes.map((item, idx) => (
-                <Checkbox
-                  key={`alergyOpt-${idx}`}
-                  name={`purpose_of_visit_${idx}_option`}
-                  value={item}
-                  active={details.purposeOfVisit.includes(item)}
-                  onChange={handlePurposeOfVisit}
-                  direction="left"
-                />
-              ))}
-            </div>
-          </fieldset>
-
-          {/* special notes */}
-          <div className="mt-3">
-            <label
-              htmlFor="notes"
-              className="text-sm  font-semibold md:font-bold opacity-70"
-            >
-              Special notes
-            </label>
-            <textarea
-              rows={4}
-              className="mt-2 p-2 w-full text-sm text-gray-900 dark:text-neutral-400 bg-gray-50 dark:bg-neutral-700 rounded-lg border border-gray-300 dark:border-neutral-400 focus:ring-blue-500 focus:border-blue-500 resize-none"
-              placeholder="Write special notes here..."
-              value={details.notes}
-              onChange={handleSpecialNotes}
-            ></textarea>
-          </div>
-
-          {/* appointment details */}
-          {selected.doctor.length !== 0 && (
-            <div className="mt-3 flex flex-col">
-              <h4 className="text-sm md:text-base font-bold opacity-70">
-                Appointment details
+            {/* Hospital searching options */}
+            <div>
+              <h4 className="text-xs font-bold opacity-85 uppercase mb-1">
+                Hospital
               </h4>
-              <div className="text-sm font-medium">
-                <span className="font-bold">Name: </span>
-                <span>{selected.doctor}</span>
+              <BookingSearchbox
+                name="hospitals"
+                containerClassName="z-30"
+                selection={handleHospitalSelection}
+                onChange={handleHospitalChange}
+                value={selected.hospital}
+                clear={clearAll}
+              />
+            </div>
+
+            {/* Location searching options */}
+            <div>
+              <h4 className="text-xs font-bold opacity-85 uppercase mb-1">
+                Location
+              </h4>
+              <BookingSearchbox
+                name="locations"
+                containerClassName="z-10"
+                selection={handleLocationSelection}
+                onChange={handleLocationChange}
+                value={selected.location}
+                clear={clearLocation}
+              />
+            </div>
+
+            {/* Hospital map */}
+            {nearbyHospitals?.hospitals && (
+              <div className="mt-2.5">
+                <h4 className="text-xs font-bold opacity-75 uppercase mb-1 max-w-80">
+                  {mapDetails ? mapDetails.address : `GlucoGuide X Hospitals`}
+                </h4>
+                <Map
+                  hospitals={
+                    mapDetails ? [mapDetails] : nearbyHospitals.hospitals
+                  }
+                  coordinates={
+                    mapDetails ? mapDetails.geometry.coordinates : [90.4, 23.79]
+                  }
+                  className="sm:h-72"
+                  zoom={10}
+                  disableResetBtn
+                />
               </div>
-              <div className="text-sm font-medium">
-                <span className="font-bold">Date: </span>
-                <span>
-                  {format(details.selectedDate, "do MMMM, yyy")} (
-                  {format(details.selectedDate, "eeee")})
+            )}
+
+            {/* About doctor's availablity */}
+            {details.availableDays.length !== 0 && (
+              <>
+                <div>
+                  <h4 className="text-xs font-bold opacity-75 uppercase mb-1 max-w-80">
+                    Consultation Hour
+                  </h4>
+                  <p className="text-sm font-semibold opacity-75">
+                    {details.time} on every{" "}
+                    {firey.makeString(details.availableDays)}.
+                  </p>
+                </div>
+                {/* booking dates */}
+                <div className="mt-3">
+                  <DoctorDates
+                    values={details}
+                    dateSelection={handleDateSelection}
+                    monthSelection={handleMonthSelection}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Appointment selection options */}
+            <div className="w-full flex flex-col mt-3">
+              {/* appointment mode */}
+              <fieldset>
+                <legend className="text-sm  font-semibold md:font-bold opacity-70">
+                  Appointment mode
+                </legend>
+                <div className="flex flex-col mt-1 text-sm">
+                  {appointmentModes.map((item, idx) => (
+                    <RadioInput
+                      key={`mealPerDayOpts-${idx}`}
+                      name={`appointment_mode_${idx}`}
+                      value={item}
+                      active={details.appointmentMode === item}
+                      onChange={handleAppointmentMode}
+                    />
+                  ))}
+                </div>
+              </fieldset>
+
+              {/* Purpose of visit */}
+              <fieldset className="mt-3">
+                <legend className="text-sm  font-semibold md:font-bold opacity-70">
+                  Purpose of visit
+                </legend>
+
+                {/* purpose of visit options */}
+                <div className="flex flex-wrap mt-2 -ml-1 gap-2">
+                  {appointmentPurposes.map((item, idx) => (
+                    <Checkbox
+                      key={`alergyOpt-${idx}`}
+                      name={`purpose_of_visit_${idx}_option`}
+                      value={item}
+                      active={details.purposeOfVisit.includes(item)}
+                      onChange={handlePurposeOfVisit}
+                      direction="left"
+                    />
+                  ))}
+                </div>
+              </fieldset>
+
+              {/* special notes */}
+              <div className="mt-3">
+                <label
+                  htmlFor="notes"
+                  className="text-sm  font-semibold md:font-bold opacity-70"
+                >
+                  Special notes
+                </label>
+                <textarea
+                  rows={4}
+                  className="mt-2 p-2 w-full text-sm text-gray-900 dark:text-neutral-400 bg-gray-50 dark:bg-neutral-700 rounded-lg border border-gray-300 dark:border-neutral-400 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  placeholder="Write special notes here..."
+                  value={details.notes}
+                  onChange={handleSpecialNotes}
+                ></textarea>
+              </div>
+
+              {/* Appointment details */}
+              {selected.doctor.length !== 0 && (
+                <div className="mt-3 flex flex-col">
+                  <h4 className="text-sm md:text-base font-bold opacity-70">
+                    Appointment details
+                  </h4>
+                  <div className="text-sm font-medium">
+                    <span className="font-bold">Name: </span>
+                    <span>{selected.doctor}</span>
+                  </div>
+                  <div className="text-sm font-medium">
+                    <span className="font-bold">Date: </span>
+                    <span>
+                      {format(details.selectedDate, "do MMMM, yyy")} (
+                      {format(details.selectedDate, "eeee")})
+                    </span>
+                  </div>
+                  <div className="text-sm font-medium">
+                    <span className="font-bold">Time: </span>
+                    <span>{details.time}</span>
+                  </div>
+                  <div className="text-sm font-medium">
+                    <span className="font-bold">Purpose of visit: </span>
+                    <span>{details.purposeOfVisit.join(", ")}.</span>
+                  </div>
+                  <div className="text-sm font-medium">
+                    <span className="font-bold">Hospital: </span>
+                    <span>{selected.hospital}.</span>
+                  </div>
+                  {mapDetails && (
+                    <div className="text-sm font-medium">
+                      <span className="font-bold">Location: </span>
+                      <span>{mapDetails.address}.</span>
+                    </div>
+                  )}
+                  {details.notes.length !== 0 && (
+                    <div className="text-sm font-medium">
+                      <span className="font-bold">Special note: </span>
+                      <span>{details.notes}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Important info */}
+              <div className="mt-4 flex flex-col text-sm">
+                <h4 className=" font-bold opacity-70">Important info</h4>
+                <span className="font-medium sm:font-medium sm:opacity-80">
+                  *Please arrive 10-15 minutes early for your appointment.
+                </span>
+                <span className="font-medium sm:font-medium sm:opacity-80">
+                  *If you need to reschedule or cancel, kindly notify us at
+                  least 24 hours in advance.
                 </span>
               </div>
-              <div className="text-sm font-medium">
-                <span className="font-bold">Time: </span>
-                <span>{details.time}</span>
-              </div>
-              <div className="text-sm font-medium">
-                <span className="font-bold">Purpose of visit: </span>
-                <span>{details.purposeOfVisit.join(", ")}.</span>
-              </div>
-              <div className="text-sm font-medium">
-                <span className="font-bold">Hospital: </span>
-                <span>{selected.hospital}.</span>
-              </div>
-              {mapDetails && (
-                <div className="text-sm font-medium">
-                  <span className="font-bold">Location: </span>
-                  <span>{mapDetails.address}.</span>
-                </div>
-              )}
-              {details.notes.length !== 0 && (
-                <div className="text-sm font-medium">
-                  <span className="font-bold">Special note: </span>
-                  <span>{details.notes}</span>
-                </div>
-              )}
             </div>
-          )}
-
-          {/* important info */}
-          <div className="mt-4 flex flex-col text-sm">
-            <h4 className=" font-bold opacity-70">Important info</h4>
-            <span className="font-medium sm:font-medium sm:opacity-80">
-              *Please arrive 10-15 minutes early for your appointment.
-            </span>
-            <span className="font-medium sm:font-medium sm:opacity-80">
-              *If you need to reschedule or cancel, kindly notify us at least 24
-              hours in advance.
-            </span>
           </div>
-        </div>
-      </div>
+        </React.Fragment>
+      )}
     </Modal>
   )
 }
