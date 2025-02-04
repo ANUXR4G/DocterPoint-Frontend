@@ -1,5 +1,15 @@
 "use client"
 
+import Link from "next/link"
+import { format } from "date-fns"
+import React, { useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+
+import { firey } from "@/utils"
+import { TAppointment } from "@/types"
+import { useApi } from "@/hooks/useApi"
+import { patientService } from "@/lib/services/patient"
+
 import {
   AppointmentDetailsModal,
   Appointment,
@@ -7,14 +17,6 @@ import {
   EmptyAppointment,
   Pagination,
 } from "@/components"
-import { useApi } from "@/hooks/useApi"
-import { patientService } from "@/lib/services/patient"
-import { TAppointment } from "@/types"
-import { firey } from "@/utils"
-import { format } from "date-fns"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import React, { useEffect, useState } from "react"
 
 const tableFields = [
   "serial",
@@ -52,16 +54,22 @@ export default function RecentAppointments() {
       patientService.getAllAppointments(token, searchParams.toString()),
     {
       select: (data) => {
-        return firey.convertKeysToCamelCase(data) as {
+        const _data = firey.convertKeysToCamelCase(data) as {
           total: number
           appointments: TAppointment[]
         } // covert keys to camelCase
+        return {
+          total: _data.total,
+          appointments: _data.appointments.filter(
+            (item) => !["upcoming", "rescheduled"].includes(item.status)
+          ),
+        }
       },
       staleTime: 0,
     }
   )
 
-  // handle appointment details modal opening
+  // Handle appointment details modal opening
   function handleOpenDetailsModal(info: TAppointment, idx: number) {
     if (!searchParams.get("popup") && !searchParams.get("id")) {
       router.push(`?popup=t&id=${info.id}&${searchParams}`)
@@ -70,32 +78,32 @@ export default function RecentAppointments() {
     setOpenDetailsModal(true)
   }
 
-  // handle appointment details modal closing
+  // Handle appointment details modal closing
   function closeDetailsModal() {
     router.push(`?page=${page}`)
     setOpenDetailsModal(false)
     setSelected(null)
   }
 
-  // handle page number indicator
+  // Handle page number indicator
   function handlePageChange(page: number) {
     setQuery("")
     router.push(`?page=${page}`)
   }
 
-  // handle previous page
+  // Handle previous page
   function handlePreviousPage() {
     setQuery("")
     router.push(`?page=${Math.max(page - 1, 1)}`)
   }
 
-  // handle next page
+  // Handle next page
   function handleNextPage() {
     setQuery("")
     router.push(`?page=${Math.min(page + 1, totalPages)}`)
   }
 
-  // update queries
+  // Update queries
   useEffect(() => {
     const encodedQuery = encodeURIComponent(query).replace(/%20/g, "+")
     if (query.length > 0) {
@@ -103,14 +111,11 @@ export default function RecentAppointments() {
     }
   }, [searchParams, router, page, limit, query])
 
-  // update the total size of page
+  // Update the total size of page
   useEffect(() => {
     if (!data) return
     setTotalPages(Math.ceil(data.total / limit))
   }, [data, limit])
-
-  // serial number based on offset (page) and limit
-  // const getSerial = (idx: number) => (page - 1) * limit + idx + 1
 
   if (!data || isLoading) return <div />
   if (data.appointments.length === 0) return <EmptyAppointment />

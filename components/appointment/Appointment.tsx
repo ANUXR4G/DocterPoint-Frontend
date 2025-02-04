@@ -62,7 +62,7 @@ export default function SmallViewAppointment({
                 <div
                   className={`size-3 center rounded-full ${
                     appointment.status !== "upcoming" &&
-                    `bg-zinc-300 dark:bg-neutral-600 `
+                    `bg-zinc-300 dark:bg-neutral-600`
                   } ${
                     appointment.status === "upcoming" &&
                     (appointment.type === "consultation"
@@ -73,7 +73,7 @@ export default function SmallViewAppointment({
                 <div
                   className={`absolute size-[12px] rounded-full ${
                     appointment.status !== "upcoming" &&
-                    `bg-zinc-300 dark:bg-neutral-600 `
+                    `bg-zinc-300 dark:bg-neutral-600`
                   } ${
                     appointment.type === "consultation"
                       ? `bg-orange-400`
@@ -89,7 +89,7 @@ export default function SmallViewAppointment({
           <div
             className={`text-xs font-bold px-1.5 md:px-2 py-0.5 text-zinc-950/70 md:py-1 rounded-sm ${
               appointment.status !== "upcoming"
-                ? `bg-zinc-400`
+                ? `bg-zinc-300 dark:bg-neutral-400`
                 : appointment.type === "consultation"
                 ? `bg-orange-300/80`
                 : `bg-blue-300/80`
