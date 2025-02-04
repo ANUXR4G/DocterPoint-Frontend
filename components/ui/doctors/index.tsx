@@ -1,39 +1,35 @@
 "use client"
 
+import Image from "next/image"
+import Link from "next/link"
+import { useQuery } from "react-query"
+import { useEffect, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+
+import { firey } from "@/utils"
+import { TDoctor, TDoctorFilteringOpts } from "@/types"
+import { doctorServices } from "@/lib/services/doctor"
+
 import {
   Button,
-  AppointmentModal,
   Icon,
   DoctorFilter,
   Pagination,
   NoData,
   Loader,
 } from "@/components"
-import { doctorServices } from "@/lib/services/doctor"
-import { TDoctor, TDoctorFilteringOpts } from "@/types"
-import { firey } from "@/utils"
-import Image from "next/image"
-import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
-import { useQuery } from "react-query"
 
 export default function Doctors() {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const popup = !!searchParams.get("popup")
-  const popup_doc_id = searchParams.get("id")
   const filter_location = searchParams.get("location")
   const page = Number(searchParams.get("page")) || 1
   const [limit] = useState<number>(10)
   const [totalPages, setTotalPages] = useState(1)
 
-  const [open, setOpen] = useState<boolean>(popup)
-  const [active, setActive] = useState<TDoctor | null>(null)
   const [openFilter, setOpenFilter] = useState<boolean>(false)
-  // const [page, setPage] = useState<number>(1)
   const [triggerFilter, setTriggerFilter] = useState<boolean>(false)
   const [filters, setFilters] = useState<TDoctorFilteringOpts>({
     locations: filter_location ? [filter_location] : [],
@@ -63,41 +59,13 @@ export default function Doctors() {
     }
   )
 
-  // retrieve a specific doctor information if popup is enabled
-  const { isLoading: infoLoading } = useQuery(
-    [`doctors:info:${popup_doc_id}`],
-    async () => {
-      if (!active && popup_doc_id) {
-        return doctorServices.getDoctorInfo(popup_doc_id)
-      }
-    },
-    {
-      select: (data) => {
-        // covert keys to camelCase
-        return firey.convertKeysToCamelCase(data) as TDoctor
-      },
-      onSuccess: (doctor) => {
-        if (doctor) setActive(doctor)
-      },
-    }
-  )
-
-  // close the modal
-  function handleModalClose() {
-    setOpen(false)
-    setActive(null)
-    router.replace(pathname)
-  }
-
   // handle booking appointment
   function handleBookAppointment(
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>,
     doctor: TDoctor
   ) {
     e.preventDefault()
-    router.push(`${pathname}?popup=t&id=${doctor.id}`)
-    setOpen(true)
-    setActive(doctor)
+    router.push(`/hospitals/doctors/info?id=${doctor.id}&popup=t`)
   }
 
   // handle prev indicator
@@ -161,19 +129,18 @@ export default function Doctors() {
     setTotalPages(Math.ceil(data.total / limit))
   }, [data, limit])
 
-  if (isLoading || infoLoading) return <Loader />
+  // if (isLoading || infoLoading) return <Loader />
+  if (isLoading) return <Loader />
 
   // handle inaccurate information
   if (!data) return <NoData content="oops, something went wrong." />
 
   return (
     <div className="flex flex-col">
-      {/* <div className="flex items-center justify-between"> */}
       <h2 className="text-4xl font-bold leading-9 tracking-tighter">
         Find the best doctors around the city.
       </h2>
 
-      {/* </div> */}
       <div className="flex justify-end -mr-2">
         <button
           className="size-10 rounded-full center hover:bg-zinc-200 dark:hover:bg-neutral-700"
@@ -199,7 +166,7 @@ export default function Doctors() {
               }}
             >
               <div className="p-2 xl:p-2.5 bg-white dark:bg-zinc-800 shadow rounded-lg hover:shadow-md hover:cursor-pointer">
-                {/* doctor image */}
+                {/* Doctor Image */}
                 <div className="relative w-full h-72 xxs:h-44 xs:h-64 lg:h-72 xl:h-80">
                   <Image
                     fill
@@ -211,7 +178,8 @@ export default function Doctors() {
                     className="rounded-lg"
                   />
                 </div>
-                {/* doctor description */}
+
+                {/* Doctor Description */}
                 <div className="flex flex-col mt-2 ml-1">
                   <h4 className="text-sm font-bold">{props.name}</h4>
                   <p className="text-xs font-bold opacity-80 leading-4 line-clamp-3 min-h-12">
@@ -226,7 +194,8 @@ export default function Doctors() {
                     </h4>
                   </div>
                 </div>
-                {/* appointment option */}
+
+                {/* Booking Confirmation Button */}
                 <div className="mt-3 md:mt-4">
                   <Button
                     className="w-full h-10 center"
@@ -246,7 +215,7 @@ export default function Doctors() {
           </div>
         )}
 
-        {/* filter modal */}
+        {/* Filter doctors based on different criteria */}
         <DoctorFilter
           active={openFilter}
           closeHandler={handleFiteringClose}
@@ -255,19 +224,9 @@ export default function Doctors() {
           filters={filters}
           setFilters={setFilters}
         />
-
-        {/* appointment modal */}
-        {active && (
-          <AppointmentModal
-            active={open}
-            closeHandler={handleModalClose}
-            doctor={active}
-            type="profile"
-          />
-        )}
       </div>
 
-      {/* pagination */}
+      {/* Pagination Controls */}
       {totalPages > 1 && (
         <Pagination
           totalPages={totalPages}

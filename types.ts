@@ -24,6 +24,7 @@ export type IconNames =
   | "search"
   | "key"
   | "navigation"
+  | "image-upload"
   | "mail-upload"
   | "energy"
   | "monitoring"

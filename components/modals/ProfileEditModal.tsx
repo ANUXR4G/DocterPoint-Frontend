@@ -3,11 +3,9 @@
 import React, { useState } from "react"
 import { BasicInfo, Button, Icon, MedicalRecords, Modal } from "@/components"
 import { useUpdateProfile } from "@/hooks/useUpdateProfile"
-import { useRouter } from "next/navigation"
 
 export default function ProfileEditModal() {
   const [openModal, setOpenModal] = useState<boolean>(false)
-  const router = useRouter()
 
   const {
     values,
@@ -54,7 +52,7 @@ export default function ProfileEditModal() {
         }
         className="h-full sm:h-3/4 w-full max-w-[720px]"
       >
-        <div className="flex flex-col gap-2 p-4 overflow-x-hidden overflow-y-auto custom-scroll">
+        <div className="flex flex-col gap-2 p-2 lg:p-4 overflow-x-hidden overflow-y-auto custom-scroll">
           {/* basic informations */}
           <BasicInfo
             values={values}

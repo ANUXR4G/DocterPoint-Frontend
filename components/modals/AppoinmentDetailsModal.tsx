@@ -88,10 +88,6 @@ export default function AppointmentDetailsModal({
     if (shouldFetch) refetch()
   }, [selected, isOpen, appointmentId, refetch])
 
-  // const recommendations = RECOMMENDATIONS.find(
-  //   (item) => item.appointmentId === selected
-  // )
-
   function handleConsultationAgain(
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>
   ) {
@@ -146,7 +142,15 @@ export default function AppointmentDetailsModal({
         )
       }
       secondaryBtn={
-        <Button onClick={handleConsultationAgain}>Consult again</Button>
+        selected ? (
+          ["upcoming", "rescheduled"].includes(selected.status) ? (
+            <></>
+          ) : (
+            <Button onClick={handleConsultationAgain}>Consult again</Button>
+          )
+        ) : (
+          <></>
+        )
       }
     >
       {!selected || !hospitalInfo ? (
@@ -244,28 +248,32 @@ export default function AppointmentDetailsModal({
               )}
 
               {/* dietary recommendations */}
-              <ListContent
-                title="Dietary Recommendations 🍇"
-                keys={[
-                  ...prescription.dietary.map((item) => `${item.time}: `),
-                  `goal: `,
-                ]}
-                values={[
-                  ...prescription.dietary.map(
-                    (item) => `Have your food under ${item.energy}kCal.`
-                  ),
-                  `${prescription.energyGoal}kCal(approx)`,
-                ]}
-              />
+              {prescription.dietary && (
+                <ListContent
+                  title="Dietary Recommendations 🍇"
+                  keys={[
+                    ...prescription.dietary.map((item) => `${item.time}: `),
+                    `goal: `,
+                  ]}
+                  values={[
+                    ...prescription.dietary.map(
+                      (item) => `Have your food under ${item.energy}kCal.`
+                    ),
+                    `${prescription.energyGoal}kCal(approx)`,
+                  ]}
+                />
+              )}
 
               {/* nutrition recommedations */}
-              <ListContent
-                title="Nutrition Recommendations 🥜"
-                keys={prescription.nutritions.map((item) => `${item.name}:`)}
-                values={prescription.nutritions.map(
-                  (item) => `${item.amount}g`
-                )}
-              />
+              {prescription.nutritions && (
+                <ListContent
+                  title="Nutrition Recommendations 🥜"
+                  keys={prescription.nutritions.map((item) => `${item.name}:`)}
+                  values={prescription.nutritions.map(
+                    (item) => `${item.amount}g`
+                  )}
+                />
+              )}
 
               {/* recommeded ingredients */}
               {prescription.recommendedIngredients && (

@@ -6,6 +6,7 @@ import { motion } from "framer-motion"
 import { BasicSelect, DatePicker, Input, Icon } from "@/components"
 import { firey } from "@/utils"
 import { TInfoOptions } from "@/types"
+import { usePathname } from "next/navigation"
 
 type Props = {
   values: TInfoOptions
@@ -31,6 +32,8 @@ export default function BasicInfo({
   enableModalMode = false,
 }: Props) {
   const [imgBlob, setImgBlob] = useState<string | null>(null)
+
+  const pathaname = usePathname()
 
   // handle image input change
   function handleImgChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -85,7 +88,7 @@ export default function BasicInfo({
               className="absolute bottom-0 right-0 size-7 center rounded-full bg-neutral-800/25 contrast-75 backdrop-blur-sm focus:outline focus:outline-2 focus:outline-blue-400"
             >
               <Icon
-                name="settings"
+                name="image-upload"
                 className="size-5"
                 pathClassName="stroke-neutral-100 dark:stroke-neutral-300"
               />
@@ -136,9 +139,11 @@ export default function BasicInfo({
               selectedDay={values.dateOfBirth}
               onChange={handleDayChange}
               containerClassName={
-                enableModalMode ? `mt-[3px]` : `2xl:[&_span]:text-base`
+                enableModalMode ? `mt-[3px]` : `mt-0.5 2xl:[&_span]:text-base`
               }
-              modalClassName="right-2"
+              modalClassName={
+                pathaname === "/patient/info" ? `right-2` : `right-7`
+              }
               containerProps={{ tabIndex: 3 }}
             />
 

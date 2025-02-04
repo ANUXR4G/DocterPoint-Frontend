@@ -1,16 +1,21 @@
 "use client"
 
-import { AlignContent, ProfileEditModal, ProfileSkeleton } from "@/components"
-import { useApi } from "@/hooks/useApi"
-import { patientService } from "@/lib/services/patient"
-import { userService } from "@/lib/services/user"
-import { TPatient } from "@/types"
-import { firey } from "@/utils"
-import { format, parse } from "date-fns"
 import Image from "next/image"
 
+import { format, parse } from "date-fns"
+
+import { firey } from "@/utils"
+import { TPatient } from "@/types"
+
+import { useApi } from "@/hooks/useApi"
+
+import { userService } from "@/lib/services/user"
+import { patientService } from "@/lib/services/patient"
+
+import { AlignContent, ProfileEditModal, ProfileSkeleton } from "@/components"
+
+// Retrieve patient informations
 export default function ProfilePage() {
-  // retrieve patient informations
   const { data: profile, isLoading } = useApi(
     ["users:profile"],
     async (_, token) => userService.profile(token),
@@ -19,7 +24,7 @@ export default function ProfilePage() {
     }
   )
 
-  // retrieve patient health record informations
+  // Retrieve patient health record informations
   const { data: healthRecord } = useApi(
     [`patients:monitorings:${profile?.id}`],
     (_, token) => patientService.getPatientHealthRecord(token),
@@ -28,8 +33,10 @@ export default function ProfilePage() {
     }
   )
 
+  // Check if the medical infomations are empty
   const isMedicalEmpty = healthRecord && Array.isArray(healthRecord)
 
+  // Show Profile Page Skeleton on Page Loading
   if (isLoading) return <ProfileSkeleton />
 
   return (

@@ -31,6 +31,8 @@ import { doctorServices } from "@/lib/services/doctor"
 import { useApiMutation } from "@/hooks/useApiMutation"
 import { patientService } from "@/lib/services/patient"
 import { queryClient } from "@/app/providers"
+import { useProfile } from "@/hooks/useProfile"
+import { useRouter } from "next/navigation"
 
 type Props = {
   isOpen: boolean
@@ -75,6 +77,9 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
     availableDays: [],
     time: "",
   })
+
+  const { data: userInfo } = useProfile()
+  const router = useRouter()
 
   const { data: nearbyHospitals } = useQuery(
     [`hospitals:nearby`],
@@ -275,6 +280,8 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
   }
 
   function handleConfirmation() {
+    if (!userInfo?.name) return router.push("/patient/info")
+
     const payload = {
       doctor_id: details.doctorId,
       mode: details.appointmentMode.startsWith("Telemedicine")

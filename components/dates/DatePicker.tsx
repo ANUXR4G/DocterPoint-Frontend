@@ -162,6 +162,8 @@ export default function DatePicker({
   // handle date picker modal close
   function handleClose() {
     setIsCalendarOpen(false)
+    setShowMonths(false)
+    setShowYears(false)
   }
 
   // close the modal on activity outside the modal
@@ -193,7 +195,7 @@ export default function DatePicker({
       {isCalendarOpen && (
         <motion.div
           ref={containerRef}
-          className={`max-w-72 h-auto absolute z-10 w-full mt-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg shadow-lg py-4 overflow-hidden lg:max-w-80 lg:py-6 ${
+          className={`max-w-72 min-h-[21rem] h-auto absolute z-10 w-full mt-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg shadow-lg py-4 overflow-hidden lg:max-w-80 lg:py-6 ${
             direction === "right" ? `right-0` : `left-0`
           } ${modalClassName && modalClassName}`}
         >
