@@ -1,14 +1,16 @@
 "use client"
 
-import { Icon, Swiper } from "@/components"
 import Image from "next/image"
-import React, { use, useCallback, useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { useRouter } from "next/navigation"
-import { firey } from "@/utils"
 import { useQuery } from "react-query"
-import { doctorServices } from "@/lib/services/doctor"
+import React, { useState } from "react"
+import { useRouter } from "next/navigation"
+
+import { firey } from "@/utils"
 import { TDoctor } from "@/types"
+
+import { Icon, Swiper } from "@/components"
+import { doctorServices } from "@/lib/services/doctor"
 
 type Props = {
   experience?: number
@@ -44,8 +46,8 @@ export default function SuggestedDoctors({
     experience,
   })
 
-  // retrieve all the doctor informations from a specific hospital
-  const { data: doctorsOfHospital } = useQuery(
+  // Retrieve all the doctor informations from a specific hospital
+  const { data: doctorsOfHospital, isLoading: isDocHospitalLoading } = useQuery(
     [`doctors:hospital:${hospitalId}:page:${page}`],
     async () => {
       if (!hospitalId) {
@@ -60,7 +62,7 @@ export default function SuggestedDoctors({
     {
       enabled: !!hospitalId,
       select: (data) => {
-        // covert keys to camelCase
+        // Covert keys to camelCase
         return firey.convertKeysToCamelCase(data) as {
           total: number
           doctors: TDoctor[]
@@ -69,35 +71,36 @@ export default function SuggestedDoctors({
     }
   )
 
-  // retrieve all the doctor informations based on experience
-  const { data: experiencedDoctors } = useQuery(
-    [`doctors:page:${page}:experience:${experience}`],
-    async () => {
-      if (!experience) {
-        throw new Error(`failed to retrieve doctors information!`)
+  // Retrieve all the doctor informations based on experience
+  const { data: experiencedDoctors, isLoading: isExperiencedLoading } =
+    useQuery(
+      [`doctors:page:${page}:experience:${experience}`],
+      async () => {
+        if (!experience) {
+          throw new Error(`failed to retrieve doctors information!`)
+        }
+
+        return doctorServices.getDoctors(paramsOfExperience.toString())
+      },
+      {
+        enabled: !!experience,
+        select: (data) => {
+          // Covert keys to camelCase
+          return firey.convertKeysToCamelCase(data) as {
+            total: number
+            doctors: TDoctor[]
+          }
+        },
       }
+    )
 
-      return doctorServices.getDoctors(paramsOfExperience.toString())
-    },
-    {
-      enabled: !!experience,
-      select: (data) => {
-        // covert keys to camelCase
-        return firey.convertKeysToCamelCase(data) as {
-          total: number
-          doctors: TDoctor[]
-        }
-      },
-    }
-  )
-
-  // retrieve all the doctor informations
-  const { data: retrievedDoctors } = useQuery(
+  // Retrieve all the doctor informations
+  const { data: retrievedDoctors, isLoading: isInfoLoading } = useQuery(
     [`doctors:page:${page}`],
     async () => doctorServices.getDoctors(params.toString()),
     {
       select: (data) => {
-        // covert keys to camelCase
+        // Covert keys to camelCase
         return firey.convertKeysToCamelCase(data) as {
           total: number
           doctors: TDoctor[]
@@ -120,7 +123,7 @@ export default function SuggestedDoctors({
         doctor.hospital.id !== detachedHospitalId
     )
 
-  // handle navigation based on dragging status
+  // Handle navigation based on dragging status
   function handleNavigation(
     e: React.MouseEvent<HTMLDivElement, MouseEvent>,
     id: string
@@ -135,6 +138,18 @@ export default function SuggestedDoctors({
       }
     }
   }
+
+  const isLoading =
+    isInfoLoading && isDocHospitalLoading && isExperiencedLoading
+
+  // Show loading UI if the retrieval data is still fetching
+  if (isLoading)
+    return (
+      <div role="status" className="animate-pulse">
+        <div className="mt-7 w-full h-64 sm:h-96 bg-gray-300/80 dark:bg-neutral-700/75 rounded-md" />
+        <span className="sr-only">Loading...</span>
+      </div>
+    )
 
   return (
     <React.Fragment>
@@ -165,10 +180,10 @@ export default function SuggestedDoctors({
                     priority
                     className="rounded-lg"
                   />
-                  {/* overlay */}
+                  {/* Overlay */}
                   <div className="min-h-full min-w-full bg-black/35 absolute top-0 right-0 bottom-0 left-0 rounded-lg" />
 
-                  {/* doctor details */}
+                  {/* Doctor details */}
                   <div className="w-11/12 text-[--primary-white] bg-white/20 backdrop-blur-lg p-4 absolute bottom-3 2xl:bottom-4 left-1/2 -translate-x-1/2 rounded-lg">
                     <h3 className="font-bold line-clamp-1">{doctor.name}</h3>
                     <div className="flex items-center -ml-1">
