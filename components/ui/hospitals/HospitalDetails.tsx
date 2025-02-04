@@ -1,36 +1,38 @@
 "use client"
 
+import React from "react"
+import Link from "next/link"
+import Image from "next/image"
+import { useQuery } from "react-query"
+
+import { THospital } from "@/types"
+import { firey } from "@/utils"
 import {
   Icon,
   Map,
   ContactInformation,
   HospitalSuggestions,
+  HospitalInfoSkeleton,
 } from "@/components"
 import { hospitalService } from "@/lib/services/hospital"
-import { THospital } from "@/types"
-import { firey } from "@/utils"
-import Image from "next/image"
-import Link from "next/link"
-import React from "react"
-import { useQuery } from "react-query"
 
 type Props = {
   id: string
 }
 
 export default function HospitalDetails({ id }: Props) {
-  const { data } = useQuery(
+  const { data, isLoading } = useQuery(
     [`hospitals:info:${id}`],
     async () => hospitalService.getHospitalInfo(id),
     {
       select: (data) => {
-        // covert keys to camelCase
+        // Covert keys to camelCase
         return firey.convertKeysToCamelCase(data) as THospital
       },
     }
   )
 
-  if (!data) return <div />
+  if (!data || isLoading) return <HospitalInfoSkeleton />
 
   return (
     <React.Fragment>
@@ -68,19 +70,19 @@ export default function HospitalDetails({ id }: Props) {
           {data.address}
         </p>
 
-        {/* contact informations */}
+        {/* Contact informations */}
         <ContactInformation
           contactNumbers={data.contactNumbers}
           emails={data.emails}
         />
       </div>
 
-      {/* hospital map */}
+      {/* Hospital map */}
       <div className="mt-6 lg:mt-8">
         <Map hospitals={[data]} coordinates={data.geometry.coordinates} />
       </div>
 
-      {/* doctors from the same hospital */}
+      {/* Doctors from the same hospital */}
       {data && (
         <HospitalSuggestions hospitalId={data.id} hospitalName={data.name} />
       )}
