@@ -1,14 +1,12 @@
-import React from "react"
-
 import { SuggestedDoctors, NearbyHospitals } from "@/components"
 
 export default function HospitalsPage() {
   return (
     <div className="pb-4 lg:pb-6">
-      {/* nearby hospitals */}
+      {/* Nearby hospitals */}
       <NearbyHospitals />
 
-      {/* doctor suggestions */}
+      {/* Doctor suggestions */}
       <div className="mt-8">
         <SuggestedDoctors experience={6}>
           <h1 className="flex gap-2 text-2xl lg:text-3xl leading-tight font-bold opacity-90 ml-2 mb-1">

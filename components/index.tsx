@@ -158,6 +158,7 @@ export { default as AppointmentSkeleton } from "./skeletons/AppointmentSkeleton"
 export { default as ActivitySuggestionSkeleton } from "./skeletons/ActivitySuggestionSkeleton"
 export { default as RecommendationChartSkeleton } from "./skeletons/RecommendationChartSkeleton"
 export { default as MealsPageSkeleton } from "./skeletons/MealsPageSkeleton"
+export { default as HospitalSkeleton } from "./skeletons/HospitalSkeleton"
 
 // info ui
 export { default as BasicInfo } from "./ui/patients/info/BasicInfo"
