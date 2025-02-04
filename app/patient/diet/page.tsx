@@ -2,8 +2,9 @@ import {
   DietPreference,
   NutrientsRecommendationChart,
   FoodRecommendations,
-  DietCategory,
+  ActivitySuggestions,
 } from "@/components"
+
 import { format, startOfToday } from "date-fns"
 
 export default function DietPage() {
@@ -18,19 +19,19 @@ export default function DietPage() {
         <h3 className="text-2xl font-extrabold leading-7">Daily Plan</h3>
       </div>
 
-      {/* preference customization popover modal */}
+      {/* Preference customization popover modal */}
       <DietPreference />
 
-      {/* meal recommendations */}
+      {/* Meal recommendations */}
       <div className="flex flex-col 2xl:flex-row w-full 2xl:gap-2 lg:items">
-        {/* recommendation categories */}
-        <DietCategory />
+        {/* Activity Suggestion Metrics */}
+        <ActivitySuggestions />
 
         {/* Nutrition Chart */}
         <NutrientsRecommendationChart />
       </div>
 
-      {/* meal details */}
+      {/* Meal details */}
       <FoodRecommendations />
     </div>
   )

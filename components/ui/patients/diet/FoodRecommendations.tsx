@@ -1,21 +1,21 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { mealRecommendationOptions } from "@/lib/dummy/diets"
-import { firey } from "@/utils"
-import { CityScene, Meal, Pagination } from "@/components"
-import {
-  dietaryRecommendations,
-  partsOfDay,
-} from "@/lib/dummy/recommededOptData"
+import React, { useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+
 import { useApi } from "@/hooks/useApi"
-import { mealService } from "@/lib/services/meal"
-import { TMeal, TMedications } from "@/types"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useProfile } from "@/hooks/useProfile"
+
+import { mealService } from "@/lib/services/meal"
 import { patientService } from "@/lib/services/patient"
+import { mealRecommendationOptions } from "@/lib/dummy/diets"
+import { dietaryRecommendations } from "@/lib/dummy/recommededOptData"
+
+import { firey } from "@/utils"
+import { TMeal, TMedications } from "@/types"
+import { CityScene, Meal, MealsPageSkeleton, Pagination } from "@/components"
 
 export default function FoodRecommendations() {
   const [options, setOptions] = useState(dietaryRecommendations)
@@ -27,20 +27,19 @@ export default function FoodRecommendations() {
   const [limit] = useState<number>(10)
   const [totalPages, setTotalPages] = useState<number>(1)
 
-  const time = new Date().getHours() // get current date in hours
+  const time = new Date().getHours() // Get current date in hours
 
-  // get the current part of the day
+  // Get the current part of the day
   const currentPOD = options.filter(
     (pod) => time >= pod.start && time <= pod.end
   )[0]
 
-  // get the recommeded meals based on category, e.g - breakfast, lunch, dinner
+  // Get the recommeded meals based on category, e.g - breakfast, lunch, dinner
   const category = searchParams.get("category") || currentPOD.status
-  // const category = searchParams.get("category")
 
-  // retrieve all the meals based on the selected category
+  // Retrieve all the meals based on the selected category
   const { data: profile } = useProfile()
-  const { data, isLoading } = useApi(
+  const { data, isLoading: isMealsLoading } = useApi(
     [
       `${
         totalPages > 1
@@ -57,7 +56,7 @@ export default function FoodRecommendations() {
       return mealService.getMeals(token, params.toString())
     },
     {
-      // reconstruct the response to have keys with camelCasing
+      // Reconstruct the response to have keys with camelCasing
       select: (data) => {
         if (data) {
           return firey.convertKeysToCamelCase(data) as {
@@ -70,7 +69,7 @@ export default function FoodRecommendations() {
     }
   )
 
-  const { data: suggestion, isLoading: isSuggestionLoading } = useApi(
+  const { data: suggestion } = useApi(
     [`patients:medications:${profile?.id}`],
     (_, token) => patientService.getMedications(token),
     {
@@ -122,7 +121,7 @@ export default function FoodRecommendations() {
     )
   }
 
-  // handle previous page (pagination btn)
+  // Handle previous page (pagination btn)
   function handlePreviousPage() {
     const oldParams = new URLSearchParams(searchParams)
     oldParams.delete("page")
@@ -136,7 +135,7 @@ export default function FoodRecommendations() {
     )
   }
 
-  // handle next page (pagination btn)
+  // Handle next page (pagination btn)
   function handleNextPage() {
     const oldParams = new URLSearchParams(searchParams)
     oldParams.delete("page")
@@ -150,20 +149,22 @@ export default function FoodRecommendations() {
     )
   }
 
-  // update the total size of page
+  // Update the total size of page
   useEffect(() => {
     if (!data) return
     setTotalPages(Math.ceil(data.total / limit))
   }, [data, limit])
 
+  if (isMealsLoading) return <MealsPageSkeleton />
+
   return (
     <React.Fragment>
-      {/* recommended meals */}
+      {/* Recommended meals */}
       <h4 className="text-center text-sm lg:text-xl mt-8 lg:mt-10 ml-2 font-bold opacity-70 dark:opacity-100 xl:text-start xl:text-base">
         Recommended Foods
       </h4>
 
-      {/* meal options */}
+      {/* Meal options */}
       <div className="mt-3 center gap-4 lg:mt-6 xl:justify-start xl:mt-4">
         {mealRecommendationOptions.map((option, idx) => (
           <div
@@ -217,7 +218,7 @@ export default function FoodRecommendations() {
         ))}
       </div>
 
-      {/* meal recommendations */}
+      {/* Meal recommendations */}
       <div className="ml-2 mt-8 opacity-90 overflow-hidden xl:mt-9">
         <motion.div
           key={category}
@@ -247,18 +248,21 @@ export default function FoodRecommendations() {
       </div>
 
       <motion.div className="mt-4 mb-4 grid grid-cols-1 xxs:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5 gap-2 md:gap-2.5 lg:gap-3 2xl:gap-4">
-        {data &&
-          data.meals.length > 0 &&
+        {data && data.meals.length > 0 ? (
           data.meals.map((meal: any, idx: number) => (
             <Meal
               meal={meal}
               idx={idx}
               key={`meal-recommendation-${meal.category}-${idx}`}
             />
-          ))}
+          ))
+        ) : (
+          // Show State if no Meal was found
+          <CityScene content="No Meal Found" />
+        )}
       </motion.div>
 
-      {/* pagination controls */}
+      {/* Pagination controls */}
       {totalPages > 1 && (
         <Pagination
           totalPages={totalPages}
@@ -268,10 +272,6 @@ export default function FoodRecommendations() {
           onPageChange={handlePageChange}
         />
       )}
-
-      {/* empty data and loading state */}
-      {isLoading && <CityScene content="Loading..." />}
-      {data && data.total === 0 && <CityScene content="No Meal Found" />}
     </React.Fragment>
   )
 }

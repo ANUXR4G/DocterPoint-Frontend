@@ -57,6 +57,7 @@ import {
   NavigationIcon,
   MailUploadIcon,
   ImageUploadIcon,
+  ArrowUpDown,
 } from "./svg"
 
 type Props = {
@@ -69,6 +70,9 @@ export default function Icon({ name, className, pathClassName }: Props) {
   switch (name) {
     case "search":
       return <SearchIcon className={className} pathClassName={pathClassName} />
+
+    case "arrow-up-down":
+      return <ArrowUpDown className={className} pathClassName={pathClassName} />
 
     case "image-upload":
       return (

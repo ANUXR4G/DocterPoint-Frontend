@@ -7,10 +7,11 @@ import { patientService } from "@/lib/services/patient"
 import { TMedications } from "@/types"
 import { firey } from "@/utils"
 import Image from "next/image"
+import ActivitySuggestionSkeleton from "../../../skeletons/ActivitySuggestionSkeleton"
 
-export default function DietCategory() {
-  // retrieve medication details
+export default function ActivitySuggestions() {
   const { data: profile } = useProfile()
+  // Retrieve medication details
   const { data: suggestions, isLoading } = useApi(
     [`patients:medications:${profile?.id}`],
     (_, token) => patientService.getMedications(token),
@@ -27,9 +28,9 @@ export default function DietCategory() {
       suggestions && !Array.isArray(suggestions) ? suggestions.sleep : "8hrs",
   })
 
-  if (isLoading) return <div />
-
-  return (
+  return isLoading ? (
+    <ActivitySuggestionSkeleton /> // Show Loading Skeleton
+  ) : (
     <div className="mt-3 md:mt-4 grid grid-cols-3 2xl:grid-cols-3 gap-2 lg:w-full min-h-44 lg:items-center">
       {options.map((option, idx) => (
         <div

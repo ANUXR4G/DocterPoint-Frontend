@@ -4,7 +4,11 @@ import Image from "next/image"
 import React, { useState } from "react"
 import { nutrientsChartData } from "@/lib/dummy/diets"
 import { PieChart, Pie, ResponsiveContainer } from "recharts"
-import { RenderNutritionChart, Icon } from "@/components"
+import {
+  RenderNutritionChart,
+  Icon,
+  RecommendationChartSkeleton,
+} from "@/components"
 import { useProfile } from "@/hooks/useProfile"
 import { useApi } from "@/hooks/useApi"
 import { patientService } from "@/lib/services/patient"
@@ -24,7 +28,7 @@ export default function NutrientsRecommendationChart() {
       select: (data) => firey.convertKeysToCamelCase(data) as TMedications | [],
       onSuccess: (data) => {
         if (!Array.isArray(data)) {
-          setNutritions(data.nutritions)
+          setNutritions(data.nutritions as any)
         }
       },
     }
@@ -34,7 +38,7 @@ export default function NutrientsRecommendationChart() {
     setActiveNutrient(index)
   }
 
-  if (isLoading) return <div />
+  if (isLoading) return <RecommendationChartSkeleton />
 
   return (
     <div>

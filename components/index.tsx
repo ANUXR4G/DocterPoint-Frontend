@@ -55,7 +55,7 @@ export { default as EmptySuggestions } from "./fancy/EmptySuggestions"
 
 // menus
 export { default as ProfileMenu } from "./menu/ProfileMenu"
-export { default as DietCategory } from "./menu/DietCategory"
+export { default as ActivitySuggestions } from "./ui/patients/diet/ActivitySuggestions"
 
 // switches
 export { default as ThemeSwitch } from "./switch/ThemeSwitch"
@@ -155,6 +155,9 @@ export { default as PatientInfoSkeleton } from "./skeletons/PatientInfoSkeleton"
 export { default as ProfileSkeleton } from "./skeletons/ProfileSkeleton"
 export { default as DoctorInfoSkeleton } from "./skeletons/DoctorInfoSkeleton"
 export { default as AppointmentSkeleton } from "./skeletons/AppointmentSkeleton"
+export { default as ActivitySuggestionSkeleton } from "./skeletons/ActivitySuggestionSkeleton"
+export { default as RecommendationChartSkeleton } from "./skeletons/RecommendationChartSkeleton"
+export { default as MealsPageSkeleton } from "./skeletons/MealsPageSkeleton"
 
 // info ui
 export { default as BasicInfo } from "./ui/patients/info/BasicInfo"
