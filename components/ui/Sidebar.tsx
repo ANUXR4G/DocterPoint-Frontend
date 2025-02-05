@@ -54,8 +54,9 @@ export default function Sidebar() {
               <div className="w-12 h-12 flex items-center justify-center">
                 <Icon
                   name={icon}
-                  pathClassName={`transition duration-200 dark:stroke-neutral-300 ${
-                    pathname === dest && `xl:stroke-[--primary-white]`
+                  pathClassName={`transition duration-200 dark:stroke-neutral-400 ${
+                    pathname === dest &&
+                    `stroke-neutral-200 dark:stroke-neutral-100`
                   }`}
                 />
               </div>
@@ -91,7 +92,11 @@ export default function Sidebar() {
               <div className="rounded-xl w-12 h-12 flex items-center justify-center">
                 <Icon
                   name={icon}
-                  pathClassName="dark:stroke-[--primary-white]"
+                  pathClassName={
+                    pathname === dest
+                      ? `stroke-neutral-700 dark:stroke-neutral-300`
+                      : `dark:stroke-neutral-400`
+                  }
                 />
               </div>
               <span className="hidden  xl:block text-sm font-bold">{name}</span>

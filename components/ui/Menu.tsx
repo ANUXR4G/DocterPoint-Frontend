@@ -63,7 +63,7 @@ export default function Menu() {
                 onClick={() => closeMenu()}
                 className={`flex transition duration-200 items-center py-2 px-2 gap-2 rounded-md ${
                   pathname === dest
-                    ? `bg-[--primary-blue] dark:bg-neutral-800 hover:bg-[--primary-blue] text-[--primary-white]`
+                    ? `dark:text-[--primary-white] before:absolute before:content-[''] before:w-[5px] before:h-5/6 before:bg-[--primary-blue] bg-neutral-200 dark:bg-neutral-800 xl:bg-[--primary-blue] before:top-[5px] before:left-[-12px] before:rounded-r-xl xl:before:hidden`
                     : `hover:bg-neutral-200 dark:hover:bg-neutral-800`
                 }`}
                 key={`sidebar_upper_link_${idx}`}
@@ -71,10 +71,11 @@ export default function Menu() {
                 <div>
                   <Icon
                     name={icon}
-                    pathClassName={`transition duration-200  dark:stroke-neutral-300 ${
+                    className="size-[22px]"
+                    pathClassName={`transition duration-200 ${
                       pathname === dest
-                        ? `stroke-[--primary-white]`
-                        : `opacity-90`
+                        ? `dark:stroke-neutral-200`
+                        : `stroke-neutral-700 dark:stroke-neutral-400`
                     }`}
                   />
                 </div>
@@ -107,11 +108,12 @@ export default function Menu() {
                 >
                   <div
                     className={`flex items-center transition duration-200 py-2 px-2 gap-2 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 ${
-                      idx === 2 && `mt-8`
-                    }`}
+                      idx === 2 && `mt-8 mb-4`
+                    } ${idx === 0 && `stroke-neutral-700`}`}
                   >
                     <div>
                       <Icon
+                        className="size-[22px]"
                         pathClassName="opacity-90 dark:stroke-neutral-300"
                         name={icon}
                       />
