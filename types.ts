@@ -347,3 +347,9 @@ export type TMessage = {
   senderId: string
   receiverId?: string | null
 }
+
+export type TRouteProps = {
+  name: string
+  icon: IconNames
+  dest?: string
+}

@@ -1,30 +1,25 @@
 import { TRouteProps } from "@/types"
 
-export const routeLinks: TRouteProps[] = [
+export const doctorRoutes: TRouteProps[] = [
   {
     name: "Dashboard",
     icon: "home",
-    dest: "/patient/dashboard",
+    dest: "/doctor/dashboard",
   },
   {
-    name: "Diet Management",
-    icon: "chart-pie",
-    dest: "/patient/diet",
+    name: "Patients",
+    icon: "beat-graphics",
+    dest: "/doctor/appointments/patients",
+  },
+  {
+    name: "Appointments",
+    icon: "calendar",
+    dest: "/doctor/appointments",
   },
   {
     name: "Doctors",
     icon: "three-people",
     dest: "/hospitals/doctors",
-  },
-  {
-    name: "Appointments",
-    icon: "calendar",
-    dest: "/patient/appointments",
-  },
-  {
-    name: "Monitoring",
-    icon: "chart-graph",
-    dest: "/patient/monitoring",
   },
   {
     name: "Hospitals",
@@ -34,7 +29,7 @@ export const routeLinks: TRouteProps[] = [
   {
     name: "Settings",
     icon: "settings",
-    dest: "/patient/settings",
+    dest: "/doctor/settings",
   },
   {
     name: "Help",

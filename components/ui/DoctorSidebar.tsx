@@ -1,26 +1,23 @@
 "use client"
 
+import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 
 import { Icon, Background } from "@/components"
-import { routeLinks as content } from "@/lib/dummy/routes"
+import { doctorRoutes as content } from "@/lib/dummy/doctorRoutes"
 
-import { useProfile } from "@/hooks/useProfile"
 import { useAppContext } from "@/hooks/useAppContext"
 
-import Link from "next/link"
-
-export default function Sidebar() {
+export default function DoctorSidebar() {
   let pathname = usePathname()
 
   const router = useRouter()
 
-  const { closeMenu, toggleChat } = useAppContext()
-  const { logout } = useProfile()
+  const { closeMenu } = useAppContext()
 
   function handleHelpModal() {
     closeMenu()
-    toggleChat()
+    // toggleChat()
   }
 
   return (
@@ -41,7 +38,7 @@ export default function Sidebar() {
           <span className="hidden xl:block text-xs text-opacity-70 ml-2 font-medium">
             Overview
           </span>
-          {content.slice(0, 6).map(({ name, icon, dest }, idx) => (
+          {content.slice(0, 5).map(({ name, icon, dest }, idx) => (
             <Link
               href={dest ?? "#"}
               className={`rounded-xl xl:rounded-md transition duration-200 relative xl:flex xl:items-center ${
@@ -70,7 +67,7 @@ export default function Sidebar() {
           <span className="hidden xl:block text-xs text-opacity-70 ml-2  font-medium">
             Support
           </span>
-          {content.slice(6, content.length).map(({ name, icon, dest }, idx) => (
+          {content.slice(5, content.length).map(({ name, icon, dest }, idx) => (
             <button
               className={`flex items-center transition duration-200 gap-2 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 ${
                 idx === 2 &&
@@ -78,14 +75,14 @@ export default function Sidebar() {
               } ${idx === 0 && `stroke-neutral-700`}`}
               key={`sidebar_bottom_link_${idx}`}
               onClick={() => {
-                // handle user logout
+                // Handle user logout
                 if (idx === 2) {
-                  logout()
+                  // logout()
                   closeMenu()
                 } else if (dest) {
-                  router.push(dest) // handle settings
+                  router.push(dest) // Handle settings
                 } else {
-                  handleHelpModal() // handle help modal
+                  handleHelpModal() // Handle help modal
                 }
               }}
             >
