@@ -4,7 +4,7 @@ from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_async_db as db
-from app.services.hospital import HospitalService
+from app.services.public import HospitalService
 from app.core.dependecies import cache
 
 

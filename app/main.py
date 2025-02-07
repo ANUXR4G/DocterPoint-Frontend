@@ -29,6 +29,8 @@ from app.routers.admin import (
     users,
 )
 
+from app.routers.doctor import info as doctor_profile
+
 
 from app.workers.celery import celery
 from app.workers.tasks import send_email_task
@@ -142,6 +144,12 @@ app.include_router(chats.router, prefix="/chats", tags=["Patient / Chats"])
 
 # websocket routes (for realtime health tracker simulation)
 app.include_router(websockets.router, prefix="/ws")
+
+
+# The following routes are used by Doctors
+app.include_router(
+    doctor_profile.router, prefix="/users/doctor", tags=["Doctors / Profile"]
+)
 
 
 # # a dmin routes (administrational authetication required)

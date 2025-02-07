@@ -4,7 +4,7 @@ from app.core.dependecies import cache
 from redis import Redis
 
 from app.db import get_async_db as db
-from app.services.doctor import DoctorService
+from app.services.public import DoctorService
 
 
 router = APIRouter()
