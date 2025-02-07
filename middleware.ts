@@ -1,22 +1,29 @@
 import { NextResponse, NextRequest } from "next/server"
 import { SCOPES } from "./scopes"
 
-const PROTECTED_ROUTES = ["/patient/:path*", "/doctor/:path*"]
+const PROTECTED_ROUTES = [
+  "/patient/:path*",
+  "/doctor/:path*",
+  "/hospitals:path*",
+  "/settings:path*",
+]
 const AUTH_ROUTES = ["/login", "/signup"]
 
-// define role-based routes and scopes
+// Define role-based routes and scopes
 const roleScopes: Record<string, string[]> = {
   patient: SCOPES["user"],
   doctor: SCOPES["doctor"],
+  admin: SCOPES["admin"],
 }
 
-// define role-based dashboard for users
+// Define role-based dashboard for users
 const dashboardURLs: { [key: string]: string } = {
   patient: "/patient/dashboard",
   doctor: "/doctor/dashboard",
+  admin: "/admin/dashboard",
 }
 
-// check if the user scopes matches the required scopes
+// Check if the user scopes matches the required scopes
 const checkScopes = (
   userScopes: string[],
   requiredScopes: string[]
@@ -24,7 +31,7 @@ const checkScopes = (
   return requiredScopes.every((scope) => userScopes.includes(scope))
 }
 
-// extract scopes from token
+// Extract scopes from token
 function extractScope(token?: string): string[] {
   if (!token) return []
   try {
@@ -47,21 +54,21 @@ export function middleware(req: NextRequest) {
   const token = req.cookies.get("refresh_token")?.value // token stored as cookie
   const userScopes = extractScope(token) // scopes extracted from token
 
-  // redirect to login page if user is trying to access protected routes without a token
+  // Redirect to login page if user is trying to access protected routes without a token
   if (isProtectedRoute && !token) {
-    // get the triggering routing identifier
+    // Get the triggering routing identifier
     const destination = req.nextUrl.href.split(
       `${process.env.NEXT_PUBLIC_OG_URL}/`
     )[1]
     const url = destination
       ? `/login?callback=${encodeURIComponent(destination)}`
-      : "/login" // callback based on routing identifier
+      : "/login" // Callback based on routing identifier
     return NextResponse.redirect(new URL(url, req.nextUrl))
   }
 
-  // restrict protected routes based on scopes
+  // Restrict protected routes based on scopes
   // e.g, if /patient/dashboard page holder visits /doctor/dashboard page,
-  // then redirect to /login page which will eventually make that dude land/redirect on/to his own dashboard
+  // Then redirect to /login page which will eventually make that dude land/redirect on/to his own dashboard
   for (const [role, _] of Object.entries(dashboardURLs)) {
     if (
       pathname.startsWith(`/${role}`) &&
@@ -71,7 +78,7 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // redirect authenticted users to dashboards from login/signup pages
+  // Redirect authenticted users to dashboards from login/signup pages
   for (const [role, url] of Object.entries(dashboardURLs)) {
     if (
       token &&

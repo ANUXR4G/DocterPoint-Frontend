@@ -7,10 +7,10 @@ export type ThemeOptions = "light" | "dark" | "system"
 
 type AppState = {
   showMenu: boolean
-  showChat: boolean
+  showHelp: boolean
   sidebarExpanded: boolean
   toggleMenu: () => void
-  toggleChat: () => void
+  toggleHelp: () => void
   expandSidebar: () => void
   closeMenu: () => void
   theme: ThemeOptions | null
@@ -19,11 +19,11 @@ type AppState = {
 
 const initialState: AppState = {
   showMenu: false,
-  showChat: false,
+  showHelp: false,
   sidebarExpanded: false,
   theme: "system",
   toggleMenu: () => {},
-  toggleChat: () => {},
+  toggleHelp: () => {},
   expandSidebar: () => {},
   closeMenu: () => {},
   changeTheme: () => {},
@@ -44,7 +44,7 @@ const queryClient = new QueryClient({
 function Providers({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeOptions>("system")
   const [showMenu, setShowMenu] = useState<boolean>(false)
-  const [showChat, setShowChat] = useState<boolean>(false)
+  const [showHelp, setShowHelp] = useState<boolean>(false)
   const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(false)
 
   // open sidebar
@@ -63,8 +63,8 @@ function Providers({ children }: { children: React.ReactNode }) {
   }
 
   // show help modal
-  function toggleChat() {
-    setShowChat((prev) => !prev)
+  function toggleHelp() {
+    setShowHelp((prev) => !prev)
   }
 
   // change theme
@@ -122,10 +122,10 @@ function Providers({ children }: { children: React.ReactNode }) {
       <AppContext.Provider
         value={{
           showMenu,
-          showChat,
+          showHelp,
           sidebarExpanded,
           toggleMenu,
-          toggleChat,
+          toggleHelp,
           expandSidebar,
           closeMenu,
           changeTheme,

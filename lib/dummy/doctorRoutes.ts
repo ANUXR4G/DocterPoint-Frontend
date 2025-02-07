@@ -12,6 +12,11 @@ export const doctorRoutes: TRouteProps[] = [
     dest: "/doctor/appointments/patients",
   },
   {
+    name: "Inbox",
+    icon: "inbox",
+    dest: "/doctor/inbox",
+  },
+  {
     name: "Appointments",
     icon: "calendar",
     dest: "/doctor/appointments",

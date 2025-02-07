@@ -1,13 +1,9 @@
 // components
-export { default as Header } from "./ui/Header"
-export { default as DoctorHeader } from "./ui/DoctorHeader"
 export { default as Menu } from "./ui/Menu"
-export { default as DoctorMenu } from "./ui/DoctorMenu"
-export { default as Sidebar } from "./ui/Sidebar"
-export { default as DoctorSidebar } from "./ui/DoctorSidebar"
-export { default as Navigation } from "./ui/Navigation"
-export { default as DoctorNavigation } from "./ui/DoctorNavigation"
 export { default as Icon } from "./icons"
+export { default as Header } from "./ui/Header"
+export { default as Sidebar } from "./ui/Sidebar"
+export { default as Navigation } from "./ui/Navigation"
 
 // buttons
 export { default as FlipEfButton } from "./buttons/FlipButton"
@@ -59,7 +55,6 @@ export { default as EmptySuggestions } from "./fancy/EmptySuggestions"
 
 // menus
 export { default as ProfileMenu } from "./menu/ProfileMenu"
-export { default as DoctorProfileMenu } from "./menu/DoctorProfileMenu"
 
 // activity
 export { default as ActivitySuggestions } from "./ui/patients/diet/ActivitySuggestions"
@@ -83,7 +78,6 @@ export { default as MultiHealthModal } from "./modals/MultiHealthModal"
 export { default as SingleHealthModal } from "./modals/SingleHealthModal"
 export { default as ActivityModal } from "./modals/ActivityModal"
 export { default as ChatModal } from "./modals/ChatModal"
-export { default as ChatWithDoctorUI } from "./modals/DoctorChatModal"
 
 // searchbox
 export { default as BookingSearchbox } from "./searchbox/BookingSearchbox"

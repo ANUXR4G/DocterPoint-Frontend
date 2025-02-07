@@ -62,10 +62,6 @@ export default function AppointmentModal({
     time: doctor.availableTimes.split(": ")[1],
   })
 
-  const pathname = usePathname()
-  const router = useRouter()
-  const { data } = useProfile()
-
   // create appointment
   const { mutate } = useApiMutation<{
     payload: Record<string, unknown>
@@ -175,21 +171,7 @@ export default function AppointmentModal({
         className="h-full sm:h-3/4 w-full max-w-[720px]"
         direction="center"
         secondaryBtn={
-          data ? (
-            <Button onClick={() => handleConfirmation(details)}>Confirm</Button>
-          ) : (
-            <Button
-              onClick={() => {
-                router.push(
-                  `/login?callback=${pathname}?${encodeURIComponent(
-                    `reload=t&popup=t&id=${doctor.id}`
-                  )}`
-                )
-              }}
-            >
-              Login
-            </Button>
-          )
+          <Button onClick={() => handleConfirmation(details)}>Confirm</Button>
         }
       >
         <div className="overflow-x-hidden overflow-y-auto custom-scroll">

@@ -1,7 +1,16 @@
 "use client"
 
+import Link from "next/link"
 import Image from "next/image"
+import { useQuery } from "react-query"
 import React, { useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+
+import { firey } from "@/utils"
+import { TDoctor, THospital } from "@/types"
+import { doctorServices } from "@/lib/services/doctor"
+import { hospitalService } from "@/lib/services/hospital"
+
 import {
   Modal,
   Map,
@@ -10,16 +19,9 @@ import {
   AppointmentModal,
   SuggestedDoctors,
   NoData,
-  ChatWithDoctorUI,
   DoctorInfoSkeleton,
+  ChatModal,
 } from "@/components"
-import { useQuery } from "react-query"
-import { doctorServices } from "@/lib/services/doctor"
-import { hospitalService } from "@/lib/services/hospital"
-import { firey } from "@/utils"
-import { TDoctor, THospital } from "@/types"
-import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 export default function DoctorInfoPage() {
   const searchParams = useSearchParams()
@@ -84,7 +86,7 @@ export default function DoctorInfoPage() {
     <React.Fragment>
       <div className="pt-4">
         <button
-          className="absolute z-[5] top-16 right-3 md:right-4 center size-9 md:size-10 bg-neutral-200/60 rounded-xl hover:bg-neutral-200/100 dark:bg-neutral-700 dark:hover:bg-neutral-600 transition"
+          className="absolute z-[5] top-20 right-3.5 center size-9 md:size-10 bg-neutral-200/60 rounded-xl hover:bg-neutral-200/100 dark:bg-neutral-700 dark:hover:bg-neutral-600 transition"
           onClick={() => setIsOpen(true)}
         >
           <Icon
@@ -247,12 +249,14 @@ export default function DoctorInfoPage() {
         </div>
       </Modal>
 
-      {/* Chat With Doctor UI */}
-      <ChatWithDoctorUI
-        isOpen={isOpen}
-        receiverId={information.id}
-        closeHandler={() => setIsOpen(false)}
-      />
+      {/* Chat with doctor  */}
+      {isOpen && (
+        <ChatModal
+          isOpen={isOpen}
+          toggleChat={() => setIsOpen(false)}
+          receiverId={information.id}
+        />
+      )}
     </React.Fragment>
   )
 }

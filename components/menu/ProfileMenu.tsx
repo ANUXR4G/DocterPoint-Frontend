@@ -4,30 +4,42 @@ import Image from "next/image"
 import Link from "next/link"
 
 import { Icon, SimpleModal, ThemeSwitch } from "@/components"
-import { useProfile } from "@/hooks/useProfile"
 import { useAppContext } from "@/hooks/useAppContext"
+import { TDoctor, TPatient } from "@/types"
+import { userService } from "@/lib/services/user"
+import { useRouter } from "next/navigation"
 
 type Props = {
   open: boolean
+  data?: TPatient | TDoctor
   toggleModal: () => void
   closeModal: () => void
 }
 
-export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
-  const { toggleChat } = useAppContext()
-  const { data, logout } = useProfile()
+export default function ProfileMenu({
+  data,
+  open,
+  toggleModal,
+  closeModal,
+}: Props) {
+  const router = useRouter()
+
+  const { toggleHelp } = useAppContext()
 
   function handleSupport() {
-    toggleChat()
+    toggleHelp()
     closeModal()
   }
 
-  function handleLogout() {
-    logout()
+  async function handleLogout() {
+    const response = await userService.logout()
+    if (response.ok && typeof window !== "undefined") {
+      router.refresh()
+      window.location.reload()
+    }
+
     closeModal()
   }
-
-  if (!data) return <div />
 
   return (
     <SimpleModal
@@ -42,9 +54,9 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
           <Image
             fill
             src={
-              data.imgSrc ||
+              data?.imgSrc ||
               `${`https://res.cloudinary.com/firey/image/upload/v1708816390/iub/${
-                data.gender
+                data?.gender
                   ? data.gender === `male`
                     ? `male`
                     : `female`
@@ -52,7 +64,7 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
               }_12.jpg`}`
             }
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            alt={`${data.id}.jpg`}
+            alt={`${data?.id}.jpg`}
             style={{ objectFit: "cover" }}
             priority
             className="rounded-full"
@@ -92,7 +104,7 @@ export default function ProfileMenu({ open, toggleModal, closeModal }: Props) {
             </span>
           </Link>
           <Link
-            href={"/patient/settings"}
+            href={"/doctor/settings"}
             className="w-full group flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60"
             onClick={closeModal}
           >

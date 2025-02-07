@@ -1,7 +1,7 @@
 import React from "react"
 import { Background, Navigation } from "@/components"
 
-export default function HospitalLayout({
+export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode

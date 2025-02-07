@@ -23,6 +23,7 @@ export default function ConnectDevice({ isLoading }: Props) {
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           alt="device.png"
           style={{ objectFit: "cover", filter: "contrast(0.9)" }}
+          priority
         />
       </div>
       <ShinnyEfBtn

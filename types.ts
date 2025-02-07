@@ -42,6 +42,7 @@ export type IconNames =
   | "calendar"
   | "chart-graph"
   | "sun"
+  | "inbox"
   | "moon"
   | "written-page"
   | "heart"
@@ -342,7 +343,7 @@ export type TMessage = {
   id: string
   type: string
   content: string
-  createdAt: Date
+  createdAt: string
   isSeen: boolean
   senderId: string
   receiverId?: string | null

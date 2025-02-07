@@ -82,6 +82,8 @@ async function logout() {
   if (!response.ok) {
     throw new Error("failed to log out rn, try again later.")
   }
+
+  return response
 }
 
 export const userService = {

@@ -227,6 +227,14 @@ function getTokenDuration(token: string) {
   return decodedPayload.exp
 }
 
+// Decode the JWT Token
+function getTokenInfo(token: string) {
+  if (!token) return "firey"
+  const [, payload] = token.split(".")
+  if (!payload) return "firey"
+  return JSON.parse(atob(payload))
+}
+
 function objIsEmpty(values: Record<string, unknown[]>) {
   return Object.values(values).every((item) => item.length === 0)
 }
@@ -281,24 +289,50 @@ function countSizeOfNestedArrObject(givenObj: { [key: string]: any }) {
   )
 }
 
+function uuidToBase64(uuid: unknown): string | null {
+  if (typeof uuid !== "string") {
+    console.error("Invalid UUID:", uuid)
+    return null
+  }
+
+  // Remove hyphens from the UUID
+  const hexString = uuid.replace(/-/g, "")
+
+  // Convert hex string to byte array
+  const byteArray = new Uint8Array(hexString.length / 2)
+  for (let i = 0; i < hexString.length; i += 2) {
+    byteArray[i / 2] = parseInt(hexString.substring(i, i + 2), 16)
+  }
+
+  // Convert byte array to Base64
+  const base64String = btoa(
+    String.fromCharCode.apply(null, Array.from(byteArray))
+  )
+
+  // Remove any extra padding '=' characters added by base64 encoding
+  return base64String.replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_")
+}
+
 export const firey = {
-  groupByCategory,
-  convertMinToHourMinFormat,
-  getSpecificArr,
   getID,
-  calculateAge,
-  generateRandomNum,
-  makeString,
-  filterNullValues,
-  getTokenDuration,
   camelize,
-  snakeToCamelCase,
-  convertKeysToCamelCase,
-  objIsEmpty,
-  createSearchParams,
-  generateEncryption: generateEncryptionAES,
-  distributeItems,
-  countSizeOfNestedArrObject,
-  camelToCapitalize,
+  makeString,
   chunkArray,
+  objIsEmpty,
+  getTokenInfo,
+  uuidToBase64,
+  calculateAge,
+  getSpecificArr,
+  distributeItems,
+  groupByCategory,
+  snakeToCamelCase,
+  getTokenDuration,
+  filterNullValues,
+  generateRandomNum,
+  camelToCapitalize,
+  createSearchParams,
+  convertKeysToCamelCase,
+  convertMinToHourMinFormat,
+  countSizeOfNestedArrObject,
+  generateEncryption: generateEncryptionAES,
 }

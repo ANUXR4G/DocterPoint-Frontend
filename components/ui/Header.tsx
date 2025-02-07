@@ -1,19 +1,26 @@
 "use client"
 
 import { useAppContext } from "@/hooks/useAppContext"
-import { Icon, ProfileMenu } from "@/components"
+import { ProfileMenu, Icon } from "@/components"
 import { motion, useMotionValueEvent, useScroll } from "framer-motion"
-import { useState } from "react"
+import React, { useState } from "react"
 import { visibleAnimation } from "@/lib/animations"
+import { useUser } from "@/hooks/useUser"
 
-export default function Header() {
-  const { showMenu, toggleMenu } = useAppContext()
+type Props = {
+  role?: string | null
+}
+
+export default function Header({ role }: Props) {
   const [hidden, setHidden] = useState<boolean>(false)
-  const [preventScroll, setPreventScroll] = useState<boolean>(false)
   const [showProfileMenu, setShowProfileMenu] = useState<boolean>(false)
 
   const { scrollY } = useScroll()
+  const { showMenu, toggleMenu } = useAppContext()
 
+  const { data } = useUser(role || "default")
+
+  // Track the scrolling position to show the header
   useMotionValueEvent(scrollY, "change", (latest) => {
     const prev = scrollY.getPrevious()
 
@@ -27,6 +34,7 @@ export default function Header() {
     }
   })
 
+  // Toggle profile menu modal
   const closeProfileMenu = () => setShowProfileMenu(false)
   const toggleProfileMenu = () => setShowProfileMenu((prev) => !prev)
 
@@ -36,7 +44,7 @@ export default function Header() {
       animate={hidden ? "hidden" : "visible"}
       className={`ml-auto w-full xl:w-[calc(100%-240px)] sticky top-0 min-h-16 flex items-center justify-between bg-[--primary-white]/100 px-3 xs:px-4 z-30 dark:bg-zinc-900/60 backdrop-blur-lg`}
     >
-      {/* hamburger menu */}
+      {/* Hamburger menu */}
       <div
         className={`w-8 h-3 relative rounded-sm hover:cursor-pointer before:absolute before:content-[''] before:w-full before:h-[3px] before:bg-[--secondary-black] dark:before:bg-neutral-400 before:top-[1px] after:absolute after:content-[''] after:w-2/3 after:h-[3px] after:bg-[--secondary-black] dark:after:bg-neutral-400 after:rounded-sm before:rounded-sm after:bottom-0 before:ease-in-out before:duration-300 after:ease-in-out after:duration-300 after:delay-75 md:hidden ${
           showMenu
@@ -46,32 +54,35 @@ export default function Header() {
         onClick={toggleMenu}
       />
 
-      {/* header controls */}
+      {/* Header controls */}
       <div className="center gap-x-3 md:w-full md:justify-end">
-        {/* search control */}
-        <div className="w-9 h-9 center rounded-full hover:cursor-pointer">
-          <Icon
-            name="search"
-            className="h-7 w-7 opacity-95"
-            pathClassName="dark:stroke-neutral-400"
-          />
-        </div>
+        <React.Fragment>
+          {/* Search control */}
+          <div className="w-9 h-9 center rounded-full hover:cursor-pointer">
+            <Icon
+              name="search"
+              className="h-7 w-7 opacity-95"
+              pathClassName="dark:stroke-neutral-400"
+            />
+          </div>
 
-        {/* notification control */}
-        <div className="w-9 h-9 center rounded-full hover:cursor-pointer">
-          <Icon
-            name="bell"
-            className="h-7 w-7"
-            pathClassName="dark:stroke-neutral-400"
-          />
-        </div>
+          {/* Notification control */}
+          <div className="w-9 h-9 center rounded-full hover:cursor-pointer">
+            <Icon
+              name="bell"
+              className="h-7 w-7"
+              pathClassName="dark:stroke-neutral-400"
+            />
+          </div>
 
-        {/* profile control */}
-        <ProfileMenu
-          open={showProfileMenu}
-          toggleModal={toggleProfileMenu}
-          closeModal={closeProfileMenu}
-        />
+          {/* Profile Menu */}
+          <ProfileMenu
+            data={data}
+            open={showProfileMenu}
+            toggleModal={toggleProfileMenu}
+            closeModal={closeProfileMenu}
+          />
+        </React.Fragment>
       </div>
     </motion.div>
   )

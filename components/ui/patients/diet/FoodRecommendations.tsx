@@ -155,7 +155,7 @@ export default function FoodRecommendations() {
     setTotalPages(Math.ceil(data.total / limit))
   }, [data, limit])
 
-  if (isMealsLoading) return <MealsPageSkeleton />
+  if (isMealsLoading || !data) return <MealsPageSkeleton />
 
   return (
     <React.Fragment>
@@ -248,7 +248,7 @@ export default function FoodRecommendations() {
       </div>
 
       <motion.div className="mt-4 mb-4 grid grid-cols-1 xxs:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5 gap-2 md:gap-2.5 lg:gap-3 2xl:gap-4">
-        {data && data.meals.length > 0 ? (
+        {data.meals.length > 0 ? (
           data.meals.map((meal: any, idx: number) => (
             <Meal
               meal={meal}

@@ -40,9 +40,29 @@ async function search(q: string) {
   return response.json()
 }
 
+async function getDoctorProfile(token: string) {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API}/users/doctor/info`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Failed to retrieve doctor profile information`)
+  }
+
+  return response.json()
+}
+
 export const doctorServices = {
   search,
   getDoctors,
   getDoctorInfo,
+  getDoctorProfile,
   getDoctorsFromHospital,
 }

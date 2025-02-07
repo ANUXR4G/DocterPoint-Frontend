@@ -1,30 +1,35 @@
 "use client"
 
+import Link from "next/link"
+
 import { useRef } from "react"
 import { motion } from "framer-motion"
 
 import { fadingAnimation, slideInAnimation } from "@/lib/animations"
-import { routeLinks as content } from "@/lib/dummy/routes"
+import { routes } from "@/lib/dummy/routes"
 
 import { Background, Icon } from "@/components"
 import { usePathname, useRouter } from "next/navigation"
 import { useClickOutside } from "@/hooks/useClickOutside"
 import { useAppContext } from "@/hooks/useAppContext"
-import { useProfile } from "@/hooks/useProfile"
 
-import Link from "next/link"
+type Props = {
+  role: string | null
+  logout: () => Promise<void>
+}
 
-export default function Menu() {
+export default function Menu({ role, logout }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const pathname = usePathname()
 
-  const { closeMenu, toggleChat } = useAppContext()
-  const { logout } = useProfile(false)
+  const pathname = usePathname()
+  const { closeMenu, toggleHelp } = useAppContext()
 
   function handleHelpModal() {
     closeMenu()
-    toggleChat()
+    toggleHelp()
   }
+
+  const content = role && role in routes ? routes[role] : []
 
   const router = useRouter()
 
@@ -32,7 +37,7 @@ export default function Menu() {
 
   return (
     <>
-      {/* mobile menu */}
+      {/* Mobile menu */}
       <motion.nav
         variants={slideInAnimation}
         initial="initial"
@@ -43,7 +48,7 @@ export default function Menu() {
       >
         <Background name="half-box-pattern" className="hidden dark:block" />
         <Background name="gradient-3" />
-        {/* logo */}
+        {/* Logo */}
         <div className="center gap-2 mb-8">
           <Icon className="w-8 h-8 -ml-4" name="gluco-guide" />
           <h3 className="font-bold bg-gradient-to-r text-lg from-blue-800 to-indigo-900 bg-clip-text text-transparent dark:from-indigo-500 dark:to-blue-500">
@@ -52,57 +57,64 @@ export default function Menu() {
         </div>
 
         <div className="h-full w-full flex flex-col px-4 pb-3 justify-between overflow-y-auto custom-scroll">
-          {/* overview routes */}
+          {/* Overview routes */}
           <div className="flex flex-col gap-3">
             <span className="text-xs text-opacity-70 ml-2 font-medium">
               Overview
             </span>
-            {content.slice(0, 6).map(({ name, icon, dest }, idx) => (
-              <Link
-                href={dest ?? "#"}
-                onClick={() => closeMenu()}
-                className={`flex transition duration-200 items-center py-2 px-2 gap-2 rounded-md ${
-                  pathname === dest
-                    ? `dark:text-[--primary-white] before:absolute before:content-[''] before:w-[5px] before:h-5/6 before:bg-[--primary-blue] bg-neutral-200 dark:bg-neutral-800 xl:bg-[--primary-blue] before:top-[5px] before:left-[-12px] before:rounded-r-xl xl:before:hidden`
-                    : `hover:bg-neutral-200 dark:hover:bg-neutral-800`
-                }`}
-                key={`sidebar_upper_link_${idx}`}
-              >
-                <div>
-                  <Icon
-                    name={icon}
-                    className="size-[22px]"
-                    pathClassName={`transition duration-200 ${
-                      pathname === dest
-                        ? `dark:stroke-neutral-200`
-                        : `stroke-neutral-700 dark:stroke-neutral-400`
-                    }`}
-                  />
-                </div>
-                <span className="text-sm font-bold">{name}</span>
-              </Link>
-            ))}
+            {content
+              .slice(0, role === "admin" ? 5 : 6)
+              .map(({ name, icon, dest }, idx) => (
+                <Link
+                  href={dest ?? "#"}
+                  onClick={() => closeMenu()}
+                  className={`flex transition duration-200 items-center py-2 px-2 gap-2 rounded-md ${
+                    pathname === dest
+                      ? `dark:text-[--primary-white] before:absolute before:content-[''] before:w-[5px] before:h-5/6 before:bg-[--primary-blue] bg-neutral-200 dark:bg-neutral-800 xl:bg-[--primary-blue] before:top-[5px] before:left-[-12px] before:rounded-r-xl xl:before:hidden`
+                      : `hover:bg-neutral-200 dark:hover:bg-neutral-800`
+                  }`}
+                  key={`sidebar_upper_link_${idx}`}
+                >
+                  <div>
+                    <Icon
+                      name={icon}
+                      className="size-[22px]"
+                      pathClassName={`transition duration-200 ${
+                        pathname === dest
+                          ? `dark:stroke-neutral-200`
+                          : `stroke-neutral-700 dark:stroke-neutral-400`
+                      }`}
+                    />
+                  </div>
+                  <span className="text-sm font-bold">{name}</span>
+                </Link>
+              ))}
           </div>
 
-          {/* support routes */}
+          {/* Support routes */}
           <div className="flex flex-col gap-3 mt-6">
             <span className="text-xs text-opacity-70 ml-2  font-medium">
               Support
             </span>
             {content
-              .slice(6, content.length)
+              .slice(role === "admin" ? 5 : 6, content.length)
               .map(({ name, icon, dest }, idx) => (
                 <button
                   key={`sidebar_bottom_link_${idx}`}
-                  onClick={() => {
-                    // handle user logout
+                  className={`${
+                    idx === 0 &&
+                    pathname === dest &&
+                    `dark:text-[--primary-white] before:absolute before:content-[''] before:w-[5px] before:h-5/6 before:bg-[--primary-blue] bg-neutral-200 dark:bg-neutral-800 xl:bg-[--primary-blue] before:top-[5px] before:left-[-12px] before:rounded-r-xl xl:before:hidden rounded-md`
+                  }`}
+                  onClick={async () => {
+                    // Handle user logout
                     if (idx === 2) {
-                      logout()
+                      await logout()
                       closeMenu()
                     } else if (dest) {
-                      router.push(dest) // handle settings
+                      router.push(dest) // Handle settings
                     } else {
-                      handleHelpModal() // handle help modal
+                      handleHelpModal() // Handle help modal
                     }
                   }}
                 >
@@ -126,7 +138,7 @@ export default function Menu() {
         </div>
       </motion.nav>
 
-      {/* overlay */}
+      {/* Overlay */}
       <motion.div
         className="size-full bg-black/80 backdrop-blur-sm inset-0 fixed z-50"
         variants={fadingAnimation}
