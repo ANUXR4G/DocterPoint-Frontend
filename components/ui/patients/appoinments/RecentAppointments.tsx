@@ -18,6 +18,10 @@ import {
   Pagination,
 } from "@/components"
 
+type Props = {
+  upcomingIds: string[]
+}
+
 const tableFields = [
   "serial",
   "time",
@@ -30,7 +34,7 @@ const tableFields = [
   "details",
 ]
 
-export default function RecentAppointments() {
+export default function RecentAppointments({ upcomingIds }: Props) {
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -58,16 +62,22 @@ export default function RecentAppointments() {
           total: number
           appointments: TAppointment[]
         } // covert keys to camelCase
+        const filtered_appointments = _data.appointments.filter(
+          (item) => !upcomingIds.includes(item.id)
+        )
         return {
           total: _data.total,
-          appointments: _data.appointments.filter(
-            (item) => !["upcoming", "rescheduled"].includes(item.status)
-          ),
+          appointments:
+            filtered_appointments.length > 0
+              ? filtered_appointments
+              : _data.appointments,
         }
       },
       staleTime: 0,
     }
   )
+
+  console.log(upcomingIds)
 
   // Handle appointment details modal opening
   function handleOpenDetailsModal(info: TAppointment, idx: number) {
@@ -118,7 +128,8 @@ export default function RecentAppointments() {
   }, [data, limit])
 
   if (!data || isLoading) return <div />
-  if (data.appointments.length === 0) return <EmptyAppointment />
+  if (data.appointments.length === 0 && upcomingIds.length === 0)
+    return <EmptyAppointment />
 
   return (
     <React.Fragment>

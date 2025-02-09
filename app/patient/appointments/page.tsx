@@ -95,7 +95,11 @@ export default function AppointmentsPage() {
       </div>
 
       {/* Recent appointments */}
-      <RecentAppointments />
+      <RecentAppointments
+        upcomingIds={currentWeekAppointments.map(
+          (appointment) => appointment.id
+        )}
+      />
     </div>
   )
 }
