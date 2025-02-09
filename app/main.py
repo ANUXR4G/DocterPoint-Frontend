@@ -29,7 +29,8 @@ from app.routers.admin import (
     users,
 )
 
-from app.routers.doctor import info as doctor_profile
+# from app.routers import doctor
+import app.routers.doctor as doctor
 
 
 from app.workers.celery import celery
@@ -107,17 +108,17 @@ app.include_router(hospitals.router, prefix=f"/hospitals", tags=["General / Hosp
 app.include_router(doctors.router, prefix=f"/doctors", tags=["General / Doctors"])
 
 
-# patient profile routes (authetication required)
+# Patient profile routes (authetication required)
 app.include_router(patients.router, prefix=f"/patient", tags=["Patient / Profile"])
 
-# patient health records routes (authetication required)
+# Patient health records routes (authetication required)
 app.include_router(
     healths.router,
     prefix=f"/patient/health",
     tags=["Patient / Health Monitoring Records"],
 )
 
-# patient appointments routes (authetication required)
+# Patient appointments routes (authetication required)
 app.include_router(
     appointments.router,
     prefix=f"/patient/appointments",
@@ -125,34 +126,33 @@ app.include_router(
 )
 
 
-# patient appointments routes (authetication required)
+# Patient appointments routes (authetication required)
 app.include_router(
     medications.router,
     prefix=f"/patient/medication",
     tags=["Patient / Medications"],
 )
 
-# meal details (authentication required)
+# Meal details (authentication required)
 app.include_router(
     meals.router,
     prefix=f"/diet",
     tags=["Diet / Meals"],
 )
 
-# patient chats
-app.include_router(chats.router, prefix="/chats", tags=["Patient / Chats"])
 
-# websocket routes (for realtime health tracker simulation)
+# The following routes are used by Doctors
+app.include_router(doctor.router, prefix="/users/doctor", tags=["User / Doctors"])
+
+
+# The following routes are used by every users for chats (authentication required)
+# app.include_router(chats.router, prefix="/chats", tags=["User / Chats"])
+
+# Websocket routes for realtime simulation (authentication required)
 app.include_router(websockets.router, prefix="/ws")
 
 
-# The following routes are used by Doctors
-app.include_router(
-    doctor_profile.router, prefix="/users/doctor", tags=["Doctors / Profile"]
-)
-
-
-# # a dmin routes (administrational authetication required)
+# # admin routes (administrational authetication required)
 # app.include_router(
 #     users.router,
 #     prefix=f"/admin/users",
