@@ -81,3 +81,22 @@ async def retrieve_patients(
     return await DoctorService.get_patients(
         doctor_id, session_user, db, redis, q, age, gender, page, limit
     )
+
+
+@router.get("/{doctor_id}/appointments")
+async def retrieve_appointments(
+    doctor_id: str,
+    session_user: Doctor = Security(
+        include_auth, scopes=["doctor:read", "doctor:update", "patient:read"]
+    ),
+    db: AsyncSession = Depends(db),
+    redis: Redis = Depends(cache),
+    date: str = "latest",
+    status: int = 1,
+    q: str | None = None,
+    page: int = 1,
+    limit: int = Query(default=10, le=100),
+):
+    return await DoctorService.get_appointments(
+        doctor_id, session_user, db, redis, status, date, q, page, limit
+    )
