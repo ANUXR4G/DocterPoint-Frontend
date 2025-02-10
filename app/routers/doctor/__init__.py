@@ -97,6 +97,59 @@ async def retrieve_appointments(
     page: int = 1,
     limit: int = Query(default=10, le=100),
 ):
+    """
+    Retrieve a list of appointments for a specific doctor.
+    ------------------------------------------------------
+
+    Parameters:
+    -----------
+    - doctor_id (str): The ID of the doctor whose appointments are to be retrieved.
+    - session_user (Doctor): The currently logged-in doctor (session user) with the required security scopes.
+    - db (AsyncSession): The database session for executing SQL queries asynchronously.
+    - redis (Redis): The Redis instance for caching purposes.
+    - date (str): The date filter to sort appointments by date | "latest" | "old" | default="latest"
+    - status (int): The status filter to filter appointments by their status | 1 | 2 | 3 | 4 | 5 | default=1
+    - q (str): The search query to filter appointments by patient name or other criteria (case-insensitive) | default=None
+    - page (int): The page number for pagination | default=1
+    - limit (int): The maximum number of appointments to retrieve per page. Must be less than or equal to 100 | default=10
+
+    Returns:
+    --------
+    - total: The total number of retrieved data.
+    - appointments: A list containing the retrieved appointment information.
+
+    """
+
     return await DoctorService.get_appointments(
         doctor_id, session_user, db, redis, status, date, q, page, limit
     )
+
+
+@router.get("/{doctor_id}/analytics")
+async def retrieve_analytics(
+    doctor_id: str,
+    session_user: Doctor = Security(
+        include_auth,
+        scopes=["doctor:read", "doctor:analytics", "doctor:update", "patient:read"],
+    ),
+    db: AsyncSession = Depends(db),
+    type: str = "day",
+):
+    """
+    Retrieve analytics of patients and appointments for a specific doctor.
+    ----------------------------------------------------------------------
+
+    Parameters:
+    -----------
+    - doctor_id (str): The ID of the doctor whose analytics are to be retrieved.
+    - session_user (Doctor): The currently logged-in doctor (session user) with the required security scopes.
+    - db (AsyncSession): The database session for executing SQL queries asynchronously.
+    - type (str): The period type for which to retrieve the analytics ('day', 'week', 'month', 'year') | deafult='day'.
+
+    Returns:
+    --------
+    - result: Analytics of patients and appointments, categorized by gender.
+
+    """
+
+    return await DoctorService.get_analytics(doctor_id, session_user, db, type)

@@ -1,16 +1,15 @@
 import json
+
 from redis import Redis
-
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select, cast, distinct, Date, case, or_, and_
-from sqlalchemy.orm import defer, joinedload
-
+from datetime import timedelta, datetime, timezone
 from fastapi.encoders import jsonable_encoder
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, cast, distinct, Date, case
+from sqlalchemy.orm import defer, joinedload
+
 from app.models import Doctor, Appointment, Patient
-from app.core.security import (
-    uuid_to_base64,
-)
+from app.core.security import uuid_to_base64
 from app.core.utils import ResponseHandler
 
 
@@ -18,21 +17,6 @@ class DoctorService:
     # Retrieve information of a specific doctor based on the current session.
     @staticmethod
     async def get_info(session_user: Doctor, db: AsyncSession, redis: Redis):
-        """
-
-
-        Parameters:
-        -----------
-        session_user: The currently logged-in doctor (session user).
-        db: The database session for executing SQL queries asynchronously.
-        redis: The Redis instance for caching purposes.
-
-
-        Returns:
-        --------
-        Information of the specific doctor.
-        """
-
         doctor_id = uuid_to_base64(session_user.id)
         redis_key = f"users:doctor:{doctor_id}:info"
 
@@ -189,6 +173,7 @@ class DoctorService:
 
         return {"total": total, "patients": patients}
 
+    # Retrieve a list of appointments for a specific doctor
     @staticmethod
     async def get_appointments(
         doctor_id: str,
@@ -286,6 +271,88 @@ class DoctorService:
             redis.set(redis_key_total, _total, 3600)
 
         return {"total": total, "appointments": appointments}
+
+    # Retrieve analytics of patients and appointments for a specific doctor.
+    @staticmethod
+    async def get_analytics(
+        _: str,
+        session_user: Doctor,
+        db: AsyncSession,
+        period_type: str,
+    ):
+        current_date = datetime.now(timezone.utc) + timedelta(days=1)
+
+        result = {}
+
+        filter_args = [Appointment.doctor_id == session_user.id]
+
+        # Filter argument to extract appointment info of current day
+        if period_type == "day":
+            filter_args.append(
+                func.to_char(Appointment.appointment_date, "YYYY-MM-DD")
+                == current_date.strftime("%Y-%m-%d")
+            )
+
+        # Filter argument to extract appointment info of current week
+        elif period_type == "week":
+            start_of_week = current_date - timedelta(days=current_date.weekday())
+            end_of_week = start_of_week + timedelta(days=6)
+
+            filter_args.append(
+                cast(Appointment.appointment_date, Date).between(
+                    start_of_week, end_of_week
+                )
+            )
+
+        # Filter argument to extract appointment info of current month
+        elif period_type == "month":
+            start_of_month = current_date.replace(day=1)
+            # Calculated by setting the day to the first day of the next month and then subtracting one day.
+            end_of_month = (start_of_month + timedelta(days=32)).replace(
+                day=1
+            ) - timedelta(days=1)
+
+            filter_args.append(
+                cast(Appointment.appointment_date, Date).between(
+                    start_of_month, end_of_month
+                )
+            )
+
+        # Filter argument to extract appointment info of current year
+        elif period_type == "year":
+            start_of_year = current_date.replace(month=1, day=1)
+            end_of_year = current_date.replace(month=12, day=31)
+
+            filter_args.append(
+                cast(Appointment.appointment_date, Date).between(
+                    start_of_year, end_of_year
+                )
+            )
+
+        # Extract the details both for male and female
+        for gender in ["male", "female"]:
+            appointment_query = (
+                select(func.count(Appointment.id))
+                .join(Appointment.patient)
+                .where(Patient.gender == gender, *filter_args)
+            )
+
+            patient_query = (
+                select(func.count(distinct(Appointment.patient_id)))
+                .join(Appointment.patient)
+                .where(Patient.gender == gender, *filter_args)
+            )
+
+            total_appointments = (await db.execute(appointment_query)).scalar()
+            total_patients = (await db.execute(patient_query)).scalar()
+
+            if gender not in result:
+                result[gender] = {
+                    "patients": total_patients,
+                    "appointments": total_appointments,
+                }
+
+        return result
 
 
 # Refactor doctor information
