@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get("/info")
-async def retrieve_profile_information(
+async def retrieve_info(
     session_user: Doctor = Security(
         include_auth, scopes=["doctor:read", "doctor:update"]
     ),
@@ -23,25 +23,27 @@ async def retrieve_profile_information(
 ):
     """
     Retrieve information of a specific doctor based on the current session.
+    ---------------------------------------------------------------
 
     Parameters:
     -----------
-    session_user: The currently logged-in doctor (session user).
-    db: The database session for executing SQL queries asynchronously.
-    redis: The Redis instance for caching purposes.
+    - session_user (Doctor): The currently logged-in doctor (session user).
+    - db (AsyncSession): The database session for executing SQL queries asynchronously.
+    - redis (Redis): The Redis instance for caching purposes.
 
 
     Returns:
     --------
-        Information of the specific doctor.
+    - Information of the specific doctor.
+
     """
 
     return await DoctorService.get_info(session_user, db, redis)
 
 
-@router.get("/{user_id}/patients")
-async def retrieve_appointed_patients_information(
-    user_id: str,
+@router.get("/{doctor_id}/patients")
+async def retrieve_patients(
+    doctor_id: str,
     session_user: Doctor = Security(
         include_auth, scopes=["doctor:read", "doctor:update", "patient:read"]
     ),
@@ -54,27 +56,28 @@ async def retrieve_appointed_patients_information(
     limit: int = Query(default=10, le=100),
 ):
     """
-    Retrieve a list of appointed patients to a doctor by doctor_id.
+    Retrieve a list of patients appiointed to a doctor by doctor_id.
+    ---------------------------------------------------------------
 
     Parameters:
     -----------
-    doctor_id: The ID of the doctor for whom the appointments are to be retrieved.
-    session_user: The currently logged-in doctor (session user).
-    db: The database session for executing SQL queries asynchronously.
-    redis: The Redis instance for caching purposes.
-    q: The search query to filter patients by name (case-insensitive).
-    age: The age filter to sort patients by age. Values can be "young" or "old".
-    gender: The gender filter to sort patients by gender. Values can be "male" or "female".
-    page : The page number for pagination.
-    limit : The maximum number of patients to retrieve per page.
+    - doctor_id (str): The ID of the doctor for whom the appointments are to be retrieved.
+    - session_user (Doctor): The currently logged-in doctor (session user).
+    - db (AsyncSession): The database session for executing SQL queries asynchronously.
+    - redis (Redis): The Redis instance for caching purposes.
+    - q (str): The search query to filter patients by name (case-insensitive) | default=None
+    - age (str): The age filter to sort patients by age | "young" | "old" | None | default=None
+    - gender (str): The gender filter to sort patients by gender | "male" | "female" | None | default=None
+    - page (int): The page number for pagination.
+    - limit (int): The maximum number of patients to retrieve per page.
 
     Returns:
     --------
-        total: The total number of retrieve data based on the requirements.
-        patients: A list containing the patient information and appointment details.
+    - total: The total number of retrieved data.
+    - patients: A list containing the patient information and appointment details.
 
     """
 
     return await DoctorService.get_patients(
-        user_id, session_user, db, redis, q, age, gender, page, limit
+        doctor_id, session_user, db, redis, q, age, gender, page, limit
     )

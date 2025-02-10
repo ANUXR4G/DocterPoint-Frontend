@@ -11,6 +11,7 @@ from app.core.security import uuid_to_base64, base64_to_uuid
 
 
 class DoctorService:
+    # Retrieve a list of doctors based on various search criteria.
     @staticmethod
     async def get_all_doctors(
         db: AsyncSession,
@@ -22,23 +23,6 @@ class DoctorService:
         locations: list[str] | None,
         experience: int | None,
     ):
-        """
-        Retrieve a list of doctors based on various search criteria.
-
-        Parameters:
-        - db (AsyncSession): The database session for executing async queries.
-        - redis (Redis): The Redis client for caching and quick data retrieval.
-        - q (Optional[str]): The search query for filtering doctors by name or specialty.
-        - page (int): The page number for pagination.
-        - limit (int): The maximum number of results to return per page.
-        - hospitals (Optional[List[str]]): A list of hospital names to filter doctors by their associated hospitals.
-        - locations (Optional[List[str]]): A list of location names to filter doctors by their practice locations.
-        - experience (Optional[int]): The minimum years of experience to filter doctors.
-
-        Returns:
-        - A list of doctors that match the search criteria along with pagination information.
-        """
-
         query = select(Doctor)
         count = select(func.count(Doctor.id))
 
@@ -90,7 +74,7 @@ class DoctorService:
                 defer(Doctor.role),  # Exclude user role
                 defer(Doctor.hospital_id),  # Exclude hospital_id
                 joinedload(Doctor.hospital).load_only(
-                    Hospital.name,  # Include name,
+                    Hospital.name,  # Include name
                     Hospital.city,  # Include city
                     Hospital.address,  # Include address
                 ),
@@ -120,20 +104,9 @@ class DoctorService:
 
         return {"total": total, "doctors": filtered_doctors}
 
+    # Retrieve a doctor's information by their ID.
     @staticmethod
     async def get_doctor_by_id(doctor_id: str, db: AsyncSession, redis: Redis):
-        """
-        Retrieve a doctor's information by their ID.
-
-        Parameters:
-        - doctor_id (str): The unique identifier of the doctor.
-        - db (AsyncSession): The database session for executing async queries.
-        - redis (Redis): The Redis client for caching and quick data retrieval.
-
-        Returns:
-        - Doctor information if found, otherwise returns an appropriate error response.
-        """
-
         doctor_id_uuid = base64_to_uuid(doctor_id)  # covert base64 string to uuid
         redis_key = f"doctors:info:{doctor_id}"  # redis key for specific doctor
 
@@ -175,6 +148,7 @@ class DoctorService:
 
         return doctor_info
 
+    # Retrieve a list of doctors associated with a specific hospital by hospital ID.
     @staticmethod
     async def get_doctors_by_hospital_id(
         hospital_id: str,
@@ -183,20 +157,6 @@ class DoctorService:
         page: int,
         limit: int,
     ):
-        """
-        Retrieve a list of doctors associated with a specific hospital by hospital ID.
-
-        Parameters:
-        - hospital_id (str): The unique identifier of the hospital.
-        - db (AsyncSession): The database session for executing async queries.
-        - redis (Redis): The Redis client for caching and quick data retrieval.
-        - page (int): The page number for pagination.
-        - limit (int): The maximum number of results to return per page.
-
-        Returns:
-        - A list of doctors associated with the specified hospital along with pagination information.
-        """
-
         hospital_id_uuid = base64_to_uuid(hospital_id)
         count = select(func.count(Doctor.id)).where(
             Doctor.hospital_id == hospital_id_uuid
@@ -260,19 +220,10 @@ class DoctorService:
 
 class HospitalService:
     @staticmethod
+    # Retrieve the list of hospital names.
     async def get_all_names(db: AsyncSession, redis: Redis):
-        """
-        Retrieve the list of hospital names.
-
-        Parameters:
-        - db (AsyncSession): The database session for executing async queries.
-        - redis (Redis): The Redis client for caching and quick data retrieval.
-
-        Returns:
-        - A list of strings containing the unique names of each hospital.
-        """
-
         redis_key = "hospitals:names"
+
         if cached_hospital_names := redis.get(redis_key):
             return json.loads(cached_hospital_names)
 
@@ -287,19 +238,9 @@ class HospitalService:
 
         return filtered_names
 
+    # Retrieve the list of hospital locations.
     @staticmethod
     async def get_all_locations(db: AsyncSession, redis: Redis):
-        """
-        Retrieve the list of hospital locations.
-
-        Parameters:
-        - db (AsyncSession): The database session for executing async queries.
-        - redis (Redis): The Redis client for caching and quick data retrieval.
-
-        Returns:
-        - A list of strings containing the unique locations of each hospital.
-        """
-
         redis_key = "hospitals:locations"
         if cached_hospital_locations := redis.get(redis_key):
             return json.loads(cached_hospital_locations)
@@ -315,6 +256,7 @@ class HospitalService:
 
         return filtered_locations
 
+    # Retrieve a list of hospitals based on various search criteria.
     @staticmethod
     async def get_all_hospitals(
         db: AsyncSession,
@@ -324,21 +266,6 @@ class HospitalService:
         limit: int,
         locations: list[str] | None,
     ):
-        """
-        Retrieve a list of hospitals based on various search criteria.
-
-        Parameters:
-        - db (AsyncSession): The database session for executing async queries.
-        - redis (Redis): The Redis client for caching and quick data retrieval.
-        - q (Optional[str]): The search query for filtering hospitals by name or specialty.
-        - page (int): The page number for pagination.
-        - limit (int): The maximum number of results to return per page.
-        - locations (Optional[List[str]]): A list of location names to filter hospitals by their locations.
-
-        Returns:
-        - A list of hospitals that match the search criteria along with pagination information.
-        """
-
         query = select(Hospital)
         count = select(func.count(Hospital.id))
 
@@ -405,20 +332,9 @@ class HospitalService:
 
         return {"total": total, "hospitals": filtered_hospitals}
 
+    # Retrieve a hospital's information by its ID.
     @staticmethod
     async def get_hospital_by_id(hospital_id: str, db: AsyncSession, redis: Redis):
-        """
-        Retrieve a hospital's information by its ID.
-
-        Parameters:
-        - hospital_id (str): The unique identifier of the hospital.
-        - db (AsyncSession): The database session for executing async queries.
-        - redis (Redis): The Redis client for caching and quick data retrieval.
-
-        Returns:
-        - Hospital information if found, otherwise returns an appropriate error response.
-        """
-
         hospital_id_uuid = base64_to_uuid(hospital_id)  # Covert base64 string to uuid
         redis_key = f"hospitals:info:{hospital_id}"  # Set keys dynamically
 
@@ -479,6 +395,6 @@ def serialized_doctor(doctor: Doctor):
             not in {
                 "id",
                 "hospital",
-            }  # exclude 'id' and 'hospital'
+            }  # Exclude 'id' and 'hospital'
         },
     }

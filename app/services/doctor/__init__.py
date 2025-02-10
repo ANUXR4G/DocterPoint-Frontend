@@ -15,10 +15,11 @@ from app.core.utils import ResponseHandler
 
 
 class DoctorService:
+    # Retrieve information of a specific doctor based on the current session.
     @staticmethod
     async def get_info(session_user: Doctor, db: AsyncSession, redis: Redis):
         """
-        Retrieve information of a specific doctor based on the current session.
+
 
         Parameters:
         -----------
@@ -29,7 +30,7 @@ class DoctorService:
 
         Returns:
         --------
-            Information of the specific doctor.
+        Information of the specific doctor.
         """
 
         doctor_id = uuid_to_base64(session_user.id)
@@ -66,6 +67,7 @@ class DoctorService:
 
         return profile_info
 
+    # Retrieve a list of appointed patients to a doctor by doctor_id.
     @staticmethod
     async def get_patients(
         doctor_id: str,
@@ -78,28 +80,6 @@ class DoctorService:
         page: int,
         limit: int,
     ):
-        """
-        Retrieve a list of appointed patients to a doctor by doctor_id.
-
-        Parameters:
-        -----------
-        doctor_id: The ID of the doctor for whom the appointments are to be retrieved.
-        session_user: The currently logged-in doctor (session user).
-        db: The database session for executing SQL queries asynchronously.
-        redis: The Redis instance for caching purposes.
-        q: The search query to filter patients by name (case-insensitive).
-        age: The age filter to sort patients by age. Values can be "young" or "old".
-        gender: The gender filter to sort patients by gender. Values can be "male" or "female".
-        page : The page number for pagination.
-        limit : The maximum number of patients to retrieve per page.
-
-        Returns:
-        --------
-            total: The total number of retrieve data based on the requirements.
-            patients: A list containing the patient information and appointment details.
-
-        """
-
         redis_key = f"users:doctor:{doctor_id}:patients"
         redis_key_total = f"users:doctor:{doctor_id}:patients:total"
 
@@ -109,10 +89,7 @@ class DoctorService:
         query = select(Appointment)
 
         order_clauses = []
-        filter_args = [
-            Appointment.doctor_id == session_user.id,
-            Appointment.status.not_in(["upcoming"]),
-        ]
+        filter_args = [Appointment.doctor_id == session_user.id]
 
         no_filter_applied = not q and not age and not gender
 
