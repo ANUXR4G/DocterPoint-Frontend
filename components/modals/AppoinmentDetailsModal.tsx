@@ -41,6 +41,8 @@ export default function AppointmentDetailsModal({
   const searchParams = useSearchParams()
   const appointmentId = searchParams.get("id")
 
+  const onGoingStatuses = ["requested", "upcoming", "resheduled"]
+
   // retrieve specific appointment details
   const { data: _, refetch } = useApi(
     [`patients:appointments:info:${appointmentId}`],
@@ -134,22 +136,16 @@ export default function AppointmentDetailsModal({
       handler={closeModal}
       primaryBtn={
         selected &&
-        (selected.status === "upcoming" ||
-          selected.status === "rescheduled") && (
+        onGoingStatuses.includes(selected.status) && (
           <Button type="outline" onClick={handleAppointmentCancel}>
             Cancel Booking
           </Button>
         )
       }
       secondaryBtn={
-        selected ? (
-          ["requested", "upcoming", "resheduled"].includes(selected.status) ? (
-            <></>
-          ) : (
-            <Button onClick={handleConsultationAgain}>Consult again</Button>
-          )
-        ) : (
-          <></>
+        selected &&
+        !onGoingStatuses.includes(selected.status) && (
+          <Button onClick={handleConsultationAgain}>Consult again</Button>
         )
       }
     >
