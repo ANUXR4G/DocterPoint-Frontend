@@ -125,6 +125,34 @@ async def retrieve_appointments(
     )
 
 
+@router.get("/{doctor_id}/appointments/requested")
+async def retrieve_requested_appointments(
+    doctor_id: str,
+    session_user: Doctor = Security(
+        include_auth,
+        scopes=["doctor:read", "doctor:update", "patient:read"],
+    ),
+    db: AsyncSession = Depends(db),
+):
+    """
+    Retrieve a list of requested appointments for a specific doctor by doctor_id.
+    ----------------------------------------------------------------------------
+
+    Parameters:
+    -----------
+    - doctor_id (str): The ID of the doctor whose requested appointments are to be retrieved.
+    - session_user (Doctor): The currently logged-in doctor (session user).
+    - db (AsyncSession): The database session for executing SQL queries asynchronously.
+
+    Returns:
+    --------
+    - A list containing the requested appointment information for the specified doctor.
+
+    """
+
+    return await DoctorService.get_requested_appointments(doctor_id, session_user, db)
+
+
 @router.get("/{doctor_id}/analytics")
 async def retrieve_analytics(
     doctor_id: str,

@@ -1,10 +1,9 @@
-from sqlalchemy import select, func, or_, desc, case
+from sqlalchemy import select, func, or_, case
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import HTTPException
 from redis import Redis
-from datetime import datetime
 import json
 
 from app.models import Patient, Appointment, Doctor, Hospital
@@ -13,14 +12,14 @@ from app.core.security import base64_to_uuid, uuid_to_base64
 from app.core.utils import ResponseHandler
 
 
-# upcoming appointment util function for redis
+# Upcoming appointment function helper for redis (DRY)
 def get_data_from_redis(redis: Redis, redis_key: str):
     if cached_result := redis.get(redis_key):
         return json.loads(cached_result)
 
 
 class AppointmentService:
-    # create a new appointment /patient
+    # Create a new appointment for the currently authenticated patient.
     @staticmethod
     async def new_appointment(
         appointment: AppointmentCreate,
@@ -89,7 +88,7 @@ class AppointmentService:
 
         return new_appointment_data
 
-    # retrieve appointment details /patient
+    # Retrieve detailed information for a specific appointment for the currently authenticated patient.
     @staticmethod
     async def get_appointment_by_id(
         id: str, session_user: Patient, db: AsyncSession, redis: Redis
@@ -133,7 +132,7 @@ class AppointmentService:
 
         return appointment_info_data
 
-    # get all the upcoming appointments /patient
+    # Retrieve a list of upcoming appointments for the currently authenticated patient.
     @staticmethod
     async def get_upcoming_appointments(
         session_user: Patient, db: AsyncSession, redis: Redis
@@ -179,6 +178,8 @@ class AppointmentService:
 
         return upcoming_appointments_data
 
+    # Retrieve a list of appointments for the currently authenticated patient.
+    @staticmethod
     async def get_all_appointments(
         q: str | None,
         page: int,
@@ -211,7 +212,7 @@ class AppointmentService:
         redis_key = f"{patient_appointments_key}:page:{page}"
         redis_key_total = f"{patient_appointments_key}:total"
 
-        # load result from redis caching if already stored
+        # Load result from redis caching if already stored
         if (
             (cached_appointments := redis.get(redis_key))
             and (cached_appointments_total := redis.get(redis_key_total))
@@ -221,14 +222,14 @@ class AppointmentService:
             appointments = json.loads(cached_appointments)
             return {"total": total, "appointments": appointments}
 
-        # apply filtering arguments if provided (q, experience, hospitals, locations)
+        # Apply filtering arguments if provided (q, experience, hospitals, locations)
         if q:
             filter_args.append(Doctor.name.ilike(f"%{q}%"))
             filter_args.append(Hospital.name.ilike(f"%{q}%"))
             filter_args.append(Hospital.city.ilike(f"%{q}%"))
             filter_args.append(Hospital.address.ilike(f"%{q}%"))
 
-        # filter out the query and the count of the query based on condition
+        # Filter out the query and the count of the query based on condition
         if filter_args:
             query = (
                 query.where(or_(*filter_args))
@@ -242,20 +243,21 @@ class AppointmentService:
             count_query = await db.execute(count)
 
         status_priority = {
-            "upcoming": 1,
-            "resheduled": 2,
-            "missed": 3,
-            "completed": 4,
-            "cancelled": 5,
+            "requested": 1,
+            "upcoming": 2,
+            "resheduled": 3,
+            "missed": 4,
+            "completed": 5,
+            "cancelled": 6,
         }
 
         status_order = case(
+            (Appointment.status == "requested", status_priority["requested"]),
             (Appointment.status == "upcoming", status_priority["upcoming"]),
             (Appointment.status == "resheduled", status_priority["resheduled"]),
             (Appointment.status == "missed", status_priority["missed"]),
             (Appointment.status == "completed", status_priority["completed"]),
             (Appointment.status == "cancelled", status_priority["cancelled"]),
-            else_=5,
         )
 
         query = (
@@ -277,12 +279,12 @@ class AppointmentService:
         result = await db.execute(query)
         filtered_appointments = result.scalars().all()
 
-        # restructure the result for general users (e.g, replace ids w base64 strings)
+        # Restructure the result for general users (e.g, replace ids w base64 strings)
         filtered_appointments = jsonable_encoder(
             [appointment_data(appointment) for appointment in filtered_appointments]
         )
 
-        # get the total length of the database
+        # Get the total length of the database
         total = count_query.scalar()
 
         if not q:
@@ -293,6 +295,8 @@ class AppointmentService:
 
         return {"total": total, "appointments": filtered_appointments}
 
+    # Update the information of a specific appointment for the currently authenticated patient.
+    @staticmethod
     async def update_appointment_by_id(
         appointment_id: str,
         updated_data: AppointmentUpdate,

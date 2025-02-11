@@ -27,7 +27,7 @@ class AppointmentCreate(AppintmentBase):
     appointment_date: date
     appointment_time: str
     type: str = "consultation"
-    status: str = "upcoming"
+    status: str = "requested"
     test_name: str = None
     patient_note: str = None
     doctor_note: str = None

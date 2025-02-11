@@ -126,7 +126,7 @@ class Appointment(Base):
     appointment_time = Column(String, nullable=False)
     mode = Column(String, nullable=False, default="in-person")
     type = Column(String, nullable=False, default="consultation")
-    status = Column(String, nullable=False, default="upcoming")
+    status = Column(String, nullable=False, default="requested")
     serial_number = Column(Integer, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

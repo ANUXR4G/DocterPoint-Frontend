@@ -275,6 +275,36 @@ class DoctorService:
 
         return {"total": total, "appointments": appointments}
 
+    # Retrieve a list of requested appointments for a specific doctor by doctor_id.
+    @staticmethod
+    async def get_requested_appointments(
+        doctor_id: str,
+        session_user: Doctor,
+        db: AsyncSession,
+    ):
+        if session_user.id != base64_to_uuid(doctor_id):
+            raise ResponseHandler.no_permission("Permission not granted.")
+
+        query = (
+            select(Appointment)
+            .join(Patient)
+            .where(
+                Appointment.doctor_id == session_user.id,
+                Appointment.status == "requested",
+            )
+            .options(
+                joinedload(Appointment.patient).load_only(Patient.name),
+                defer(Appointment.created_at),  # Exclude created_at
+                defer(Appointment.updated_at),  # Exclude updated_at
+            )
+            .order_by(Appointment.appointment_date.desc())
+        )
+
+        requested_appointments = (await db.execute(query)).scalars().all()
+        appointments = [serialized_appointment(info) for info in requested_appointments]
+
+        return appointments
+
     # Retrieve analytics of patients and appointments for a specific doctor.
     @staticmethod
     async def get_analytics(
