@@ -104,7 +104,7 @@ export default function AppointmentDetailsModal({
     }
   }
 
-  // appointment cancel api for upcoming and rescheduled appointments
+  // Cancel Appointments
   const { mutate } = useApiMutation<{
     payload: Record<string, unknown>
   }>(
@@ -121,7 +121,7 @@ export default function AppointmentDetailsModal({
     }
   )
 
-  // handle cancel appointment
+  // Handle cancel appointment
   function handleAppointmentCancel() {
     mutate({ payload: { status: "cancelled" } })
     closeModal()
@@ -143,7 +143,7 @@ export default function AppointmentDetailsModal({
       }
       secondaryBtn={
         selected ? (
-          ["upcoming", "rescheduled"].includes(selected.status) ? (
+          ["requested", "upcoming", "resheduled"].includes(selected.status) ? (
             <></>
           ) : (
             <Button onClick={handleConsultationAgain}>Consult again</Button>
@@ -161,12 +161,12 @@ export default function AppointmentDetailsModal({
             Serial No. #{selected.serialNumber}
           </h4>
 
-          {/* test name if there is any */}
+          {/* Test name if there is any */}
           {selected.testName && (
             <AlignContent keys={["Test Name"]} values={[selected.testName]} />
           )}
 
-          {/* basic doctor information */}
+          {/* Basic doctor information */}
           <AlignContent
             keys={
               selected.referredBy

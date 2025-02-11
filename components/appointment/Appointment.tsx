@@ -18,7 +18,7 @@ export default function SmallViewAppointment({
   appointment,
   openModal,
 }: Props) {
-  const ongoingStatuses = ["upcoming", "resheduled"]
+  const ongoingStatuses = ["upcoming", "resheduled", "requested"]
   const [openOptions, setOpenOptions] = useState<boolean>(false)
 
   // toggle see more button controls
@@ -61,23 +61,20 @@ export default function SmallViewAppointment({
               <div className="center relative">
                 <div
                   className={`size-3 center rounded-full ${
-                    appointment.status !== "upcoming" &&
-                    `bg-zinc-300 dark:bg-neutral-600`
-                  } ${
-                    appointment.status === "upcoming" &&
-                    (appointment.type === "consultation"
-                      ? `bg-orange-400/80 dark:bg-orange-400/50 animate-ping`
-                      : `bg-blue-500/80 dark:bg-blue-500/50 animate-ping`)
+                    appointment.type === "consultation"
+                      ? appointment.status === "requested"
+                        ? `bg-red-400/80`
+                        : `bg-orange-400/80`
+                      : `bg-blue-400/80`
                   }`}
                 />
                 <div
                   className={`absolute size-[12px] rounded-full ${
-                    appointment.status !== "upcoming" &&
-                    `bg-zinc-300 dark:bg-neutral-600`
-                  } ${
                     appointment.type === "consultation"
-                      ? `bg-orange-400`
-                      : `bg-blue-500`
+                      ? appointment.status === "requested"
+                        ? `bg-red-400/80 dark:bg-red-400/50 animate-ping`
+                        : `bg-orange-400/80 dark:bg-orange-400/50 animate-ping`
+                      : `bg-blue-400/80 dark:bg-blue-400/50 animate-ping`
                   }`}
                 />
               </div>
@@ -96,7 +93,7 @@ export default function SmallViewAppointment({
             }
             `}
           >
-            #{appointment.type}
+            #{appointment.status}
           </div>
         </div>
 

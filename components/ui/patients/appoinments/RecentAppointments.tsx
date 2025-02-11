@@ -77,8 +77,6 @@ export default function RecentAppointments({ upcomingIds }: Props) {
     }
   )
 
-  console.log(upcomingIds)
-
   // Handle appointment details modal opening
   function handleOpenDetailsModal(info: TAppointment, idx: number) {
     if (!searchParams.get("popup") && !searchParams.get("id")) {
@@ -177,6 +175,8 @@ export default function RecentAppointments({ upcomingIds }: Props) {
                         className={`size-3 rounded-full ${
                           item.status === "upcoming"
                             ? `bg-green-200 dark:bg-green-300`
+                            : item.status === "requested"
+                            ? `bg-red-200 dark:bg-red-300`
                             : `bg-blue-200 dark:bg-blue-300`
                         }`}
                       />
