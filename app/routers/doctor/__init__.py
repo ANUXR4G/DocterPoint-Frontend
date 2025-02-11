@@ -133,7 +133,7 @@ async def retrieve_analytics(
         scopes=["doctor:read", "doctor:analytics", "doctor:update", "patient:read"],
     ),
     db: AsyncSession = Depends(db),
-    type: str = "day",
+    type: str = "week",
 ):
     """
     Retrieve analytics of patients and appointments for a specific doctor.
@@ -144,11 +144,11 @@ async def retrieve_analytics(
     - doctor_id (str): The ID of the doctor whose analytics are to be retrieved.
     - session_user (Doctor): The currently logged-in doctor (session user) with the required security scopes.
     - db (AsyncSession): The database session for executing SQL queries asynchronously.
-    - type (str): The period type for which to retrieve the analytics ('day', 'week', 'month', 'year') | deafult='day'.
+    - type (str): The period type for which to retrieve the analytics ('week', 'month') | deafult='week'.
 
     Returns:
     --------
-    - result: Analytics of patients and appointments, categorized by gender.
+    - result: Analytics of patients and appointments, categorized by period type and gender.
 
     """
 

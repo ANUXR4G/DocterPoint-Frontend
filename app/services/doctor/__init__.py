@@ -1,4 +1,5 @@
 import json
+import calendar
 
 from redis import Redis
 from datetime import timedelta, datetime, timezone
@@ -9,8 +10,10 @@ from sqlalchemy import func, select, cast, distinct, Date, case
 from sqlalchemy.orm import defer, joinedload
 
 from app.models import Doctor, Appointment, Patient
-from app.core.security import uuid_to_base64
+from app.core.security import uuid_to_base64, base64_to_uuid
 from app.core.utils import ResponseHandler
+
+# cal = calendar.Calendar(firstweekday=6)
 
 
 class DoctorService:
@@ -275,84 +278,124 @@ class DoctorService:
     # Retrieve analytics of patients and appointments for a specific doctor.
     @staticmethod
     async def get_analytics(
-        _: str,
+        doctor_id: str,
         session_user: Doctor,
         db: AsyncSession,
         period_type: str,
     ):
-        current_date = datetime.now(timezone.utc) + timedelta(days=1)
+        if period_type not in ["week", "month"]:
+            raise ResponseHandler.no_permission("Invalid param value.")
 
-        result = {}
+        if session_user.id != base64_to_uuid(doctor_id):
+            raise ResponseHandler.no_permission("Permission not granted.")
 
-        filter_args = [Appointment.doctor_id == session_user.id]
+        today = datetime.now()
+        current_year = datetime.now().year
+        start_of_week = today - timedelta(days=today.weekday() + 1)
 
-        # Filter argument to extract appointment info of current day
-        if period_type == "day":
-            filter_args.append(
-                func.to_char(Appointment.appointment_date, "YYYY-MM-DD")
-                == current_date.strftime("%Y-%m-%d")
-            )
+        # Get the current week day dates starting from Sunday
+        week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
+        # Get all the day names starting from Sunday
+        week_days = [
+            (start_of_week + timedelta(days=i)).strftime("%A") for i in range(7)
+        ]
+        # Get all the month names of a year starting from January
+        months = [
+            (datetime(current_year, month, 1)).strftime("%B") for month in range(1, 13)
+        ]
 
-        # Filter argument to extract appointment info of current week
-        elif period_type == "week":
-            start_of_week = current_date - timedelta(days=current_date.weekday())
-            end_of_week = start_of_week + timedelta(days=6)
+        # Week day results
+        week_result = {
+            day: {
+                "patients": {"male": 0, "female": 0},
+                "appointments": {"male": 0, "female": 0},
+            }
+            for day in week_days
+        }
+        # Months results
+        month_result = {
+            name: {
+                "patients": {"male": 0, "female": 0},
+                "appointments": {"male": 0, "female": 0},
+            }
+            for name in months
+        }
 
-            filter_args.append(
-                cast(Appointment.appointment_date, Date).between(
-                    start_of_week, end_of_week
-                )
-            )
-
-        # Filter argument to extract appointment info of current month
-        elif period_type == "month":
-            start_of_month = current_date.replace(day=1)
-            # Calculated by setting the day to the first day of the next month and then subtracting one day.
-            end_of_month = (start_of_month + timedelta(days=32)).replace(
-                day=1
-            ) - timedelta(days=1)
-
-            filter_args.append(
-                cast(Appointment.appointment_date, Date).between(
-                    start_of_month, end_of_month
-                )
-            )
-
-        # Filter argument to extract appointment info of current year
-        elif period_type == "year":
-            start_of_year = current_date.replace(month=1, day=1)
-            end_of_year = current_date.replace(month=12, day=31)
-
-            filter_args.append(
-                cast(Appointment.appointment_date, Date).between(
-                    start_of_year, end_of_year
-                )
-            )
-
-        # Extract the details both for male and female
         for gender in ["male", "female"]:
-            appointment_query = (
-                select(func.count(Appointment.id))
-                .join(Appointment.patient)
-                .where(Patient.gender == gender, *filter_args)
-            )
+            # Extract the patient and appointment analytics of current week
+            if period_type == "week":
+                # Iterate through each day of the current week
+                for i, day in enumerate(week_days):
+                    patient_query = (
+                        select(func.count(distinct(Appointment.patient_id)))
+                        .join(Appointment.patient)
+                        .where(
+                            Appointment.doctor_id == session_user.id,
+                            cast(Appointment.appointment_date, Date)
+                            == cast(week_dates[i], Date),
+                            Patient.gender == gender,
+                        )
+                    )
+                    appointment_query = (
+                        select(func.count(Appointment.id))
+                        .join(Appointment.patient)
+                        .where(
+                            Appointment.doctor_id == session_user.id,
+                            cast(Appointment.appointment_date, Date)
+                            == cast(week_dates[i], Date),
+                            Patient.gender == gender,
+                        )
+                    )
 
-            patient_query = (
-                select(func.count(distinct(Appointment.patient_id)))
-                .join(Appointment.patient)
-                .where(Patient.gender == gender, *filter_args)
-            )
+                    # Update the week result to contain result details categorized by gender and week days
+                    week_result[day]["patients"][gender] = (
+                        await db.execute(patient_query)
+                    ).scalar()
+                    week_result[day]["appointments"][gender] = (
+                        await db.execute(appointment_query)
+                    ).scalar()
 
-            total_appointments = (await db.execute(appointment_query)).scalar()
-            total_patients = (await db.execute(patient_query)).scalar()
+            # Extract the patient and appointment analytics of the current year
+            elif period_type == "month":
+                # Iterate through each month of the current year
+                for i, name in enumerate(months):
+                    start_of_month = today.replace(month=i + 1, day=1)
+                    end_of_month = (start_of_month + timedelta(days=32)).replace(
+                        day=1
+                    ) - timedelta(days=1)
 
-            if gender not in result:
-                result[gender] = {
-                    "patients": total_patients,
-                    "appointments": total_appointments,
-                }
+                    patient_query = (
+                        select(func.count(distinct(Appointment.patient_id)))
+                        .join(Appointment.patient)
+                        .where(
+                            Appointment.doctor_id == session_user.id,
+                            cast(Appointment.appointment_date, Date).between(
+                                start_of_month, end_of_month
+                            ),
+                            Patient.gender == gender,
+                        )
+                    )
+                    appointment_query = (
+                        select(func.count(Appointment.id))
+                        .join(Appointment.patient)
+                        .where(
+                            Appointment.doctor_id == session_user.id,
+                            cast(Appointment.appointment_date, Date).between(
+                                start_of_month, end_of_month
+                            ),
+                            Patient.gender == gender,
+                        )
+                    )
 
-        return result
+                    # Update the month result to contain result details categorized by gender and months
+                    month_result[name]["patients"][gender] = (
+                        await db.execute(patient_query)
+                    ).scalar()
+                    month_result[name]["appointments"][gender] = (
+                        await db.execute(appointment_query)
+                    ).scalar()
+
+        return week_result if period_type == "week" else month_result
 
 
 # Refactor doctor information
