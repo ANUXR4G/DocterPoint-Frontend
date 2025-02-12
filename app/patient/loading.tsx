@@ -1,6 +1,6 @@
 import dynamic from "next/dynamic"
 
-const CoolKid = dynamic(() => import("../components/fancy/CoolKid"), {
+const CoolKid = dynamic(() => import("../../components/fancy/CoolKid"), {
   ssr: false,
 })
 
