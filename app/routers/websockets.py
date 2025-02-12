@@ -92,6 +92,22 @@ async def websocket_chatting(
         print(f"User #{user_id} left the help room.")
 
 
+# WebSocket Connection for requested appointments
+@router.websocket("/appointment/requests/{user_id}")
+async def websocket_appoinment_requests(
+    ws: WebSocket,
+    user_id: str,
+):
+    room_id = f"{user_id}_RA"
+    await socket_manager.connect(ws, f"{room_id}")
+    try:
+        while True:
+            await ws.receive_json()
+
+    except WebSocketDisconnect:
+        socket_manager.disconnect(ws, f"{user_id}_RA")
+
+
 # WebSocket Connection to handle broadcasts of the Admins
 @router.websocket("/admin/help")
 async def admin_websocket(
@@ -131,15 +147,7 @@ async def admin_websocket(
         socket_manager.disconnect(ws)
 
 
-def get_original_user_id_chat(room_id: str) -> str:
-    suffix = "_CHAT"
-    if room_id.endswith(suffix):
-        return room_id[: -len(suffix)]
-    return ""
-
-
-def get_original_user_id_monitoring(room_id: str) -> str:
-    suffix = "_MONITORING"
+def get_original_room_id(room_id: str, suffix: str | None ="_CHAT") -> str:
     if room_id.endswith(suffix):
         return room_id[: -len(suffix)]
     return ""

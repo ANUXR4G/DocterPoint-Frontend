@@ -1,15 +1,20 @@
+import json
+
+from redis import Redis
+
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import HTTPException
+
 from sqlalchemy import select, func, or_, case
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi.encoders import jsonable_encoder
-from fastapi.exceptions import HTTPException
-from redis import Redis
-import json
 
 from app.models import Patient, Appointment, Doctor, Hospital
 from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
+
 from app.core.security import base64_to_uuid, uuid_to_base64
 from app.core.utils import ResponseHandler
+from app.core.socket import socket_manager
 
 
 # Upcoming appointment function helper for redis (DRY)
@@ -27,6 +32,7 @@ class AppointmentService:
         db: AsyncSession,
         redis: Redis,
     ):
+        request_room_id = f"{appointment.doctor_id}_RA"
         appointment.doctor_id = base64_to_uuid(appointment.doctor_id)
 
         # get the next serial number
@@ -64,6 +70,11 @@ class AppointmentService:
 
         # restructure the result for general users (e.g, replace ids w base64 strings)
         new_appointment_data = appointment_data(appointment_info)
+
+        # Broadcast the newly created appointment as a request to doctor
+        await socket_manager.send_private_msg(
+            f"{request_room_id}", new_appointment_data
+        )
 
         patient_appointments_key = (
             f"patients:appointments:{uuid_to_base64(appointment_info.patient_id)}"
