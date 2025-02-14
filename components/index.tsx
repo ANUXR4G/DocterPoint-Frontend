@@ -1,6 +1,7 @@
 // components
 export { default as Menu } from "./ui/Menu"
 export { default as Icon } from "./icons"
+export { default as Table } from "./table/Table"
 export { default as Header } from "./ui/Header"
 export { default as Sidebar } from "./ui/Sidebar"
 export { default as Navigation } from "./ui/Navigation"
@@ -32,6 +33,13 @@ export { default as DietPreference } from "./ui/patients/diet/DietPreference"
 export { default as Doctors } from "./ui/doctors"
 export { default as SuggestedDoctors } from "./ui/doctors/SuggestedDoctors"
 export { default as DoctorDetails } from "./ui/doctors/DoctorDetails"
+
+// doctor dashboard ui
+export { default as PatientHistory } from "./ui/doctors/dashboard/Patients"
+export { default as PatientTrackings } from "./ui/doctors/dashboard/Trackings"
+export { default as AppointmentHistory } from "./ui/doctors/dashboard/Appointments"
+export { default as AppointmentRequests } from "./ui/doctors/dashboard/Requests"
+export { default as DoctorAnalysis } from "./ui/doctors/dashboard/Analytics"
 
 // hospitals ui
 export { default as Hospitals } from "./ui/hospitals"
@@ -100,6 +108,7 @@ export { default as Medications } from "./ui/patients/monitoring/Medications"
 
 // recharts
 export { default as RenderNutritionChart } from "./recharts/NutritionChart"
+export { default as GenderChart } from "./recharts/GenderChart"
 
 // map
 export { default as Map } from "./map"

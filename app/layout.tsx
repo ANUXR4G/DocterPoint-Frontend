@@ -23,6 +23,24 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
+              (function() {
+                const userTheme = localStorage.getItem('theme');
+                const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const theme = userTheme || 'system';
+                const isDark = theme === 'dark' || (theme === 'system' && systemPrefersDark);
+                if (isDark) {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+                document.documentElement.style.setProperty('--initial-theme', theme);
+              })();
+            `,
+          }}
+        />
+        {/* <script
+          dangerouslySetInnerHTML={{
+            __html: `
             (function() {
               const userTheme = localStorage.getItem('theme');
               const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -36,7 +54,7 @@ export default function RootLayout({
             })();
           `,
           }}
-        />
+        /> */}
       </head>
       <body
         className={`${manrope.className} dark:bg-zinc-900 dark:text-[#a3a3a3]`}

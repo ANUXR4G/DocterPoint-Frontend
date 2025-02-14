@@ -42,6 +42,7 @@ const queryClient = new QueryClient({
 })
 
 function Providers({ children }: { children: React.ReactNode }) {
+  const [isHydrated, setIsHydrated] = useState(false)
   const [theme, setTheme] = useState<ThemeOptions>("system")
   const [showMenu, setShowMenu] = useState<boolean>(false)
   const [showHelp, setShowHelp] = useState<boolean>(false)
@@ -80,18 +81,17 @@ function Providers({ children }: { children: React.ReactNode }) {
     const storedTheme = (localStorage.getItem("theme") ||
       "system") as ThemeOptions
     setTheme(storedTheme)
+    setIsHydrated(true) // Mark that hydration is complete
   }, [])
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-
+    if (!isHydrated) return
     const root = document.documentElement
     const systemPrefersDark = window.matchMedia(
       "(prefers-color-scheme: dark)"
     ).matches
 
     const isDark = theme === "dark" || (theme === "system" && systemPrefersDark)
-
     if (isDark) {
       root.classList.add("dark")
     } else {
@@ -101,7 +101,34 @@ function Providers({ children }: { children: React.ReactNode }) {
     if (theme !== "system") {
       localStorage.setItem("theme", theme)
     }
-  }, [theme])
+  }, [theme, isHydrated])
+
+  // useEffect(() => {
+  //   const storedTheme = (localStorage.getItem("theme") ||
+  //     "system") as ThemeOptions
+  //   setTheme(storedTheme)
+  // }, [])
+
+  // useEffect(() => {
+  //   if (typeof window === "undefined") return
+
+  //   const root = document.documentElement
+  //   const systemPrefersDark = window.matchMedia(
+  //     "(prefers-color-scheme: dark)"
+  //   ).matches
+
+  //   const isDark = theme === "dark" || (theme === "system" && systemPrefersDark)
+
+  //   if (isDark) {
+  //     root.classList.add("dark")
+  //   } else {
+  //     root.classList.remove("dark")
+  //   }
+
+  //   if (theme !== "system") {
+  //     localStorage.setItem("theme", theme)
+  //   }
+  // }, [theme])
 
   useEffect(() => {
     if (typeof window === "undefined") return

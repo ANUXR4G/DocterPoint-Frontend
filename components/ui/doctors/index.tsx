@@ -43,7 +43,7 @@ export default function Doctors() {
   })
 
   // Retrieve all the doctor informations
-  const { refetch, data, isLoading } = useQuery(
+  const { refetch, data } = useQuery(
     [`doctors:page:${page}`],
     async () => doctorServices.getDoctors(params.toString()),
     {
@@ -128,8 +128,6 @@ export default function Doctors() {
     if (!data) return
     setTotalPages(Math.ceil(data.total / limit))
   }, [data, limit])
-
-  if (isLoading) return <DoctorPageSkeleton />
 
   // Handle inaccurate information
   if (!data) return <NoData content="oops, something went wrong." />

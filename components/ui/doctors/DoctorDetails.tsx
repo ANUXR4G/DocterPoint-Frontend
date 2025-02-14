@@ -19,7 +19,6 @@ import {
   AppointmentModal,
   SuggestedDoctors,
   NoData,
-  DoctorInfoSkeleton,
   ChatModal,
 } from "@/components"
 
@@ -36,7 +35,7 @@ export default function DoctorInfoPage() {
   const router = useRouter()
 
   // Retrieve the Doctor Informations
-  const { data: information, isLoading: isDoctorLoading } = useQuery(
+  const { data: information } = useQuery(
     [`doctors:info:${id}`],
     async () => {
       if (id) return doctorServices.getDoctorInfo(id)
@@ -48,7 +47,7 @@ export default function DoctorInfoPage() {
   )
 
   // Retrieve the Hospital Informations
-  const { data: hospitalInfo, isLoading: isHospitalLoading } = useQuery(
+  const { data: hospitalInfo } = useQuery(
     [`hospitals:info:${information?.hospital.id}`],
     async () => {
       if (information?.hospital) {
@@ -79,8 +78,7 @@ export default function DoctorInfoPage() {
   if (!id) return <NoData content="OOPS, Doctor Not Found." />
 
   // Loader Skeleton UI
-  if (!information || !hospitalInfo || isDoctorLoading || isHospitalLoading)
-    return <DoctorInfoSkeleton />
+  if (!information || !hospitalInfo) return <div />
 
   return (
     <React.Fragment>

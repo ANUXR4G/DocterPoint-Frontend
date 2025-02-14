@@ -21,7 +21,7 @@ type Props = {
 }
 
 export default function HospitalDetails({ id }: Props) {
-  const { data, isLoading } = useQuery(
+  const { data } = useQuery(
     [`hospitals:info:${id}`],
     async () => hospitalService.getHospitalInfo(id),
     {
@@ -32,7 +32,7 @@ export default function HospitalDetails({ id }: Props) {
     }
   )
 
-  if (!data || isLoading) return <HospitalInfoSkeleton />
+  if (!data) return <div />
 
   return (
     <React.Fragment>

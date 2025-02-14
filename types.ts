@@ -354,3 +354,24 @@ export type TRouteProps = {
   icon: IconNames
   dest?: string
 }
+
+export type TRequestAppointment = TAppointment & {
+  patient: TAppointmentDoc
+}
+
+export type TypeAnalytics = Record<
+  string,
+  {
+    patients: { male: number; female: number }
+    appointments: { male: number; female: number }
+  }
+>
+
+export type TypeAnalyticsParam = "week" | "month"
+
+export type AnalyticMetrics = {
+  name: string
+  male: number
+  female: number
+  hasMetrics: boolean
+}
