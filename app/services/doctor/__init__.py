@@ -7,7 +7,7 @@ from fastapi.encoders import jsonable_encoder
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, cast, distinct, Date, case
-from sqlalchemy.orm import defer, joinedload
+from sqlalchemy.orm import defer, joinedload, load_only
 
 from app.models import Doctor, Appointment, Patient
 from app.core.security import uuid_to_base64, base64_to_uuid
@@ -73,10 +73,13 @@ class DoctorService:
         page = max(1, page)
         offset = (page - 1) * limit
 
-        query = select(Appointment)
+        query = select(Patient)
 
         order_clauses = []
         filter_args = [Appointment.doctor_id == session_user.id]
+
+        # Extract all the patient ids associated with doctor
+        patient_ids = select(distinct(Appointment.patient_id)).where(*filter_args)
 
         no_filter_applied = not q and not age and not gender
 
@@ -97,25 +100,20 @@ class DoctorService:
 
         # Extract all the appointed patients informations
         query = (
-            query.join(Patient)
-            .where(*filter_args)
+            query.where(Patient.id.in_(patient_ids))
             .options(
-                joinedload(Appointment.patient).load_only(
-                    Patient.name, Patient.date_of_birth, Patient.gender
-                )
+                defer(Patient.role),  # Exclude updated_at)
+                defer(Patient.password),  # Exclude password
+                defer(Patient.created_by),  # Exclude created_by
+                defer(Patient.created_at),  # Exclude created_at
+                defer(Patient.updated_at),  # Exclude updated_at)
             )
             .offset(offset)
             .limit(limit)
         )
 
         # Count Statement for the distinct (no duplicate) ids of the patients
-        count = (
-            select(func.count(distinct(Appointment.patient_id)))
-            .where(*filter_args)
-            .join(Appointment.patient)
-            .offset(offset)
-            .limit(limit)
-        )
+        count = select(func.count(distinct(Appointment.patient_id))).where(*filter_args)
 
         # Sort the patients list based on age
         if age and age in ["young", "old"]:
@@ -138,32 +136,8 @@ class DoctorService:
         query = query.order_by(*order_clauses)
 
         # Retrieve the Query result
-        result = await db.execute(query)
-        filtered_patients = result.scalars().all()
-
-        patients_dict = {}
-
-        # Refactor the patient data for response
-        for data in filtered_patients:
-            patient_info = data.patient
-            patient_id = uuid_to_base64(patient_info.id)
-            appointments = {
-                "id": uuid_to_base64(data.id),
-                "date": data.appointment_date,
-            }
-
-            if patient_id not in patients_dict:
-                patients_dict[patient_id] = {
-                    "id": patient_id,
-                    "name": patient_info.name,
-                    "gender": patient_info.gender,
-                    "date_of_birth": patient_info.date_of_birth,
-                    "appointments": [appointments],
-                }
-            else:
-                patients_dict[patient_id]["appointments"].append(appointments)
-
-        patients = list(patients_dict.values())
+        result = (await db.execute(query)).scalars().all()
+        patients = [serialized_patient(info) for info in result]
 
         count_query = await db.execute(count)
         total = count_query.scalar()
@@ -184,7 +158,7 @@ class DoctorService:
         db: AsyncSession,
         redis: Redis,
         status: int,
-        date: str,
+        date: str | None,
         q: str | None,
         page: int,
         limit: int,
@@ -214,7 +188,7 @@ class DoctorService:
         order_clauses = []
         filter_args = [
             Appointment.doctor_id == session_user.id,
-            Appointment.status.not_in(["processing"]),
+            Appointment.status.not_in(["requested"]),
         ]
 
         # Handle Searching
@@ -222,11 +196,11 @@ class DoctorService:
             filter_args.append(Patient.name.ilike(f"%{q}%"))
 
         # Sort based on appointment date
-        if date in ["latest", "old"]:
+        if date and date in ["latest", "old"]:
             if date == "latest":
-                order_clauses.append(Appointment.appointment_date.desc())
-            if date == "old":
                 order_clauses.append(Appointment.appointment_date.asc())
+            if date == "old":
+                order_clauses.append(Appointment.appointment_date.desc())
 
         # Sort based on appointment 'status'
         status_priority = status_priority_map[status - 1]
@@ -363,6 +337,7 @@ class DoctorService:
                             Appointment.doctor_id == session_user.id,
                             cast(Appointment.appointment_date, Date)
                             == cast(week_dates[i], Date),
+                            Appointment.status.not_in(["requested"]),
                             Patient.gender == gender,
                         )
                     )
@@ -373,6 +348,9 @@ class DoctorService:
                             Appointment.doctor_id == session_user.id,
                             cast(Appointment.appointment_date, Date)
                             == cast(week_dates[i], Date),
+                            Appointment.status.not_in(
+                                ["requested", "declined", "cancelled"]
+                            ),
                             Patient.gender == gender,
                         )
                     )
@@ -430,6 +408,18 @@ class DoctorService:
 
 # Refactor doctor information
 def serialized_doctor(data):
+    return {
+        "id": uuid_to_base64(data.id),
+        **{
+            key: val
+            for key, val in data.__dict__.items()
+            if key != "id"  # Exclude 'id'
+        },
+    }
+
+
+# Refactor doctor information
+def serialized_patient(data):
     return {
         "id": uuid_to_base64(data.id),
         **{

@@ -91,7 +91,7 @@ async def retrieve_appointments(
     ),
     db: AsyncSession = Depends(db),
     redis: Redis = Depends(cache),
-    date: str = "latest",
+    date: str | None = "latest",
     status: int = 1,
     q: str | None = None,
     page: int = 1,
@@ -107,7 +107,7 @@ async def retrieve_appointments(
     - session_user (Doctor): The currently logged-in doctor (session user) with the required security scopes.
     - db (AsyncSession): The database session for executing SQL queries asynchronously.
     - redis (Redis): The Redis instance for caching purposes.
-    - date (str): The date filter to sort appointments by date | "latest" | "old" | default="latest"
+    - date (str): The date filter to sort appointments by date | "latest" | "old" | default="None"
     - status (int): The status filter to filter appointments by their status | 1 | 2 | 3 | 4 | 5 | default=1
     - q (str): The search query to filter appointments by patient name or other criteria (case-insensitive) | default=None
     - page (int): The page number for pagination | default=1

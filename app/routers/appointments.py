@@ -2,7 +2,7 @@ from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, Security, Query
 
-from app.models import Patient
+from app.models import Patient, Doctor
 from app.db import get_async_db as db
 from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
 from app.services.appointment import AppointmentService
@@ -115,7 +115,7 @@ async def retrieve_patient_appointment_info(
 async def update_patient_appointment_info(
     id: str,
     payload: AppointmentUpdate,
-    _: Patient = Security(
+    _: Patient | Doctor = Security(
         include_auth,
         scopes=["appointment:update"],
     ),
