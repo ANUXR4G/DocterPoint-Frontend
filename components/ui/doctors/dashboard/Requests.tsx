@@ -1,40 +1,56 @@
 "use client"
 
 import { queryClient } from "@/app/providers"
-import { Button, CoolKid, Swiper } from "@/components"
-import { useApiMutation } from "@/hooks/useApiMutation"
-import useAppointments from "@/hooks/useAppointments"
-import { useSocket } from "@/hooks/useSocket"
-import { useUser } from "@/hooks/useUser"
-import { patientService } from "@/lib/services/patient"
-import { TAppointment, TRequestAppointment } from "@/types"
-import { format, setQuarter, startOfToday } from "date-fns"
+import { format, startOfToday } from "date-fns"
 import React, { useEffect, useState } from "react"
+
+import { useUser } from "@/hooks/useUser"
+import { useSocket } from "@/hooks/useSocket"
+import { useApiMutation } from "@/hooks/useApiMutation"
+import { useAppointments } from "@/hooks/useAppointments"
+
+import { Button, CoolKid, Swiper } from "@/components"
+import { patientService } from "@/lib/services/patient"
+import { TAppointment, TDoctorAppointment } from "@/types"
 
 export default function Requests() {
   const [today, setToday] = useState<Date | null>(null)
 
-  const { data: userInfo } = useUser("doctor")
+  // Retrieve the information of the doctor
+  const { data: userInfo, isLoading: infoIsLoading } = useUser("doctor")
 
+  // Get the data from the WebSocket room
   const socketURL = userInfo
     ? `ws://${process.env.NEXT_PUBLIC_WS_ORIGIN}/api/v1/ws/appointment/requests/${userInfo.id}`
     : null
 
   const { values } = useSocket(socketURL)
 
-  const { data, isLoading } =
-    useAppointments<TRequestAppointment[]>("requested")
+  // Retrieve the request appointment list
+  const { data, isLoading } = useAppointments<TDoctorAppointment[]>("requested")
 
   useEffect(() => {
     if (!isLoading) setToday(startOfToday())
   }, [isLoading])
 
+  // Invalidate the request query to add the real-time incoming appointment appointments
   useEffect(() => {
     if (!data || !values) return
     queryClient.invalidateQueries(
-      `user:doctor:requested:${userInfo?.id}:page:1`
+      `users:doctor:${userInfo?.id}:appointments:requested`
     )
   }, [values, data, userInfo?.id])
+
+  // Display loading skeleton UI
+  if (isLoading || infoIsLoading || !today)
+    return (
+      <div
+        role="status"
+        className="animate-pulse hidden lg:block rounded-[26px] col-span-4 lg:order-2 lg:col-span-1 lg:row-span-2 bg-gray-300/75 dark:bg-neutral-700/75"
+      >
+        <span className="sr-only">Loading...</span>
+      </div>
+    )
 
   return (
     <div className={`w-full col-span-4 lg:order-2 lg:col-span-1 lg:row-span-2`}>
@@ -81,7 +97,7 @@ export default function Requests() {
   )
 }
 
-function Appointment(item: TRequestAppointment) {
+function Appointment(item: TDoctorAppointment) {
   const { data: userInfo } = useUser("doctor")
 
   // 'decline' or 'accept' requested appointments
@@ -94,16 +110,11 @@ function Appointment(item: TRequestAppointment) {
     },
     {
       onSuccess: () => {
-        const keyPattern = /^user:doctor:requested:/
-        queryClient.invalidateQueries({
-          predicate: (query) => {
-            const queryKeyString = Array.isArray(query.queryKey)
-              ? query.queryKey.join(":")
-              : query.queryKey
-            return keyPattern.test(queryKeyString as string)
-          },
-        })
-        queryClient.invalidateQueries(`user:doctor:${userInfo?.id}:analytics`)
+        queryClient.invalidateQueries(
+          `users:doctor:${userInfo?.id}:appointments:requested`
+        )
+
+        queryClient.invalidateQueries(`users:doctor:${userInfo?.id}:analytics`)
       },
     }
   )

@@ -23,7 +23,7 @@ const fetchRequests = async (
   }
 }
 
-export default function usePatients<T>(
+export function usePatients<T>(
   type: TypeRequests = "default",
   params?: URLSearchParams
 ): {

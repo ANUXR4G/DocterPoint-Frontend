@@ -1,22 +1,63 @@
 "use client"
 
 import { Icon } from "@/components"
-import { useAnalytics } from "@/hooks/useAnalysis"
-import useAppointments from "@/hooks/useAppointments"
-import { TRequestAppointment } from "@/types"
 import { useEffect, useState } from "react"
+import { TDoctorAppointment } from "@/types"
+import { useAnalytics } from "@/hooks/useAnalysis"
+import { useAppointments } from "@/hooks/useAppointments"
+import { useRouter } from "next/navigation"
 
-export default function Analysis() {
-  const { data, isLoading } =
-    useAppointments<TRequestAppointment[]>("requested")
+export default function Analytics() {
+  const [hydrated, setHydrated] = useState(false)
+
+  const router = useRouter()
+
+  // Retrieve requested appointments
+  const { data, isLoading } = useAppointments<TDoctorAppointment[]>("requested")
   const { calculatePercentage } = useAnalytics("month")
 
-  const patientAnalysis = calculatePercentage("patients")
+  // Calculate metrics for displaying analytics
+  const patientAnalysis = calculatePercentage()
   const appointmentAnalysis = calculatePercentage("appointments")
+
+  function handleNavigation(
+    e: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+    url: string
+  ) {
+    if (typeof window !== "undefined") {
+      e.preventDefault()
+      if (e.ctrlKey) {
+        window.open(url, `_blank`)
+      } else {
+        router.push(url)
+      }
+    }
+  }
+
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
+  // Loading UI Skeleton
+  if (!isLoading && !hydrated)
+    return (
+      <div
+        role="status"
+        className="animate-pulse mt-3 lg:mt-0 min-h-40 w-full col-span-4 lg:order-1 lg:col-span-3 flex gap-2 md:gap-3"
+      >
+        {[...Array(3)].map((_, i) => (
+          <div
+            key={`analytics-skeleton-${i}`}
+            className="size-full rounded-[26px] bg-gray-300/80 min-h-40 dark:bg-neutral-700/75"
+          />
+        ))}
+        <span className="sr-only">Loading...</span>
+      </div>
+    )
 
   return (
     <div
-      className={`min-h-40 w-full col-span-4 lg:order-1 lg:col-span-3 flex gap-2 md:gap-3`}
+      className={`mt-3 lg:mt-0 min-h-40 w-full col-span-4 lg:order-1 lg:col-span-3 flex gap-2 md:gap-3`}
     >
       {/* Patient Metrics */}
       <div className="text-sm text-start size-full relative bg-neutral-200 dark:bg-neutral-800 rounded-[26px] shadow-sm border border-neutral-300 dark:border-none dark:gradient-border-black">
@@ -25,7 +66,12 @@ export default function Analysis() {
             <h3 className="md:text-base lg:text-lg font-semibold md:font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
               Patients
             </h3>
-            <button className="hidden relative md:center size-9 rounded-full bg-neutral-300 group hover:bg-neutral-400/80 dark:bg-neutral-700/80 dark:hover:bg-neutral-700 hover:cursor-pointer transition">
+            <button
+              className="hidden relative md:center size-9 rounded-full bg-neutral-300 group hover:bg-neutral-400/80 dark:bg-neutral-700/80 dark:hover:bg-neutral-700 hover:cursor-pointer transition"
+              onClick={(e) =>
+                handleNavigation(e, "/doctor/appointments/patients")
+              }
+            >
               <Icon
                 name="rotated-arrow"
                 className="size-8"
@@ -50,7 +96,10 @@ export default function Analysis() {
             <h3 className="md:text-base lg:text-lg font-semibold md:font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
               Appointments
             </h3>
-            <button className="hidden relative md:center size-9 rounded-full bg-neutral-300 group hover:bg-neutral-400/80 dark:bg-neutral-700/80 dark:hover:bg-neutral-700 hover:cursor-pointer transition">
+            <button
+              className="hidden relative md:center size-9 rounded-full bg-neutral-300 group hover:bg-neutral-400/80 dark:bg-neutral-700/80 dark:hover:bg-neutral-700 hover:cursor-pointer transition"
+              onClick={(e) => handleNavigation(e, "/doctor/appointments")}
+            >
               <Icon
                 name="rotated-arrow"
                 className="size-8"
@@ -75,7 +124,10 @@ export default function Analysis() {
             <h3 className="md:text-base lg:text-lg font-semibold leading-4 md:font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
               Patient on Queue
             </h3>
-            <button className="hidden relative md:center size-9 rounded-full bg-neutral-300 group hover:bg-neutral-400/80 dark:bg-neutral-700/80 dark:hover:bg-neutral-700 hover:cursor-pointer transition">
+            <button
+              className="hidden relative md:center size-9 rounded-full bg-neutral-300 group hover:bg-neutral-400/80 dark:bg-neutral-700/80 dark:hover:bg-neutral-700 hover:cursor-pointer transition"
+              onClick={(e) => handleNavigation(e, "/doctor/appointments")}
+            >
               <Icon
                 name="rotated-arrow"
                 className="size-8"

@@ -14,13 +14,17 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
   calculatePercentage: (type?: "patients" | "appointments") => number
 } {
   const role = useRole()
+
+  // Retrieve the doctor information
   const { data: userInfo } = useUser(role)
+
   const today = startOfToday()
 
+  // Retrieve the doctor analytics key
   const { data, isLoading } = useApi(
-    [`user:doctor:${userInfo?.id}:analytics`, { param }],
+    [`users:doctor:${userInfo?.id}:analytics`, { param }],
     (_, token) => {
-      if (!userInfo) throw new Error(`Failed to retrieve doctor analytics.`)
+      if (!userInfo) throw new Error(`Failed to retrieve doctor analytics`)
       return doctorServices.fetchAnalytics(token, userInfo.id, param)
     },
     {
@@ -29,6 +33,7 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
     }
   )
 
+  // Calculate the analysis based on specified records
   function calculatePercentage(type: "patients" | "appointments" = "patients") {
     const currentIdx = Number(format(today, "M"))
     if (!data || param === "week" || currentIdx === 1) return 0 // Skip the first month
@@ -36,6 +41,7 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
     const previousMonth = months[currentIdx - 2]
     const currentCurrentMonth = format(today, "MMMM")
 
+    // Calculate the total visits of previous period
     const previousTotal =
       type === "patients"
         ? data[previousMonth].patients.male +
@@ -45,6 +51,7 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
 
     if (previousTotal === 0) return 0
 
+    // Calculate the total visits of current period
     const currentTotal =
       type === "patients"
         ? data[currentCurrentMonth].patients.male +
@@ -60,6 +67,7 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
     return Number(percentageChange)
   }
 
+  // Refactor the metrics based on patients
   const patientMetrics = data
     ? Object.entries(data).map(([key, value]) => ({
         name: key,
@@ -69,6 +77,7 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
       }))
     : []
 
+  // Refactor the metrics based on apppointments
   const appointmentMetrics = data
     ? Object.entries(data).map(([key, value]) => ({
         name: key,

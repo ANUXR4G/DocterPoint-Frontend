@@ -355,7 +355,7 @@ export type TRouteProps = {
   dest?: string
 }
 
-export type TRequestAppointment = TAppointment & {
+export type TDoctorAppointment = TAppointment & {
   patient: TAppointmentDoc
 }
 

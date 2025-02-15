@@ -39,7 +39,7 @@ export { default as PatientHistory } from "./ui/doctors/dashboard/Patients"
 export { default as PatientTrackings } from "./ui/doctors/dashboard/Trackings"
 export { default as AppointmentHistory } from "./ui/doctors/dashboard/Appointments"
 export { default as AppointmentRequests } from "./ui/doctors/dashboard/Requests"
-export { default as DoctorAnalysis } from "./ui/doctors/dashboard/Analytics"
+export { default as DoctorAnalytics } from "./ui/doctors/dashboard/Analytics"
 
 // hospitals ui
 export { default as Hospitals } from "./ui/hospitals"
@@ -168,6 +168,7 @@ export { default as PendingActivitiesSkeleton } from "./skeletons/PendingActivit
 export { default as BloodPressureSkeleton } from "./skeletons/BloodPressureSkeleton"
 export { default as ConsultBannerSkeleton } from "./skeletons/ConsultBannerSkeleton"
 export { default as ConnectDeviceSkeleton } from "./skeletons/ConnectDeviceSkeleton"
+export { default as DoctorDashboardSkeleton } from "./skeletons/DoctorDashboardSkeleton"
 export { default as PendingAppointmentSkeleton } from "./skeletons/PendingAppointments"
 export { default as ActivitySuggestionSkeleton } from "./skeletons/ActivitySuggestionSkeleton"
 export { default as RecommendationChartSkeleton } from "./skeletons/RecommendationChartSkeleton"

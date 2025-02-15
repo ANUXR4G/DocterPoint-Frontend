@@ -4,12 +4,14 @@ type Props = {
   disableIds?: number[]
   customFields?: ((value: any) => JSX.Element)[]
   bodyClassName?: string
+  headerClassName?: string
 }
 
 export default function Table({
   values,
   name,
   bodyClassName,
+  headerClassName,
   disableIds = [],
   customFields = [],
 }: Props) {
@@ -30,7 +32,9 @@ export default function Table({
             {tableFields.map((field, idx) => (
               <th
                 key={`${name}-h-${idx}`}
-                className="px-2 py-2.5 capitalize text-xs font-medium"
+                className={`px-2 py-2.5 capitalize text-xs font-medium ${
+                  headerClassName ? headerClassName : ``
+                }`}
               >
                 {field.split("_").join(" ")}
               </th>
@@ -45,11 +49,13 @@ export default function Table({
               {Object.values(item).map((val: any, i) => (
                 <td
                   key={`${name}-b-${idx}-${i}`}
-                  className={`p-2 text-sm text-center font-medium ${bodyClassName}`}
+                  className={`p-2 text-sm text-center font-medium ${
+                    bodyClassName ? bodyClassName : ``
+                  }`}
                 >
                   {/* Render custom component if provided */}
                   {disableIds.includes(i)
-                    ? customFields[disableIds.indexOf(i)](val)
+                    ? customFields[disableIds.indexOf(i)](item)
                     : val}
                 </td>
               ))}

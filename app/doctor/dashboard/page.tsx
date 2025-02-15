@@ -3,16 +3,16 @@
 import {
   AppointmentHistory,
   AppointmentRequests,
-  DoctorAnalysis,
-  PatientHistory,
+  DoctorAnalytics,
   PatientTrackings,
+  PatientHistory,
 } from "@/components"
 
 export default function DoctorDashboard() {
   return (
     <div className="max-w-[1536px] mx-auto">
       <div className="flex flex-col w-full">
-        <h1 className="ml-2 leading-8 text-3xl lg:leading-[64px] lg:text-5xl bg-gradient-to-r font-bold from-blue-500 to-cyan-500 dark:from-emerald-400 dark:to-cyan-400 bg-clip-text text-transparent">
+        <h1 className="ml-2 leading text-3xl lg:leading-[64px] lg:text-5xl bg-gradient-to-r font-bold from-blue-500 to-cyan-500 dark:from-emerald-400 dark:to-cyan-400 bg-clip-text text-transparent">
           Overview
         </h1>
 
@@ -21,8 +21,8 @@ export default function DoctorDashboard() {
           {/* List of requested appointments */}
           <AppointmentRequests />
 
-          {/* Analysis metrics of patient, appointments and queue status. */}
-          <DoctorAnalysis />
+          {/* Analytic metrics of patient, appointments and queue status. */}
+          <DoctorAnalytics />
 
           {/* Patient Tracking Analysis */}
           <PatientTrackings />
