@@ -88,7 +88,6 @@ class AppointmentService:
         offset = (page - 1) * limit
 
         query = select(Appointment)
-        count_query = select(func.count(Appointment.id))
 
         order_clauses = []
         filter_args = [
@@ -96,7 +95,10 @@ class AppointmentService:
             Appointment.status.not_in(["requested"]),
         ]
 
-        # Handle Searching
+        # Query to get the total count of the doctors' appointment
+        count_query = select(func.count(Appointment.id)).where(*filter_args)
+
+        # Handle searching by name of the patients
         if q:
             filter_args.append(Patient.name.ilike(f"%{q}%"))
 
@@ -130,11 +132,6 @@ class AppointmentService:
             .order_by(status_order, *order_clauses)
             .offset(offset)
             .limit(limit)
-        )
-
-        # Get to total size of the record stored in the databse
-        count_query = (
-            count_query.join(Patient).where(*filter_args).offset(offset).limit(limit)
         )
 
         result = await db.execute(query)
