@@ -5,6 +5,7 @@ import { useUser } from "./useUser"
 import { format, startOfToday } from "date-fns"
 import { months } from "@/lib/dummy/calender"
 import { AnalyticMetrics, TypeAnalytics, TypeAnalyticsParam } from "@/types"
+import { queryClient } from "@/app/providers"
 
 export function useAnalytics(param: TypeAnalyticsParam = "week"): {
   data?: TypeAnalytics

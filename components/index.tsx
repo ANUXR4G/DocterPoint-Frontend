@@ -23,6 +23,14 @@ export { default as PendingTasks } from "./ui/patients/dashboard/PendingTasks"
 export { default as ConnectDeviceBanner } from "./ui/patients/dashboard/ConnectDevice"
 export { default as ConsultDoctors } from "./ui/patients/dashboard/ConsultDoctors"
 
+// appointments
+export { default as AppointmentInfo } from "./ui/doctors/AppointmentInfo"
+export { default as AppointmentPrescription } from "./ui/doctors/AppointmentPrescription"
+export { default as AppointmentBasic } from "./ui/doctors/AppointmentBasic"
+export { default as HealthMetrics } from "./ui/doctors/HealthMetrics"
+export { default as ConsultHistory } from "./ui/doctors/ConsultHistory"
+export { default as PatientInfo } from "./ui/doctors/PatientInfo"
+
 // patient diet ui
 export { default as FoodRecommendations } from "./ui/patients/diet/FoodRecommendations"
 export { default as Meal } from "./ui/patients/diet/Meal"

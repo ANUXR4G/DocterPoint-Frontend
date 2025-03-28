@@ -44,10 +44,15 @@ export default function SmallViewAppointment({
     }
   )
 
+  const { mutate: deleteRecord } = useApiMutation<void>((_, token) =>
+    patientService.deleteMedicationById(token, appointment.id)
+  )
+
   // handle cancel appointment
   function handleAppointmentCancel() {
     if (!ongoingStatuses.includes(appointment.status)) return
     mutate({ payload: { status: "cancelled" } })
+    deleteRecord()
     setOpenOptions(false)
   }
 

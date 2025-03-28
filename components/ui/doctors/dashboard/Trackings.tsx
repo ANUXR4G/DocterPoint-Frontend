@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { TypeAnalyticsParam } from "@/types"
 import { useAnalytics } from "@/hooks/useAnalysis"
-import { Button, Icon, GenderChart } from "@/components"
+import { Button, Icon, GenderChart, ShinnyEfBtn } from "@/components"
 import Link from "next/link"
 
 export default function Trackings() {
@@ -34,11 +34,24 @@ export default function Trackings() {
       </div>
     )
 
+  const isEmpty = patientMetrics.every(
+    (item) => item.male === 0 && item.female === 0
+  )
+
   return (
     <div
-      className={`h-80 sm:h-[336px] w-full p-4 lg:order-3 col-span-4 lg:col-span-3 relative bg-neutral-200 dark:bg-neutral-800 rounded-[26px] shadow-sm border border-neutral-300 dark:border-none dark:gradient-border-black`}
+      className={`h-80 sm:h-[336px] w-full p-4 lg:order-3 col-span-4 lg:col-span-3 relative bg-neutral-200 dark:bg-neutral-800 rounded-[26px] shadow-sm border border-neutral-300 ${
+        isEmpty ? `sm:border-2 dark:border-neutral-700` : `dark:border-none`
+      } dark:gradient-border-black`}
     >
-      <div className="mt-3 hidden sm:flex items-center">
+      {isEmpty && (
+        <div className="hidden sm:flex absolute center left-0 top-0 z-20 size-full rounded-3xl bg-black/80 dark:bg-black/50 backdrop-blur-sm">
+          <ShinnyEfBtn className="[&&]:cursor-default text-neutral-100 text-xs xxs:text-sm px-5 xs:px-8 py-3 xs:text-lg  gradient-border-green rounded-3xl z-10 backdrop-blur-[20px]">
+            No Patient Record Available This Week
+          </ShinnyEfBtn>
+        </div>
+      )}
+      <div className="select-none mt-3 hidden sm:flex items-center">
         <div className="flex flex-col ml-4 text-start">
           <h2 className="text-2xl font-bold text-neutral-600 dark:text-neutral-300">
             Patient Trackings

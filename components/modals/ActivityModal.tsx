@@ -168,7 +168,7 @@ export default function AddActivity({ active, closeHandler, details }: Props) {
           {/* duration */}
           {values.type === "Exercise 🏃🏼‍♂️" && (
             <MultiOptions
-              title="time"
+              title="duration"
               values={[
                 "10-15mins",
                 "15min-20mins",

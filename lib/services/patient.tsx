@@ -238,22 +238,46 @@ async function generateSuggestions(token: string, payload: any) {
 // update patient health record fetch request
 async function updateMedications(
   token: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  patientId?: string
+): Promise<TMedications> {
+  const url_prefix = patientId
+    ? `/patient/medication/suggestions?id=${patientId}`
+    : `/patient/medication/suggestions`
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API}${url_prefix}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(`failed to update patients medication record.`)
+  }
+
+  return response.json()
+}
+
+// Delete patient Medication record
+async function deleteMedicationById(
+  token: string,
+  appointmentId: string
 ): Promise<TMedications> {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API}/patient/medication/suggestions`,
+    `${process.env.NEXT_PUBLIC_API}/patient/medication/appointment?id=${appointmentId}`,
     {
-      method: "PUT",
+      method: "DELETE",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
     }
   )
 
   if (!response.ok) {
-    throw new Error(`failed to update patients medication record.`)
+    throw new Error(`failed to delete patients medication record.`)
   }
 
   return response.json()
@@ -275,4 +299,5 @@ export const patientService = {
   updateMedications,
   getMedications,
   getAppointmentMedications,
+  deleteMedicationById,
 }

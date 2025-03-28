@@ -205,6 +205,15 @@ export type THospital = {
   }
 }
 
+export type TPresciptionOpts = {
+  type: string
+  name: string
+  duration: string
+  amount: string
+  times: string[]
+  note: string
+}
+
 type TAppointmentDoc = {
   id: string
   name: string
@@ -355,8 +364,33 @@ export type TRouteProps = {
   dest?: string
 }
 
+export type THealth = {
+  id: string
+  weight: number | null
+  height: number | null
+  bloodGroup: string | null
+  smokingStatus: string | null
+  physicalActivity: string | null
+  previousDiabetesRecords: string[] | null
+  bodyTemperature: number | null
+  bloodOxygen: number | null
+  bmi: number | null
+  bloodPressureRecords: BloodPressureDetail[] | null
+  bloodGlucoseRecords: MonitoringDetail[] | null
+}
+
 export type TDoctorAppointment = TAppointment & {
-  patient: TAppointmentDoc
+  doctorId: string
+  patient: {
+    id: string
+    name: string
+    imgSrc: string | null
+    address: string | null
+    age: number | null
+    gender: string | null
+  }
+  medication: TMedications | []
+  health: THealth | []
 }
 
 export type TypeAnalytics = Record<

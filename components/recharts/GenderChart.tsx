@@ -1,6 +1,7 @@
 "use client"
 
-import { AnalyticMetrics, TypeAnalyticsParam } from "@/types"
+import { useUser } from "@/hooks/useUser"
+import { AnalyticMetrics, TDoctor, TypeAnalyticsParam } from "@/types"
 import {
   Bar,
   BarChart,
@@ -15,6 +16,33 @@ type Props = {
   data: AnalyticMetrics[]
   active: TypeAnalyticsParam
 }
+
+const defaultData: AnalyticMetrics[] = [
+  {
+    name: "Sunday",
+    male: 10,
+    female: 4,
+    hasMetrics: false,
+  },
+  {
+    name: "Tuesday",
+    male: 5,
+    female: 3,
+    hasMetrics: false,
+  },
+  {
+    name: "Wednesday",
+    male: 6,
+    female: 5,
+    hasMetrics: false,
+  },
+  {
+    name: "Saturday",
+    male: 7,
+    female: 8,
+    hasMetrics: false,
+  },
+]
 
 function CustomTooltip({ active, payload, label, _type }: any) {
   if (active && payload && payload.length) {
@@ -58,10 +86,26 @@ function CustomLegend(props: any) {
 }
 
 export default function GenderChart({ data, active }: Props) {
+  const { data: userInfo } = useUser("doctor")
+  const consultantTimes =
+    (userInfo as TDoctor)?.availableTimes.split(":")[0].split(", ") || []
+
+  // Extract the metrics that matches the consultant time of the doctor if 'week' is active
+  const values =
+    active === "week"
+      ? data.filter((item) =>
+          consultantTimes.includes(item.name.substring(0, 3))
+        )
+      : data
+
+  const isEmpty = values.every((item) => item.male === 0 && item.female === 0)
+
+  const metrics = isEmpty ? defaultData : values
+
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart
-        data={data}
+        data={metrics}
         margin={{
           top: 40,
           bottom: 64,
@@ -69,7 +113,7 @@ export default function GenderChart({ data, active }: Props) {
       >
         <XAxis
           dataKey="name"
-          tickFormatter={(month) => month.substring(0, 3)}
+          tickFormatter={(label) => label.substring(0, 3)}
           tick={{ fill: "#7e7e7e" }}
           axisLine={{ stroke: "none" }}
           tickLine={{ stroke: "none" }}

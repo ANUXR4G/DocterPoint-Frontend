@@ -7,11 +7,12 @@ import React, { useEffect, useState } from "react"
 import { useUser } from "@/hooks/useUser"
 import { useSocket } from "@/hooks/useSocket"
 import { useApiMutation } from "@/hooks/useApiMutation"
-import { useAppointments } from "@/hooks/useAppointments"
+import { useDoctor } from "@/hooks/useDoctor"
 
 import { Button, CoolKid, Swiper } from "@/components"
 import { patientService } from "@/lib/services/patient"
 import { TAppointment, TDoctorAppointment } from "@/types"
+import { doctorServices } from "@/lib/services/doctor"
 
 export default function Requests() {
   const [today, setToday] = useState<Date | null>(null)
@@ -27,7 +28,7 @@ export default function Requests() {
   const { values } = useSocket(socketURL)
 
   // Retrieve the request appointment list
-  const { data, isLoading } = useAppointments<TDoctorAppointment[]>("requested")
+  const { data, isLoading } = useDoctor<TDoctorAppointment[]>("requested")
 
   useEffect(() => {
     if (!isLoading) setToday(startOfToday())
@@ -104,16 +105,27 @@ function Appointment(item: TDoctorAppointment) {
   const { mutate } = useApiMutation<{ payload: Record<string, unknown> }>(
     ({ payload }, token) => {
       const appointmentId = payload.id as string
-      return patientService.updateAppointmentInfo(token, appointmentId, {
+      return doctorServices.updateAppointmentInfo(token, appointmentId, {
         status: payload.status,
       })
     },
     {
       onSuccess: () => {
+        // Invalidate doctor requested appointments
         queryClient.invalidateQueries(
           `users:doctor:${userInfo?.id}:appointments:requested`
         )
 
+        // Invalidate doctor appointments list (all pages)
+        queryClient.invalidateQueries({
+          predicate: (query) =>
+            Array.isArray(query.queryKey) &&
+            (query.queryKey[0] as string).includes(
+              `users:doctor:${userInfo?.id}:appointments:page`
+            ),
+        })
+
+        // Invalidate doctor analytics
         queryClient.invalidateQueries(`users:doctor:${userInfo?.id}:analytics`)
       },
     }

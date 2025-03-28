@@ -13,6 +13,7 @@ export const SCOPES: Record<string, string[]> = {
     "medication:read",
     "medication:write",
     "medication:update",
+    "medication:delete",
   ],
   doctor: [
     "users:chat",
@@ -26,6 +27,7 @@ export const SCOPES: Record<string, string[]> = {
     "appointment:read",
     "appointment:write",
     "appointment:update",
+    "medication:delete",
   ],
   admin: [
     "users:chat",

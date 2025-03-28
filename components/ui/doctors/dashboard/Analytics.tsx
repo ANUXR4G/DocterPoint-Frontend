@@ -4,7 +4,7 @@ import { Icon } from "@/components"
 import { useEffect, useState } from "react"
 import { TDoctorAppointment } from "@/types"
 import { useAnalytics } from "@/hooks/useAnalysis"
-import { useAppointments } from "@/hooks/useAppointments"
+import { useDoctor } from "@/hooks/useDoctor"
 import { useRouter } from "next/navigation"
 
 export default function Analytics() {
@@ -13,7 +13,7 @@ export default function Analytics() {
   const router = useRouter()
 
   // Retrieve requested appointments
-  const { data, isLoading } = useAppointments<TDoctorAppointment[]>("requested")
+  const { data, isLoading } = useDoctor<TDoctorAppointment[]>("requested")
   const { calculatePercentage } = useAnalytics("month")
 
   // Calculate metrics for displaying analytics

@@ -60,7 +60,7 @@ export function useActivities(details?: TMedications | []) {
       [
         ...filterByTime(exercises, "morning"),
         ...filterByTime(medicines, "morning"),
-        details.dietary.find((meal) => meal.time === "breakfast"),
+        details.dietary?.find((meal) => meal.time === "breakfast"),
       ]
     )
     const totalNoonActivities = removeDuplicates(
@@ -68,7 +68,7 @@ export function useActivities(details?: TMedications | []) {
       [
         ...filterByTime(exercises, "afternoon"),
         ...filterByTime(medicines, "afternoon"),
-        details.dietary.find((meal) => meal.time === "lunch"),
+        details.dietary?.find((meal) => meal.time === "lunch"),
       ]
     )
     const totalEveningActivities = removeDuplicates(
@@ -76,7 +76,7 @@ export function useActivities(details?: TMedications | []) {
       [
         ...filterByTime(exercises, "evening"),
         ...filterByTime(medicines, "evening"),
-        details.dietary.find((meal) => meal.time === "snacks"),
+        details.dietary?.find((meal) => meal.time === "snacks"),
       ]
     )
     const totalNightActivities = removeDuplicates(
@@ -84,7 +84,7 @@ export function useActivities(details?: TMedications | []) {
       [
         ...filterByTime(exercises, "night"),
         ...filterByTime(medicines, "night"),
-        details.dietary.find((meal) => meal.time === "dinner"),
+        details.dietary?.find((meal) => meal.time === "dinner"),
       ]
     )
 

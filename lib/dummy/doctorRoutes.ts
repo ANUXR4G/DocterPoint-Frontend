@@ -34,7 +34,7 @@ export const doctorRoutes: TRouteProps[] = [
   {
     name: "Settings",
     icon: "settings",
-    dest: "/doctor/settings",
+    dest: "/settings",
   },
   {
     name: "Help",

@@ -1,5 +1,5 @@
-import type { Metadata } from "next"
 import "./globals.css"
+import type { Metadata } from "next"
 import { Providers } from "./providers"
 import { Manrope } from "next/font/google"
 
@@ -38,23 +38,6 @@ export default function RootLayout({
             `,
           }}
         />
-        {/* <script
-          dangerouslySetInnerHTML={{
-            __html: `
-            (function() {
-              const userTheme = localStorage.getItem('theme');
-              const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-              const theme = userTheme || 'system';
-              const isDark = theme === 'dark' || (theme === 'system' && systemTheme === 'dark');
-              if (isDark) {
-                document.documentElement.classList.add('dark');
-              } else {
-                document.documentElement.classList.remove('dark');
-              }
-            })();
-          `,
-          }}
-        /> */}
       </head>
       <body
         className={`${manrope.className} dark:bg-zinc-900 dark:text-[#a3a3a3]`}

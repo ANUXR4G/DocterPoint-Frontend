@@ -103,33 +103,6 @@ function Providers({ children }: { children: React.ReactNode }) {
     }
   }, [theme, isHydrated])
 
-  // useEffect(() => {
-  //   const storedTheme = (localStorage.getItem("theme") ||
-  //     "system") as ThemeOptions
-  //   setTheme(storedTheme)
-  // }, [])
-
-  // useEffect(() => {
-  //   if (typeof window === "undefined") return
-
-  //   const root = document.documentElement
-  //   const systemPrefersDark = window.matchMedia(
-  //     "(prefers-color-scheme: dark)"
-  //   ).matches
-
-  //   const isDark = theme === "dark" || (theme === "system" && systemPrefersDark)
-
-  //   if (isDark) {
-  //     root.classList.add("dark")
-  //   } else {
-  //     root.classList.remove("dark")
-  //   }
-
-  //   if (theme !== "system") {
-  //     localStorage.setItem("theme", theme)
-  //   }
-  // }, [theme])
-
   useEffect(() => {
     if (typeof window === "undefined") return
 

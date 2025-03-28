@@ -10,9 +10,9 @@ export default function DoctorLayout({
     <React.Fragment>
       <Navigation />
       <Background name="gradient-2" />
-      <div className="ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] p-4 xs:px-4">
+      <main className="ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] p-4 xs:px-4">
         {children}
-      </div>
+      </main>
     </React.Fragment>
   )
 }

@@ -1,38 +1,46 @@
 "use client"
 
-import { Table, Button } from "@/components"
-import { useAppointments } from "@/hooks/useAppointments"
+import { Table, Button, AppointmentInfo } from "@/components"
+import { useDoctor } from "@/hooks/useDoctor"
 import { TDoctorAppointment } from "@/types"
+import { firey } from "@/utils"
 import { format } from "date-fns"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import React, { useEffect, useState } from "react"
 
 export default function Appointments() {
-  const [isHydrated, setHydrated] = useState(false)
+  const [isHydrated, setHydrated] = useState<boolean>(false)
+
+  const router = useRouter()
+
+  const searchParams = useSearchParams()
+  const isInfoModalOpen = !!searchParams.get("info")
 
   // Retrieve appointments info of the doctor
-  const { data, isLoading } = useAppointments<{
+  const { data, isLoading } = useDoctor<{
     total: number
     appointments: TDoctorAppointment[]
-  }>("doctor", new URLSearchParams({ page: "1", date: "latest" }))
+  }>("appointments", new URLSearchParams({ page: "1", date: "latest" }))
 
   // Refactor the retrieve data for table
   const values =
     data?.appointments.map((info) => ({
       id: info.id,
+      patientId: info.patient.id,
       serial: `#${info.serialNumber}`,
       patient_name: info.patient.name,
       date: format(info.appointmentDate, "dd/MM/yyyy"),
       status: info.status,
-      visit_reason: info.purposeOfVisit.join(", "),
+      visit_reason: firey.makeString(info.purposeOfVisit),
       type: info.mode,
-      patient_note: info.patientNote || `None`,
-      personal_note: info.doctorNote || `None`,
+      patient_note: info.patientNote || `NA`,
+      personal_note: info.doctorNote || `NA`,
       details: ``,
     })) || []
 
   // Custom fields for the table
-  const disableIds = [4, 6, 9]
+  const disableIds = [5, 7, 10]
   const customFields = [
     (values: any) => (
       <div className="center px-2 py-1.5 text-center whitespace-nowrap rounded-lg flex items-center gap-2">
@@ -57,7 +65,7 @@ export default function Appointments() {
         type="outline"
         className="h-8 text-xs"
         onClick={() => {
-          console.log(values.id)
+          router.push(`?info=${values.id}&id=${values.patientId}`)
         }}
       >
         View
@@ -84,7 +92,7 @@ export default function Appointments() {
 
   return (
     <React.Fragment>
-      <div className={`mt-8 min-h-40 w-full lg:order-4 col-span-4`}>
+      <div className={`mt-8 w-full lg:order-4 col-span-4`}>
         <div className="flex items-center justify-between">
           <h1 className="text-start ml-2 text-xl lg:text-3xl text-neutral-500 font-semibold">
             Appointment History
@@ -96,17 +104,25 @@ export default function Appointments() {
             view appointments
           </Link>
         </div>
-        <div className="mt-3 border min-h-72 dark:border-neutral-500 border-neutral-300 bg-transparent dark:bg-neutral-800 rounded-2xl ">
-          <Table
-            name={`appointment-tracking`}
-            values={values}
-            disableIds={disableIds}
-            customFields={customFields}
-            headerClassName="[&:nth-child(1)]:hidden"
-            bodyClassName="[&:nth-child(1)]:hidden [&:nth-child(3)]:min-w-48 [&:nth-child(5)]:text-xs [&:nth-child(6)]:min-w-36 [&:nth-child(6)]:text-xs [&:nth-child(7)]:text-xs [&:nth-child(6)]:font-semibold [&:nth-child(6)]:opacity-80 [&:nth-child(6)]:min-w-24"
-          />
-        </div>
+        {values.length > 0 ? (
+          <div className="mt-3 border dark:border-neutral-500 border-neutral-300 bg-transparent dark:bg-neutral-800 rounded-2xl">
+            <Table
+              name={`appointment-tracking`}
+              values={values}
+              disableIds={disableIds}
+              customFields={customFields}
+              headerClassName="[&:nth-child(1)]:hidden [&:nth-child(2)]:hidden"
+              bodyClassName="[&:nth-child(1)]:hidden [&:nth-child(2)]:hidden [&:nth-child(3)]:min-w-16 [&:nth-child(4)]:min-w-32 [&:nth-child(6)]:text-xs [&:nth-child(7)]:min-w-40 [&:nth-child(7)]:max-w-56 [&:nth-child(7)]:font-semibold [&:nth-child(7)]:opacity-80 [&:nth-child(7)]:text-xs [&:nth-child(8)]:text-xs [&:nth-child(9)]:min-w-32 [&:nth-child(9)]:max-w-40 [&:nth-child(10)]:min-w-32 [&:nth-child(10)]:max-w-40"
+            />
+          </div>
+        ) : (
+          <div className="text-sm font-semibold opacity-90 text-neutral-500 flex mt-2.5 ml-2.5">
+            No appointment record exists
+          </div>
+        )}
       </div>
+
+      {isInfoModalOpen && <AppointmentInfo />}
     </React.Fragment>
   )
 }

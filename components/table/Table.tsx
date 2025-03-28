@@ -43,7 +43,9 @@ export default function Table({
         </thead>
 
         {/* Table body */}
-        <tbody className={`divide-y divide-gray-200`}>
+        <tbody
+          className={`divide-y divide-neutral-300 dark:divide-neutral-500`}
+        >
           {values.map((item: any, idx: number) => (
             <tr key={`${name}-b-${idx}`}>
               {Object.values(item).map((val: any, i) => (

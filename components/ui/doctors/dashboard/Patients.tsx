@@ -1,16 +1,21 @@
 "use client"
 
-import { Button, Table } from "@/components"
+import { Button, PatientInfo, Table } from "@/components"
 import { usePatients } from "@/hooks/usePatients"
 import { TPatient } from "@/types"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 
 export default function Patients() {
   const [isHydrated, setIsHydrated] = useState<boolean>(false)
+  const [activePatient, setActivePatient] = useState<TPatient | null>(null)
 
   const router = useRouter()
+  const pathname = usePathname()
+
+  const searchParams = useSearchParams()
+  const patientId = searchParams.get("id")
 
   // Retrieve the consulted patients of the doctor
   const { data, isLoading } = usePatients<{
@@ -40,7 +45,12 @@ export default function Patients() {
       <Button
         type="outline"
         className="h-8 text-xs"
-        onClick={() => console.log(values.id)}
+        onClick={() => {
+          router.push(`?id=${values.id}`)
+          setActivePatient(
+            data?.patients.find((item) => item.id === values.id) || null
+          )
+        }}
       >
         View
       </Button>
@@ -65,7 +75,7 @@ export default function Patients() {
     )
 
   return (
-    <div className={`mt-8 min-h-40 w-full lg:order-5 col-span-4`}>
+    <div className={`mt-8 w-full lg:order-5 col-span-4`}>
       <div className="flex items-center justify-between">
         <h1 className="text-start ml-2 text-xl lg:text-3xl text-neutral-500 font-semibold">
           Patient History
@@ -77,16 +87,26 @@ export default function Patients() {
           view patients
         </Link>
       </div>
-      <div className="mt-3 border min-h-72 dark:border-neutral-500 border-neutral-300 bg-transparent dark:bg-neutral-800 rounded-2xl ">
-        <Table
-          name={`patient-history`}
-          values={values}
-          disableIds={disableIds}
-          customFields={customFields}
-          headerClassName="[&:nth-child(1)]:hidden"
-          bodyClassName="text-xs [&:nth-child(1)]:hidden [&:nth-child(2)]:text-sm [&:nth-child(2)]:min-w-40"
-        />
-      </div>
+      {values.length > 0 ? (
+        <div className="mt-3 border dark:border-neutral-500 border-neutral-300 bg-transparent dark:bg-neutral-800 rounded-2xl ">
+          <Table
+            name={`patient-history`}
+            values={values}
+            disableIds={disableIds}
+            customFields={customFields}
+            headerClassName="[&:nth-child(1)]:hidden"
+            bodyClassName="text-xs [&:nth-child(1)]:hidden [&:nth-child(2)]:text-sm [&:nth-child(2)]:min-w-40"
+          />
+        </div>
+      ) : (
+        <div className="text-sm font-semibold opacity-90 text-neutral-500 flex mt-2.5 ml-2.5">
+          No patient record exists
+        </div>
+      )}
+
+      {!!(activePatient && patientId) && (
+        <PatientInfo active={activePatient} setActive={setActivePatient} />
+      )}
     </div>
   )
 }

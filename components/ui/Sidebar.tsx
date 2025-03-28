@@ -26,7 +26,7 @@ export default function Sidebar({ role, logout }: Props) {
   const content = role ? (role in routes ? routes[role] : []) : []
 
   return (
-    <aside className="hidden xl:border-r-2 dark:border-r-neutral-800 fixed z-50 min-h-full h-full w-[72px] xl:w-60 top-0 left-0 xl:pt-6 md:flex flex-col">
+    <aside className="hidden xl:border-r-2 dark:border-r-neutral-800 fixed z-40 min-h-full h-full w-[72px] xl:w-60 top-0 left-0 xl:pt-6 md:flex flex-col">
       <Background name="half-box-pattern" className="hidden dark:xl:block" />
       <Background name="gradient-3" />
       {/* logo */}

@@ -104,7 +104,7 @@ export default function ProfileMenu({
             </span>
           </Link>
           <Link
-            href={"/doctor/settings"}
+            href={"/settings"}
             className="w-full group flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60"
             onClick={closeModal}
           >

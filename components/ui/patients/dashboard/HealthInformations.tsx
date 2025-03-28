@@ -155,7 +155,7 @@ export default function HealthInformations({ isLoading, healthRecord }: Props) {
         </div>
 
         {isBMIEmpty ? (
-          <div className="min-h-32 flex flex-col">
+          <div className="min-h-32 h-full flex flex-col">
             <p className="mt-3 font-medium text-neutral-500 dark:text-neutral-400 px-3 lg:px-4 text-xs line-clamp-3">
               Regularly checking your BMI helps you stay aware of your weight
               and potential health risks, enabling you to make healthier

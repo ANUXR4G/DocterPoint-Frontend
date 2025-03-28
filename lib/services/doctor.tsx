@@ -83,13 +83,9 @@ async function getPatients(token: string, doctor_id: string, params: string) {
 }
 
 // Retrieve a list of appointments for a specific doctor
-async function getAppointments(
-  token: string,
-  doctor_id: string,
-  params: string
-) {
+async function getAppointments(token: string, params: string) {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API}/users/doctor/${doctor_id}/appointments?${params}`,
+    `${process.env.NEXT_PUBLIC_API}/users/doctor/appointments?${params}`,
     {
       method: "GET",
       headers: {
@@ -100,16 +96,87 @@ async function getAppointments(
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to retrieve appointments #${doctor_id}.`)
+    throw new Error(`Failed to retrieve list of appointments`)
+  }
+
+  return response.json()
+}
+
+// Retrieve a list of appointments for of a specific patient
+async function getPatientAppointments(token: string, patient_id: string) {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API}/users/doctor/appointments/patient/${patient_id}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to retrieve appointments of the patient #${patient_id}.`
+    )
+  }
+
+  return response.json()
+}
+
+// Retrieve information of a specific appointment
+async function getAppointmentInfo(token: string, appointmentId: string) {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API}/users/doctor/appointments/info/${appointmentId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to retrieve appointment information #${appointmentId}`
+    )
+  }
+
+  return response.json()
+}
+
+// Upate information of a specific appointment by id
+async function updateAppointmentInfo(
+  token: string,
+  appointmentId: string,
+  payload: Record<string, unknown>
+) {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API}/users/doctor/appointments/info/${appointmentId}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to update appointment information #${appointmentId}`
+    )
   }
 
   return response.json()
 }
 
 // Retrieve a list of requested appointments for a specific doctor
-async function getAppointmentRequests(token: string, doctor_id: string) {
+async function getRequestedAppointments(token: string) {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API}/users/doctor/${doctor_id}/appointments/requested`,
+    `${process.env.NEXT_PUBLIC_API}/users/doctor/appointments/requested`,
     {
       method: "GET",
       headers: {
@@ -120,7 +187,7 @@ async function getAppointmentRequests(token: string, doctor_id: string) {
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to retrieve requested appointments #${doctor_id}.`)
+    throw new Error(`Failed to retrieve requested appointments`)
   }
 
   return response.json()
@@ -158,6 +225,9 @@ export const doctorServices = {
   fetchAnalytics,
   getAppointments,
   getDoctorProfile,
-  getAppointmentRequests,
+  getAppointmentInfo,
+  updateAppointmentInfo,
+  getRequestedAppointments,
+  getPatientAppointments,
   getDoctorsFromHospital,
 }

@@ -1,16 +1,16 @@
-import { doctorServices } from "@/lib/services/doctor"
+import { firey } from "@/utils"
 import { useApi } from "./useApi"
 import { useRole } from "./useRole"
 import { useUser } from "./useUser"
-import { firey } from "@/utils"
-import { patientService } from "@/lib/services/patient"
+import { doctorServices } from "@/lib/services/doctor"
 
 type TypeAppointment =
   | "requested"
   | "specific"
   | "default"
   | "upcoming"
-  | "doctor"
+  | "appointments"
+  | "patient"
 
 type KeyConfig = {
   [key: string]: (params: URLSearchParams) => string
@@ -20,58 +20,56 @@ type KeyConfig = {
 const fetchRequests = async (
   type: TypeAppointment,
   token: string,
-  userId: string,
   params: URLSearchParams
 ) => {
   switch (type) {
     case "requested":
-      return await doctorServices.getAppointmentRequests(token, userId)
+      return await doctorServices.getRequestedAppointments(token)
 
-    case "doctor":
-      return await doctorServices.getAppointments(
-        token,
-        userId,
-        params.toString()
-      )
+    case "appointments":
+      return await doctorServices.getAppointments(token, params.toString())
 
     case "specific":
-      const appointmentId = params?.get("id") || null
+      const appointmentId = params?.get("info") || null
       if (!appointmentId)
         throw new Error(`Need required params to retrieve appointment info.`)
-      return await patientService.getAppointmentInfo(token, appointmentId)
+      return await doctorServices.getAppointmentInfo(token, appointmentId)
+
+    case "patient":
+      const patientId = params?.get("id") || null
+      if (!patientId)
+        throw new Error(
+          `Need required params to retrieve appointments of the patient.`
+        )
+      return await doctorServices.getPatientAppointments(token, patientId)
 
     case "default":
       throw new Error(`Select atleast one region of interest.`)
   }
 }
 
-// function transformData<T>(type: TypeAppointment, data: any) {
-//   switch (type) {
-//     case "requested":
-//       return firey.convertKeysToCamelCase(data) as T
-
-//     case "default":
-//       throw new Error(`Select atleast one region of interest.`)
-//   }
-// }
-
 // Key configuration for different types based on role, type and params
 const keyConfig: KeyConfig = {
-  doctor: (params?: URLSearchParams) => {
+  appointments: (params?: URLSearchParams) => {
     const page = params?.get("page") || "1"
     return `appointments:page:${page}`
   },
   specific: (params?: URLSearchParams) => {
-    const id = params?.get("id") || null
+    const id = params?.get("info") || null
     if (!id) throw new Error(`Provide appointment id as params`)
     return `appointments:info:${id}`
+  },
+  patient: (params?: URLSearchParams) => {
+    const id = params?.get("id") || null
+    if (!id) throw new Error(`Provide patient id as params`)
+    return `appointments:patient:info:${id}`
   },
   requested: (_?: URLSearchParams) => {
     return `appointments:requested`
   },
 }
 
-export function useAppointments<T>(
+export function useDoctor<T>(
   type: TypeAppointment = "default",
   params?: URLSearchParams,
   onSuccess?: (data: unknown) => void
@@ -85,28 +83,19 @@ export function useAppointments<T>(
   // Dynamically created key based on role and type of data
   const getQueryKey = () => {
     if (!userInfo?.id || !role) return ""
-
-    const userRole = role === "user" ? "patient" : `${role}`
     const targetType = keyConfig[type](params as URLSearchParams)
-
-    const key = `users:${userRole}:${userInfo.id}:${targetType}`
-
+    const key = `users:${role}:${userInfo.id}:${targetType}`
     return key
   }
 
-  // Caching key for the response
+  // Generate dynamic caching key based on type of fetching
   const queryKey = getQueryKey()
 
   const { data, isLoading } = useApi(
     [queryKey, { params }],
     (_, token) => {
       if (!userInfo) throw new Error(`Failed to retrieve due to user info`)
-      return fetchRequests(
-        type,
-        token,
-        userInfo.id,
-        params ?? new URLSearchParams()
-      )
+      return fetchRequests(type, token, params ?? new URLSearchParams())
     },
     {
       enabled: !!userInfo?.id && !!role,
