@@ -1,5 +1,7 @@
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
+from datetime import datetime
+
 
 scopes = {
     "user": [
@@ -16,6 +18,7 @@ scopes = {
         "medication:read",
         "medication:write",
         "medication:update",
+        "medication:delete",
     ],
     "doctor": [
         "users:chat",
@@ -29,6 +32,7 @@ scopes = {
         "appointment:read",
         "appointment:write",
         "appointment:update",
+        "medication:delete",
     ],
     "admin": [
         "users:chat",
@@ -47,6 +51,58 @@ scopes = {
         "medication:delete",
     ],
 }
+
+
+status_priority_map = [
+    {
+        "upcoming": 1,
+        "resheduled": 2,
+        "missed": 3,
+        "completed": 4,
+        "cancelled": 5,
+    },
+    {
+        "resheduled": 1,
+        "upcoming": 2,
+        "missed": 3,
+        "completed": 4,
+        "cancelled": 5,
+    },
+    {
+        "missed": 1,
+        "resheduled": 2,
+        "upcoming": 3,
+        "completed": 4,
+        "cancelled": 5,
+    },
+    {
+        "completed": 1,
+        "missed": 2,
+        "resheduled": 3,
+        "upcoming": 4,
+        "cancelled": 5,
+    },
+    {
+        "cancelled": 1,
+        "completed": 2,
+        "missed": 3,
+        "resheduled": 4,
+        "upcoming": 5,
+    },
+]
+
+
+def calculate_age(birth_date_str):
+    if not birth_date_str:
+        return
+    birth_date = datetime.strptime(birth_date_str, "%m/%d/%Y")
+    today = datetime.today()
+    age = (
+        today.year
+        - birth_date.year
+        - ((today.month, today.day) < (birth_date.month, birth_date.day))
+    )
+    return age
 
 
 def get_age_group(age: int):
@@ -70,6 +126,12 @@ class Custom:
     @staticmethod
     def snake_to_title(snake_str: str):
         return " ".join(word.capitalize() for word in snake_str.split("_"))
+
+    def convert_list_to_str(items: list[str]):
+        if len(items) > 1:
+            return ", ".join(items[:-1] + " and " + items[-1])
+        else:
+            return items[0]
 
 
 class ResponseHandler:

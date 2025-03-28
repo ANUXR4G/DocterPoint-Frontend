@@ -199,13 +199,6 @@ class AppointmentService:
         db: AsyncSession,
         redis: Redis,
     ):
-        """
-        Retrieve a list of appointments based on various optional search criteria.
-
-        q: Query parameter for searching appointments by name, hospital, doctor (partial matches allowed).
-        page: Pagination parameter to specify the starting index of the returned results.
-        limit: Pagination parameter to specify the maximum number of results to return.
-        """
         query = select(Appointment)
         count = (
             select(func.count(Appointment.id))
@@ -380,14 +373,17 @@ class AppointmentService:
             3600,
         )
 
+        # Delete previous stored doctor appointment
+        doctor_id = uuid_to_base64(appointment_info.doctor_id)
+        doctor_keys = redis.keys(f"users:doctor:{doctor_id}:appointments:page:*")
+
         # delete previous stored appointment records from the cache
         count_key = f"{patient_appointments_key}:total"
         upcoming_key = f"{patient_appointments_key}:upcoming"
         redis_keys = redis.keys(f"{patient_appointments_key}:page:*")
-        redis_keys.extend([count_key, upcoming_key])
+        redis_keys.extend([upcoming_key, count_key])
 
-        if redis_keys:
-            redis.delete(*redis_keys)
+        redis.delete(*redis_keys, *doctor_keys)
 
         return updated_appointment_data
 

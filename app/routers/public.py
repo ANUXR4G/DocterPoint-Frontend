@@ -1,9 +1,10 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, Query
-from app.core.dependecies import cache
 from redis import Redis
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Query
+
 from app.db import get_async_db as db
+from app.core.dependecies import cache
 from app.services.public import DoctorService, HospitalService
 
 
@@ -66,6 +67,7 @@ async def retrieve_doctor_information(
     Returns:
     --------
     - The information of the specified doctor retrieved from the database.
+
     """
 
     return await DoctorService.get_doctor_by_id(id, db, redis)

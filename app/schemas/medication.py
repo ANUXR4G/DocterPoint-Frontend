@@ -77,6 +77,7 @@ class UpdateMedication(MedicationBase):
     allergies: List[str] = None
     recommended_ingredients: List[str] = None
     preferred_cuisine: str = None
+    generated_by: Optional[str] = None  # 'system' or 'doctor'
 
 
 class GenerateMedication(BaseModel):

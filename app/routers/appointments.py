@@ -1,12 +1,14 @@
 from redis import Redis
-from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, Security, Query
 
-from app.models import Patient, Doctor
+from fastapi import APIRouter, Depends, Security, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db import get_async_db as db
-from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
-from app.services.appointment import AppointmentService
+from app.models import Patient, Doctor
 from app.core.dependecies import include_auth, cache
+from app.services.appointment import AppointmentService
+from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
+
 
 router = APIRouter()
 
@@ -41,6 +43,7 @@ async def retrieve_patient_appointments(
     - A list containing the appointment information for the specified patient.
 
     """
+
     return await AppointmentService.get_all_appointments(
         q, page, limit, session_user, db, redis
     )

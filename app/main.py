@@ -2,11 +2,13 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Request,
+    APIRouter,
 )
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from time import time
 
-from app.core.security import origins
+from app.core.security import origins, decode_token
 from app.core.config import settings
 
 from app.routers import (
@@ -30,8 +32,9 @@ from app.routers.admin import (
 )
 
 # from app.routers import doctor
-import app.routers.doctor as doctor
-
+# import app.routers.doctor as doctor
+from app.routers.doctor import general as doctor_general_routes
+from app.routers.doctor import appointments as doctor_appointment_routes
 
 from app.workers.celery import celery
 from app.workers.tasks import send_email_task
@@ -60,6 +63,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Router for doctors
+doctor_router = APIRouter(prefix="/users/doctor", tags=["User / Doctors"])
+
 
 # Custom exception handler
 @app.exception_handler(HTTPException)
@@ -68,6 +74,83 @@ async def custom_http_exception_handler(_: Request, exc: HTTPException):
         status_code=exc.status_code,
         content={"status": "unsuccessful", "message": exc.detail},
     )
+
+
+rate_limit_data = {}
+burst_control_data = {}
+
+# Default Rate Limits
+RATE_LIMIT = 50
+TIME_WINDOW = 60
+BURST_LIMIT = 20  # Allow up to 20 extra requests within a short burst
+BURST_WINDOW = 5  # Burst period of 5 seconds
+
+# Configuration for public and autheticated users
+RATE_LIMIT_CONFIG = {
+    "public": {"rate_limit": 60, "time_window": 60},  # 60 requests per 60 seconds
+    "user": {"rate_limit": 200, "time_window": 60},  # 200 requests per 60 seconds
+}
+
+
+# Custom rate limiter middleware
+@app.middleware("http")
+async def rate_limiter(request: Request, next):
+    client_ip = request.client.host
+    current_time = time()
+
+    # Indetify is the user is autheticated
+    bearer = request.headers.get("authorization")
+
+    # Define the configuration of the Rate Limiter
+    if bearer:
+        token = bearer.split("Bearer ")[1].strip()
+        decode_token(token)
+        # Update the default configuration
+        config = RATE_LIMIT_CONFIG.get("user")
+    else:
+        config = RATE_LIMIT_CONFIG.get("public")
+
+    # Get the limits
+    rate_limit = config["rate_limit"]
+    time_window = config["time_window"]
+
+    # Initialize data for the client if not present
+    if client_ip not in rate_limit_data:
+        rate_limit_data[client_ip] = []
+    if client_ip not in burst_control_data:
+        burst_control_data[client_ip] = []
+
+    # Handle Burst Control
+    burst_control_data[client_ip] = [
+        timestamp
+        for timestamp in burst_control_data[client_ip]
+        if current_time - timestamp < BURST_WINDOW
+    ]
+
+    # Check if the burst amount is within the limit
+    if len(burst_control_data[client_ip]) > BURST_LIMIT:
+        raise HTTPException(status_code=429, detail="Burst limit exceeded.")
+
+    # Add burst request within burst window
+    burst_control_data[client_ip].append(current_time)
+
+    # Handle Tiered Rate Limits
+    rate_limit_data[client_ip] = [
+        timestamp
+        for timestamp in rate_limit_data[client_ip]
+        if current_time - timestamp < time_window
+    ]
+
+    # Check if the client is within the limit
+    if len(rate_limit_data[client_ip]) >= rate_limit:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded.")
+
+    # Record the current requests' timestamp
+    rate_limit_data[client_ip].append(current_time)
+
+    # Proceed to the next middleware or endpoint
+    response = await next(request)
+    return response
 
 
 # Root Endpoint
@@ -129,7 +212,7 @@ app.include_router(
 )
 
 
-# Patient appointments routes (authetication required)
+# Patient medication routes (authetication required)
 app.include_router(
     medications.router,
     prefix=f"/patient/medication",
@@ -143,9 +226,19 @@ app.include_router(
     tags=["Diet / Meals"],
 )
 
-
 # The following routes are used by Doctors
-app.include_router(doctor.router, prefix="/users/doctor", tags=["User / Doctors"])
+doctor_router.include_router(doctor_general_routes.router)
+doctor_router.include_router(doctor_appointment_routes.router)
+app.include_router(doctor_router)
+
+# app.include_router(
+#     doctor_general_routes.router, prefix="/users/doctor", tags=["User / Doctors"]
+# )
+# app.include_router(
+#     doctor_appointment_routes.router,
+#     prefix="/users/doctor",
+#     tags=["User / Doctors"],
+# )
 
 # The following routes are used by every users for chats (authentication required)
 app.include_router(chats.router, prefix="/chats", tags=["User / Chats"])

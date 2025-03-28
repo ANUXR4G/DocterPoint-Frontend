@@ -14,7 +14,7 @@ def send_email(recipient: str, subject: str, body: str):
     message["Subject"] = subject
     message.attach(MIMEText(body, "plain"))
 
-    # connect to gmail smtp with oauth2 token 
+    # connect to gmail smtp with oauth2 token
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
             server.starttls()

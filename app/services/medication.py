@@ -3,13 +3,12 @@ from redis import Redis
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
-from datetime import timedelta, datetime, timezone
 
-from app.models import Patient, Medication
+from app.models import Patient, Doctor, Medication
 from app.core.security import uuid_to_base64, base64_to_uuid
 from app.schemas.medication import (
     UpdateMedication,
@@ -17,6 +16,7 @@ from app.schemas.medication import (
 )
 from app.core.utils import ResponseHandler, get_age_group
 from app.core.dummy import dummy_suggestions, exercises
+from app.services.serialization import PatientSerialization
 
 
 class MedicationService:
@@ -27,7 +27,6 @@ class MedicationService:
         db: AsyncSession,
         redis: Redis,
     ):
-
         age = get_age_group(payload.age)
         suggestion_data = dummy_suggestions[age]
 
@@ -45,8 +44,8 @@ class MedicationService:
         await db.commit()
         await db.refresh(new_medication)
 
-        # # restructure the result for general users (e.g, replace ids w base64 strings)
-        medication_details = suggestions_data(new_medication)
+        # restructure the result for general users (e.g, replace ids w base64 strings)
+        medication_details = PatientSerialization.suggestion(new_medication)
 
         # convert the data into json and set the data into redis caching
         redis_key = f"patients:medications:{uuid_to_base64(session_user.id)}"
@@ -66,13 +65,24 @@ class MedicationService:
         if cached_medication_details := redis.get(redis_key):
             return json.loads(cached_medication_details)
 
+        # Get the latest/active Medication record of the consulting patient
         query = (
             select(Medication)
-            .where(Medication.patient_id == session_user.id)
-            .options(
-                defer(Medication.updated_at),  # exclude updated_at
+            .where(
+                Medication.patient_id == session_user.id,
+                # Make sure either medications or exercises exists
+                or_(
+                    Medication.medications.isnot(None),
+                    Medication.exercises.isnot(None),
+                ),
             )
-            .order_by(Medication.updated_at)
+            .options(
+                defer(
+                    Medication.updated_at,
+                )
+            )
+            .order_by(Medication.updated_at.desc())
+            .limit(1)  # Restrict it to only get the latest one
         )
 
         result = await db.execute(query)
@@ -82,7 +92,7 @@ class MedicationService:
             return []
 
         # restructure the result for general users (e.g, replace ids w base64 strings)
-        medication_details = suggestions_data(db_patient_medications)
+        medication_details = PatientSerialization.suggestion(db_patient_medications)
 
         # convert the data into json and set the data into redis caching
         medication_json = json.dumps(jsonable_encoder(medication_details))
@@ -116,7 +126,9 @@ class MedicationService:
             return []
 
         # restructure the result for general users (e.g, replace ids w base64 strings)
-        appointment_medication_details = suggestions_data(db_appointment_medications)
+        appointment_medication_details = PatientSerialization.suggestion(
+            db_appointment_medications
+        )
 
         # convert the data into json and set the data into redis caching
         appointment_medication_json = json.dumps(
@@ -128,21 +140,37 @@ class MedicationService:
 
     @staticmethod
     async def update_patient_medications(
-        payload: UpdateMedication, session_user: Patient, db: AsyncSession, redis: Redis
+        payload: UpdateMedication,
+        session_user: Patient | Doctor,
+        patient_id: str | None,
+        db: AsyncSession,
+        redis: Redis,
     ):
-        patient_id = uuid_to_base64(session_user.id)
-        redis_key = f"patients:medications:{patient_id}"
+        if patient_id:
+            decoded_patient_id = base64_to_uuid(patient_id)
+        else:
+            decoded_patient_id = session_user.id
 
-        query = select(Medication).where(Medication.patient_id == session_user.id)
+        redis_key = f"patients:medications:{patient_id if patient_id else uuid_to_base64(session_user.id)}"
+
+        # Retrieve the latest record
+        query = (
+            select(Medication)
+            .where(Medication.patient_id == decoded_patient_id)
+            .order_by(Medication.updated_at.desc())
+            .limit(1)
+        )  # Restrict it to only get the latest one
+
         result = await db.execute(query)
         db_medications = result.scalar_one_or_none()
 
+        # Raise custom error if the medication record does not exist
         if not db_medications:
             raise ResponseHandler.not_found_error(
                 f"patient medication record not found."
             )
 
-        # raise custom error if no field was provided
+        # Raise custom error if no field was provided
         if payload.is_empty():
             raise HTTPException(
                 status_code=400,
@@ -151,20 +179,52 @@ class MedicationService:
 
         updated_payload = {"updated_at": func.now(), **payload.none_excluded()}
 
+        # Update the appointment id if the medication is being prescribed by the doctor
+        if payload.appointment_id:
+            updated_payload["appointment_id"] = base64_to_uuid(payload.appointment_id)
+
+        # Update the key values
         for key, value in updated_payload.items():
             setattr(db_medications, key, value)
 
+        # Commit the change to database and refresh the record
         await db.commit()
         await db.refresh(db_medications)
 
-        # restructure the result for general users (e.g, replace ids w base64 strings)
-        medication_record = suggestions_data(db_medications)
+        # Restructure the result for general users (e.g, replace ids w base64 strings)
+        medication_record = PatientSerialization.suggestion(db_medications)
 
-        # convert the data into json and store it into redis
+        # Convert the data into json and store it into redis
         medication_record_json = json.dumps(jsonable_encoder(medication_record))
         redis.set(redis_key, medication_record_json, 3600)
 
         return medication_record
+
+    @staticmethod
+    async def delete_patient_medications(
+        session_user: Patient, id: str, db: AsyncSession, redis: Redis
+    ):
+        patient_id = uuid_to_base64(session_user.id)
+        appointment_id = base64_to_uuid(id)
+
+        # Query the Medication record
+        query = select(Medication).where(Medication.appointment_id == appointment_id)
+        result = (await db.execute(query)).scalar_one_or_none()
+
+        # Check if the record exists
+        if not result:
+            raise ResponseHandler.not_found_error(f"medication record #{id} not found")
+
+        # Delete the
+        await db.delete(result)
+        await db.commit()
+
+        # Delete the existing redis cache
+        medication_key = f"patients:medications:{patient_id}"
+        upcoming_key = f"patients:appointments:{patient_id}:upcoming"
+        redis.delete(medication_key, upcoming_key)
+
+        return {"message": f"Successfuly deleted medication record #{id}"}
 
     # @staticmethod
     # async def suggestions_using_ai(
@@ -247,40 +307,3 @@ class MedicationService:
     #     except Exception as e:
     #         print("error", str(e))
     #         raise HTTPException(status_code=500, detail=str(e))
-
-
-# refactor user information
-def suggestions_data(medication: Medication):
-    expiry_time = medication.created_at + timedelta(days=30)
-    remaining_days = (expiry_time - datetime.now(timezone.utc)).days + 1
-
-    data = {
-        "id": uuid_to_base64(medication.id),
-        "patient_id": uuid_to_base64(medication.patient_id),
-        "expiry": remaining_days,
-    }
-
-    # Add doctor_id only if it exists
-    if medication.appointment_id:
-        data["appointment_id"] = uuid_to_base64(medication.appointment_id)
-
-    if medication.doctor_id:
-        data["doctor_id"] = uuid_to_base64(medication.doctor_id)
-
-    data.update(
-        {
-            key: val
-            for key, val in medication.__dict__.items()
-            if key
-            not in {
-                "expiry",
-                "id",
-                "doctor_id",
-                "appointment_id",
-                "patient_id",
-                "created_at",
-            }  # exclude 'expiry', 'id', 'doctor_id', and 'patient_id', 'appointment_id', 'created_at' and 'updated_at',
-        }
-    )
-
-    return data

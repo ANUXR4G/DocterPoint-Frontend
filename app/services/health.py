@@ -85,7 +85,9 @@ class HealthMonitorings:
         redis.set(redis_key, health_record_json, 3600)
 
         # expose the record to websocket room
-        await socket_manager.broadcast_to_room(patient_id, health_record_json)
+        await socket_manager.broadcast_to_room(
+            f"{patient_id}_MONITORING", health_record_json
+        )
 
         return health_record_info
 
@@ -126,7 +128,7 @@ class HealthMonitorings:
             updated_payload["bmi"] = round(updated_data.weight / (height_mtr**2), 2)
         # update the bmi if weight aleready exist and height was provided
         elif db_heath_record.weight and updated_data.height:
-            height_mtr = db_heath_record.height * 0.3048
+            height_mtr = updated_data.height * 0.3048
             updated_payload["bmi"] = round(db_heath_record.weight / (height_mtr**2), 2)
 
         for key, value in updated_payload.items():
@@ -147,7 +149,9 @@ class HealthMonitorings:
         redis.set(redis_key, health_record_json, 3600)
 
         # expose the record to websocket room
-        await socket_manager.broadcast_to_room(patient_id, health_record_json)
+        await socket_manager.broadcast_to_room(
+            f"{patient_id}_MONITORING", health_record_json
+        )
 
         return health_record_info
 
