@@ -30,6 +30,7 @@ export { default as AppointmentBasic } from "./ui/doctors/AppointmentBasic"
 export { default as HealthMetrics } from "./ui/doctors/HealthMetrics"
 export { default as ConsultHistory } from "./ui/doctors/ConsultHistory"
 export { default as PatientInfo } from "./ui/doctors/PatientInfo"
+export { default as DoctorAppointments } from "./ui/doctors/appointments/Appointments"
 
 // patient diet ui
 export { default as FoodRecommendations } from "./ui/patients/diet/FoodRecommendations"
