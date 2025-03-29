@@ -31,6 +31,7 @@ export { default as HealthMetrics } from "./ui/doctors/HealthMetrics"
 export { default as ConsultHistory } from "./ui/doctors/ConsultHistory"
 export { default as PatientInfo } from "./ui/doctors/PatientInfo"
 export { default as DoctorAppointments } from "./ui/doctors/appointments/Appointments"
+export { default as AppointmentAnalytics } from "./ui/doctors/appointments/Analytics"
 
 // patient diet ui
 export { default as FoodRecommendations } from "./ui/patients/diet/FoodRecommendations"

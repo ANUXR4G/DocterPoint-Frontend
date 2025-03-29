@@ -124,6 +124,31 @@ async function getPatientAppointments(token: string, patient_id: string) {
   return response.json()
 }
 
+// Retrieve the number of appointments that has to be done today
+async function getTotalAppointmentCount(
+  token: string,
+  doctorId: string
+): Promise<number> {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API}/users/doctor/${doctorId}/appointments/today`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to retrieve appointment count of today #${doctorId}`
+    )
+  }
+
+  return response.json()
+}
+
 // Retrieve information of a specific appointment
 async function getAppointmentInfo(token: string, appointmentId: string) {
   const response = await fetch(
@@ -227,7 +252,8 @@ export const doctorServices = {
   getDoctorProfile,
   getAppointmentInfo,
   updateAppointmentInfo,
-  getRequestedAppointments,
   getPatientAppointments,
   getDoctorsFromHospital,
+  getTotalAppointmentCount,
+  getRequestedAppointments,
 }

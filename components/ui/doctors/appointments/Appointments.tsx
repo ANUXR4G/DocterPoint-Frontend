@@ -127,7 +127,11 @@ export default function Appointments() {
     )
 
   return (
-    <div>
+    <div className="mt-4">
+      <h1 className="ml-2 text-start text-xl lg:text-3xl text-neutral-500 font-semibold">
+        Appointment History
+      </h1>
+
       {values.length > 0 ? (
         <div className="mt-3 border dark:border-neutral-500 border-neutral-300 bg-transparent dark:bg-neutral-800 rounded-2xl">
           <Table

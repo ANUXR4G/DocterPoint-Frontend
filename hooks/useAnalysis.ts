@@ -6,20 +6,27 @@ import { format, startOfToday } from "date-fns"
 import { months } from "@/lib/dummy/calender"
 import { AnalyticMetrics, TypeAnalytics, TypeAnalyticsParam } from "@/types"
 import { queryClient } from "@/app/providers"
+import { useEffect, useState } from "react"
 
 export function useAnalytics(param: TypeAnalyticsParam = "week"): {
   data?: TypeAnalytics
   isLoading: boolean
+  totalPatients: number
+  totalAppointments: number
   patientMetrics: AnalyticMetrics[]
   appointmentMetrics: AnalyticMetrics[]
   calculatePercentage: (type?: "patients" | "appointments") => number
 } {
+  const [totalAppointments, setTotalAppointments] = useState<number>(0)
+  const [totalPatients, setTotalPatients] = useState<number>(0)
+
   const role = useRole()
 
   // Retrieve the doctor information
   const { data: userInfo } = useUser(role)
 
   const today = startOfToday()
+  const currentCurrentMonth = format(today, "MMMM")
 
   // Retrieve the doctor analytics key
   const { data, isLoading } = useApi(
@@ -34,13 +41,26 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
     }
   )
 
+  useEffect(() => {
+    if (!data) return
+    const patientCount = data[currentCurrentMonth]
+      ? data[currentCurrentMonth].patients.male +
+        data[currentCurrentMonth].patients.female
+      : 0
+    const appointmentCount = data[currentCurrentMonth]
+      ? data[currentCurrentMonth].appointments.male +
+        data[currentCurrentMonth].appointments.female
+      : 0
+    setTotalPatients(patientCount)
+    setTotalAppointments(appointmentCount)
+  }, [data, currentCurrentMonth])
+
   // Calculate the analysis based on specified records
   function calculatePercentage(type: "patients" | "appointments" = "patients") {
     const currentIdx = Number(format(today, "M"))
     if (!data || param === "week" || currentIdx === 1) return 0 // Skip the first month
 
     const previousMonth = months[currentIdx - 2]
-    const currentCurrentMonth = format(today, "MMMM")
 
     // Calculate the total visits of previous period
     const previousTotal =
@@ -56,9 +76,9 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
     const currentTotal =
       type === "patients"
         ? data[currentCurrentMonth].patients.male +
-          data[previousMonth].patients.female
+          data[currentCurrentMonth].patients.female
         : data[currentCurrentMonth].appointments.male +
-          data[previousMonth].appointments.female
+          data[currentCurrentMonth].appointments.female
 
     const percentageChange = (
       ((currentTotal - previousTotal) / previousTotal) *
@@ -92,7 +112,9 @@ export function useAnalytics(param: TypeAnalyticsParam = "week"): {
   return {
     data,
     isLoading,
+    totalPatients,
     patientMetrics,
+    totalAppointments,
     appointmentMetrics,
     calculatePercentage,
   }
