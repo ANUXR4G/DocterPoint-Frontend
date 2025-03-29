@@ -391,6 +391,31 @@ class AppointmentService:
             "medication": medication_result or [],
         }
 
+    @staticmethod
+    async def get_appointmets_today(
+        doctor_id: str,
+        session_user: Doctor,
+        db: AsyncSession,
+    ):
+        today = datetime.today()
+        doctor_id = base64_to_uuid(doctor_id)
+
+        if session_user.id != doctor_id:
+            raise ResponseHandler.no_permission(
+                "you don't have permission to view this resource"
+            )
+
+        # Query for retrieving the total number of visits the doctor has today
+        count_query = select(func.count(Appointment.id)).where(
+            Appointment.doctor_id == session_user.id,
+            Appointment.status.not_in(["requested", "declined", "cancelled"]),
+            cast(Appointment.appointment_date, Date) == cast(today, Date),
+        )
+
+        total_appointment = (await db.execute(count_query)).scalar()
+
+        return total_appointment
+
 
 def updating_info_redis_keys(redis: Redis, doctor_id: str, patient_id: str):
     # Redis key for appointments of the doctor

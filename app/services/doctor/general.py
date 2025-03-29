@@ -61,6 +61,8 @@ class DoctorService:
         db: AsyncSession,
         period_type: str,
     ):
+        allowed_status = ["requested", "declined", "cancelled", "upcoming"]
+
         if period_type not in ["week", "month"]:
             raise ResponseHandler.no_permission("Invalid param value.")
 
@@ -111,9 +113,7 @@ class DoctorService:
                             Appointment.doctor_id == session_user.id,
                             cast(Appointment.appointment_date, Date)
                             == cast(week_dates[i], Date),
-                            Appointment.status.not_in(
-                                ["requested", "declined", "cancelled"]
-                            ),
+                            Appointment.status.not_in(allowed_status),
                             Patient.gender == gender,
                         )
                     )
@@ -124,9 +124,7 @@ class DoctorService:
                             Appointment.doctor_id == session_user.id,
                             cast(Appointment.appointment_date, Date)
                             == cast(week_dates[i], Date),
-                            Appointment.status.not_in(
-                                ["requested", "declined", "cancelled"]
-                            ),
+                            Appointment.status.not_in(allowed_status),
                             Patient.gender == gender,
                         )
                     )
@@ -148,31 +146,40 @@ class DoctorService:
                         day=1
                     ) - timedelta(days=1)
 
-                    patient_query = (
-                        select(func.count(distinct(Appointment.patient_id)))
+                    # Subquery to get the first visit date for each patient
+                    first_visit_query = (
+                        select(
+                            Appointment.patient_id,
+                            func.min(Appointment.appointment_date).label("first_visit"),
+                        )
                         .join(Appointment.patient)
                         .where(
                             Appointment.doctor_id == session_user.id,
-                            cast(Appointment.appointment_date, Date).between(
-                                start_of_month, end_of_month
-                            ),
-                            Appointment.status.not_in(
-                                ["requested", "declined", "cancelled"]
-                            ),
+                            Appointment.status.not_in(allowed_status),
                             Patient.gender == gender,
                         )
+                        .group_by(Appointment.patient_id)
                     )
+
+                    # Main query to count only the first time visits in the current month of that patient
+                    patient_query = select(
+                        func.count(first_visit_query.c.patient_id)
+                    ).where(
+                        cast(first_visit_query.c.first_visit, Date).between(
+                            cast(start_of_month, Date), cast(end_of_month, Date)
+                        ),
+                    )
+
+                    # Query to get the total appointment count of the gender
                     appointment_query = (
                         select(func.count(Appointment.id))
                         .join(Appointment.patient)
                         .where(
                             Appointment.doctor_id == session_user.id,
                             cast(Appointment.appointment_date, Date).between(
-                                start_of_month, end_of_month
+                                cast(start_of_month, Date), cast(end_of_month, Date)
                             ),
-                            Appointment.status.not_in(
-                                ["requested", "declined", "cancelled"]
-                            ),
+                            Appointment.status.not_in(allowed_status),
                             Patient.gender == gender,
                         )
                     )

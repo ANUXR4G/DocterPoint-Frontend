@@ -161,3 +161,32 @@ async def retrieve_patient_appointments(
     """
 
     return await PatientService.get_patient_appointments(patient_id, session_user, db)
+
+
+@router.get("/{doctor_id}/appointments/today")
+async def retrieve_appointment_today(
+    doctor_id: str,
+    session_user: Doctor = Security(
+        include_auth,
+        scopes=["doctor:read", "doctor:update", "patient:read", "appointment:read"],
+    ),
+    db: AsyncSession = Depends(db),
+):
+    """
+    Retrieve appointments count which are scheduled for today of a specific doctor.
+    ----------------------------------------------------------------------------
+
+    Parameters:
+    -----------
+    - doctor_id (str): The unique identifier of the doctor whose appointments are being retrieved.
+    - session_user (Doctor): The authenticated doctor performing the request, validated through
+      role-based permissions (scopes).
+    - db (AsyncSession): The asynchronous database session used for executing SQL queries.
+
+    Returns:
+    --------
+    - Number: The total number for today's appointments for the specified doctor,
+      filtered by the doctor_id and current date.
+    """
+
+    return await AppointmentService.get_appointmets_today(doctor_id, session_user, db)
