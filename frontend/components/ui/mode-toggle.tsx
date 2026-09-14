@@ -1,6 +1,6 @@
 "use client"
 
-import { Monitor, Moon, Sun } from "lucide-react"
+import { IconDeviceDesktop, IconMoon, IconSun } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useAppContext } from "@/hooks/useAppContext"
 import type { ThemeOptions } from "@/app/providers"
@@ -35,9 +35,9 @@ export function ModeToggle({ className }: { className?: string }) {
       title={`${LABELS[active]} · click for ${LABELS[upcoming]}`}
       onClick={() => changeTheme(upcoming)}
       className={cn(
-        "relative inline-flex size-9 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-transparent text-neutral-900 transition-colors dark:border-[#262626] dark:text-white",
+        "relative z-50 inline-flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-white/90 text-neutral-900 shadow-sm transition-colors dark:border-white/15 dark:bg-slate-800/90 dark:text-white",
         "hover:bg-black/5 dark:hover:bg-white/10",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0099ff]/40",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40",
         className,
       )}
     >
@@ -51,11 +51,11 @@ export function ModeToggle({ className }: { className?: string }) {
           className="absolute inset-0 flex items-center justify-center"
         >
           {active === "light" ? (
-            <Sun className="size-[1.15rem]" strokeWidth={1.75} />
+            <IconSun className="size-5" stroke={1.75} />
           ) : active === "dark" ? (
-            <Moon className="size-[1.15rem]" strokeWidth={1.75} />
+            <IconMoon className="size-5" stroke={1.75} />
           ) : (
-            <Monitor className="size-[1.15rem]" strokeWidth={1.75} />
+            <IconDeviceDesktop className="size-5" stroke={1.75} />
           )}
         </motion.span>
       </AnimatePresence>
