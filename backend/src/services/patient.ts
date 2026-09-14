@@ -330,15 +330,14 @@ export class PatientService {
 
   /**
    * Create a patient account from WhatsApp chat.
-   * Email optional — if omitted, uses wa{phone}@patients.glucoguide.local.
-   * Returns a one-time plaintext password for the confirmation message.
+   * Requires a real email for the profile; patients sign in with phone OTP (not email).
    */
   static async registerViaWhatsApp(data: {
     phone: string;
     name: string;
     gender?: string;
     dateOfBirth?: string | null;
-    email?: string | null;
+    email: string;
     address?: string | null;
   }) {
     const phone = data.phone.replace(/\D/g, "").slice(-10);
@@ -379,7 +378,7 @@ export class PatientService {
     if (existing) {
       throw new AppError(
         409,
-        `You're already registered as ${existing.name || "a patient"}. Reply *BOOK* to book, or login on the website with your email.`,
+        `You're already registered as ${existing.name || "a patient"}. Reply *BOOK* to book, or sign in on the app/website with your mobile number.`,
       );
     }
 
@@ -388,29 +387,31 @@ export class PatientService {
       throw new AppError(400, "Please provide your full name.");
     }
 
-    let email =
-      data.email?.trim().toLowerCase() ||
-      `wa${phone}@patients.glucoguide.local`;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new AppError(400, "That email looks invalid. Try again or reply *SKIP*.");
+    const email = data.email.trim().toLowerCase();
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      email.endsWith("@patients.glucoguide.local")
+    ) {
+      throw new AppError(
+        400,
+        "Please send your real email address (e.g. you@gmail.com).",
+      );
     }
 
     const emailTaken = await prisma.user.findUnique({ where: { email } });
     if (emailTaken) {
-      if (email.endsWith("@patients.glucoguide.local")) {
-        email = `wa${phone}.${Date.now()}@patients.glucoguide.local`;
-      } else {
-        throw new AppError(
-          409,
-          "That email is already registered. Reply with another email or *SKIP*.",
-        );
-      }
+      throw new AppError(
+        409,
+        "That email is already registered. Reply with a different email address.",
+      );
     }
 
     const gender = requireGender(data.gender);
 
-    const tempPassword = `Gg${phone.slice(-4)}${Math.random().toString(36).slice(2, 6)}`;
-    const hashedPassword = await generateHash(tempPassword);
+    // Random password for schema only — patients authenticate via phone OTP.
+    const hashedPassword = await generateHash(
+      `wa-reg-${phone}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    );
 
     const user = await prisma.user.create({
       data: {
@@ -437,8 +438,6 @@ export class PatientService {
       name: user.name,
       email: user.email,
       phone,
-      tempPassword,
-      usedPlaceholderEmail: email.endsWith("@patients.glucoguide.local"),
     };
   }
 }

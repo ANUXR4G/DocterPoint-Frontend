@@ -20,10 +20,12 @@ import {
   type WaLang,
 } from "./whatsapp.i18n.js";
 import {
-  parseDateOnly,
+  exactMenuIntent,
+  parsePatientDate,
   parseSlotsRegex,
   parseUtterance,
   stepUsesLlm,
+  type BotIntent,
   type NluSlots,
 } from "./whatsapp.nlu.js";
 import { formatLocalDate } from "./slotEngine.js";
@@ -57,6 +59,7 @@ export type ConversationStep =
   | "awaiting_reschedule_slot"
   | "awaiting_register_name"
   | "awaiting_register_gender"
+  | "awaiting_register_email"
   | "awaiting_register_confirm";
 
 export type ConversationState = {
@@ -77,6 +80,7 @@ export type ConversationState = {
   bookingChoices?: Array<{ id: string; label: string }>;
   regName?: string;
   regGender?: string;
+  regEmail?: string;
   regDob?: string | null;
   regAddress?: string | null;
   /** After register succeeds, auto-start booking */
@@ -146,6 +150,121 @@ function bookingWhenLabel(b: {
     return `Token #${b.tokenNumber ?? "?"} on ${b.sessionDate?.toISOString().slice(0, 10) ?? "?"}`;
   }
   return b.slotStart?.toLocaleString() ?? "scheduled time";
+}
+
+async function replyStatus(
+  practice: PracticeCtx,
+  patientPhone: string,
+  lang: WaLang,
+): Promise<{ reply: string }> {
+  const bookings = await BookingService.listForPatient({ phone: patientPhone });
+  const mine = bookings.filter((b) => b.practiceId === practice.id);
+  if (!mine.length) {
+    const patient = await PatientService.findByPhone(patientPhone);
+    if (!patient) {
+      return {
+        reply:
+          lang === "hi"
+            ? "अभी कोई अपॉइंटमेंट नहीं — और आप रजिस्टर्ड नहीं हैं।\nएक साथ रजिस्टर और शेड्यूल के लिए *BOOK* लिखें।"
+            : "No appointments yet — and you're not registered.\nReply *BOOK* to register and schedule in one flow.",
+      };
+    }
+    return {
+      reply:
+        lang === "hi"
+          ? "इस क्लिनिक पर आपकी कोई अपॉइंटमेंट नहीं है। शेड्यूल के लिए *BOOK* लिखें।"
+          : "You have no appointments at this clinic. Reply *BOOK* to schedule.",
+    };
+  }
+  const lines = mine.slice(0, 5).map((b) => {
+    const docs = Array.isArray(b.documents) ? b.documents.length : 0;
+    const docBit =
+      docs > 0
+        ? lang === "hi"
+          ? ` · ${docs} फ़ाइल`
+          : ` · ${docs} file(s)`
+        : "";
+    return `• ${b.status}: ${bookingWhenLabel(b)}${docBit}`;
+  });
+  return {
+    reply:
+      lang === "hi"
+        ? `*${practice.name}* पर आपकी अपॉइंटमेंट:\n${lines.join("\n")}\n\nरिपोर्ट जोड़ने के लिए फ़ोटो/PDF भेजें, या *REPORT* लिखें।`
+        : `Your appointments at ${practice.name}:\n${lines.join("\n")}\n\nSend a photo/PDF to attach a report, or reply *REPORT*.`,
+  };
+}
+
+async function dispatchMenuIntent(opts: {
+  intent: BotIntent;
+  convId: string;
+  practice: PracticeCtx;
+  patientPhone: string;
+  state: ConversationState;
+  lang: WaLang;
+}): Promise<{ reply: string } | null> {
+  const { intent, convId, practice, patientPhone, state, lang } = opts;
+  switch (intent) {
+    case "status":
+      return replyStatus(practice, patientPhone, lang);
+    case "book":
+      return ensureRegisteredThenBook(convId, practice, patientPhone, {}, state);
+    case "register":
+      return startRegisterFlow(convId, patientPhone, state);
+    case "doctors": {
+      const providers = await loadProviders(practice.id);
+      return {
+        reply: BotPrompts.doctorsList(
+          practice.name,
+          providers.map((p, i) => ({
+            index: i + 1,
+            name: p.name,
+            detail: p.detail,
+          })),
+          practiceClinicUrl(practice.slug),
+          lang,
+        ),
+      };
+    }
+    case "help": {
+      const patient = await PatientService.findByPhone(patientPhone);
+      return { reply: BotPrompts.help(practice.name, patient?.name, lang) };
+    }
+    case "report":
+      return { reply: BotPrompts.visitDocHowTo(lang) };
+    case "my_docs": {
+      const { listWhatsAppVisitDocuments } = await import("./whatsapp.visitDocs.js");
+      return {
+        reply: await listWhatsAppVisitDocuments({
+          practiceId: practice.id,
+          patientPhone,
+          lang,
+        }),
+      };
+    }
+    case "faq": {
+      const loc = practice.locations?.[0];
+      const faqExtras = {
+        consultationFee: practice.consultationFee,
+        address: loc
+          ? [loc.address, loc.city].filter(Boolean).join(", ")
+          : null,
+        phone: practice.phone,
+        specialty: practice.specialty,
+        email: practice.email,
+      };
+      const faq =
+        faqReply(practice.faqKb, practice.name, "FAQ", lang, faqExtras) ||
+        faqReply(practice.faqKb, practice.name, "fee", lang, faqExtras);
+      if (faq) return { reply: faq };
+      return null;
+    }
+    case "cancel":
+    case "reschedule":
+      // Handled below with booking lookups (same as NLU path)
+      return null;
+    default:
+      return null;
+  }
 }
 
 /** Providers linked to this clinic only (PracticeMember rows for practiceId). */
@@ -247,6 +366,168 @@ async function suggestDefaultDate(
   const t = new Date();
   t.setDate(t.getDate() + 1);
   return formatLocalDate(t);
+}
+
+/** Keep booking date step alive and suggest another day. */
+async function reaskDateNoSlots(
+  convId: string,
+  practice: PracticeCtx,
+  state: ConversationState,
+): Promise<{ reply: string }> {
+  const lang = resolveLang(state.preferredLanguage);
+  const next: ConversationState = {
+    ...state,
+    step: "awaiting_date",
+    date: undefined,
+    mode: undefined,
+    slotStart: undefined,
+    slotChoices: undefined,
+    sessionDate: undefined,
+    tokenPreview: undefined,
+    pendingSummary: undefined,
+  };
+  let suggested: string | undefined;
+  if (next.providerId && next.locationId) {
+    suggested = await suggestDefaultDate(
+      practice,
+      next.providerId,
+      next.locationId,
+    );
+  }
+  await saveState(convId, next);
+  return { reply: BotPrompts.noSlots(lang, suggested) };
+}
+
+async function handleAwaitingDate(
+  convId: string,
+  practice: PracticeCtx,
+  state: ConversationState,
+  patientPhone: string,
+  text: string,
+): Promise<{ reply: string }> {
+  const lang = resolveLang(state.preferredLanguage);
+  const trimmed = text.trim();
+
+  // Escape hatches so users aren't trapped if they change their mind
+  if (/^(help|menu|\?)$/i.test(trimmed)) {
+    const patient = await PatientService.findByPhone(patientPhone);
+    return { reply: BotPrompts.help(practice.name, patient?.name, lang) };
+  }
+  if (/^(cancel|stop|nevermind|never mind|abort)$/i.test(trimmed)) {
+    await saveState(convId, idleState(state));
+    return { reply: BotPrompts.bookingFlowCanceled(lang) };
+  }
+
+  const parsed = parsePatientDate(text);
+  if (!parsed.ok) {
+    await saveState(convId, { ...state, step: "awaiting_date", failedTurns: 0 });
+    if (parsed.reason === "past") return { reply: BotPrompts.datePast(lang) };
+    if (parsed.reason === "far") return { reply: BotPrompts.dateTooFar(lang) };
+    return { reply: BotPrompts.dateInvalid(lang) };
+  }
+
+  const date = parsed.date;
+
+  if (state.rescheduleBookingId) {
+    const booking = await prisma.practiceBooking.findUnique({
+      where: { id: state.rescheduleBookingId },
+    });
+    if (!booking) {
+      await saveState(convId, idleState(state));
+      return { reply: BotPrompts.bookingNotFound(lang) };
+    }
+
+    if (booking.mode === ScheduleMode.TOKEN_BASED) {
+      try {
+        const updated = await BookingService.reschedule(booking.id, {
+          sessionDate: date,
+          phone: patientPhone,
+          skipPatientNotification: true,
+        });
+        await saveState(convId, idleState(state));
+        return { reply: BotPrompts.rescheduled(bookingWhenLabel(updated), lang) };
+      } catch (err) {
+        await saveState(convId, {
+          ...state,
+          step: "awaiting_date",
+          failedTurns: 0,
+        });
+        return {
+          reply:
+            (err instanceof Error ? err.message : "Could not reschedule.") +
+            "\n" +
+            BotPrompts.askDate(lang),
+        };
+      }
+    }
+
+    const availability = await BookingService.getAvailability(
+      practice.id,
+      booking.providerId,
+      booking.locationId,
+      date,
+    );
+    const open = availability.timeSlots.filter((s) => s.available).slice(0, 12);
+    if (!open.length) {
+      return reaskDateNoSlots(convId, practice, {
+        ...state,
+        providerId: booking.providerId,
+        locationId: booking.locationId,
+      });
+    }
+
+    if (open.length === 1) {
+      try {
+        const updated = await BookingService.reschedule(booking.id, {
+          slotStart: open[0]!.start.toISOString(),
+          phone: patientPhone,
+          skipPatientNotification: true,
+        });
+        await saveState(convId, idleState(state));
+        return { reply: BotPrompts.rescheduled(bookingWhenLabel(updated), lang) };
+      } catch (err) {
+        await saveState(convId, {
+          ...state,
+          step: "awaiting_date",
+          failedTurns: 0,
+        });
+        return {
+          reply:
+            (err instanceof Error ? err.message : "Could not reschedule.") +
+            "\n" +
+            BotPrompts.askDate(lang),
+        };
+      }
+    }
+
+    const slotChoices = open.map((s) => ({
+      start: s.start.toISOString(),
+      label: s.start.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }));
+    await saveState(convId, {
+      ...state,
+      date,
+      step: "awaiting_reschedule_slot",
+      slotChoices,
+      providerId: booking.providerId,
+      locationId: booking.locationId,
+      mode: booking.mode,
+      failedTurns: 0,
+    });
+    return {
+      reply: BotPrompts.askSlot(
+        slotChoices.map((s, i) => ({ index: i + 1, label: s.label })),
+        lang,
+      ),
+    };
+  }
+
+  state.date = date;
+  state.failedTurns = 0;
+  return advanceAfterDate(convId, practice, state);
 }
 
 async function advanceAfterDate(
@@ -368,8 +649,7 @@ async function askModeForDay(
   const hasTime = availability.timeSlots.some((s) => s?.available);
 
   if (!hasToken && !hasTime) {
-    await saveState(convId, idleState(state));
-    return { reply: BotPrompts.noSlots(lang) };
+    return reaskDateNoSlots(convId, practice, state);
   }
 
   // Auto-select the only available mode
@@ -412,8 +692,7 @@ async function continueAfterMode(
   if (mode === ScheduleMode.TOKEN_BASED) {
     const session = availability.tokenSessions.find((s) => s?.available);
     if (!session) {
-      await saveState(convId, idleState(state));
-      return { reply: BotPrompts.noSlots(lang) };
+      return reaskDateNoSlots(convId, practice, state);
     }
     const pendingSummary = `Token #${session.nextToken} on ${date} (${session.sessionStart}–${session.sessionEnd}) at ${practice.name}`;
     await saveState(convId, {
@@ -437,8 +716,7 @@ async function continueAfterMode(
 
   const open = availability.timeSlots.filter((s) => s.available).slice(0, 12);
   if (!open.length) {
-    await saveState(convId, idleState(state));
-    return { reply: BotPrompts.noSlots(lang) };
+    return reaskDateNoSlots(convId, practice, state);
   }
 
   // Auto-confirm if only one slot remains
@@ -528,9 +806,18 @@ function registerSummary(state: ConversationState, phone: string): string {
     `• Gender: ${state.regGender}`,
     `• Phone: ${phone}`,
   ];
+  if (state.regEmail) lines.push(`• Email: ${state.regEmail}`);
   if (state.regDob) lines.push(`• DOB: ${state.regDob}`);
   if (state.regAddress) lines.push(`• Address: ${state.regAddress}`);
   return lines.join("\n");
+}
+
+function parseRegisterEmail(text: string): string | null {
+  const raw = text.trim().toLowerCase();
+  if (!raw || /^(skip|no|none|n\/a|na)$/i.test(raw)) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return null;
+  if (raw.endsWith("@patients.glucoguide.local")) return null;
+  return raw;
 }
 
 async function applyIdScanToRegister(
@@ -566,15 +853,13 @@ async function applyIdScanToRegister(
   const gender = scan.gender;
   if (gender) {
     state.regGender = gender;
-    state.step = "awaiting_register_confirm";
-    state.pendingSummary = registerSummary(state, patientPhone);
+    state.step = "awaiting_register_email";
     await saveState(convId, state);
     return {
-      reply: BotPrompts.idOcrConfirm(
-        state.pendingSummary,
-        state.afterRegister === "book",
-        lang,
-      ),
+      reply:
+        BotPrompts.idOcrGotName(name, lang) +
+        "\n\n" +
+        BotPrompts.askRegisterEmail(lang),
     };
   }
 
@@ -643,7 +928,7 @@ async function confirmRegister(
       name: state.regName!,
       gender: state.regGender,
       dateOfBirth: state.regDob ?? null,
-      email: null,
+      email: state.regEmail!,
       address: state.regAddress ?? null,
     });
     const continueToBook = state.afterRegister === "book";
@@ -662,9 +947,6 @@ async function confirmRegister(
           BotPrompts.registered(
             {
               name: result.name || state.regName!,
-              email: result.email,
-              tempPassword: result.tempPassword,
-              usedPlaceholderEmail: result.usedPlaceholderEmail,
               continueToBook: true,
             },
             resolveLang(state.preferredLanguage),
@@ -679,9 +961,6 @@ async function confirmRegister(
       reply: BotPrompts.registered(
         {
           name: result.name || state.regName!,
-          email: result.email,
-          tempPassword: result.tempPassword,
-          usedPlaceholderEmail: result.usedPlaceholderEmail,
         },
         resolveLang(state.preferredLanguage),
       ),
@@ -773,17 +1052,31 @@ async function runOrchestratorCore(input: {
   const lang: WaLang = resolveLang(state.preferredLanguage);
 
   if (state.handedOff) {
-    if (/^(bot|resume|menu)$/i.test(text.trim())) {
-      state = { ...state, handedOff: false, step: "idle", failedTurns: 0 };
-      await saveState(convId, state);
-      await prisma.whatsAppConversation.update({
-        where: { id: convId },
-        data: { status: "bot_active" },
-      });
+    const t = text.trim();
+    const resumeMenuOnly = /^(bot|resume|menu)$/i.test(t);
+    // Match care-chat escape: booking commands must reclaim the bot (copy promised BOOK works).
+    const resumeAndRun =
+      /^(book|cancel|reschedule|status|help|hi|hello|hey|start|register|doctors?|faq|info|report|reports|my\s*docs?)\b/i.test(
+        t,
+      ) ||
+      (/\b(book|cancel|reschedule)\b/i.test(t) && t.length < 80);
+
+    if (!resumeMenuOnly && !resumeAndRun) {
+      return { reply: BotPrompts.handedOffWait(lang) };
+    }
+
+    state = { ...state, handedOff: false, step: "idle", failedTurns: 0 };
+    await saveState(convId, state);
+    await prisma.whatsAppConversation.update({
+      where: { id: convId },
+      data: { status: "bot_active" },
+    });
+
+    if (resumeMenuOnly) {
       const patient = await PatientService.findByPhone(patientPhone);
       return { reply: BotPrompts.help(practice.name, patient?.name, lang) };
     }
-    return { reply: BotPrompts.handedOffWait(lang) };
+    // Fall through — process BOOK / STATUS / etc. normally
   }
 
   // ID photo OCR → autofill registration (same vision stack as web /auth/id-scan)
@@ -802,6 +1095,7 @@ async function runOrchestratorCore(input: {
       state.step === "idle" ||
       state.step === "awaiting_register_name" ||
       state.step === "awaiting_register_gender" ||
+      state.step === "awaiting_register_email" ||
       state.step === "awaiting_register_confirm";
     if (!inRegister) {
       return { reply: BotPrompts.idPhotoWrongStep(lang) };
@@ -815,11 +1109,36 @@ async function runOrchestratorCore(input: {
     return { reply: BotPrompts.idleReset(lang) };
   }
 
-  // Fast path: registration gender/name/confirm — no NLU/LLM (avoids multi-second hangs)
+  // Global menu commands (typed or WhatsApp button) — always win over mid-flow steps
+  const menuIntent = exactMenuIntent(text);
+  if (menuIntent) {
+    state = { ...idleState(state), failedTurns: 0 };
+    await saveState(convId, state);
+    const dispatched = await dispatchMenuIntent({
+      intent: menuIntent,
+      convId,
+      practice,
+      patientPhone,
+      state,
+      lang,
+    });
+    if (dispatched) return dispatched;
+  }
+
+  // Fast path: registration gender/name/email/confirm — no NLU/LLM
   if (state.step === "awaiting_register_gender") {
     const gender = parseGender(text, parseSlotsRegex(text));
     if (!gender) return { reply: BotPrompts.askRegisterGender(lang) };
     state.regGender = gender;
+    state.step = "awaiting_register_email";
+    await saveState(convId, state);
+    return { reply: BotPrompts.askRegisterEmail(lang) };
+  }
+
+  if (state.step === "awaiting_register_email") {
+    const email = parseRegisterEmail(text);
+    if (!email) return { reply: BotPrompts.askRegisterEmail(lang) };
+    state.regEmail = email;
     state.step = "awaiting_register_confirm";
     state.pendingSummary = registerSummary(state, patientPhone);
     await saveState(convId, state);
@@ -844,6 +1163,11 @@ async function runOrchestratorCore(input: {
   }
 
   if (state.step === "awaiting_register_confirm") {
+    if (!state.regEmail) {
+      state.step = "awaiting_register_email";
+      await saveState(convId, state);
+      return { reply: BotPrompts.askRegisterEmail(lang) };
+    }
     if (/^(yes|y|confirm|ok|okay|sure)$/i.test(text.trim())) {
       return confirmRegister(convId, practice, state, patientPhone);
     }
@@ -858,6 +1182,11 @@ async function runOrchestratorCore(input: {
         lang,
       ),
     };
+  }
+
+  // Fast path: booking/reschedule date — stay in step; never fall through to HELP/escalate
+  if (state.step === "awaiting_date") {
+    return handleAwaitingDate(convId, practice, state, patientPhone, text);
   }
 
   const contextHint = `step=${state.step ?? "idle"}; practice=${practice.name}; today=${formatLocalDate(new Date())}`;
@@ -954,89 +1283,6 @@ async function runOrchestratorCore(input: {
       await saveState(convId, idleState(state));
       return { reply: BotPrompts.keptBooking(lang) };
     }
-  }
-
-  // Date (book or reschedule)
-  if (state.step === "awaiting_date") {
-    const date = nlu.slots.date || parseDateOnly(text);
-    if (!date) return { reply: BotPrompts.askDate(lang) };
-
-    if (state.rescheduleBookingId) {
-      const booking = await prisma.practiceBooking.findUnique({
-        where: { id: state.rescheduleBookingId },
-      });
-      if (!booking) {
-        await saveState(convId, idleState(state));
-        return { reply: BotPrompts.bookingNotFound(lang) };
-      }
-
-      if (booking.mode === ScheduleMode.TOKEN_BASED) {
-        try {
-          const updated = await BookingService.reschedule(booking.id, {
-            sessionDate: date,
-            phone: patientPhone,
-            skipPatientNotification: true,
-          });
-          await saveState(convId, idleState(state));
-          return { reply: BotPrompts.rescheduled(bookingWhenLabel(updated), lang) };
-        } catch (err) {
-          await saveState(convId, idleState(state));
-          return {
-            reply: err instanceof Error ? err.message : "Could not reschedule.",
-          };
-        }
-      }
-
-      const availability = await BookingService.getAvailability(
-        practice.id,
-        booking.providerId,
-        booking.locationId,
-        date,
-      );
-      const open = availability.timeSlots.filter((s) => s.available).slice(0, 12);
-      if (!open.length) return { reply: BotPrompts.noSlots(lang) };
-
-      if (open.length === 1) {
-        try {
-          const updated = await BookingService.reschedule(booking.id, {
-            slotStart: open[0]!.start.toISOString(),
-            phone: patientPhone,
-            skipPatientNotification: true,
-          });
-          await saveState(convId, idleState(state));
-          return { reply: BotPrompts.rescheduled(bookingWhenLabel(updated), lang) };
-        } catch (err) {
-          await saveState(convId, idleState(state));
-          return {
-            reply: err instanceof Error ? err.message : "Could not reschedule.",
-          };
-        }
-      }
-
-      const slotChoices = open.map((s) => ({
-        start: s.start.toISOString(),
-        label: s.start.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      }));
-      await saveState(convId, {
-        ...state,
-        date,
-        step: "awaiting_reschedule_slot",
-        slotChoices,
-        providerId: booking.providerId,
-        locationId: booking.locationId,
-        mode: booking.mode,
-      });
-      return {
-        reply: BotPrompts.askSlot(
-          slotChoices.map((s, i) => ({ index: i + 1, label: s.label })), lang),
-      };
-    }
-
-    state.date = date;
-    return advanceAfterDate(convId, practice, state);
   }
 
   if (state.step === "awaiting_provider") {
@@ -1157,41 +1403,7 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "status") {
-    const bookings = await BookingService.listForPatient({ phone: patientPhone });
-    const mine = bookings.filter((b) => b.practiceId === practice.id);
-    if (!mine.length) {
-      const patient = await PatientService.findByPhone(patientPhone);
-      if (!patient) {
-        return {
-          reply:
-            lang === "hi"
-              ? "अभी कोई अपॉइंटमेंट नहीं — और आप रजिस्टर्ड नहीं हैं।\nएक साथ रजिस्टर और शेड्यूल के लिए *BOOK* लिखें।"
-              : "No appointments yet — and you're not registered.\nReply *BOOK* to register and schedule in one flow.",
-        };
-      }
-      return {
-        reply:
-          lang === "hi"
-            ? "इस क्लिनिक पर आपकी कोई अपॉइंटमेंट नहीं है। शेड्यूल के लिए *BOOK* लिखें।"
-            : "You have no appointments at this clinic. Reply *BOOK* to schedule.",
-      };
-    }
-    const lines = mine.slice(0, 5).map((b) => {
-      const docs = Array.isArray(b.documents) ? b.documents.length : 0;
-      const docBit =
-        docs > 0
-          ? lang === "hi"
-            ? ` · ${docs} फ़ाइल`
-            : ` · ${docs} file(s)`
-          : "";
-      return `• ${b.status}: ${bookingWhenLabel(b)}${docBit}`;
-    });
-    return {
-      reply:
-        lang === "hi"
-          ? `*${practice.name}* पर आपकी अपॉइंटमेंट:\n${lines.join("\n")}\n\nरिपोर्ट जोड़ने के लिए फ़ोटो/PDF भेजें, या *REPORT* लिखें।`
-          : `Your appointments at ${practice.name}:\n${lines.join("\n")}\n\nSend a photo/PDF to attach a report, or reply *REPORT*.`,
-    };
+    return replyStatus(practice, patientPhone, lang);
   }
 
   if (nlu.intent === "report") {
