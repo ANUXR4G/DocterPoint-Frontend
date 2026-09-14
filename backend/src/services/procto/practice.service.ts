@@ -516,6 +516,69 @@ export const PracticeService = {
     return updated;
   },
 
+  /**
+   * Wipe WhatsApp bot state (+ optional WA-registered patient) for a phone
+   * so the language / REGISTER welcome flow can be retested cleanly.
+   */
+  async clearWhatsAppPhone(
+    practiceId: string,
+    phoneRaw: string,
+    actorUserId: string,
+  ) {
+    await this.assertMember(practiceId, actorUserId);
+    const phone = phoneRaw.replace(/\D/g, "").slice(-10);
+    if (phone.length !== 10) {
+      throw new AppError(400, "A valid 10-digit phone is required.");
+    }
+
+    const conversations = await prisma.whatsAppConversation.deleteMany({
+      where: {
+        patientPhone: { endsWith: phone },
+      },
+    });
+
+    const bookingIds = (
+      await prisma.practiceBooking.findMany({
+        where: { patientPhone: { endsWith: phone } },
+        select: { id: true },
+      })
+    ).map((b) => b.id);
+
+    const notifications = bookingIds.length
+      ? await prisma.notificationEvent.deleteMany({
+          where: { bookingId: { in: bookingIds } },
+        })
+      : { count: 0 };
+
+    const { PatientService } = await import("../patient.js");
+    const existing = await PatientService.findByPhone(phone);
+    let patientCleared: { id: string; name: string | null; email: string | null } | null =
+      null;
+    if (existing) {
+      const email = (existing.email ?? "").toLowerCase();
+      const waLocal =
+        email.endsWith("@patients.glucoguide.local") ||
+        email.startsWith(`wa${phone}@`) ||
+        /^wa\d+@/.test(email);
+      // Only auto-delete WhatsApp-provisioned patients; never wipe normal web signups.
+      if (waLocal || !existing.email) {
+        await prisma.user.delete({ where: { id: existing.id } });
+        patientCleared = {
+          id: existing.id,
+          name: existing.name,
+          email: existing.email,
+        };
+      }
+    }
+
+    return {
+      phone,
+      conversationsDeleted: conversations.count,
+      notificationsDeleted: notifications.count,
+      patientCleared,
+    };
+  },
+
   async assertMember(practiceId: string, userId: string) {
     const member = await prisma.practiceMember.findUnique({
       where: { practiceId_userId: { practiceId, userId } },
