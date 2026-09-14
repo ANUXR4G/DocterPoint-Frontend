@@ -334,6 +334,28 @@ router.patch(
   },
 );
 
+router.post(
+  "/:practiceId/whatsapp/clear-phone",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const phone = String(req.body?.phone ?? "");
+      const data = await PracticeService.clearWhatsAppPhone(
+        param(req.params.practiceId),
+        phone,
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(
+        res,
+        "WhatsApp phone record cleared.",
+        data,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get(
   "/:practiceId/reviews",
   async (req: Request, res: Response, next: NextFunction) => {
