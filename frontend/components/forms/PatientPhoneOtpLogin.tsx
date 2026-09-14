@@ -103,8 +103,13 @@ export default function PatientPhoneOtpLogin() {
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
               setPhone(e.target.value)
             }
-            placeholder="10-digit mobile"
+            inputMode="tel"
+            maxLength={15}
+            autoComplete="tel"
           />
+          <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+            10-digit Indian mobile number
+          </p>
           {error ? (
             <p className="text-sm font-medium text-rose-600">{error}</p>
           ) : null}
@@ -132,8 +137,13 @@ export default function PatientPhoneOtpLogin() {
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
               setCode(e.target.value)
             }
-            placeholder="6-digit code"
+            inputMode="numeric"
+            maxLength={6}
+            autoComplete="one-time-code"
           />
+          <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+            6-digit code from WhatsApp
+          </p>
           {error ? (
             <p className="text-sm font-medium text-rose-600">{error}</p>
           ) : null}

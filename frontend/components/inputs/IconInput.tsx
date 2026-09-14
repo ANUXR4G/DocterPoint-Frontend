@@ -41,6 +41,8 @@ const IconInput = React.memo(function IconInput({
 }: Props) {
   const hasValue = String(value ?? "").length > 0
   const hasError = Boolean(error)
+  // Floating label needs a blank placeholder; real hint text would overlap the label.
+  const inputPlaceholder = label ? " " : placeholder
   return (
     <div
       className={`form-input-shell flex w-full min-w-0 items-center relative min-h-[4.5rem] h-auto px-5 group ${
@@ -62,11 +64,11 @@ const IconInput = React.memo(function IconInput({
           type={type ?? "text"}
           id={name}
           name={name}
-          className={`form-input peer block h-14 w-full min-w-0 rounded-md border-none bg-transparent pl-2.5 pr-1 text-base font-semibold leading-[3.5rem] focus:outline-none focus:pt-5 focus:pb-2 focus:leading-normal peer-[:not(:placeholder-shown)]:pt-5 peer-[:not(:placeholder-shown)]:pb-2 peer-[:not(:placeholder-shown)]:leading-normal placeholder:text-transparent dark:placeholder:text-transparent ${
+          className={`form-input peer block h-14 w-full min-w-0 rounded-md border-none bg-transparent pl-2.5 pr-1 text-base font-semibold leading-[3.5rem] focus:outline-none focus:pt-5 focus:pb-2 focus:leading-normal placeholder:text-transparent dark:placeholder:text-transparent ${
             hasValue ? "pt-5 pb-2 leading-normal" : ""
           }${inputClassName ? ` ${inputClassName}` : ""}`}
           spellCheck="false"
-          placeholder={placeholder}
+          placeholder={inputPlaceholder}
           value={value}
           onChange={onChange}
           onBlur={onBlur}
@@ -77,6 +79,7 @@ const IconInput = React.memo(function IconInput({
           autoComplete={
             autoComplete ?? (type === "password" ? "new-password" : "off")
           }
+          aria-label={label || undefined}
         />
         <label
           htmlFor={name}
