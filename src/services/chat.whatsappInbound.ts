@@ -10,14 +10,14 @@ function looksLikeBotCommand(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
   if (
-    /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|attach)\b/.test(
+    /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info)\b/.test(
       t,
     )
   ) {
     return true;
   }
   // Explicit booking verbs mid-message still go to the bot.
-  if (/\b(book|cancel|reschedule)\b/.test(t) && t.length < 80) return true;
+  if (/\b(book|cancel|reschedule|status)\b/.test(t) && t.length < 80) return true;
   return false;
 }
 

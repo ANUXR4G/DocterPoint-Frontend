@@ -1,5 +1,5 @@
 import { llmChatProviders } from "../../lib/llm.js";
-import { formatLocalDate } from "./slotEngine.js";
+import { formatLocalDate, parseLocalDate, startOfLocalDay } from "./slotEngine.js";
 
 export type BotIntent =
   | "book"
@@ -52,27 +52,101 @@ const INTENTS: BotIntent[] = [
   "unknown",
 ];
 
-function normalizeDateText(text: string): string | undefined {
-  const t = text.trim().toLowerCase();
-  const today = new Date();
-  if (/^today$|^आज$/i.test(t) || text.trim() === "आज") return formatLocalDate(today);
-  if (/^tomorrow$|^कल$/i.test(t) || text.trim() === "कल") {
+export type ParsedPatientDate =
+  | { ok: true; date: string }
+  | { ok: false; reason: "invalid" | "past" | "far" };
+
+function isValidCalendarYmd(y: number, m: number, d: number): boolean {
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return false;
+  if (y < 1900 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(y, m - 1, d);
+  return (
+    dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d
+  );
+}
+
+function ymdString(y: number, m: number, d: number): string | undefined {
+  if (!isValidCalendarYmd(y, m, d)) return undefined;
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/** India-first: prefer DD-MM-YYYY when both parts are ≤ 12. */
+function resolveDayMonth(a: number, b: number): { day: number; month: number } {
+  if (a > 12 && b >= 1 && b <= 12) return { day: a, month: b };
+  if (b > 12 && a >= 1 && a <= 12) return { day: b, month: a };
+  return { day: a, month: b }; // DD-MM
+}
+
+/**
+ * Parse a patient-typed appointment date.
+ * Accepts TODAY/TOMORROW (any case), DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD.
+ */
+export function parsePatientDate(
+  text: string,
+  now: Date = new Date(),
+): ParsedPatientDate {
+  const raw = text.trim();
+  if (!raw) return { ok: false, reason: "invalid" };
+  const t = raw.toLowerCase().replace(/\s+/g, " ");
+
+  const today = startOfLocalDay(now);
+  let candidate: string | undefined;
+
+  if (
+    /^(today|todays|aaj|आज)$/i.test(t) ||
+    t === "आज"
+  ) {
+    candidate = formatLocalDate(today);
+  } else if (
+    /^(tomorrow|tomm?orrow|tmrw|kal|कल)$/i.test(t) ||
+    t === "कल"
+  ) {
     const d = new Date(today);
     d.setDate(d.getDate() + 1);
-    return formatLocalDate(d);
+    candidate = formatLocalDate(d);
+  } else if (
+    /^(day after( tomorrow)?|parso|परसों)$/i.test(t) ||
+    t === "परसों"
+  ) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 2);
+    candidate = formatLocalDate(d);
+  } else {
+    const iso = t.match(/\b((?:19|20|21)\d{2})-(\d{1,2})-(\d{1,2})\b/);
+    if (iso) {
+      candidate = ymdString(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+    } else {
+      const numbered = t.match(
+        /\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.]((?:19|20|21)\d{2})\b/,
+      );
+      if (numbered) {
+        const a = Number(numbered[1]);
+        const b = Number(numbered[2]);
+        const y = Number(numbered[3]);
+        const { day, month } = resolveDayMonth(a, b);
+        candidate = ymdString(y, month, day);
+      }
+    }
   }
-  const iso = t.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
-  if (iso) return iso[1];
-  const isoAny = t.match(/\b((?:19|20)\d{2}-\d{2}-\d{2})\b/);
-  if (isoAny) return isoAny[1];
-  const dmy = t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.]((?:19|20)\d{2})\b/);
-  if (dmy) {
-    const dd = dmy[1]!.padStart(2, "0");
-    const mm = dmy[2]!.padStart(2, "0");
-    const yyyy = dmy[3]!;
-    return `${yyyy}-${mm}-${dd}`;
+
+  if (!candidate) return { ok: false, reason: "invalid" };
+
+  const parsed = parseLocalDate(candidate);
+  const max = new Date(today);
+  max.setDate(max.getDate() + 180);
+
+  if (parsed.getTime() < today.getTime()) {
+    return { ok: false, reason: "past" };
   }
-  return undefined;
+  if (parsed.getTime() > max.getTime()) {
+    return { ok: false, reason: "far" };
+  }
+  return { ok: true, date: candidate };
+}
+
+function normalizeDateText(text: string): string | undefined {
+  const parsed = parsePatientDate(text);
+  return parsed.ok ? parsed.date : undefined;
 }
 
 function levenshtein(a: string, b: string): number {
@@ -159,6 +233,57 @@ const COMMAND_WORDS: Array<{ intent: BotIntent; words: string[] }> = [
     words: ["mydocs", "mydoc", "documents", "document"],
   },
 ];
+
+/**
+ * Exact single-token menu commands (typed or WhatsApp button title/payload).
+ * Used to interrupt mid-flow steps so STATUS/BOOK etc. always work.
+ */
+export function exactMenuIntent(text: string): BotIntent | null {
+  const raw = text
+    .trim()
+    .toLowerCase()
+    .replace(/^[*`~]+|[*`~]+$/g, "")
+    .replace(/\s+/g, " ");
+  if (!raw || raw.length > 40) return null;
+  const t = raw
+    .replace(/^(btn_|action_|cmd_|quick_)/i, "")
+    .replace(/[\s-]+/g, "_");
+  const aliases: Record<string, BotIntent> = {
+    status: "status",
+    statues: "status",
+    stauts: "status",
+    stattus: "status",
+    upcoming: "status",
+    my_status: "status",
+    book: "book",
+    booking: "book",
+    bok: "book",
+    appointment: "book",
+    cancel: "cancel",
+    cancle: "cancel",
+    cancell: "cancel",
+    reschedule: "reschedule",
+    reshedule: "reschedule",
+    register: "register",
+    signup: "register",
+    sign_up: "register",
+    doctors: "doctors",
+    doctor: "doctors",
+    docters: "doctors",
+    providers: "doctors",
+    help: "help",
+    menu: "help",
+    faq: "faq",
+    info: "faq",
+    report: "report",
+    reports: "report",
+    my_docs: "my_docs",
+    mydocs: "my_docs",
+    my_doc: "my_docs",
+    documents: "my_docs",
+  };
+  return aliases[t] ?? aliases[raw.replace(/\s+/g, "_")] ?? null;
+}
 
 /**
  * Catch typos like DOCTERS → doctors for short command-like messages.
@@ -491,6 +616,7 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_reschedule_slot",
     "awaiting_register_name",
     "awaiting_register_gender",
+    "awaiting_register_email",
     "awaiting_register_confirm",
     "awaiting_date",
   ]);

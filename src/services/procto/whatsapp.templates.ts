@@ -126,6 +126,14 @@ export const BotPrompts = {
     );
   },
 
+  askRegisterEmail(lang?: WaLang): string {
+    return L(
+      lang,
+      "What is your *email address*? (for your profile — you sign in with your mobile number)",
+      "आपका *ईमेल पता* क्या है? (प्रोफ़ाइल के लिए — लॉगिन मोबाइल नंबर से होगा)",
+    );
+  },
+
   askRegisterConfirm(summary: string, thenBook?: boolean, lang?: WaLang): string {
     const next = thenBook
       ? L(lang, "\nAfter this we'll continue to *booking*.", "\nइसके बाद *बुकिंग* जारी रखेंगे।")
@@ -334,20 +342,10 @@ export const BotPrompts = {
   registered(
     opts: {
       name: string;
-      email: string;
-      tempPassword?: string;
-      usedPlaceholderEmail: boolean;
       continueToBook?: boolean;
     },
     lang?: WaLang,
   ): string {
-    const loginHint = opts.usedPlaceholderEmail
-      ? L(
-          lang,
-          `Sign-in email: \`${opts.email}\` (phone-based — update anytime in Settings)`,
-          `साइन-इन ईमेल: \`${opts.email}\` (फ़ोन आधारित — Settings में कभी भी अपडेट करें)`,
-        )
-      : L(lang, `Sign-in email: ${opts.email}`, `साइन-इन ईमेल: ${opts.email}`);
     const next = opts.continueToBook
       ? L(lang, `\n\nContinuing to book your appointment…`, `\n\nअपॉइंटमेंट बुकिंग जारी…`)
       : L(
@@ -358,14 +356,8 @@ export const BotPrompts = {
     return (
       L(
         lang,
-        `✅ Welcome, *${opts.name}*! Your patient profile is ready.\n\n` +
-          `${loginHint}\n` +
-          `For web login, use *Forgot password* on the patient portal to set a password ` +
-          `(we never send passwords on WhatsApp).`,
-        `✅ स्वागत है, *${opts.name}*! आपका मरीज़ प्रोफ़ाइल तैयार है।\n\n` +
-          `${loginHint}\n` +
-          `वेब लॉगिन के लिए मरीज़ पोर्टल पर *Forgot password* से पासवर्ड सेट करें ` +
-          `(हम WhatsApp पर पासवर्ड नहीं भेजते)।`,
+        `✅ Welcome, *${opts.name}*! Your patient profile is ready.`,
+        `✅ स्वागत है, *${opts.name}*! आपका मरीज़ प्रोफ़ाइल तैयार है।`,
       ) + next
     );
   },
@@ -383,8 +375,53 @@ export const BotPrompts = {
   askDate(lang?: WaLang): string {
     return L(
       lang,
-      "Which date? Reply *TODAY*, *TOMORROW*, or YYYY-MM-DD.",
-      "कौन सी तारीख? *TODAY*, *TOMORROW*, या YYYY-MM-DD लिखें।",
+      "Which date? Reply *TODAY*, *TOMORROW*, or a date like *15-09-2026* / *2026-09-15*.",
+      "कौन सी तारीख? *TODAY*, *TOMORROW*, या *15-09-2026* / *2026-09-15* जैसा लिखें।",
+    );
+  },
+
+  dateInvalid(lang?: WaLang): string {
+    return L(
+      lang,
+      "That date isn't clear. Reply *TODAY*, *TOMORROW*, or DD-MM-YYYY (e.g. *15-09-2026*).",
+      "तारीख समझ नहीं आई। *TODAY*, *TOMORROW*, या DD-MM-YYYY लिखें (जैसे *15-09-2026*)।",
+    );
+  },
+
+  datePast(lang?: WaLang): string {
+    return L(
+      lang,
+      "That date is in the past. Reply *TODAY*, *TOMORROW*, or a future date (DD-MM-YYYY).",
+      "वह तारीख बीत चुकी है। *TODAY*, *TOMORROW*, या आने वाली तारीख (DD-MM-YYYY) लिखें।",
+    );
+  },
+
+  dateTooFar(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please pick a date within the next 6 months. Reply *TODAY*, *TOMORROW*, or DD-MM-YYYY.",
+      "कृपया अगले 6 महीनों की तारीख चुनें। *TODAY*, *TOMORROW*, या DD-MM-YYYY लिखें।",
+    );
+  },
+
+  noSlots(lang?: WaLang, suggested?: string): string {
+    const hint = suggested
+      ? L(
+          lang,
+          `\nNext open day: *${suggested}* — reply that date, *TODAY*, or *TOMORROW*.`,
+          `\nअगला खाली दिन: *${suggested}* — वह तारीख, *TODAY*, या *TOMORROW* लिखें।`,
+        )
+      : L(
+          lang,
+          "\nTry another date: *TODAY*, *TOMORROW*, or DD-MM-YYYY.",
+          "\nदूसरी तारीख आज़माएँ: *TODAY*, *TOMORROW*, या DD-MM-YYYY।",
+        );
+    return (
+      L(
+        lang,
+        "No slots available for that day.",
+        "उस दिन कोई स्लॉट उपलब्ध नहीं।",
+      ) + hint
     );
   },
 
@@ -612,14 +649,6 @@ export const BotPrompts = {
     );
   },
 
-  noSlots(lang?: WaLang): string {
-    return L(
-      lang,
-      "No slots available for that day. Try another date (YYYY-MM-DD).",
-      "उस दिन कोई स्लॉट उपलब्ध नहीं। दूसरी तारीख आज़माएँ (YYYY-MM-DD)।",
-    );
-  },
-
   notConfigured(lang?: WaLang): string {
     return L(
       lang,
@@ -691,8 +720,10 @@ export const BotPrompts = {
   handedOffWait(lang?: WaLang): string {
     return L(
       lang,
-      "Reply *BOT* to use the booking assistant again, or continue with *BOOK* / *STATUS* / *DOCTORS*.",
-      "फिर से बुकिंग असिस्टेंट के लिए *BOT* लिखें, या *BOOK* / *STATUS* / *DOCTORS* से जारी रखें।",
+      "A clinic staff member may reply here.\n" +
+        "To use the assistant again, reply *BOOK*, *STATUS*, *DOCTORS*, or *BOT*.",
+      "क्लिनिक स्टाफ यहाँ जवाब दे सकता है।\n" +
+        "असिस्टेंट फिर से चलाने के लिए *BOOK*, *STATUS*, *DOCTORS*, या *BOT* लिखें।",
     );
   },
 

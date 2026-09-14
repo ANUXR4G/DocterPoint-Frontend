@@ -48,7 +48,51 @@ type MetaMessage = {
     filename?: string;
     caption?: string;
   };
+  /** Template quick-reply taps */
+  button?: { text?: string; payload?: string };
+  interactive?: {
+    type?: string;
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string; description?: string };
+  };
 };
+
+/** Normalize inbound WhatsApp text from plain text, buttons, or list picks. */
+function extractInboundText(message: MetaMessage): string {
+  if (message.type === "text" && message.text?.body) {
+    return message.text.body.trim();
+  }
+  if (message.type === "button") {
+    return (
+      message.button?.text?.trim() ||
+      message.button?.payload?.trim() ||
+      ""
+    );
+  }
+  if (message.type === "interactive") {
+    const btn = message.interactive?.button_reply;
+    if (btn?.title?.trim() || btn?.id?.trim()) {
+      return (btn.title || btn.id || "").trim();
+    }
+    const list = message.interactive?.list_reply;
+    if (list?.title?.trim() || list?.id?.trim()) {
+      return (list.title || list.id || "").trim();
+    }
+  }
+  // Some payloads omit type but still include button/interactive
+  if (message.button?.text || message.button?.payload) {
+    return (message.button.text || message.button.payload || "").trim();
+  }
+  if (message.interactive?.button_reply) {
+    const btn = message.interactive.button_reply;
+    return (btn.title || btn.id || "").trim();
+  }
+  if (message.interactive?.list_reply) {
+    const list = message.interactive.list_reply;
+    return (list.title || list.id || "").trim();
+  }
+  return "";
+}
 
 function extractMetaMessages(body: unknown): Array<{
   from: string;
@@ -216,8 +260,25 @@ export const WhatsAppService = {
       let transcribedText: string | undefined;
       let idScan: IdScanFields | undefined;
 
+      const buttonOrInteractive =
+        item.message.type === "button" ||
+        item.message.type === "interactive" ||
+        Boolean(item.message.button) ||
+        Boolean(item.message.interactive);
+
       if (item.message.type === "text" && item.message.text?.body) {
         text = item.message.text.body;
+      } else if (buttonOrInteractive) {
+        text = extractInboundText(item.message);
+        if (!text) {
+          console.warn(
+            `[WhatsApp] empty button/interactive payload type=${item.message.type} from=${item.from}`,
+          );
+          continue;
+        }
+        console.log(
+          `[WhatsApp] button/interactive from=${item.from} → "${text.slice(0, 80)}"`,
+        );
       } else if (
         item.message.type === "audio" ||
         item.message.type === "voice"
