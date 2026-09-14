@@ -72,8 +72,8 @@ export default function SiteNavbar({
       <NavBody>
         <NavbarLogo />
         <NavItems items={navItems} />
-        <div className="relative z-20 flex items-center gap-2">
-          <ModeToggle />
+        <div className="relative z-50 flex shrink-0 items-center gap-2">
+          <ModeToggle className="border-slate-200 bg-white/80 shadow-sm dark:border-white/15 dark:bg-slate-800/80" />
           {loggedIn ? (
             <>
               <NavbarButton href={dashboardHref(role, pathname)} variant="secondary">
@@ -97,8 +97,8 @@ export default function SiteNavbar({
       <MobileNav>
         <MobileNavHeader>
           <NavbarLogo />
-          <div className="flex min-w-0 items-center gap-1.5 xs:gap-2">
-            <ModeToggle />
+          <div className="flex min-w-0 shrink-0 items-center gap-1.5 xs:gap-2">
+            <ModeToggle className="border-slate-200 bg-white/80 shadow-sm dark:border-white/15 dark:bg-slate-800/80" />
             {loggedIn ? (
               <UserProfileControls />
             ) : (
@@ -167,6 +167,12 @@ export default function SiteNavbar({
               Book now
             </NavbarButton>
           ) : null}
+          <div className="flex w-full items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-white/10">
+            <span className="text-[15px] font-medium tracking-[-0.15px] text-neutral-600 dark:text-[#999999]">
+              Theme
+            </span>
+            <ModeToggle className="border-slate-200 bg-white shadow-sm dark:border-white/15 dark:bg-slate-800" />
+          </div>
         </MobileNavMenu>
       </MobileNav>
     </Navbar>
