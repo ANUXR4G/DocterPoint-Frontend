@@ -145,11 +145,32 @@ html.dark body {
 .dark .dark\:text-neutral-300 {
   color: #e5e5e5 !important;
 }
-.dark .dark\:text-neutral-400 {
-  color: #999999 !important;
+.dark .dark\:text-neutral-400,
+.dark .dark\:text-slate-400 {
+  color: #a8a29e !important;
 }
-.dark .dark\:text-neutral-500 {
-  color: #737373 !important;
+.dark .dark\:text-neutral-500,
+.dark .dark\:text-slate-500 {
+  color: #94a3b8 !important;
+}
+/* Keep inverted chips/buttons readable (light surface + dark ink) */
+.dark .dark\:text-neutral-900,
+.dark .dark\:text-slate-900,
+.dark .dark\:text-gray-900,
+.dark .dark\:text-black {
+  color: #0f172a !important;
+}
+.dark .dark\:text-neutral-800,
+.dark .dark\:text-slate-800 {
+  color: #1e293b !important;
+}
+.dark .dark\:text-neutral-700,
+.dark .dark\:text-slate-700 {
+  color: #334155 !important;
+}
+.dark .dark\:text-neutral-600,
+.dark .dark\:text-slate-600 {
+  color: #475569 !important;
 }
 
 .dark .dark\:border-neutral-800,
@@ -482,12 +503,29 @@ html.dark body {
   .dark .dashboard-app {
     --solune-canvas: #0f172a;
     --solune-surface: #1e293b;
-    --solune-surface-muted: #1e293b;
-    --solune-border: rgba(148, 163, 184, 0.15);
-    --solune-nav-active: rgba(59, 130, 246, 0.15);
+    --solune-surface-muted: #334155;
+    --solune-elevated: #334155;
+    --solune-border: rgba(148, 163, 184, 0.18);
+    --solune-border-strong: rgba(148, 163, 184, 0.28);
+    --solune-shadow-soft: 0 16px 48px -20px rgba(0, 0, 0, 0.55);
+    --solune-shadow-card: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
     --solune-ink: #f1f5f9;
     --solune-muted: #94a3b8;
+    --solune-soft: #cbd5e1;
+    --solune-nav-active: rgba(59, 130, 246, 0.18);
+    --solune-purple-soft: rgba(59, 130, 246, 0.16);
+    --solune-green-soft: rgba(52, 211, 153, 0.14);
+    --solune-coral-soft: rgba(248, 113, 113, 0.14);
+    --solune-amber-soft: rgba(251, 191, 36, 0.14);
+    --solune-gradient: linear-gradient(135deg, #2563eb 0%, #3b82f6 55%, #38bdf8 100%);
+    --color-ink: #f1f5f9;
+    --dashboard-text: #f1f5f9;
+    --dashboard-muted: #94a3b8;
+    --dashboard-surface: #1e293b;
+    --dashboard-elevated: #334155;
+    --dashboard-border: rgba(148, 163, 184, 0.18);
     background: linear-gradient(165deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    color: #f1f5f9;
   }
 
   .dashboard-app-canvas {
@@ -1514,4 +1552,90 @@ html:not(.dark) textarea::placeholder {
 html:not(.dark) .gg-public,
 html:not(.dark) .gg-auth {
   color: var(--solune-ink);
+}
+
+/* ── Dark mode: flip light-theme ink utilities on dark canvases ── */
+html.dark {
+  color: #f5f2ee;
+}
+
+html.dark .text-black,
+html.dark .text-slate-900,
+html.dark .text-neutral-900,
+html.dark .text-gray-900,
+html.dark .text-zinc-900 {
+  color: #f5f2ee;
+}
+
+html.dark .text-slate-800,
+html.dark .text-neutral-800,
+html.dark .text-gray-800,
+html.dark .text-zinc-800 {
+  color: #e7e5e4;
+}
+
+html.dark .text-slate-700,
+html.dark .text-neutral-700,
+html.dark .text-gray-700,
+html.dark .text-zinc-700 {
+  color: #d6d3d1;
+}
+
+html.dark .text-slate-600,
+html.dark .text-neutral-600,
+html.dark .text-gray-600,
+html.dark .text-zinc-600 {
+  color: #a8a29e;
+}
+
+html.dark .text-slate-500,
+html.dark .text-neutral-500,
+html.dark .text-gray-500,
+html.dark .text-zinc-500 {
+  color: #a8a29e;
+}
+
+html.dark .text-slate-400,
+html.dark .text-neutral-400,
+html.dark .text-gray-400 {
+  color: #78716c;
+}
+
+html.dark .dashboard-main,
+html.dark .dashboard-app,
+html.dark .dashboard-app .dashboard-frame,
+html.dark .gg-public,
+html.dark .gg-auth {
+  color: #f1f5f9;
+}
+
+html.dark .dashboard-hero .text-slate-500,
+html.dark .dashboard-hero .text-slate-600,
+html.dark .dashboard-insight-card .text-slate-500,
+html.dark .dashboard-panel .text-slate-500,
+html.dark aside .text-slate-400,
+html.dark aside .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.dark aside .text-slate-900 {
+  color: #f1f5f9 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #78716c !important;
+  opacity: 1;
+}
+
+html.dark .form-input,
+html.dark .form-input-shell .form-input,
+html.dark .form-input-shell input:not([type="checkbox"]):not([type="radio"]) {
+  color: #f5f2ee;
+  -webkit-text-fill-color: #f5f2ee;
+  caret-color: #f5f2ee;
+}
+
+html.dark .form-input-shell label {
+  color: #a8a29e;
 }

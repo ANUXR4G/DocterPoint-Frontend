@@ -157,7 +157,7 @@ export default function DoctorAnalyticsPage() {
           <AnalyticsPeriodFilter value={type} onChange={setType} />
           <Link
             href={practiceTabHref("patients")}
-            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-600 shadow-sm hover:bg-gray-50 dark:border-neutral-600 dark:bg-neutral-300"
+            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-600 shadow-sm hover:bg-gray-50 dark:border-neutral-600 dark:bg-neutral-300 dark:text-neutral-900"
           >
             View patients
           </Link>

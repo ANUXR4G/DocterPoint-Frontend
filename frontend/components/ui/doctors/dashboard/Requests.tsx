@@ -61,7 +61,7 @@ export default function Requests() {
               href={`/doctor/queue/${b.id}`}
               className="relative flex min-h-28 flex-col rounded-[26px] bg-neutral-200 p-4 text-start text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100 dark:gradient-border-black"
             >
-              <span className="w-fit rounded-md bg-white px-2 pb-0.5 text-xs font-bold text-neutral-700 dark:bg-neutral-300">
+              <span className="w-fit rounded-md bg-white px-2 pb-0.5 text-xs font-bold text-neutral-700 dark:bg-neutral-300 dark:text-neutral-900">
                 {(b.status || "BOOKED").replace(/_/g, " ")}
               </span>
               <p className="mt-2 line-clamp-1 text-sm font-bold">

@@ -65,7 +65,7 @@ export default function Patients() {
           Patient history
         </h1>
         <Link
-          className="inline-flex items-center gap-x-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-neutral-600 shadow-sm hover:bg-gray-50 dark:bg-neutral-300 dark:hover:bg-neutral-200"
+          className="inline-flex items-center gap-x-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-neutral-600 shadow-sm hover:bg-gray-50 dark:border-neutral-600 dark:bg-neutral-300 dark:text-neutral-900 dark:hover:bg-neutral-200"
           href={practiceTabHref("patients")}
         >
           view patients

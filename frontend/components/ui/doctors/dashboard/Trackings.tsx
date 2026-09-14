@@ -41,7 +41,7 @@ export default function Trackings() {
         <div className="relative ml-auto flex flex-wrap items-center gap-2">
           <AnalyticsPeriodFilter value={type} onChange={setType} />
           <Link
-            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-600 shadow-sm hover:bg-gray-50 dark:bg-neutral-300 dark:hover:bg-neutral-200"
+            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-600 shadow-sm hover:bg-gray-50 dark:border-neutral-600 dark:bg-neutral-300 dark:text-neutral-900 dark:hover:bg-neutral-200"
             href="/doctor/analytics"
           >
             view analytics
