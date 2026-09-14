@@ -3,6 +3,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -23,6 +24,7 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { uploadVisitFile } from "@/lib/cloudinary";
+import { resolveMediaUrl } from "@/lib/media";
 import {
   fetchBooking,
   updateBookingStatus,
@@ -146,20 +148,46 @@ export default function VisitScreen() {
     "Patient";
   const p = booking?.patient;
 
+  async function persistMedicines(next: Med[]) {
+    if (!bookingId || booking?.status === "COMPLETED") return
+    setBusy(true)
+    setError("")
+    const res = await updateVisit(bookingId, {
+      doctorRemarks: remarks,
+      medicines: next,
+      documents,
+    })
+    setBusy(false)
+    if (res.status !== "successful") {
+      setError(res.message || "Could not save medicine")
+      await load()
+      return
+    }
+    await load({ silent: true })
+  }
+
   function addMedicine() {
     const name = medName.trim();
     if (!name) return;
-    setMedicines((prev) => [
-      ...prev,
+    const next = [
+      ...medicines,
       {
         name,
         amount: medAmount.trim() || undefined,
         times: medTimes.length ? [...medTimes] : undefined,
       },
-    ]);
+    ];
+    setMedicines(next);
     setMedName("");
     setMedAmount("");
     setMedTimes([]);
+    void persistMedicines(next);
+  }
+
+  function removeMedicine(idx: number) {
+    const next = medicines.filter((_, i) => i !== idx);
+    setMedicines(next);
+    void persistMedicines(next);
   }
 
   function toggleTime(t: string) {
@@ -287,7 +315,24 @@ export default function VisitScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.snapshotTitle}>Patient</Text>
+          <View style={styles.patientHeader}>
+            {resolveMediaUrl(p?.imgSrc) ? (
+              <Image
+                source={{ uri: resolveMediaUrl(p?.imgSrc)! }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={styles.avatarInitial}>
+                  {(patientName || "?").charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.snapshotTitle}>Patient</Text>
+              <Text style={styles.patientName}>{patientName}</Text>
+            </View>
+          </View>
           <Text style={styles.rowLabel}>Age: {ageFromDob(p?.dateOfBirth)}</Text>
           <Text style={styles.rowLabel}>Gender: {dash(p?.gender)}</Text>
           <Text style={styles.rowLabel}>Email: {dash(p?.email)}</Text>
@@ -298,7 +343,7 @@ export default function VisitScreen() {
           <Text style={styles.rowLabel}>Address: {dash(p?.address)}</Text>
           <View style={styles.divider} />
           <Text style={styles.rowLabel}>
-            Disease: {booking.disease || booking.consultationType || "—"}
+            Problem: {booking.disease || booking.consultationType || "—"}
           </Text>
           <Text style={styles.rowLabel}>
             Mode: {booking.mode?.replace(/_/g, " ") || "—"}
@@ -318,7 +363,10 @@ export default function VisitScreen() {
             </Text>
           ) : null}
           {booking.notes ? (
-            <Text style={styles.notes}>Patient notes: {booking.notes}</Text>
+            <Text style={styles.notes}>
+              Patient problem & AI brief:{"\n"}
+              {booking.notes}
+            </Text>
           ) : null}
         </View>
 
@@ -337,7 +385,10 @@ export default function VisitScreen() {
           ) : null}
         </View>
 
-        <Text style={styles.section}>Remarks for patient</Text>
+        <Text style={styles.section}>Remarks</Text>
+        <Text style={styles.lockedHint}>
+          Prefills from the patient problem with an AI visit brief.
+        </Text>
         <TextInput
           value={remarks}
           onChangeText={setRemarks}
@@ -394,9 +445,7 @@ export default function VisitScreen() {
               {!completed ? (
                 <Chip
                   label="Remove"
-                  onPress={() =>
-                    setMedicines((prev) => prev.filter((_, i) => i !== idx))
-                  }
+                  onPress={() => removeMedicine(idx)}
                 />
               ) : null}
             </View>
@@ -513,11 +562,38 @@ const styles = StyleSheet.create({
     padding: space.lg,
     marginBottom: space.md,
   },
+  patientHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.line,
+  },
+  avatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+  },
+  avatarInitial: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  patientName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.ink,
+  },
   snapshotTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: colors.inkSoft,
-    marginBottom: 8,
+    marginBottom: 4,
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },

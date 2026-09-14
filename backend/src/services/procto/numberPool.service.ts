@@ -406,7 +406,7 @@ export const NumberPoolService = {
           directory: true,
           whatsappLine: 1,
           reminders: false,
-          reviews: false,
+          reviews: true,
           priorityListing: false,
           multiDoctor: false,
           queueAnalytics: true,

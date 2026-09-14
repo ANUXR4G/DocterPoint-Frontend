@@ -44,6 +44,11 @@ const listPublicCache = new Map<
   { at: number; data: Array<Record<string, unknown>> }
 >();
 
+/** Drop find-clinic cache so new reviews / plan flags appear promptly. */
+export function clearListPublicCache() {
+  listPublicCache.clear();
+}
+
 export const PracticeService = {
   async onboardPractice(data: {
     name: string;
@@ -362,6 +367,7 @@ export const PracticeService = {
 
     const data = ranked.map(({ reviewsEnabled, ...rest }) => ({
       ...rest,
+      reviewsEnabled,
       reviewSummary: reviewsEnabled
         ? reviewSummaries.get(rest.id) ?? { average: null, count: 0 }
         : { average: null, count: 0 },
@@ -374,9 +380,12 @@ export const PracticeService = {
     return data;
   },
 
-  async getBySlug(slug: string) {
-    const practice = await prisma.practice.findUnique({
-      where: { slug },
+  async getBySlug(slugOrId: string) {
+    const key = decodeURIComponent(String(slugOrId ?? "")).trim();
+    if (!key) ResponseHandler.notFoundError("practice not found.");
+
+    const practice = await prisma.practice.findFirst({
+      where: isUuid(key) ? { OR: [{ slug: key }, { id: key }] } : { slug: key },
       include: {
         locations: { where: { isActive: true } },
         members: {
@@ -888,6 +897,7 @@ export const PracticeService = {
               phone: true,
               gender: true,
               address: true,
+              imgSrc: true,
               patient: {
                 select: {
                   profession: true,
@@ -914,6 +924,7 @@ export const PracticeService = {
               phone: true,
               gender: true,
               address: true,
+              imgSrc: true,
               patient: {
                 select: {
                   profession: true,
@@ -951,6 +962,7 @@ export const PracticeService = {
           email: linked?.email ?? null,
           gender: linked?.gender ?? null,
           address: linked?.address ?? null,
+          imgSrc: linked?.imgSrc ?? null,
           profession: linked?.patient?.profession ?? null,
           dateOfBirth: linked?.patient?.dateOfBirth ?? null,
           bookingCount: row.bookingCount,

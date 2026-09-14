@@ -12,7 +12,7 @@ export function hasAuthSession() {
 }
 
 export function patientBookingLoginUrl(practiceSlug: string) {
-  const callback = encodeURIComponent(`practices/${practiceSlug}`)
+  const callback = encodeURIComponent(`/practices/${practiceSlug}`)
   return `/login/patient?callback=${callback}`
 }
 

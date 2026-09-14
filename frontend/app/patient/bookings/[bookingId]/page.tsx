@@ -219,6 +219,15 @@ export default function PatientVisitPage() {
       setBooking((prev) =>
         prev ? patchBookingFields(prev, incoming) : prev,
       )
+      // Medicines / docs / remarks may arrive snake_case — refetch for full enriched shape
+      if (
+        incoming.medicines !== undefined ||
+        incoming.documents !== undefined ||
+        incoming.doctor_remarks !== undefined ||
+        incoming.doctorRemarks !== undefined
+      ) {
+        void load({ silent: true })
+      }
     },
     () => void load({ silent: true }),
   )
@@ -466,22 +475,22 @@ export default function PatientVisitPage() {
                 }
                 icon={IconMapPin}
               />
-              <DetailRow label="Disease / reason" value={disease} icon={IconNotes} />
-              <DetailRow
-                label="Booking notes"
-                value={dash(booking.notes)}
-                icon={IconFileText}
-              />
+              <DetailRow label="Your problem" value={disease} icon={IconNotes} />
             </div>
           </SectionCard>
 
           <SectionCard title="Doctor remarks" icon={IconNotes}>
-            {booking.doctorRemarks?.trim() ? (
+            {booking.status === "COMPLETED" && booking.doctorRemarks?.trim() ? (
               <p className="whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm leading-relaxed text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
                 {booking.doctorRemarks}
               </p>
-            ) : (
+            ) : booking.status === "COMPLETED" ? (
               <EmptyNote>No remarks from the doctor yet.</EmptyNote>
+            ) : (
+              <EmptyNote>
+                The doctor will add remarks after your visit. Your problem was
+                shared with them when you booked.
+              </EmptyNote>
             )}
           </SectionCard>
 
@@ -524,12 +533,12 @@ export default function PatientVisitPage() {
                       href={d.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="dashboard-row flex items-center gap-3 !py-3 transition hover:border-blue-200 dark:hover:border-blue-500/30"
+                      className="dashboard-row flex !min-h-0 flex-row items-center !justify-start gap-3 !py-3 transition hover:border-blue-200 dark:hover:border-blue-500/30"
                     >
-                      <span className="flex size-8 items-center justify-center rounded-lg bg-sky-100 text-blue-600 dark:bg-blue-500/15 dark:text-sky-400">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-blue-600 dark:bg-blue-500/15 dark:text-sky-400">
                         <IconFileText className="size-4" stroke={1.75} />
                       </span>
-                      <span className="text-sm font-semibold text-blue-600 dark:text-sky-400">
+                      <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-blue-600 dark:text-sky-400">
                         {d.name || "View document"}
                       </span>
                     </a>

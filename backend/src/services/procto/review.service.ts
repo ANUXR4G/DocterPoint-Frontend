@@ -173,7 +173,7 @@ export const ReviewService = {
     await assertFeature(
       input.practiceId,
       "reviews",
-      "Patient reviews require Growth or Clinic plan.",
+      "Patient reviews are not enabled for this clinic plan.",
     );
 
     const rating = Math.round(Number(input.rating));
@@ -219,6 +219,9 @@ export const ReviewService = {
         isPublished: true,
       },
     });
+
+    const { clearListPublicCache } = await import("./practice.service.js");
+    clearListPublicCache();
 
     const { broadcastOpsInvalidate } = await import("../opsSocket.js");
     void broadcastOpsInvalidate("reviews").catch(() => undefined);

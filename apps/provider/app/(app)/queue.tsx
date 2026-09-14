@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,6 +18,7 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { PremiumAtmosphere, PremiumCard } from "@/components/mobile/PremiumChrome";
+import { resolveMediaUrl } from "@/lib/media";
 import { usePractice } from "@/lib/practiceContext";
 import { fetchPracticeBookings, updateBookingStatus } from "@/lib/procto";
 import {
@@ -237,9 +239,30 @@ export default function QueueScreen() {
               style={styles.card}
             >
               <View style={styles.row}>
-                <Text style={styles.name}>
-                  {b.patientName || b.patientPhone}
-                </Text>
+                <View style={styles.nameRow}>
+                  {resolveMediaUrl(b.patient?.imgSrc) ? (
+                    <Image
+                      source={{ uri: resolveMediaUrl(b.patient?.imgSrc)! }}
+                      style={styles.avatar}
+                    />
+                  ) : (
+                    <View style={[styles.avatar, styles.avatarFallback]}>
+                      <Text style={styles.avatarInitial}>
+                        {(
+                          b.patientName ||
+                          b.patient?.name ||
+                          b.patientPhone ||
+                          "?"
+                        )
+                          .charAt(0)
+                          .toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.name}>
+                    {b.patientName || b.patient?.name || b.patientPhone}
+                  </Text>
+                </View>
                 <StatusBadge status={b.status} />
               </View>
               <Text style={styles.meta}>
@@ -317,6 +340,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.line,
+  },
+  avatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+  },
+  avatarInitial: { fontSize: 14, fontWeight: "700", color: "#fff" },
   name: { fontSize: 16, fontWeight: "600", color: colors.ink, flex: 1 },
   meta: { marginTop: 6, fontSize: 13, color: colors.inkSoft },
   notes: { marginTop: 6, fontSize: 13, color: colors.inkFaint },

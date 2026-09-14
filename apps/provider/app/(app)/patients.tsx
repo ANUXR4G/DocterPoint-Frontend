@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,6 +16,7 @@ import {
   PageTitle,
   StatusBadge,
 } from "@/components/ui";
+import { resolveMediaUrl } from "@/lib/media";
 import { usePractice } from "@/lib/practiceContext";
 import { fetchPracticePatients } from "@/lib/procto";
 import type { PracticePatient } from "@/lib/types";
@@ -97,16 +99,33 @@ export default function PatientsScreen() {
           const visits = p.recentBookings ?? p.recent ?? [];
           return (
             <View key={key} style={styles.card}>
-              <Pressable onPress={() => setExpanded(open ? null : key)}>
-                <Text style={styles.name}>{p.name || p.phone}</Text>
-                <Text style={styles.meta}>
-                  {p.phone} · {p.bookingCount} visits
-                </Text>
-                {p.lastStatus ? (
-                  <View style={{ marginTop: 8 }}>
-                    <StatusBadge status={p.lastStatus} />
+              <Pressable
+                onPress={() => setExpanded(open ? null : key)}
+                style={styles.row}
+              >
+                {resolveMediaUrl(p.imgSrc) ? (
+                  <Image
+                    source={{ uri: resolveMediaUrl(p.imgSrc)! }}
+                    style={styles.avatar}
+                  />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarInitial}>
+                      {(p.name || p.phone || "?").charAt(0).toUpperCase()}
+                    </Text>
                   </View>
-                ) : null}
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{p.name || p.phone}</Text>
+                  <Text style={styles.meta}>
+                    {p.phone} · {p.bookingCount} visits
+                  </Text>
+                  {p.lastStatus ? (
+                    <View style={{ marginTop: 8 }}>
+                      <StatusBadge status={p.lastStatus} />
+                    </View>
+                  ) : null}
+                </View>
               </Pressable>
               {open ? (
                 <View style={styles.recent}>
@@ -161,6 +180,19 @@ const styles = StyleSheet.create({
     padding: space.lg,
     marginBottom: space.md,
   },
+  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.line,
+  },
+  avatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+  },
+  avatarInitial: { fontSize: 16, fontWeight: "700", color: "#fff" },
   name: { fontSize: 16, fontWeight: "600", color: colors.ink },
   meta: { marginTop: 4, fontSize: 13, color: colors.inkSoft },
   recent: {

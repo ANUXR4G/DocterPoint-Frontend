@@ -49,6 +49,7 @@ export type BookingRow = {
     email?: string | null;
     gender?: string | null;
     address?: string | null;
+    imgSrc?: string | null;
     profession?: string | null;
     dateOfBirth?: string | null;
     contactNumber?: string | null;
@@ -62,6 +63,7 @@ export type PracticePatient = {
   email?: string | null;
   gender?: string | null;
   address?: string | null;
+  imgSrc?: string | null;
   profession?: string | null;
   dateOfBirth?: string | null;
   bookingCount: number;

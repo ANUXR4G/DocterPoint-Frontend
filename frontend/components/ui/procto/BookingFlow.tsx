@@ -313,7 +313,7 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
       return
     }
     if (!disease.trim()) {
-      setMessage("Please enter the disease / reason for visit.")
+      setMessage("Please describe the problem / reason for your visit.")
       return
     }
     if (mode === "TIME_BASED" && !selectedSlot) {
@@ -620,6 +620,16 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
                   </dd>
                 </div>
               ) : null}
+              {disease.trim() ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-neutral-500 dark:text-neutral-400">
+                    Your problem
+                  </dt>
+                  <dd className="whitespace-pre-wrap font-medium text-neutral-900 dark:text-white">
+                    {disease.trim()}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
           </div>
 
@@ -680,18 +690,22 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
           </label>
           <VoiceTextInput
             ref={diseaseVoiceRef}
-            label="Disease / reason for visit *"
+            label="What is the problem? *"
             value={disease}
             onChange={setDisease}
-            placeholder="e.g. Diabetes follow-up, skin rash, fever"
+            placeholder="Describe symptoms, how long, and what you need help with"
             required
             multiline
-            rows={2}
+            rows={3}
             disabled={submitting || uploadingDoc}
-            micAriaLabel="Record reason for visit by voice"
-            listeningHint="Listening… describe your symptoms or reason for visit"
-            voiceHint="Tap the mic to dictate — review the text before confirming."
+            micAriaLabel="Describe your problem by voice"
+            listeningHint="Listening… describe your problem or symptoms"
+            voiceHint="Tell us the problem in your own words. We’ll prepare a short brief for the doctor."
           />
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Required. Your description is shared with the doctor, and AI prepares a
+            clear visit brief in their remarks.
+          </p>
 
           <div className="space-y-2">
             <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">

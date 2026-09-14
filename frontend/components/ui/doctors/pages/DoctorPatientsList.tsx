@@ -12,6 +12,7 @@ import {
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
+import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 
 type PracticePatient = {
   phone: string
@@ -20,6 +21,7 @@ type PracticePatient = {
   email?: string | null
   gender?: string | null
   address?: string | null
+  imgSrc?: string | null
   profession?: string | null
   dateOfBirth?: string | null
   bookingCount: number
@@ -252,17 +254,25 @@ export default function DoctorPatientsList() {
               return (
                 <li key={p.phone} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">
-                        {p.name || "Unknown"}
-                      </p>
-                      <p className="mt-0.5 text-sm font-medium">
-                        {p.phone || "—"}
-                      </p>
-                      <p className="mt-1 text-xs opacity-60">
-                        {p.bookingCount} visit
-                        {p.bookingCount === 1 ? "" : "s"}
-                      </p>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <PatientAvatar
+                        name={p.name}
+                        imgSrc={p.imgSrc}
+                        size="md"
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">
+                          {p.name || "Unknown"}
+                        </p>
+                        <p className="mt-0.5 text-sm font-medium">
+                          {p.phone || "—"}
+                        </p>
+                        <p className="mt-1 text-xs opacity-60">
+                          {p.bookingCount} visit
+                          {p.bookingCount === 1 ? "" : "s"}
+                        </p>
+                      </div>
                     </div>
                     {p.lastStatus ? (
                       <span
@@ -374,9 +384,11 @@ export default function DoctorPatientsList() {
                       <tr className="bg-white dark:bg-neutral-900/40">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-sm font-bold text-white">
-                              {(p.name || "?").charAt(0).toUpperCase()}
-                            </div>
+                            <PatientAvatar
+                              name={p.name}
+                              imgSrc={p.imgSrc}
+                              size="md"
+                            />
                             <div className="min-w-0">
                               <p className="truncate font-semibold">
                                 {p.name || "Unknown"}

@@ -72,7 +72,7 @@ export default function PracticeBookScreen() {
   const [tokens, setTokens] = useState<TokenSession[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [mode, setMode] = useState<"TIME_BASED" | "TOKEN_BASED" | null>(null);
-  const [disease, setDisease] = useState("General consultation");
+  const [disease, setDisease] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -184,6 +184,10 @@ export default function PracticeBookScreen() {
       setError("Add a contact number on your profile before booking.");
       return;
     }
+    if (!disease.trim()) {
+      setError("Please describe the problem you want help with.");
+      return;
+    }
     setBooking(true);
     setError("");
     setMessage("");
@@ -194,7 +198,7 @@ export default function PracticeBookScreen() {
       providerId,
       patientPhone: phone,
       mode,
-      disease: disease.trim() || "General consultation",
+      disease: disease.trim(),
       channel: "WEB_PORTAL",
     };
     if (mode === "TIME_BASED") {
@@ -362,12 +366,13 @@ export default function PracticeBookScreen() {
         ) : null}
 
         <VoiceField
-          label="Reason / disease"
+          label="What is the problem?"
           value={disease}
           onChangeText={setDisease}
-          placeholder="General consultation"
-          micAriaLabel="Record reason for visit by voice"
+          placeholder="Describe symptoms, how long, and what you need help with"
+          micAriaLabel="Describe your problem by voice"
         />
+        <HintText text="Required for the doctor. AI turns this into a short visit brief in their remarks." />
 
         <ErrorText text={error} />
         {message ? <HintText text={message} /> : null}

@@ -39,6 +39,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 |----------|--------|-----|
 | Slot engine | Server-side availability from `ProviderSchedule` + overrides | Single source of truth for open slots/tokens |
 | Booking identity | `patientPhone` required; optional `patientId` when logged in | Guest book + logged-in book both work |
+| Patient problem at book | Required `disease` text; AI visit brief → `notes` + seeds `doctorRemarks` | Doctor sees problem + AI explanation in Remarks; not a diagnosis |
 | Accept before visit | After `SCHEDULED`/`REQUESTED`, doctor/clinic sets **`ACCEPTED`**, then Waiting → Started → Finished | Request must be accepted from web dashboard or doctor mobile |
 | Doctor analytics | Live Procto booking series only — no sample/demo chart fallbacks | Empty period shows “No data”; Clinic plan required for charts |
 | Live queue | Native `ws` `/api/v1/ws/procto/:practiceId` (JWT + practice membership) | Doctor/clinic queue + calendar without polling |
@@ -90,7 +91,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Subscriptions | `docline_plans` table (legacy DB name) + `practice_subscriptions` + Razorpay + Billing tab | Keep table name for migrations; UI says GlucoGuide plans |
 | Bot policy | AI disclosure, FAQ from `faq_kb`, clinical guardrails, *HUMAN* handoff | Meta policy |
 | Directory visibility | `practice.isDirectoryListed` | Suspended / unpaid practices hidden from public find-care |
-| Reviews | `practice_reviews` soft verification on profile | V1; hard-gate completed visits deferred |
+| Reviews | `practice_reviews` after completed visit; shown on profile + find-clinic | Starter+ plans (`features.reviews`); require published + entitlement |
 | Conversation takeover | `whatsapp_conversations.status` + doctor Practice → WhatsApp inbox | Bot silences on `handed_off` |
 | Care chat ↔ WhatsApp | Outbound: `chat.whatsappFanout.ts`; inbound replies: `chat.whatsappInbound.ts` into `Message` + `_CHAT` sockets | Patient can answer clinic care texts on WhatsApp; `BOOK`/`BOT` still reach the bot |
 | UTILITY template copy | Single catalog `whatsapp.metaTemplates.ts`; free-form fallbacks render from it | Stop drifted duplicate bodies in `whatsapp.templates.ts` |
