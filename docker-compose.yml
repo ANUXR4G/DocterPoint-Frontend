@@ -1,0 +1,70 @@
+# GlucoGuide local infrastructure
+# Usage: docker compose up -d
+# Prefer this for Redis/MinIO when not using a host Postgres.
+# Canonical app DB is `gluco_guide` (see backend/.env). If you already run
+# Postgres on the host with gluco_guide, you can start only redis (+ minio).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: glucoguide-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gluco_guide
+    volumes:
+      - glucoguide_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gluco_guide"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles: ["full"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: glucoguide-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - glucoguide_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: glucoguide-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - glucoguide_minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: glucoguide-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb -p local/glucoguide-uploads || true;
+      mc anonymous set download local/glucoguide-uploads || true;
+      exit 0;
+      "
+
+volumes:
+  glucoguide_postgres_data:
+  glucoguide_redis_data:
+  glucoguide_minio_data:

@@ -66,7 +66,7 @@ export default function EmptySuggestions({ onClick }: Props) {
           onClick
             ? onClick
             : !profile?.dateOfBirth
-            ? () => router.push("/patient/info")
+            ? () => router.push("/patient/profile")
             : generateSuggestions
         }
       >

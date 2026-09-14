@@ -30,8 +30,10 @@ export { default as AppointmentBasic } from "./ui/doctors/AppointmentBasic"
 export { default as HealthMetrics } from "./ui/doctors/HealthMetrics"
 export { default as ConsultHistory } from "./ui/doctors/ConsultHistory"
 export { default as PatientInfo } from "./ui/doctors/PatientInfo"
-export { default as DoctorAppointments } from "./ui/doctors/appointments/Appointments"
+export { default as DoctorAppointments } from "./ui/doctors/appointments/AppointmentCalendar"
 export { default as AppointmentAnalytics } from "./ui/doctors/appointments/Analytics"
+export { default as AppointmentCalendar } from "./ui/doctors/appointments/AppointmentCalendar"
+export { default as DoctorPortalLinks } from "./ui/doctors/DoctorPortalLinks"
 
 // patient diet ui
 export { default as FoodRecommendations } from "./ui/patients/diet/FoodRecommendations"
@@ -154,11 +156,15 @@ export { default as InfoForm } from "./forms/InfoForm"
 
 // background
 export { default as Background } from "./bg"
+export { default as ThemeBackground } from "./bg/ThemeBackground"
 
 //pagination
 export { default as Pagination } from "./pagination"
 
 // loader
+export { default as ThinkingLoader } from "./loader/ThinkingLoader"
+export { default as DhakaAreaPicker } from "./location/DhakaAreaPicker"
+export { default as GlucoBot } from "./assistant/GlucoBot"
 export { default as SimpleSpinner } from "./loader/SimpleSinner"
 export { default as Loader } from "./loader/Loader"
 

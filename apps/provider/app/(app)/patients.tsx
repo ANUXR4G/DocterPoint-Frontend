@@ -1,0 +1,180 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useRouter } from "expo-router";
+import {
+  EmptyState,
+  ErrorText,
+  PageTitle,
+  StatusBadge,
+} from "@/components/ui";
+import { usePractice } from "@/lib/practiceContext";
+import { fetchPracticePatients } from "@/lib/procto";
+import type { PracticePatient } from "@/lib/types";
+import { colors, space } from "@/lib/theme";
+
+export default function PatientsScreen() {
+  const router = useRouter();
+  const { practiceId, membership } = usePractice();
+  const [rows, setRows] = useState<PracticePatient[]>([]);
+  const [q, setQ] = useState("");
+  const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!practiceId) return;
+    const res = await fetchPracticePatients(practiceId);
+    if (res.status === "successful") {
+      setRows((res.data as PracticePatient[]) ?? []);
+      setError("");
+    } else {
+      setError(res.message || "Could not load patients");
+    }
+  }, [practiceId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((p) => {
+      const name = (p.name || "").toLowerCase();
+      const phone = (p.phone || "").toLowerCase();
+      return name.includes(needle) || phone.includes(needle);
+    });
+  }, [rows, q]);
+
+  return (
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await load();
+            setRefreshing(false);
+          }}
+          tintColor={colors.brand}
+        />
+      }
+      keyboardShouldPersistTaps="handled"
+    >
+      <PageTitle
+        eyebrow={membership?.practice.name}
+        title="Patients"
+        subtitle={`${rows.length} in your practice roster`}
+      />
+
+      <TextInput
+        value={q}
+        onChangeText={setQ}
+        placeholder="Search name or phone"
+        placeholderTextColor={colors.inkFaint}
+        style={styles.search}
+        autoCorrect={false}
+      />
+
+      <ErrorText text={error} />
+
+      {filtered.length === 0 ? (
+        <EmptyState text="No patients match this search." />
+      ) : (
+        filtered.map((p) => {
+          const key = p.patientId || p.phone;
+          const open = expanded === key;
+          const visits = p.recentBookings ?? p.recent ?? [];
+          return (
+            <View key={key} style={styles.card}>
+              <Pressable onPress={() => setExpanded(open ? null : key)}>
+                <Text style={styles.name}>{p.name || p.phone}</Text>
+                <Text style={styles.meta}>
+                  {p.phone} · {p.bookingCount} visits
+                </Text>
+                {p.lastStatus ? (
+                  <View style={{ marginTop: 8 }}>
+                    <StatusBadge status={p.lastStatus} />
+                  </View>
+                ) : null}
+              </Pressable>
+              {open ? (
+                <View style={styles.recent}>
+                  {visits.length === 0 ? (
+                    <Text style={styles.visitLabel}>No recent visits.</Text>
+                  ) : (
+                    visits.slice(0, 8).map((b) => (
+                      <Pressable
+                        key={b.id}
+                        onPress={() => router.push(`/(app)/visit/${b.id}`)}
+                        style={styles.visitRow}
+                      >
+                        <Text style={styles.visitLabel}>
+                          {(b.sessionDate || b.slotStart || "")
+                            .toString()
+                            .slice(0, 10)}{" "}
+                          · {String(b.status || "").replace(/_/g, " ")}
+                        </Text>
+                        <Text style={styles.openLink}>Open</Text>
+                      </Pressable>
+                    ))
+                  )}
+                </View>
+              ) : null}
+            </View>
+          );
+        })
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.paper },
+  content: { padding: space.xl, paddingBottom: 120 },
+  search: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paperRaised,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.ink,
+    borderRadius: 12,
+    marginBottom: space.lg,
+  },
+  card: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paperRaised,
+    borderRadius: 16,
+    padding: space.lg,
+    marginBottom: space.md,
+  },
+  name: { fontSize: 16, fontWeight: "600", color: colors.ink },
+  meta: { marginTop: 4, fontSize: 13, color: colors.inkSoft },
+  recent: {
+    marginTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+    paddingTop: space.md,
+    gap: 8,
+  },
+  visitRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  visitLabel: { fontSize: 13, color: colors.inkSoft, flex: 1 },
+  openLink: { fontSize: 13, fontWeight: "600", color: colors.brand },
+});

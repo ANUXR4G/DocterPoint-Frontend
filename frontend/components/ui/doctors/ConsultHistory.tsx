@@ -7,7 +7,9 @@ import { useUser } from "@/hooks/useUser"
 import { TAppointment, TDoctor } from "@/types"
 import { firey } from "@/utils"
 import { format } from "date-fns"
-import { useSearchParams } from "next/navigation"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
+import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 
 type Props = {
   id: string
@@ -19,6 +21,7 @@ type TConsult = TAppointment & {
 
 export default function ConsultHistory({ id }: Props) {
   const searchParams = useSearchParams()
+  const router = useRouter()
 
   const { data: doctorInfo } = useUser<TDoctor>("doctor")
 
@@ -33,7 +36,15 @@ export default function ConsultHistory({ id }: Props) {
 
   return (
     <div className="mt-6">
-      <h2 className="text-sm font-semibold mt-2">Consult History</h2>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">Consult History</h2>
+        <Link
+          href={practiceTabHref("patients")}
+          className="text-xs font-semibold text-[var(--theme-primary)] hover:underline"
+        >
+          All patients →
+        </Link>
+      </div>
       {appointments.length === 0 && (
         <h3 className="text-sm font-semibold opacity-90">
           No consult history is available of the patient.
@@ -48,10 +59,10 @@ export default function ConsultHistory({ id }: Props) {
           >
             {doctorInfo && doctorInfo.id === info.doctor.id && (
               <button
+                type="button"
                 className="absolute z-10 right-3 top-3 center size-7 rounded-full bg-neutral-300 group hover:bg-neutral-400/80 dark:bg-neutral-700/80 dark:hover:bg-neutral-700 hover:cursor-pointer transition"
-                // onClick={(e) =>
-                //   handleNavigation(e, "/doctor/appointments/patients")
-                // }
+                onClick={() => router.push(practiceTabHref("patients"))}
+                aria-label="Open patients"
               >
                 <Icon
                   name="rotated-arrow"

@@ -1,19 +1,28 @@
 import { HealthMonitoring, Medications } from "@/components"
-import dynamic from "next/dynamic"
-
-const DateHeading = dynamic(
-  () => import("../../../components/dates/DateHeading"),
-  {
-    ssr: false,
-  }
-)
+import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 
 export default function PatientMonitoringPage() {
   return (
-    <div className="relative overflow-hidden">
-      <DateHeading />
-      <HealthMonitoring />
-      <Medications />
+    <div className="dashboard-page">
+      <DashboardPageHeader
+        eyebrow="Patient"
+        title={
+          <>
+            Health{" "}
+            <span className="text-blue-600 dark:text-sky-400">monitoring</span>
+          </>
+        }
+        subtitle="Track vitals, glucose, blood pressure, and medications in one place."
+      />
+
+      <div className="space-y-5">
+        <section className="dashboard-panel">
+          <HealthMonitoring />
+        </section>
+        <section className="dashboard-panel">
+          <Medications />
+        </section>
+      </div>
     </div>
   )
 }

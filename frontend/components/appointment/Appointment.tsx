@@ -143,14 +143,14 @@ export default function SmallViewAppointment({
         ) : (
           <Link
             className="text-sm md:text-base font-bold opacity-95 hover:opacity-100 size-fit"
-            href={`/hospitals/doctors/info?id=${appointment.doctor.id}`}
+            href="/practices"
           >
             {appointment.doctor.name}
           </Link>
         )}
         <Link
           className="text-xs md:text-sm font-semibold leading-4 md:leading-4 size-fit opacity-95 hover:opacity-100"
-          href={`/hospitals/${appointment.hospital.id}/info`}
+          href="/practices"
         >
           {appointment.hospital.name}
         </Link>

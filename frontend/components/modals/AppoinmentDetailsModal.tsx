@@ -96,12 +96,9 @@ export default function AppointmentDetailsModal({
     if (typeof window !== "undefined" && selected) {
       e.preventDefault()
       if (e.ctrlKey) {
-        window.open(
-          `/hospitals/doctors/info?id=${selected.doctor.id}&popup=t`,
-          `_blank`
-        )
+        window.open(`/practices`, `_blank`)
       } else {
-        router.push(`/hospitals/doctors/info?id=${selected.doctor.id}&popup=t`)
+        router.push(`/practices`)
       }
     }
   }
@@ -176,11 +173,8 @@ export default function AppointmentDetailsModal({
             }
             hrefs={
               selected.referredBy
-                ? [
-                    `/hospitals/doctors/info?id=${selected.doctor.id}`,
-                    `/hospitals/doctors/info?id=${selected.referredBy.id}`,
-                  ]
-                : [`/hospitals/doctors/info?id=${selected.doctor.id}`]
+                ? ["/practices", "/practices"]
+                : ["/practices"]
             }
           />
 
@@ -208,7 +202,7 @@ export default function AppointmentDetailsModal({
           <AlignContent
             keys={["Hospital Name", "Hospital Adress"]}
             values={[selected.hospital.name, selected.hospital.address]}
-            hrefs={[`/hospitals/${selected.hospital.id}/info`]}
+            hrefs={["/practices"]}
           />
 
           {/* hospital map */}

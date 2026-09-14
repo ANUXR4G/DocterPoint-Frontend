@@ -9,6 +9,7 @@ import { modifyData } from "@/lib/dummy/health"
 import { patientService } from "@/lib/services/patient"
 import { HumanAnatomy, MonitoringSlider } from "@/components"
 import { useRouter, useSearchParams } from "next/navigation"
+import { buildWsUrl } from "@/lib/wsOrigin"
 
 export default function HealthMonitoring() {
   const router = useRouter()
@@ -22,7 +23,7 @@ export default function HealthMonitoring() {
 
   // define the url of the socket url using the users id
   const socketURL = userInfo
-    ? `ws://localhost:8000/api/v1/ws/monitoring/${userInfo.id}`
+    ? buildWsUrl(`/api/v1/ws/monitoring/${userInfo.id}`)
     : null
 
   // connect the socket through the hook
@@ -105,7 +106,7 @@ export default function HealthMonitoring() {
       />
 
       {/* monitoring slider (also modal indicators) */}
-      <div className="absolute left-6 bottom-5 right-0">
+      <div className="absolute left-4 right-4 bottom-5">
         <MonitoringSlider openModal={handleOpenModal} uiData={uiData} />
       </div>
     </React.Fragment>

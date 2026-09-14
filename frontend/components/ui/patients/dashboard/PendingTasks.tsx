@@ -28,7 +28,7 @@ export default function PendingTasks({ isLoading: recordLoading }: Props) {
 
   useEffect(() => {
     setToday(startOfToday())
-    setTomorrow(startOfTomorrow)
+    setTomorrow(startOfTomorrow())
   }, [])
 
   const { data: upcomingAppointments, isLoading: appointmentLoading } = useApi(

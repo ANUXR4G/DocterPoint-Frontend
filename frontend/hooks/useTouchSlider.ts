@@ -1,6 +1,6 @@
 import { RefObject, useState } from "react"
 
-export function useTouchSlider<T extends HTMLElement>(ref: RefObject<T>) {
+export function useTouchSlider<T extends HTMLElement>(ref: RefObject<T | null>) {
   const [hidePrevBtn, setHidePrevBtn] = useState<boolean>(false)
   const [hideNextBtn, setHideNextBtn] = useState<boolean>(false)
 

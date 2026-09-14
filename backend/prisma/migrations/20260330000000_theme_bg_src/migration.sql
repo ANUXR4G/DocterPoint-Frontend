@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "bg_src" TEXT;
+ALTER TABLE "practices" ADD COLUMN IF NOT EXISTS "bg_src" TEXT;

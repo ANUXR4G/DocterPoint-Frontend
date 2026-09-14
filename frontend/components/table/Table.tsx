@@ -1,8 +1,10 @@
+import type { ReactElement } from "react"
+
 type Props = {
   values: any
   name: string
   disableIds?: number[]
-  customFields?: ((value: any) => JSX.Element)[]
+  customFields?: ((value: any) => ReactElement)[]
   bodyClassName?: string
   headerClassName?: string
 }

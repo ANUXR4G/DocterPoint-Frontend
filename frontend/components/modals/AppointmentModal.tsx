@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Button,
   Checkbox,
@@ -23,6 +23,14 @@ import { useApiMutation } from "@/hooks/useApiMutation"
 import { patientService } from "@/lib/services/patient"
 import { queryClient } from "@/app/providers"
 import { useProfile } from "@/hooks/useProfile"
+
+const FALLBACK_DOCTOR_IMG =
+  "https://res.cloudinary.com/firey/image/upload/v1708816390/iub/male_12.jpg"
+
+function doctorImageSrc(src?: string | null) {
+  const trimmed = src?.trim()
+  return trimmed ? trimmed : FALLBACK_DOCTOR_IMG
+}
 import { usePathname, useRouter } from "next/navigation"
 
 type Props = {
@@ -38,28 +46,39 @@ export default function AppointmentModal({
   doctor,
   type = "general",
 }: Props) {
-  // get current day
-  const today = startOfToday()
-  // get the first day of the current month
-  const firstDayCurrentMonth = startOfMonth(today)
-  // loop through the current month and get a preview of the dates
-  const previewDays = eachDayOfInterval({
-    start: startOfMonth(firstDayCurrentMonth),
-    end: endOfMonth(firstDayCurrentMonth),
-  })
+  const availableDays = useMemo(() => {
+    const raw = doctor.availableTimes?.split(":")[0] ?? ""
+    return raw
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean)
+  }, [doctor.availableTimes])
 
-  const [details, setDetails] = useState<AppointmentCreationProps>({
-    doctor: doctor.name,
-    hospital: doctor.hospital.name,
-    address: doctor.hospital.address,
-    appointmentMode: "In-Person Consultation",
-    purposeOfVisit: ["General Checkup"],
-    selectedDate: today,
-    selectedMonth: format(today, "MMMM"),
-    selectedMonthDays: previewDays,
-    notes: "",
-    availableDays: doctor.availableTimes.split(":")[0].split(", "),
-    time: doctor.availableTimes.split(": ")[1],
+  const appointmentTime = useMemo(() => {
+    const parts = doctor.availableTimes?.split(": ") ?? []
+    return parts[1]?.trim() || ""
+  }, [doctor.availableTimes])
+
+  const [details, setDetails] = useState<AppointmentCreationProps>(() => {
+    const today = startOfToday()
+    const firstDayCurrentMonth = startOfMonth(today)
+    const previewDays = eachDayOfInterval({
+      start: startOfMonth(firstDayCurrentMonth),
+      end: endOfMonth(firstDayCurrentMonth),
+    })
+    return {
+      doctor: doctor.name,
+      hospital: doctor.hospital.name,
+      address: doctor.hospital.address,
+      appointmentMode: "In-Person Consultation",
+      purposeOfVisit: ["General Checkup"],
+      selectedDate: today,
+      selectedMonth: format(today, "MMMM"),
+      selectedMonthDays: previewDays,
+      notes: "",
+      availableDays,
+      time: appointmentTime,
+    }
   })
 
   // create appointment
@@ -74,7 +93,8 @@ export default function AppointmentModal({
   })
 
   // handle month selection
-  function handleMonthSelection(month: string) {
+  const handleMonthSelection = useCallback((month: string) => {
+    const today = startOfToday()
     const newDate = new Date(`${month} 1 ${format(today, "y")}`)
     const newPreviewDays = eachDayOfInterval({
       start: startOfMonth(newDate),
@@ -86,21 +106,30 @@ export default function AppointmentModal({
       selectedMonth: month,
       selectedMonthDays: newPreviewDays,
     }))
-  }
+  }, [])
 
   // handle date selection
-  function handleDateSelection(date: Date, month?: string) {
-    const newPreviewDays = eachDayOfInterval({
-      start: startOfMonth(date),
-      end: endOfMonth(date),
+  const handleDateSelection = useCallback((date: Date, month?: string) => {
+    setDetails((prev) => {
+      const sameDay =
+        prev.selectedDate.getFullYear() === date.getFullYear() &&
+        prev.selectedDate.getMonth() === date.getMonth() &&
+        prev.selectedDate.getDate() === date.getDate()
+      const sameMonth = !month || month === prev.selectedMonth
+      if (sameDay && sameMonth) return prev
+
+      const newPreviewDays = eachDayOfInterval({
+        start: startOfMonth(date),
+        end: endOfMonth(date),
+      })
+      return {
+        ...prev,
+        selectedDate: date,
+        selectedMonth: month ? month : prev.selectedMonth,
+        selectedMonthDays: month ? newPreviewDays : prev.selectedMonthDays,
+      }
     })
-    setDetails((prev) => ({
-      ...prev,
-      selectedDate: date,
-      selectedMonth: month ? month : prev.selectedMonth,
-      selectedMonthDays: month ? newPreviewDays : prev.selectedMonthDays,
-    }))
-  }
+  }, [])
 
   // handle appointment mode
   function handleAppointmentMode(e: React.ChangeEvent<HTMLInputElement>) {
@@ -150,18 +179,17 @@ export default function AppointmentModal({
     mutate({ payload })
   }
 
-  // update the available time of doctors (selected date carousel)
+  // Sync doctor schedule fields when the selected doctor changes (do not reset the picked date every render).
   useEffect(() => {
-    const today = startOfToday()
-
     setDetails((prev) => ({
       ...prev,
-      selectedDate: today,
       doctor: doctor.name,
-      availableDays: doctor.availableTimes.split(":")[0].split(", "),
-      time: doctor.availableTimes.split(": ")[1],
+      hospital: doctor.hospital.name,
+      address: doctor.hospital.address,
+      availableDays,
+      time: appointmentTime,
     }))
-  }, [doctor])
+  }, [doctor.id, doctor.name, doctor.hospital.name, doctor.hospital.address, availableDays, appointmentTime])
 
   return (
     <React.Fragment>
@@ -182,9 +210,9 @@ export default function AppointmentModal({
               <div className="relative size-32">
                 <Image
                   fill
-                  src={doctor.imgSrc}
+                  src={doctorImageSrc(doctor.imgSrc)}
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  alt="doctor.png"
+                  alt={doctor.name ? `${doctor.name}` : "Doctor"}
                   style={{ objectFit: "cover", filter: "contrast(0.9)" }}
                   priority
                   className="rounded-lg"

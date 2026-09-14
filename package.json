@@ -1,0 +1,24 @@
+{
+  "name": "glucoguide",
+  "private": true,
+  "workspaces": [
+    "apps/mobile",
+    "apps/provider"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:mobile": "npm run start -w @glucoguide/mobile",
+    "dev:mobile:tunnel": "npm run start -w @glucoguide/mobile -- --tunnel -c",
+    "dev:mobile:ios": "npm run ios -w @glucoguide/mobile",
+    "dev:provider": "npm run start -w @glucoguide/provider",
+    "seed": "npm run seed --prefix backend",
+    "qms:gate": "node scripts/qms-gate.mjs",
+    "qa": "npm run qa --prefix backend",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

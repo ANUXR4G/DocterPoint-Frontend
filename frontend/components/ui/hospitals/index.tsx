@@ -8,6 +8,14 @@ import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { THospital } from "@/types"
 
+const FALLBACK_HOSPITAL_IMG =
+  "https://images.pexels.com/photos/263402/pexels-photo-263402.jpeg"
+
+function hospitalImageSrc(src?: string | null) {
+  const trimmed = src?.trim()
+  return trimmed ? trimmed : FALLBACK_HOSPITAL_IMG
+}
+
 type Props = {
   hospitals: THospital[]
 }
@@ -31,9 +39,9 @@ export default function HospitalsSwiper({ hospitals }: Props) {
       e.preventDefault()
 
       if (e.ctrlKey) {
-        window.open(`/hospitals/${id}/info`, `_blank`)
+        window.open(`/practices`, `_blank`)
       } else {
-        router.push(`/hospitals/${id}/info`)
+        router.push(`/practices`)
       }
     }
   }
@@ -57,9 +65,9 @@ export default function HospitalsSwiper({ hospitals }: Props) {
             >
               <Image
                 fill
-                src={hospital.imgSrc}
+                src={hospitalImageSrc(hospital.imgSrc)}
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                alt="doctor.png"
+                alt={hospital.name || "hospital"}
                 style={{ objectFit: "cover" }}
                 priority
                 className="rounded-lg"

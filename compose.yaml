@@ -18,15 +18,6 @@ services:
     command: "yarn dev"
     volumes:
       - "./frontend:/app"
-    # develop:
-    #   watch:
-    #     - action: sync
-    #       path: "./frontend"
-    #       target: "/app"
-    #     - action: rebuild
-    #       path: "./frontend/package.json"
-    #     - action: rebuild
-    #       path: "./frontend/next.config.mjs"
 
   backend:
     container_name: glucoguide-backend
@@ -36,27 +27,29 @@ services:
     depends_on:
       - postgres
       - redis
-    command: "python main.py"
+    command: "npm run dev"
     volumes:
       - "./backend:/code"
-    # develop:
-    #   watch:
-    #     - action: sync
-    #       path: "./backend"
-    #       target: "/code"
-    #     - action: rebuild
-    #       path: "./backend/requirements.txt"
+
+  bullmq-worker:
+    container_name: glucoguide-bullmq-worker
+    build: ./backend
+    command: "npm run worker:all"
+    depends_on:
+      - redis
+      - backend
+    volumes:
+      - "./backend:/code"
 
   postgres:
     container_name: glucoguide-db
     image: postgres:13
     ports:
-      - "5433:5433"
+      - "5433:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASS}
+      POSTGRES_PASSWORD: ${POSTGRES_PASS:-postgres}
       POSTGRES_DB: ${POSTGRES_DATABASE_NAME}
-      PGPORT: 5433
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -65,47 +58,9 @@ services:
     container_name: glucoguide-redis
     ports:
       - "6379:6379"
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/var/lib/redis/data
-
-  celery:
-    container_name: glucoguide-celery-worker
-    build: ./backend
-    command: celery -A app.workers.celery worker --loglevel=info
-    depends_on:
-      - redis
-      - backend
-    volumes:
-      - ./backend:/code/var/celery/data
-
-  celery_beat:
-    container_name: glucoguide-celery-beat
-    build: ./backend
-    command: celery -A app.workers.celery beat --loglevel=info
-    depends_on:
-      - redis
-      - backend
-    volumes:
-      - ./backend:/code/var/celery/beat/data
-
-  celery_flower:
-    container_name: glucoguide-celery-flower
-    build: ./backend
-    image: mher/flower:2.0
-    command: celery -A app.workers.celery flower
-    ports:
-      - "5555:5555"
-    environment:
-      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH}
-    depends_on:
-      - redis
-      - backend
-      - celery
-      - nginx
-    volumes:
-      - ./backend:/code/var/celery/flower/data
 
   pgadmin:
     container_name: glucoguide-pgadmin

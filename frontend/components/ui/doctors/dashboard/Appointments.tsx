@@ -1,128 +1,181 @@
 "use client"
 
-import { Table, Button, AppointmentInfo } from "@/components"
-import { useDoctor } from "@/hooks/useDoctor"
-import { TDoctorAppointment } from "@/types"
-import { firey } from "@/utils"
-import { format } from "date-fns"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import React, { useEffect, useState } from "react"
+import { format } from "date-fns"
+import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import {
+  bookingStatusLabel,
+  matchesQueueStatusFilter,
+  type QueueStatusFilter,
+} from "@/lib/bookingStatus"
+import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 
+function patientLabel(b: ProctoBooking) {
+  return (
+    b.patientName || b.patient_name || b.patient?.name || "Patient"
+  )
+}
+
+function whenLabel(b: ProctoBooking) {
+  const when =
+    b.slotStart ||
+    b.slot_start ||
+    b.sessionDate ||
+    b.session_date ||
+    b.createdAt
+  return when ? format(new Date(when), "dd MMM · HH:mm") : "—"
+}
+
+/** Recent clinic bookings table from Procto. */
 export default function Appointments() {
-  const [isHydrated, setHydrated] = useState<boolean>(false)
-
-  const router = useRouter()
-
-  const searchParams = useSearchParams()
-  const isInfoModalOpen = !!searchParams.get("info")
-
-  // Retrieve appointments info of the doctor
-  const { data, isLoading } = useDoctor<{
-    total: number
-    appointments: TDoctorAppointment[]
-  }>("appointments", new URLSearchParams({ page: "1", date: "latest" }))
-
-  // Refactor the retrieve data for table
-  const values =
-    data?.appointments.map((info) => ({
-      id: info.id,
-      patientId: info.patient.id,
-      serial: `#${info.serialNumber}`,
-      patient_name: info.patient.name,
-      date: format(info.appointmentDate, "dd/MM/yyyy"),
-      status: info.status,
-      visit_reason: firey.makeString(info.purposeOfVisit),
-      type: info.mode,
-      patient_note: info.patientNote || `NA`,
-      personal_note: info.doctorNote || `NA`,
-      details: ``,
-    })) || []
-
-  // Custom fields for the table
-  const disableIds = [5, 7, 10]
-  const customFields = [
-    (values: any) => (
-      <div className="center px-2 py-1.5 text-center whitespace-nowrap rounded-lg flex items-center gap-2">
-        <div
-          className={`size-3 rounded-full ${
-            values.status === "upcoming"
-              ? `bg-green-200 dark:bg-green-300`
-              : `bg-blue-200 dark:bg-blue-300`
-          }`}
-        />
-        <span className="text-xs font-bold opacity-80">{values.status}</span>
-      </div>
-    ),
-    (values: any) => (
-      <div className="center px-2 py-1.5 text-center whitespace-nowrap rounded-lg flex gap-2 items-center">
-        <div className="size-3 rounded-full bg-zinc-300" />
-        <span>{values.type}</span>
-      </div>
-    ),
-    (values: any) => (
-      <Button
-        type="outline"
-        className="h-8 text-xs"
-        onClick={() => {
-          router.push(`?info=${values.id}&id=${values.patientId}`)
-        }}
-      >
-        View
-      </Button>
-    ),
-  ]
+  const [loading, setLoading] = useState(true)
+  const [rows, setRows] = useState<ProctoBooking[]>([])
+  const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
 
   useEffect(() => {
-    setHydrated(true)
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      const mine = await proctoService.getMyPractices()
+      if (cancelled) return
+      const practiceId = mine?.data?.[0]?.practice?.id as string | undefined
+      if (!practiceId) {
+        setRows([])
+        setLoading(false)
+        return
+      }
+      const to = new Date()
+      const from = new Date()
+      from.setDate(from.getDate() - 14)
+      const res = await proctoService.listPracticeBookings(practiceId, {
+        from: format(from, "yyyy-MM-dd"),
+        to: format(to, "yyyy-MM-dd"),
+      })
+      if (cancelled) return
+      setRows((res?.data ?? []) as ProctoBooking[])
+      setLoading(false)
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  // Display loading skeleton UI
-  if (!isLoading && !isHydrated)
-    return (
-      <div
-        role="status"
-        className="animate-pulse w-full mt-5 lg:order-4 col-span-4"
-      >
-        <div className="ml-1 mb-3 w-72 h-9 lg:h-14 rounded-sm lg:rounded-md bg-gray-300/80 dark:bg-neutral-700/75" />
-        <div className="rounded-lg h-72 bg-gray-300/80 dark:bg-neutral-700/75" />
-        <span className="sr-only">loading...</span>
-      </div>
-    )
+  const filtered = useMemo(
+    () =>
+      rows
+        .filter((b) => matchesQueueStatusFilter(b.status || "", statusFilter))
+        .slice(0, 12),
+    [rows, statusFilter],
+  )
 
   return (
-    <React.Fragment>
-      <div className={`mt-8 w-full lg:order-4 col-span-4`}>
-        <div className="flex items-center justify-between">
-          <h1 className="text-start ml-2 text-xl lg:text-3xl text-neutral-500 font-semibold">
-            Appointment History
-          </h1>
-          <Link
-            className="bg-white dark:bg-neutral-300 text-neutral-600 shadow-sm hover:bg-gray-50 hover:text-neutral-700 dark:hover:bg-neutral-200 focus:outline outline-offset-2 focus:outline-blue-400 py-2 px-3 inline-flex items-center font-semibold gap-x-2 text-xs rounded-lg border border-gray-200"
-            href="/doctor/appointments"
-          >
-            view appointments
-          </Link>
-        </div>
-        {values.length > 0 ? (
-          <div className="mt-3 border dark:border-neutral-500 border-neutral-300 bg-transparent dark:bg-neutral-800 rounded-2xl">
-            <Table
-              name={`appointment-tracking`}
-              values={values}
-              disableIds={disableIds}
-              customFields={customFields}
-              headerClassName="[&:nth-child(1)]:hidden [&:nth-child(2)]:hidden"
-              bodyClassName="[&:nth-child(1)]:hidden [&:nth-child(2)]:hidden [&:nth-child(3)]:min-w-16 [&:nth-child(4)]:min-w-32 [&:nth-child(6)]:text-xs [&:nth-child(7)]:min-w-40 [&:nth-child(7)]:max-w-56 [&:nth-child(7)]:font-semibold [&:nth-child(7)]:opacity-80 [&:nth-child(7)]:text-xs [&:nth-child(8)]:text-xs [&:nth-child(9)]:min-w-32 [&:nth-child(9)]:max-w-40 [&:nth-child(10)]:min-w-32 [&:nth-child(10)]:max-w-40"
-            />
-          </div>
-        ) : (
-          <div className="text-sm font-semibold opacity-90 text-neutral-500 flex mt-2.5 ml-2.5">
-            No appointment record exists
-          </div>
-        )}
+    <div className="mt-2 w-full min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="ml-0 text-start text-lg font-semibold text-neutral-900 dark:text-white sm:ml-2 sm:text-xl lg:text-2xl">
+          Recent bookings
+        </h1>
+        <Link
+          className="inline-flex items-center gap-x-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-neutral-600 shadow-sm hover:bg-gray-50 dark:bg-neutral-300 dark:hover:bg-neutral-200"
+          href="/doctor/calendar"
+        >
+          Open calendar
+        </Link>
       </div>
+      <BookingStatusFilterBar
+        value={statusFilter}
+        onChange={setStatusFilter}
+        statuses={rows.map((b) => b.status)}
+        className="mt-3"
+      />
+      {loading ? (
+        <p className="ml-2.5 mt-2.5 text-sm font-semibold text-neutral-500">
+          Loading…
+        </p>
+      ) : filtered.length > 0 ? (
+        <>
+          <ul className="mt-3 space-y-2 md:hidden">
+            {filtered.map((b) => (
+              <li
+                key={b.id}
+                className="rounded-2xl border border-neutral-300 bg-white p-3 dark:border-neutral-600 dark:bg-neutral-800"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{patientLabel(b)}</p>
+                    <p className="text-xs text-neutral-500">
+                      {b.patientPhone || b.patient_phone || ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[10px] font-bold tracking-wide text-neutral-500">
+                    {bookingStatusLabel(b.status || "")}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                  {whenLabel(b)}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-neutral-500">
+                  {b.disease || b.consultationType || "—"}
+                </p>
+                <Link
+                  href={`/doctor/queue/${b.id}`}
+                  className="mt-2 inline-block text-xs font-bold text-[var(--theme-primary)] hover:underline"
+                >
+                  Open visit →
+                </Link>
+              </li>
+            ))}
+          </ul>
 
-      {isInfoModalOpen && <AppointmentInfo />}
-    </React.Fragment>
+          <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-neutral-300 bg-white dark:border-neutral-600 dark:bg-neutral-800 md:block">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
+                <tr>
+                  <th className="px-4 py-3">Patient</th>
+                  <th className="px-4 py-3">When</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Disease</th>
+                  <th className="px-4 py-3 text-right">Open</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+                {filtered.map((b) => (
+                  <tr key={b.id}>
+                    <td className="px-4 py-3 font-semibold">
+                      {patientLabel(b)}
+                      <p className="text-xs font-medium opacity-60">
+                        {b.patientPhone || b.patient_phone}
+                      </p>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
+                      {whenLabel(b)}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-bold">
+                      {bookingStatusLabel(b.status || "")}
+                    </td>
+                    <td className="max-w-[12rem] truncate px-4 py-3 text-xs">
+                      {b.disease || b.consultationType || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/doctor/queue/${b.id}`}
+                        className="text-xs font-bold text-[var(--theme-primary)] hover:underline"
+                      >
+                        Visit
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div className="ml-2.5 mt-2.5 flex text-sm font-semibold text-neutral-500">
+          No booking record matches this status filter
+        </div>
+      )}
+    </div>
   )
 }

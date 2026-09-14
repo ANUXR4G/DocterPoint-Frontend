@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "GlucoGuide Doctor",
+    "slug": "glucoguide-provider",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "glucoguide-provider",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow GlucoGuide Doctor to record your voice for help chat.",
+          "speechRecognitionPermission": "Allow GlucoGuide Doctor to convert speech to text for Mira help."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow GlucoGuide Doctor to attach visit documents from your photos."
+        }
+      ],
+      "expo-document-picker",
+      "expo-audio",
+      "expo-status-bar",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "http://localhost:3001"
+    }
+  }
+}

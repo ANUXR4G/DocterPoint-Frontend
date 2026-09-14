@@ -1,4 +1,6 @@
 venv/
+node_modules/
+dist/
 .idea
 .ipynb_checkpoints
 .mypy_cache

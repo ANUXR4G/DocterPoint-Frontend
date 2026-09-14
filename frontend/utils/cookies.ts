@@ -3,10 +3,10 @@ function getCookie(name: string) {
 
   const targetedCookie = document.cookie
     .split("; ")
-    .find((row) => row.startsWith(`${name}`))
+    .find((row) => row.startsWith(`${name}=`))
 
   if (!targetedCookie) return ""
-  return targetedCookie.split("=")[1]
+  return decodeURIComponent(targetedCookie.slice(name.length + 1))
 }
 
 function setCookie(name: string, value: string, expires: number) {

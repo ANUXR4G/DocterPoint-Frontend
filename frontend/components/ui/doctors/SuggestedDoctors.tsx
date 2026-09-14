@@ -12,6 +12,14 @@ import { TDoctor } from "@/types"
 import { Icon, Swiper } from "@/components"
 import { doctorServices } from "@/lib/services/doctor"
 
+const FALLBACK_DOCTOR_IMG =
+  "https://res.cloudinary.com/firey/image/upload/v1708816390/iub/male_12.jpg"
+
+function doctorImageSrc(src?: string | null) {
+  const trimmed = src?.trim()
+  return trimmed ? trimmed : FALLBACK_DOCTOR_IMG
+}
+
 type Props = {
   experience?: number
   limit?: number
@@ -132,9 +140,9 @@ export default function SuggestedDoctors({
       e.preventDefault()
 
       if (e.ctrlKey) {
-        window.open(`/hospitals/doctors/info?id=${id}`, `_blank`)
+        window.open(`/practices`, `_blank`)
       } else {
-        router.push(`/hospitals/doctors/info?id=${id}`)
+        router.push(`/practices`)
       }
     }
   }
@@ -173,9 +181,9 @@ export default function SuggestedDoctors({
                 >
                   <Image
                     fill
-                    src={doctor.imgSrc}
+                    src={doctorImageSrc(doctor.imgSrc)}
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    alt="doctor.png"
+                    alt={doctor.name || "doctor"}
                     style={{ objectFit: "cover", filter: "contrast(0.9)" }}
                     priority
                     className="rounded-lg"

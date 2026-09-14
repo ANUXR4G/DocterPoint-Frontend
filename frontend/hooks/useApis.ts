@@ -34,6 +34,7 @@ export function useApis<
       return fetcher(queryKey[1], token)
     },
     ...options,
+    enabled: Boolean(token) && (options?.enabled ?? true),
   }))
 
   return useQueries(queryConfigs)

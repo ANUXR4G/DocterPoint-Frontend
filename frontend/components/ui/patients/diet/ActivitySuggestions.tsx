@@ -31,7 +31,7 @@ export default function ActivitySuggestions() {
   return isLoading ? (
     <ActivitySuggestionSkeleton /> // Show Loading Skeleton
   ) : (
-    <div className="mt-3 md:mt-4 grid grid-cols-3 2xl:grid-cols-3 gap-2 lg:w-full min-h-44 lg:items-center">
+    <div className="mt-3 md:mt-4 grid grid-cols-1 min-[400px]:grid-cols-3 2xl:grid-cols-3 gap-2 lg:w-full min-h-44 lg:items-center">
       {options.map((option, idx) => (
         <div
           key={`recommendation_option_${idx}`}

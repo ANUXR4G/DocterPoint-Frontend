@@ -1,27 +1,46 @@
 import { firey } from "@/utils"
 import { cookies } from "@/utils/cookies"
+import { usePathname } from "next/navigation"
 import { useToken } from "./useToken"
 import { SCOPES } from "@/scopes"
 
-function identifyRole(tokenScopes: string[]): string | null {
-  if (!tokenScopes) return null
+const ROLE_ORDER = ["admin", "doctor", "user"] as const
 
-  for (const [role, roleScopes] of Object.entries(SCOPES)) {
-    if (tokenScopes.every((scope) => roleScopes.includes(scope))) {
+function identifyRole(tokenScopes: string[]): string | null {
+  if (!tokenScopes?.length) return null
+
+  // User has a role when their token includes every scope that role requires
+  for (const role of ROLE_ORDER) {
+    const roleScopes = SCOPES[role]
+    if (roleScopes.every((scope) => tokenScopes.includes(scope))) {
       return role
     }
   }
-  return null // Return null if no matching role is found
+
+  return null
+}
+
+function roleFromPathname(pathname: string): string | null {
+  if (pathname.startsWith("/doctor")) return "doctor"
+  if (pathname.startsWith("/patient")) return "user"
+  if (pathname.startsWith("/admin")) return "admin"
+  return null
 }
 
 export function useRole() {
   const token = useToken()
+  const pathname = usePathname()
 
   const decodedToken = firey.getTokenInfo(
-    token || cookies.getCookie("refresh_token")
+    token || cookies.getCookie("refresh_token"),
   )
 
-  const userRole = decodedToken ? identifyRole(decodedToken?.scopes) : null
+  const scopes =
+    decodedToken && typeof decodedToken === "object"
+      ? (decodedToken.scopes as string[] | undefined)
+      : undefined
 
-  return userRole
+  const userRole = scopes ? identifyRole(scopes) : null
+
+  return userRole ?? roleFromPathname(pathname)
 }

@@ -2,7 +2,7 @@ export default function ActivitySuggestionSkeleton() {
   return (
     <div
       role="status"
-      className="mt-3 md:mt-4 w-full min-h-40 mb-3 lg:mb-0 grid grid-cols-3 gap-2 animate-pulse"
+      className="mt-3 md:mt-4 w-full min-h-40 mb-3 lg:mb-0 grid grid-cols-1 min-[400px]:grid-cols-3 gap-2 animate-pulse"
     >
       {[...Array(3)].map((_, idx) => (
         <div

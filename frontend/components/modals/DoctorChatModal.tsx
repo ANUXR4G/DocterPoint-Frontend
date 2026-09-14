@@ -8,6 +8,7 @@ import { useSocket } from "@/hooks/useSocket"
 import { useProfile } from "@/hooks/useProfile"
 import { useObserver } from "@/hooks/useObserver"
 import { useAppContext } from "@/hooks/useAppContext"
+import { buildWsUrl } from "@/lib/wsOrigin"
 
 import { firey } from "@/utils"
 import { chatService } from "@/lib/services/chat"
@@ -70,7 +71,7 @@ export default function DoctorChatModal({
           isSeen: msg.isSeen,
           senderId: msg.senderId,
           receiverId: msg.receiverId,
-          createdAt: new Date(msg.createdAt),
+          createdAt: msg.createdAt,
         }))
 
         // Keep appending incoming messages for infinite scroll
@@ -81,7 +82,7 @@ export default function DoctorChatModal({
 
   // Define the Socket URL using the users id
   const socketURL = userInfo
-    ? `ws://localhost:8000/api/v1/ws/chats/${userInfo.id}`
+    ? buildWsUrl(`/api/v1/ws/chats/${userInfo.id}`)
     : null
 
   // Connect the Chatting Socket Connection through the hook
@@ -137,7 +138,7 @@ export default function DoctorChatModal({
               isSeen: values.is_seen,
               senderId: values.sender_id,
               receiverId: values.receiver_id,
-              createdAt: new Date(values.created_at),
+              createdAt: values.created_at,
             },
             ...prev,
           ]

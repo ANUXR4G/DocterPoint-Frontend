@@ -1,0 +1,359 @@
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { CareChatPanel } from "@/components/CareChatPanel";
+import { PracticeReviewForm } from "@/components/PracticeReviewForm";
+import {
+  ErrorText,
+  Loading,
+  PageTitle,
+  Panel,
+  Screen,
+  SectionTitle,
+} from "@/components/ui";
+import { api } from "@/lib/api";
+import { usePatientLiveSocket } from "@/hooks/useLiveSocket";
+import { patchBookingFields } from "@/lib/liveBooking";
+import { getSessionUserId } from "@/lib/sessionUser";
+import { colors, radii, space } from "@/lib/theme";
+import { bookingWhen, type BookingDetail } from "@/lib/types";
+
+function statusTone(status: string) {
+  const s = (status || "").toUpperCase();
+  if (s === "COMPLETED") return { bg: "#d1fae5", text: "#047857" };
+  if (s === "IN_PROGRESS") return { bg: "#fef3c7", text: "#b45309" };
+  if (s === "WAITING" || s === "CHECKED_IN")
+    return { bg: "#ede9fe", text: "#6d28d9" };
+  if (s === "ACCEPTED" || s === "CONFIRMED")
+    return { bg: "#ccfbf1", text: "#0f766e" };
+  if (s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW") {
+    return { bg: "#f1f5f9", text: "#64748b" };
+  }
+  return { bg: "#dbeafe", text: "#1d4ed8" };
+}
+
+export default function BookingDetailScreen() {
+  const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
+  const router = useRouter();
+  const [booking, setBooking] = useState<BookingDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selfUserId, setSelfUserId] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (opts?: { soft?: boolean }) => {
+      if (!bookingId) return;
+      const soft = Boolean(opts?.soft);
+      if (!soft) {
+        setLoading(true);
+        setError("");
+      }
+      const [res, uid] = await Promise.all([
+        api<BookingDetail>(`/procto/bookings/${bookingId}`),
+        getSessionUserId(),
+      ]);
+      setSelfUserId(uid);
+      if (!soft) setLoading(false);
+      if (res.status !== "successful" || !res.data) {
+        if (!soft) {
+          setError(res.message || "Visit not found.");
+          setBooking(null);
+        }
+        return;
+      }
+      setBooking(res.data);
+    },
+    [bookingId],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  usePatientLiveSocket(
+    true,
+    (event) => {
+      if (
+        !event ||
+        typeof event !== "object" ||
+        !("event" in event) ||
+        (event.event !== "booking_created" &&
+          event.event !== "booking_updated")
+      ) {
+        return;
+      }
+      const incoming =
+        "booking" in event
+          ? (event.booking as Record<string, unknown>)
+          : undefined;
+      if (!incoming?.id || String(incoming.id) !== String(bookingId)) return;
+      setBooking((prev) => {
+        if (!prev) return prev;
+        return patchBookingFields(prev, incoming);
+      });
+    },
+    () => void load({ soft: true }),
+  );
+
+  if (loading && !booking) return <Loading />;
+
+  if (!booking) {
+    return (
+      <Screen>
+        <View style={styles.content}>
+          <ErrorText text={error || "Visit not found."} />
+          <Pressable onPress={() => router.back()}>
+            <Text style={styles.back}>← Back</Text>
+          </Pressable>
+        </View>
+      </Screen>
+    );
+  }
+
+  const tone = statusTone(booking.status);
+  const isCompleted = booking.status === "COMPLETED";
+  const practiceId = booking.practiceId ?? booking.practice?.id ?? null;
+  const canReview = isCompleted && booking.reviewEligibility?.canReview === true;
+  const alreadyReviewed =
+    isCompleted && booking.reviewEligibility?.alreadyReviewed === true;
+  const medicines = Array.isArray(booking.medicines) ? booking.medicines : [];
+  const documents = Array.isArray(booking.documents) ? booking.documents : [];
+  const showVisitSummary =
+    isCompleted ||
+    Boolean(booking.doctorRemarks?.trim()) ||
+    medicines.length > 0 ||
+    documents.length > 0;
+
+  return (
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Pressable onPress={() => router.back()} style={styles.backRow}>
+          <Text style={styles.back}>← My visits</Text>
+        </Pressable>
+
+        <PageTitle
+          title={booking.practice?.name || "Clinic visit"}
+          subtitle={bookingWhen(booking)}
+        />
+
+        <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.statusText, { color: tone.text }]}>
+            {(booking.status || "").replace(/_/g, " ")}
+          </Text>
+        </View>
+
+        {isCompleted ? (
+          <Text style={styles.lockedHint}>
+            This visit is finished and cannot be canceled or rescheduled.
+          </Text>
+        ) : null}
+
+        <Panel style={styles.panel}>
+          <SectionTitle>Visit details</SectionTitle>
+          <Detail label="Doctor" value={booking.provider?.name || "—"} />
+          <Detail
+            label="Location"
+            value={
+              booking.location
+                ? `${booking.location.name}, ${booking.location.city}`
+                : "—"
+            }
+          />
+          <Detail
+            label="Reason"
+            value={booking.disease || booking.consultationType || "—"}
+          />
+        </Panel>
+
+        {showVisitSummary ? (
+          <>
+            <Panel style={styles.panel}>
+              <SectionTitle>Doctor remarks</SectionTitle>
+              {booking.doctorRemarks?.trim() ? (
+                <Text style={styles.body}>{booking.doctorRemarks}</Text>
+              ) : (
+                <Text style={styles.muted}>No remarks from the doctor yet.</Text>
+              )}
+            </Panel>
+
+            <Panel style={styles.panel}>
+              <SectionTitle>Medicines</SectionTitle>
+              {medicines.length === 0 ? (
+                <Text style={styles.muted}>No medicines prescribed.</Text>
+              ) : (
+                medicines.map((m, idx) => (
+                  <View key={`${m.name}-${idx}`} style={styles.medRow}>
+                    <Text style={styles.med}>• {m.name}</Text>
+                    <Text style={styles.medMeta}>
+                      {[m.amount, m.times?.length ? m.times.join(", ") : ""]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </Panel>
+
+            <Panel style={styles.panel}>
+              <SectionTitle>Documents</SectionTitle>
+              {documents.length === 0 ? (
+                <Text style={styles.muted}>No documents attached.</Text>
+              ) : (
+                documents.map((d, idx) => (
+                  <Pressable
+                    key={`${d.url}-${idx}`}
+                    onPress={() => {
+                      if (d.url) void Linking.openURL(d.url);
+                    }}
+                    style={styles.docRow}
+                  >
+                    <Text style={styles.docLink}>{d.name || "View document"}</Text>
+                  </Pressable>
+                ))
+              )}
+            </Panel>
+          </>
+        ) : null}
+
+        {selfUserId && booking.provider?.id ? (
+          <CareChatPanel
+            selfUserId={selfUserId}
+            peerUserId={booking.provider.id}
+            peerName={
+              booking.provider.name
+                ? `Dr. ${booking.provider.name}`
+                : "Doctor"
+            }
+            subtitle="Doctor messages also arrive on WhatsApp. Do not use this for emergencies."
+          />
+        ) : null}
+
+        {isCompleted && practiceId ? (
+          <Panel style={styles.panel}>
+            <SectionTitle>Your review</SectionTitle>
+            {alreadyReviewed ? (
+              <Text style={styles.thanks}>
+                Thank you — your review has been submitted and appears on the
+                clinic&apos;s Find Care profile.
+              </Text>
+            ) : canReview ? (
+              <PracticeReviewForm
+                practiceId={practiceId}
+                bookingId={booking.id}
+                defaultAuthorName={booking.patientName ?? ""}
+                providerName={booking.provider?.name}
+                onSubmitted={() => void load()}
+              />
+            ) : (
+              <Text style={styles.muted}>
+                Reviews are not available for this visit.
+              </Text>
+            )}
+          </Panel>
+        ) : null}
+      </ScrollView>
+    </Screen>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detail}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { padding: space.lg, paddingBottom: 48 },
+  backRow: { marginBottom: space.md },
+  back: {
+    color: colors.brand,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  statusPill: {
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: space.lg,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  lockedHint: {
+    marginTop: -space.md,
+    marginBottom: space.lg,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.inkSoft,
+  },
+  panel: { marginBottom: space.md },
+  detail: { marginTop: space.sm },
+  detailLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.inkSoft,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  detailValue: {
+    marginTop: 2,
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.ink,
+  },
+  body: {
+    marginTop: space.sm,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.inkSoft,
+  },
+  med: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.ink,
+  },
+  medRow: { marginTop: 8 },
+  medMeta: {
+    marginTop: 2,
+    marginLeft: 12,
+    fontSize: 12,
+    color: colors.inkSoft,
+  },
+  docRow: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: radii.md,
+    backgroundColor: "#eff6ff",
+  },
+  docLink: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.brand,
+  },
+  thanks: {
+    marginTop: space.sm,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#047857",
+  },
+  muted: {
+    marginTop: space.sm,
+    fontSize: 14,
+    color: colors.inkSoft,
+  },
+});

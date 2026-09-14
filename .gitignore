@@ -1,1 +1,40 @@
-*.env
+node_modules/
+.env
+.env.local
+.env.*.local
+apps/*/.env
+apps/*/.env.local
+dist/
+.next/
+*.log
+.DS_Store
+
+# Logs
+logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+# Dependency directories
+# Environment variables
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+backend/uploads/
+
+# Local / IDE junk
+.cursor/
+.expo/
+dump.rdb
+*.bak
+frontend/.env.bak
+.taskmaster/
+
+# Task files
+# tasks.json
+# tasks/ 

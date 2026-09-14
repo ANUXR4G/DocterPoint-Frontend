@@ -1,13 +1,52 @@
-export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex"></div>
+import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
+import type { Metadata } from "next"
+import { SCOPES } from "@/scopes"
+import HomePage from "@/components/marketing/HomePage"
+import { providerDashboardFromContext } from "@/lib/providerPortal"
 
-      <div className="relative z-[-1] text-center flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <h3>An Integrated Health Monitoring System for Diabetes Patient.</h3>
-      </div>
+export const metadata: Metadata = {
+  title: "GlucoGuide — Find doctors & book clinic visits",
+  description:
+    "Search doctors and clinics, book appointments, and manage diabetes care in one place.",
+}
 
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left"></div>
-    </main>
-  );
+const dashboardURLs: Record<string, string> = {
+  doctor: "/doctor/dashboard",
+  admin: "/admin/dashboard",
+}
+
+function extractScope(token: string): string[] {
+  try {
+    const [, payload] = token.split(".")
+    const decoded = JSON.parse(atob(payload))
+    return decoded.scopes || []
+  } catch {
+    return []
+  }
+}
+
+function resolveProviderDashboard(
+  scopes: string[],
+  portalCookie?: string | null,
+): string | null {
+  if (SCOPES.admin.every((s) => scopes.includes(s))) return dashboardURLs.admin
+  if (SCOPES.doctor.every((s) => scopes.includes(s))) {
+    return providerDashboardFromContext("doctor", null, portalCookie)
+  }
+  return null
+}
+
+export default async function Home() {
+  const cookieStore = await cookies()
+  const token = cookieStore.get("refresh_token")?.value
+  if (token) {
+    const dashboard = resolveProviderDashboard(
+      extractScope(token),
+      cookieStore.get("gg_portal")?.value,
+    )
+    if (dashboard) redirect(dashboard)
+  }
+
+  return <HomePage />
 }

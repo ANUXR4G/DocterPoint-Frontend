@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "GlucoGuide Patient",
+    "slug": "glucoguide-patient",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "scheme": "glucoguide",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#0f5c5c"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow GlucoGuide to find clinics near you."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow GlucoGuide to access ID photos for registration autofill."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow GlucoGuide to record your voice for booking and help chat.",
+          "speechRecognitionPermission": "Allow GlucoGuide to convert speech to text for booking and Mira help."
+        }
+      ],
+      "expo-audio",
+      "expo-status-bar",
+      "expo-asset",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "http://localhost:3001"
+    },
+    "ios": {
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow GlucoGuide to convert speech to text for booking and Mira help.",
+        "NSMicrophoneUsageDescription": "Allow GlucoGuide to record your voice for booking and help chat."
+      },
+      "bundleIdentifier": "com.anonymous.glucoguide-patient"
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "pan"
+    }
+  }
+}

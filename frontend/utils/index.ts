@@ -1,53 +1,88 @@
-// handle encrypting text using aes in gcm mode
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ""
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!)
+  }
+  return btoa(binary)
+}
+
+function base64UrlToJson(payload: string): Record<string, unknown> {
+  const padded = payload.replace(/-/g, "+").replace(/_/g, "/")
+  const pad = "=".repeat((4 - (padded.length % 4)) % 4)
+  return JSON.parse(atob(padded + pad))
+}
+
+// handle encrypting text using aes in gcm mode (browser Web Crypto — no Node Buffer)
 async function generateEncryptionAES(content: string): Promise<string> {
-  if (typeof window === "undefined") return ""
+  if (typeof window === "undefined") {
+    throw new Error("Password encryption is only available in the browser")
+  }
+
+  const secret = process.env.NEXT_PUBLIC_ENCRYPTION_SECRET_KEY
+  if (!secret) {
+    throw new Error("Missing NEXT_PUBLIC_ENCRYPTION_SECRET_KEY")
+  }
 
   const enc = new TextEncoder()
-  // encode the masterkey
-  const rawKey = Uint8Array.from(
-    atob(process.env.NEXT_PUBLIC_ENCRYPTION_SECRET_KEY as string),
-    (c) => c.charCodeAt(0)
-  )
+  const rawKey = Uint8Array.from(atob(secret), (c) => c.charCodeAt(0))
   const key = await window.crypto.subtle.importKey(
     "raw",
     rawKey,
     { name: "AES-GCM", length: 256 },
-    true,
-    ["encrypt", "decrypt"]
+    false,
+    ["encrypt"]
   )
-  // generate a 12bytes random string
   const iv = window.crypto.getRandomValues(new Uint8Array(12))
 
-  // generate encrypted ciphertext w tag
-  const ciphertextWithTag = await window.crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv },
-    key,
-    enc.encode(content)
+  const ciphertextWithTag = new Uint8Array(
+    await window.crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      enc.encode(content)
+    )
   )
 
-  const ciphertext = new Uint8Array(ciphertextWithTag.slice(0, -16))
-  const tag = new Uint8Array(ciphertextWithTag.slice(-16)) // last 16 bytes as tag
-
-  // encrypt everything in a single base64 string
-  return Buffer.concat([iv, ciphertext, tag]).toString("base64")
+  // Web Crypto appends the 16-byte auth tag; backend expects iv || ciphertext || tag
+  const packed = new Uint8Array(iv.length + ciphertextWithTag.length)
+  packed.set(iv, 0)
+  packed.set(ciphertextWithTag, iv.length)
+  return bytesToBase64(packed)
 }
 
 function calculateAge(dateString: string): number {
-  // parse the date string in the format "DD/MM/YYYY"
-  const [day, month, year] = dateString.split("/").map(Number)
-  const birthDate = new Date(year, month - 1, day) // month is 0-indexed
+  if (!dateString?.trim()) return -1
+  const raw = dateString.trim()
+  let birth: Date | null = null
 
-  // Get today's date
+  const slash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (slash) {
+    const first = Number(slash[1])
+    const second = Number(slash[2])
+    const year = Number(slash[3])
+    // App stores MM/DD/YYYY; if first > 12 treat as DD/MM/YYYY
+    if (first > 12) {
+      birth = new Date(year, second - 1, first)
+    } else {
+      birth = new Date(year, first - 1, second)
+    }
+  } else {
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) {
+      birth = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+    } else {
+      const parsed = new Date(raw)
+      if (!Number.isNaN(parsed.getTime())) birth = parsed
+    }
+  }
+
+  if (!birth || Number.isNaN(birth.getTime())) return -1
+
   const today = new Date()
-
-  // calculate the age
-  let age = today.getFullYear() - birthDate.getFullYear()
-  const monthDiff = today.getMonth() - birthDate.getMonth()
-
-  // adjust age if the birthday hasn't occurred yet this year
+  let age = today.getFullYear() - birth.getFullYear()
+  const monthDiff = today.getMonth() - birth.getMonth()
   if (
     monthDiff < 0 ||
-    (monthDiff === 0 && today.getDate() < birthDate.getDate())
+    (monthDiff === 0 && today.getDate() < birth.getDate())
   ) {
     age--
   }
@@ -219,12 +254,16 @@ function convertMinToHourMinFormat(duration: number) {
   return `${convertedHours}h ${mins}m`
 }
 
-// get expiriration time in a token
+// get expiration time in a token
 function getTokenDuration(token: string) {
   const [, payload] = token.split(".")
   if (!payload) return 0
-  const decodedPayload = JSON.parse(atob(payload))
-  return decodedPayload.exp
+  try {
+    const decodedPayload = base64UrlToJson(payload)
+    return typeof decodedPayload.exp === "number" ? decodedPayload.exp : 0
+  } catch {
+    return 0
+  }
 }
 
 // Decode the JWT Token
@@ -232,7 +271,11 @@ function getTokenInfo(token: string) {
   if (!token) return "firey"
   const [, payload] = token.split(".")
   if (!payload) return "firey"
-  return JSON.parse(atob(payload))
+  try {
+    return base64UrlToJson(payload)
+  } catch {
+    return "firey"
+  }
 }
 
 function objIsEmpty(values: Record<string, unknown[]>) {

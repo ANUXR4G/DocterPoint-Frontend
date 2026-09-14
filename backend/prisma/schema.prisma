@@ -1,0 +1,614 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.VarChar(256)
+  password  String?  @db.VarChar(256)
+  role      String
+  name      String?
+  gender    String?
+  imgSrc    String?  @map("img_src")
+  bgSrc     String?  @map("bg_src")
+  textSize  String?  @default("medium") @map("text_size") @db.VarChar(16)
+  address   String?
+  phone     String?  @db.VarChar(20)
+  createdBy String   @default("self_attempted") @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient                 Patient?
+  doctor                  Doctor?
+  sentMessages            Message[] @relation("SenderMessages")
+  receivedMessages        Message[] @relation("ReceiverMessages")
+  practiceMembers         PracticeMember[]
+  assistantConversations  AssistantConversation[]
+
+  @@map("users")
+}
+
+model Patient {
+  id              String @id @db.Uuid
+  profession      String?
+  dateOfBirth     String? @map("date_of_birth")
+  contactNumber   String? @map("contact_number")
+  emergencyNumber String? @map("emergency_number")
+  aadharNumber    String? @map("aadhar_number") @db.VarChar(12)
+  panNumber       String? @map("pan_number") @db.VarChar(10)
+  aadharCardSrc   String? @map("aadhar_card_src")
+
+  user          User           @relation(fields: [id], references: [id], onDelete: Cascade)
+  healthRecords HealthRecord[]
+  appointments  Appointment[]
+  medications   Medication[]
+
+  @@map("patients")
+}
+
+model Doctor {
+  id                       String @id @db.Uuid
+  description              String
+  hospitalId               String @map("hospital_id") @db.Uuid
+  availableTimes           String @map("available_times")
+  experience               Int
+  emails                   Json
+  contactNumbers           Json   @map("contact_numbers")
+  appointmentValidityDays  Int    @default(7) @map("appointment_validity_days")
+  licenseNo                String? @map("license_no")
+
+  user         User          @relation(fields: [id], references: [id], onDelete: Cascade)
+  hospital     Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  medications  Medication[]
+
+  @@map("doctors")
+}
+
+model Hospital {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  address        String
+  city           String
+  imgSrc         String   @map("img_src")
+  description    String
+  emails         Json
+  contactNumbers Json     @map("contact_numbers")
+  geometry       Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  doctors Doctor[]
+
+  @@map("hospitals")
+}
+
+model HealthRecord {
+  id                      String   @id @default(uuid()) @db.Uuid
+  patientId               String   @map("patient_id") @db.Uuid
+  weight                  Float?
+  height                  Float?
+  bloodGroup              String?  @map("blood_group")
+  smokingStatus           String?  @map("smoking_status")
+  physicalActivity        String?  @map("physical_activity")
+  previousDiabetesRecords Json?    @map("previous_diabetes_records")
+  bloodPressureRecords    Json?    @map("blood_pressure_records")
+  bloodGlucoseRecords     Json?    @map("blood_glucose_records")
+  bodyTemperature         Float?   @map("body_temperature")
+  bloodOxygen             Float?   @map("blood_oxygen")
+  bmi                     Float?
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("health_records")
+}
+
+model Appointment {
+  id              String   @id @default(uuid()) @db.Uuid
+  patientId       String   @map("patient_id") @db.Uuid
+  doctorId        String   @map("doctor_id") @db.Uuid
+  testName        String?  @map("test_name")
+  referredBy      Json?    @map("referred_by")
+  purposeOfVisit  Json?    @map("purpose_of_visit")
+  patientNote     String?  @map("patient_note")
+  doctorNote      String?  @map("doctor_note")
+  appointmentDate DateTime @map("appointment_date") @db.Date
+  appointmentTime String   @map("appointment_time")
+  mode            String   @default("in-person")
+  type            String   @default("consultation")
+  status          String   @default("requested")
+  serialNumber    Int      @map("serial_number")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  medications Medication[]
+
+  @@map("appointments")
+}
+
+model Medication {
+  id                     String   @id @default(uuid()) @db.Uuid
+  patientId              String   @map("patient_id") @db.Uuid
+  doctorId               String?  @map("doctor_id") @db.Uuid
+  appointmentId          String?  @map("appointment_id") @db.Uuid
+  primaryGoals           String   @map("primary_goals")
+  medications            Json?
+  dietary                Json?
+  nutritions             Json?
+  energyGoal             Float?   @map("energy_goal")
+  bmiGoal                Float?   @map("bmi_goal")
+  hydration              String?
+  sleep                  String?
+  exercises              Json?
+  monitoring             Json?
+  expiry                 Float?
+  allergies              Json?
+  recommendedIngredients Json?    @map("recommended_ingredients")
+  preferredCuisine       String?  @map("preferred_cuisine")
+  generatedBy            String   @default("system") @map("generated_by")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor      Doctor?      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("medications")
+}
+
+model Meal {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  category    String
+  description String   @db.VarChar(256)
+  ingredients Json
+  time        String
+  calories    Float
+  protein     Float
+  fat         Float
+  carbs       Float
+  blog        String
+  imgSrc      String   @map("img_src")
+  cookingType String?  @map("cooking_type")
+  cuisine     String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("meals")
+}
+
+model Message {
+  id         String   @id @default(uuid()) @db.Uuid
+  senderId   String   @map("sender_id") @db.Uuid
+  receiverId String?  @map("receiver_id") @db.Uuid
+  content    String
+  isSeen     Boolean? @default(false) @map("is_seen")
+  type       String?  @default("help")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  sender   User  @relation("SenderMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User? @relation("ReceiverMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+/// Mira (in-app assistant) chat threads — one user, many conversations.
+model AssistantConversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String   @db.VarChar(160)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AssistantMessage[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("assistant_conversations")
+}
+
+model AssistantMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           String   @db.VarChar(16) // user | assistant
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("assistant_messages")
+}
+
+// ─── GlucoGuide Pro (Procto-style booking platform) ───────────────────────
+
+enum PracticeType {
+  SOLO
+  CLINIC
+  MEDICAL_CENTER
+}
+
+enum PracticeMemberRole {
+  PRACTICE_OWNER
+  PRACTICE_ADMIN
+  DOCTOR
+  RECEPTIONIST
+}
+
+enum ScheduleMode {
+  TIME_BASED
+  TOKEN_BASED
+}
+
+enum BookingStatus {
+  SCHEDULED
+  ACCEPTED
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+  NO_SHOW
+  REQUESTED
+}
+
+enum BookingChannel {
+  WEB_PORTAL
+  PROVIDER_APP
+  PATIENT_APP
+  WHATSAPP_AI
+}
+
+enum OverrideType {
+  BLOCK_SLOT
+  BLOCK_DAY
+  EMERGENCY_LEAVE
+  TOKEN_LIMIT_ADJUST
+  EXTRA_SLOT
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMATION
+  REMINDER
+  QUEUE_ALERT
+  CANCELLATION
+  RESCHEDULE
+}
+
+/// DocLine WhatsApp number pool lifecycle (PRD §8).
+enum WhatsAppNumberStatus {
+  AVAILABLE
+  ASSIGNED
+  VERIFYING
+  DISPLAY_NAME_PENDING
+  TEMPLATES_PENDING
+  LIVE
+  SUSPENDED
+  RELEASED
+}
+
+/// Provisioning channel — Meta Cloud API only (no BSP). MOCK for local/dev.
+enum ProvisioningProvider {
+  MOCK
+  META_CLOUD_API
+}
+
+enum PracticeSubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE
+  SUSPENDED
+  CANCELLED
+}
+
+enum MessageTemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Practice {
+  id                     String       @id @default(uuid()) @db.Uuid
+  name                   String
+  slug                   String       @unique
+  type                   PracticeType @default(SOLO)
+  specialty              String?
+  consultationFee        Float?       @map("consultation_fee")
+  registrationNo         String?      @map("registration_no")
+  phone                  String?      @db.VarChar(20)
+  email                  String?      @db.VarChar(256)
+  whatsappBusinessNumber String?      @map("whatsapp_business_number")
+  whatsappWebhookSecret  String?      @map("whatsapp_webhook_secret")
+  /// Structured FAQ answers for the WhatsApp bot (DocLine §9.2 / §11) — never free-form medical knowledge.
+  faqKb                  Json?        @map("faq_kb")
+  /// When false, directory listing is hidden (e.g. subscription suspended).
+  isDirectoryListed      Boolean      @default(true) @map("is_directory_listed")
+  bgSrc                  String?      @map("bg_src")
+  isActive               Boolean      @default(true) @map("is_active")
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  locations      ClinicLocation[]
+  members        PracticeMember[]
+  schedules      ProviderSchedule[]
+  bookings       PracticeBooking[]
+  overrides      ScheduleOverride[]
+  conversations  WhatsAppConversation[]
+  notifications  NotificationEvent[]
+  whatsappNumber WhatsAppNumber?
+  subscription   PracticeSubscription?
+  messageTemplates MessageTemplate[]
+  reviews        PracticeReview[]
+
+  @@map("practices")
+}
+
+model ClinicLocation {
+  id            String   @id @default(uuid()) @db.Uuid
+  practiceId    String   @map("practice_id") @db.Uuid
+  name          String
+  address       String
+  city          String
+  geometry      Json?
+  businessHours Json?    @map("business_hours")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  practice  Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  schedules ProviderSchedule[]
+  bookings  PracticeBooking[]
+
+  @@map("clinic_locations")
+}
+
+model PracticeMember {
+  id         String             @id @default(uuid()) @db.Uuid
+  practiceId String             @map("practice_id") @db.Uuid
+  userId     String             @map("user_id") @db.Uuid
+  role       PracticeMemberRole
+  doctorId   String?            @map("doctor_id") @db.Uuid
+  isActive   Boolean            @default(true) @map("is_active")
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, userId])
+  @@map("practice_members")
+}
+
+model ProviderSchedule {
+  id              String       @id @default(uuid()) @db.Uuid
+  practiceId      String       @map("practice_id") @db.Uuid
+  locationId      String       @map("location_id") @db.Uuid
+  providerId      String       @map("provider_id") @db.Uuid
+  dayOfWeek       Int          @map("day_of_week")
+  mode            ScheduleMode
+  slotIntervalMin Int?         @map("slot_interval_min")
+  startTime       String?      @map("start_time")
+  endTime         String?      @map("end_time")
+  maxPerSlot      Int          @default(1) @map("max_per_slot")
+  sessionStart    String?      @map("session_start")
+  sessionEnd      String?      @map("session_end")
+  maxTokens       Int?         @map("max_tokens")
+  breakStartTime  String?      @map("break_start_time")
+  breakEndTime    String?      @map("break_end_time")
+  isActive        Boolean      @default(true) @map("is_active")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  location ClinicLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, providerId, locationId, dayOfWeek])
+  @@index([practiceId, providerId, locationId, dayOfWeek, isActive])
+  @@index([providerId, dayOfWeek, isActive])
+  @@map("provider_schedules")
+}
+
+model ScheduleOverride {
+  id         String       @id @default(uuid()) @db.Uuid
+  practiceId String       @map("practice_id") @db.Uuid
+  providerId String       @map("provider_id") @db.Uuid
+  date       DateTime     @db.Date
+  type       OverrideType
+  startTime  String?      @map("start_time")
+  endTime    String?      @map("end_time")
+  maxTokens  Int?         @map("max_tokens")
+  reason     String?
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, providerId, date])
+  @@map("schedule_overrides")
+}
+
+model PracticeBooking {
+  id               String         @id @default(uuid()) @db.Uuid
+  practiceId       String         @map("practice_id") @db.Uuid
+  locationId       String         @map("location_id") @db.Uuid
+  providerId       String         @map("provider_id") @db.Uuid
+  patientId        String?        @map("patient_id") @db.Uuid
+  patientPhone     String         @map("patient_phone")
+  patientName      String?        @map("patient_name")
+  mode             ScheduleMode
+  status           BookingStatus  @default(SCHEDULED)
+  channel          BookingChannel @default(WEB_PORTAL)
+  slotStart        DateTime?      @map("slot_start") @db.Timestamptz(6)
+  slotEnd          DateTime?      @map("slot_end") @db.Timestamptz(6)
+  tokenNumber      Int?           @map("token_number")
+  sessionDate      DateTime?      @map("session_date") @db.Date
+  consultationType String?        @map("consultation_type")
+  disease          String?
+  notes            String?
+  doctorRemarks    String?        @map("doctor_remarks")
+  medicines        Json?
+  documents        Json?
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  practice      Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  location      ClinicLocation      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  notifications NotificationEvent[]
+  review        PracticeReview?
+
+  @@index([practiceId, providerId, status, slotStart])
+  @@index([practiceId, providerId, sessionDate, status])
+  @@index([patientPhone])
+  @@index([patientId])
+  @@map("practice_bookings")
+}
+
+model NotificationEvent {
+  id         String           @id @default(uuid()) @db.Uuid
+  practiceId String           @map("practice_id") @db.Uuid
+  bookingId  String           @map("booking_id") @db.Uuid
+  type       NotificationType
+  channel    String           @default("WHATSAPP")
+  status     String           @default("PENDING")
+  payload    Json?
+  sentAt     DateTime?        @map("sent_at") @db.Timestamptz(6)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  practice Practice        @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  booking  PracticeBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("notification_events")
+}
+
+model WhatsAppConversation {
+  id           String   @id @default(uuid()) @db.Uuid
+  practiceId   String   @map("practice_id") @db.Uuid
+  patientPhone String   @map("patient_phone")
+  state        Json     @default("{}")
+  /// bot_active | handed_off | closed (DocLine §10)
+  status       String   @default("bot_active")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, patientPhone])
+  @@map("whatsapp_conversations")
+}
+
+/// Pre-purchased / assigned WhatsApp Business numbers (one LIVE number per practice).
+model WhatsAppNumber {
+  id                 String               @id @default(uuid()) @db.Uuid
+  phoneNumber        String               @unique @map("phone_number") @db.VarChar(20)
+  wabaId             String?              @map("waba_id")
+  wabaPhoneNumberId  String?              @map("waba_phone_number_id")
+  displayName        String?              @map("display_name")
+  status             WhatsAppNumberStatus @default(AVAILABLE)
+  provider           ProvisioningProvider @default(MOCK)
+  practiceId         String?              @unique @map("practice_id") @db.Uuid
+  verificationStatus String?              @map("verification_status")
+  displayNameStatus  String?              @map("display_name_status")
+  templatesStatus    String?              @map("templates_status")
+  activatedAt        DateTime?            @map("activated_at") @db.Timestamptz(6)
+  notes              String?
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  practice Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([wabaId])
+  @@map("whatsapp_numbers")
+}
+
+model DocLinePlan {
+  id                  String   @id @default(uuid()) @db.Uuid
+  name                String
+  priceMonthlyInr     Int      @map("price_monthly_inr")
+  priceYearlyInr      Int?     @map("price_yearly_inr")
+  maxBookingsPerMonth Int?     @map("max_bookings_per_month")
+  features            Json     @default("{}")
+  razorpayPlanId      String?  @map("razorpay_plan_id")
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  subscriptions        PracticeSubscription[]
+  pendingSubscriptions   PracticeSubscription[] @relation("PendingPlan")
+
+  @@map("docline_plans")
+}
+
+model PracticeSubscription {
+  id                            String                     @id @default(uuid()) @db.Uuid
+  practiceId                    String                     @unique @map("practice_id") @db.Uuid
+  planId                        String                     @map("plan_id") @db.Uuid
+  pendingPlanId                 String?                    @map("pending_plan_id") @db.Uuid
+  status                        PracticeSubscriptionStatus @default(TRIALING)
+  razorpaySubscriptionId        String?                    @unique @map("razorpay_subscription_id")
+  pendingRazorpaySubscriptionId String?                  @unique @map("pending_razorpay_subscription_id")
+  razorpayCustomerId            String?                    @map("razorpay_customer_id")
+  currentPeriodStart     DateTime?                  @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd       DateTime?                  @map("current_period_end") @db.Timestamptz(6)
+  gracePeriodEnd         DateTime?                  @map("grace_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd      Boolean                    @default(false) @map("cancel_at_period_end")
+  cancelledAt            DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
+  notes                  String?
+  createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  practice    Practice     @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  plan        DocLinePlan  @relation(fields: [planId], references: [id])
+  pendingPlan DocLinePlan? @relation("PendingPlan", fields: [pendingPlanId], references: [id])
+
+  @@index([status])
+  @@map("practice_subscriptions")
+}
+
+/// Shared / per-practice Meta message templates (confirmation, reminder, etc.).
+model MessageTemplate {
+  id         String                @id @default(uuid()) @db.Uuid
+  practiceId String?               @map("practice_id") @db.Uuid
+  name       String
+  category   String
+  language   String                @default("en")
+  status     MessageTemplateStatus @default(DRAFT)
+  body       String
+  metaName   String?               @map("meta_name")
+  createdAt  DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  practice Practice? @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, status])
+  @@map("message_templates")
+}
+
+/// Soft-verified public reviews on directory profiles (DocLine §14).
+model PracticeReview {
+  id             String   @id @default(uuid()) @db.Uuid
+  practiceId     String   @map("practice_id") @db.Uuid
+  bookingId      String?  @unique @map("booking_id") @db.Uuid
+  patientId      String?  @map("patient_id") @db.Uuid
+  providerId     String?  @map("provider_id") @db.Uuid
+  authorName     String   @map("author_name")
+  authorPhone    String?  @map("author_phone") @db.VarChar(20)
+  rating         Int
+  providerRating Int?     @map("provider_rating")
+  body           String?
+  isPublished    Boolean  @default(true) @map("is_published")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  practice Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  booking  PracticeBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId, isPublished])
+  @@index([providerId, isPublished])
+  @@map("practice_reviews")
+}

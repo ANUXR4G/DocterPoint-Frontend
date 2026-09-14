@@ -21,11 +21,11 @@ const SimpleInput = memo(function MemoInput({
 
   return (
     <div className={`w-full ${containerClassName}`}>
-      <label className="font-semibold text-xs xxs:text-sm opacity-90">
+      <label className="font-semibold text-xs xxs:text-sm opacity-90 text-neutral-700 dark:text-neutral-300">
         {firey.camelToCapitalize(name)}
       </label>
       <input
-        className={`w-full mt-0.5 rounded-sm indent-2 outline outline-1 outline-neutral-300 dark:outline-neutral-600 focus:outline-blue-400 text-sm text-neutral-600 dark:text-neutral-400 py-1.5 placeholder:text-neutral-500 placeholder:opacity-70 dark:placeholder:text-neutral-500 ${className}`}
+        className={`form-input w-full mt-0.5 rounded-sm indent-2 outline outline-1 outline-neutral-300 dark:outline-neutral-600 focus:outline-blue-400 text-sm py-1.5 ${className ?? ""}`}
         name={name}
         value={value}
         type={type}

@@ -1,0 +1,2 @@
+-- Rename practice type POLYCLINIC → CLINIC
+ALTER TYPE "PracticeType" RENAME VALUE 'POLYCLINIC' TO 'CLINIC';

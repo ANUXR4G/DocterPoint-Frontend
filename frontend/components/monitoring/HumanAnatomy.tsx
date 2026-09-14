@@ -25,7 +25,7 @@ export default function HumanAnatomy({
     <div
       className={`relative min-h-[calc(100vh-164px)] md:min-h-[calc(100vh-124px)] flex`}
     >
-      <div className="my-auto relative size-full min-w-[356px] max-w-[356px] xs:max-w-96 sm:max-w-xl">
+      <div className="relative mx-auto my-auto size-full w-full min-w-0 max-w-[356px] xs:max-w-96 sm:max-w-xl">
         <Image
           width="0"
           height="0"

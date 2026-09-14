@@ -4,35 +4,38 @@ import {
   FoodRecommendations,
   ActivitySuggestions,
 } from "@/components"
-
+import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { format, startOfToday } from "date-fns"
 
 export default function DietPage() {
   const today = startOfToday()
 
   return (
-    <div className="pb-4 lg:pb-6">
-      <div className="flex flex-col ml-1">
-        <span className="text-sm font-bold opacity-70">
-          {format(today, "PPP")}
-        </span>
-        <h3 className="text-2xl font-extrabold leading-7">Daily Plan</h3>
+    <div className="dashboard-page">
+      <DashboardPageHeader
+        eyebrow={format(today, "EEEE, d MMMM yyyy")}
+        title={
+          <>
+            Daily{" "}
+            <span className="text-blue-600 dark:text-sky-400">nutrition plan</span>
+          </>
+        }
+        subtitle="Personalised meal ideas, activity suggestions, and nutrient targets for your day."
+        action={<DietPreference />}
+      />
+
+      <div className="flex w-full flex-col gap-5 2xl:flex-row 2xl:items-start">
+        <section className="dashboard-panel min-w-0 flex-1">
+          <ActivitySuggestions />
+        </section>
+        <section className="dashboard-panel min-w-0 flex-1">
+          <NutrientsRecommendationChart />
+        </section>
       </div>
 
-      {/* Preference customization popover modal */}
-      <DietPreference />
-
-      {/* Meal recommendations */}
-      <div className="flex flex-col 2xl:flex-row w-full 2xl:gap-2 lg:items">
-        {/* Activity Suggestion Metrics */}
-        <ActivitySuggestions />
-
-        {/* Nutrition Chart */}
-        <NutrientsRecommendationChart />
-      </div>
-
-      {/* Meal details */}
-      <FoodRecommendations />
+      <section className="dashboard-panel">
+        <FoodRecommendations />
+      </section>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
-import { useRef, useState } from "react"
-import ReactMap, { Marker, Popup } from "react-map-gl"
+import { useMemo, useRef, useState } from "react"
+import MapGL, { Marker, Popup } from "react-map-gl/mapbox"
 import "mapbox-gl/dist/mapbox-gl.css"
 import Image from "next/image"
 import Icon from "../icons"
@@ -18,128 +18,188 @@ type Props = {
   disableResetBtn?: boolean
 }
 
+const FALLBACK_HOSPITAL_IMG =
+  "https://images.pexels.com/photos/263402/pexels-photo-263402.jpeg"
+const DEFAULT_CENTER: [number, number] = [90.391, 23.752]
+
+function isFiniteCoord(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value)
+}
+
+function sanitizePair(
+  pair?: number[] | null,
+  fallback: [number, number] = DEFAULT_CENTER,
+): [number, number] {
+  if (
+    Array.isArray(pair) &&
+    pair.length >= 2 &&
+    isFiniteCoord(pair[0]) &&
+    isFiniteCoord(pair[1])
+  ) {
+    return [pair[0], pair[1]]
+  }
+  return fallback
+}
+
+function hospitalImageSrc(src?: string | null) {
+  const trimmed = src?.trim()
+  return trimmed ? trimmed : FALLBACK_HOSPITAL_IMG
+}
+
 export default function Map({
   hospitals,
-  coordinates = [90.391, 23.752],
+  coordinates = DEFAULT_CENTER,
   className,
   zoom = 12.5,
   disableResetBtn = false,
 }: Props) {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.trim()
+  const center = sanitizePair(coordinates)
+
   const [viewState, setViewState] = useState({
-    latitude: coordinates[1],
-    longitude: coordinates[0],
-    zoom: zoom,
+    latitude: center[1],
+    longitude: center[0],
+    zoom,
   })
 
-  const [isLoaded, setIsLoaded] = useState(false)
   const mapRef = useRef<any>(null)
-
   const [selectedHospital, setSelectedHospital] = useState<HospitalType | null>(
-    null
+    null,
+  )
+
+  const plottable = useMemo(
+    () =>
+      hospitals.filter((hospital) => {
+        const coords = hospital?.geometry?.coordinates
+        return (
+          Array.isArray(coords) &&
+          coords.length >= 2 &&
+          isFiniteCoord(coords[0]) &&
+          isFiniteCoord(coords[1])
+        )
+      }),
+    [hospitals],
   )
 
   function handleReset() {
     if (!mapRef.current) return
     mapRef.current.flyTo({
-      center: [coordinates[0], coordinates[1]],
+      center,
       zoom: 12.5,
       speed: 1,
     })
   }
 
+  if (!token) {
+    return (
+      <div
+        className={`flex w-full flex-col ${
+          className ? className : `mt-1 h-80 sm:h-[516px]`
+        }`}
+      >
+        <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-neutral-300 bg-neutral-100 px-4 text-center dark:border-neutral-700 dark:bg-neutral-800/60">
+          <p className="max-w-sm text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+            Map unavailable — set{" "}
+            <code className="text-xs">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
+            <code className="text-xs">frontend/.env</code> to enable Mapbox.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
-      className={`w-full h-80  flex flex-col ${
-        className ? className : `sm:h-[516px] mt-1`
+      className={`flex w-full flex-col ${
+        className ? className : `mt-1 h-80 sm:h-[516px]`
       }`}
     >
-      <ReactMap
-        mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
+      <MapGL
+        mapboxAccessToken={token}
         style={{ width: "100%", height: "100%" }}
         onMove={(e) => setViewState(e.viewState)}
-        onLoad={() => setIsLoaded(true)}
         mapStyle="mapbox://styles/mapbox/streets-v11"
         ref={mapRef}
         {...viewState}
       >
-        {hospitals.map((hospital) => (
-          <Marker
-            key={hospital.id}
-            latitude={hospital.geometry.coordinates[1]}
-            longitude={hospital.geometry.coordinates[0]}
-            onClick={() => {
-              if (!mapRef.current) return
-              setSelectedHospital(hospital)
-              mapRef.current.flyTo({
-                center: [
-                  hospital.geometry.coordinates[0],
-                  hospital.geometry.coordinates[1],
-                ],
-                zoom: viewState.zoom,
-                speed: 1,
-              })
-            }}
-          >
-            <div
+        {plottable.map((hospital) => {
+          const [lng, lat] = hospital.geometry.coordinates
+          return (
+            <Marker
               key={hospital.id}
-              className="center ring-4 ring-blue-500 marker-btn cursor-pointer size-10 bg-slate-100 rounded-full"
+              latitude={lat}
+              longitude={lng}
+              onClick={() => {
+                if (!mapRef.current) return
+                setSelectedHospital(hospital)
+                mapRef.current.flyTo({
+                  center: [lng, lat],
+                  zoom: viewState.zoom,
+                  speed: 1,
+                })
+              }}
             >
-              <div className="relative size-6">
-                <Image
-                  fill
-                  src="https://res.cloudinary.com/dwhlynqj3/image/upload/v1720969669/glucoguide/gluco-guide-logo.png"
-                  alt={`${hospital.name}.jpg`}
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  priority
-                />
+              <div className="marker-btn center size-10 cursor-pointer rounded-full bg-slate-100 ring-4 ring-blue-500">
+                <div className="relative size-6">
+                  <Image
+                    fill
+                    src="https://res.cloudinary.com/dwhlynqj3/image/upload/v1720969669/glucoguide/gluco-guide-logo.png"
+                    alt={`${hospital.name}.jpg`}
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    priority
+                  />
+                </div>
               </div>
-            </div>
-          </Marker>
-        ))}
+            </Marker>
+          )
+        })}
 
-        {selectedHospital && (
+        {selectedHospital &&
+        isFiniteCoord(selectedHospital.geometry.coordinates[0]) &&
+        isFiniteCoord(selectedHospital.geometry.coordinates[1]) ? (
           <Popup
             key={selectedHospital.id}
             longitude={selectedHospital.geometry.coordinates[0]}
             latitude={selectedHospital.geometry.coordinates[1]}
             closeOnClick={false}
-            className="min-w-[256px] relative"
+            className="relative min-w-0 w-[min(256px,calc(100vw-2rem))]"
             closeButton={false}
           >
             <div className="flex">
               <button
+                type="button"
                 onClick={() => {
                   setSelectedHospital(null)
                 }}
               >
                 <Icon
                   name="cross"
-                  className="min-w-4 size-4 absolute right-1.5 top-1.5"
+                  className="absolute right-1.5 top-1.5 size-4 min-w-4"
                 />
               </button>
-              <div className="relative min-w-24 w-24 min-h-20">
+              <div className="relative min-h-20 min-w-24 w-24">
                 <Image
                   fill
-                  src={selectedHospital.imgSrc}
-                  alt="gluco-guide-logo.png"
+                  src={hospitalImageSrc(selectedHospital.imgSrc)}
+                  alt={selectedHospital.name || "hospital"}
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   className="rounded-md object-cover"
                 />
               </div>
-              <div className="flex flex-col my-auto ml-2">
-                <Link href={`/hospitals/${selectedHospital.id}/info`}>
-                  <h3 className="text-sm leading-4 font-semibold opacity-80 text-[--primary-black]">
+              <div className="my-auto ml-2 flex flex-col">
+                <Link href={`/practices`}>
+                  <h3 className="text-sm font-semibold leading-4 text-[--primary-black] opacity-80">
                     {selectedHospital.name}
                   </h3>
                 </Link>
-                <span className="text-xs opacity-80 leading-3 text-start">
+                <span className="text-start text-xs leading-3 opacity-80">
                   {selectedHospital.address}
                 </span>
               </div>
             </div>
           </Popup>
-        )}
-      </ReactMap>
+        ) : null}
+      </MapGL>
 
       {!disableResetBtn && (
         <Button type="outline" className="ml-auto mt-2" onClick={handleReset}>

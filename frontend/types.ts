@@ -104,6 +104,11 @@ export type BookingModalProps = {
 export type AuthValueType = {
   email: string
   password: string
+  role?: "user" | "doctor" | "admin"
+  name?: string
+  phone?: string
+  gender?: "male" | "female" | "others"
+  appointmentValidityDays?: number
 }
 
 export interface User {
@@ -393,19 +398,37 @@ export type TDoctorAppointment = TAppointment & {
   health: THealth | []
 }
 
+export type GenderCountBucket = {
+  male: number
+  female: number
+  others?: number
+  unknown?: number
+}
+
 export type TypeAnalytics = Record<
   string,
   {
-    patients: { male: number; female: number }
-    appointments: { male: number; female: number }
+    patients: GenderCountBucket
+    appointments: GenderCountBucket
+    compare?: {
+      patients: GenderCountBucket
+      appointments: GenderCountBucket
+    }
   }
 >
 
-export type TypeAnalyticsParam = "week" | "month"
+export type TypeAnalyticsParam = "day" | "week" | "month" | "year" | "yoy"
 
 export type AnalyticMetrics = {
   name: string
   male: number
   female: number
+  others?: number
+  unknown?: number
   hasMetrics: boolean
+  /** Present for yoy — last-year totals in the same gender shape */
+  compareMale?: number
+  compareFemale?: number
+  compareOthers?: number
+  compareUnknown?: number
 }

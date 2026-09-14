@@ -2,7 +2,8 @@
 
 import {
   bloodGroups,
-  diabetesTypes,
+  chronicConditions,
+  CHRONIC_CONDITIONS_LABEL,
   physicalActivities,
   smokingStatuses,
 } from "@/lib/dummy/lifestyles"
@@ -45,8 +46,8 @@ export default function MedicalRecords({
     setValues((prev) => ({ ...prev, height: !isNaN(value) ? value : "" }))
   }
 
-  // handle previous diabetes status changes
-  function handleDiabetesStatus(e: React.ChangeEvent<HTMLInputElement>) {
+  // handle chronic conditions changes
+  function handleChronicConditions(e: React.ChangeEvent<HTMLInputElement>) {
     setValues((prev) => {
       const value = e.target.value
       const exists = prev.previousDiabetesRecords.includes(value)
@@ -105,7 +106,7 @@ export default function MedicalRecords({
 
           {/* medical history options */}
           <div
-            className={`grid grid-cols-2 gap-x-4 ${
+            className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 ${
               enableModalMode ? `pt-3 2xl:pt-5 gap-y-1` : `2xl:gap-y-3`
             }`}
           >
@@ -139,10 +140,10 @@ export default function MedicalRecords({
 
             {/* physical activity preferences options */}
             <MultiOptions
-              title={infoKeys[13]}
-              values={diabetesTypes}
+              title={CHRONIC_CONDITIONS_LABEL}
+              values={chronicConditions}
               options={values.previousDiabetesRecords}
-              onChange={handleDiabetesStatus}
+              onChange={handleChronicConditions}
               containerClassName="mt-2 col-span-2 2xl:mt-3"
             />
 
