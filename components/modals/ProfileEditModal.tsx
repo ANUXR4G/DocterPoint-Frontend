@@ -25,15 +25,16 @@ export default function ProfileEditModal() {
   return (
     <React.Fragment>
       <button
-        className="rounded-full flex items-center gap-1 border border-gray-300 py-1 px-3"
+        type="button"
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-blue-600 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
         onClick={() => setOpenModal(true)}
       >
         <Icon
           name="settings"
           className="size-4"
-          pathClassName="stroke-neutral-600 dark:stroke-neutral-400"
+          pathClassName="stroke-current"
         />
-        <span className="text-sm font-semibold opacity-90">Edit</span>
+        Edit profile
       </button>
       <Modal
         open={openModal}

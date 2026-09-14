@@ -72,7 +72,7 @@ export default function DoctorSearchbox({
           doctors: TDoctor[]
         }
       },
-      staleTime: 0,
+      staleTime: 60_000,
       onSuccess: (data) => setDoctors((prev) => [...prev, ...data.doctors]),
     }
   )

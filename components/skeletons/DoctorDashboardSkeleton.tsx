@@ -4,7 +4,7 @@ export default function DoctorDashboardSkeleton() {
       <div className="ml-1 mb-3 w-64 h-12 lg:h-16 rounded-sm lg:rounded-md bg-gray-300/80 dark:bg-neutral-700/75" />
       <div className="grid grid-cols-4 lg:mt-3 gap-3">
         <div className="hidden lg:block rounded-[26px] col-span-4 lg:order-2 lg:col-span-1 lg:row-span-2 bg-gray-300/80 dark:bg-neutral-700/75" />
-        <div className="min-h-40 w-full col-span-4 lg:order-1 lg:col-span-3 flex gap-2 md:gap-3">
+        <div className="min-h-40 w-full col-span-4 lg:order-1 lg:col-span-3 flex flex-col sm:flex-row gap-2 md:gap-3">
           {[...Array(3)].map((_, i) => (
             <div
               key={`analytics-skeleton-${i}`}

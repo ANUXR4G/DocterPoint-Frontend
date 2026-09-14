@@ -7,6 +7,7 @@ import { chatService } from "@/lib/services/chat"
 import { firey } from "@/utils"
 import { useObserver } from "./useObserver"
 import { useSocket } from "./useSocket"
+import { buildWsUrl } from "@/lib/wsOrigin"
 
 export function useChat(role: string, receiverId?: string) {
   const [limit] = useState<number>(20)
@@ -21,7 +22,7 @@ export function useChat(role: string, receiverId?: string) {
 
   // Retrieve all the conversations of the User
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: [`user:chats:${receiverId ? `direct` : `help`}`],
+    queryKey: [`user:chats:${receiverId ? `direct` : `help`}`, userInfo?.id],
     queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams({
         page: String(pageParam),
@@ -51,7 +52,7 @@ export function useChat(role: string, receiverId?: string) {
     },
     select: (data) => firey.convertKeysToCamelCase(data),
     staleTime: 0,
-    // Keep previous data while fetching next page
+    enabled: !!userInfo?.id && !!token,
     keepPreviousData: true,
   })
 
@@ -67,7 +68,7 @@ export function useChat(role: string, receiverId?: string) {
 
   // Define the Socket URL using the users id
   const socketURL = userInfo
-    ? `ws://localhost:8000/api/v1/ws/chats/${userInfo.id}`
+    ? buildWsUrl(`/api/v1/ws/chats/${userInfo.id}`)
     : null
 
   // Connect the Chatting Socket Connection through the hook
@@ -75,28 +76,69 @@ export function useChat(role: string, receiverId?: string) {
     useSocket<TSocketMessage>(socketURL, 3000)
 
   // Handle sending new messages
-  function sendMessage() {
-    if (
-      !socketRef.current ||
-      !userInfo ||
-      value.trim() === "" ||
-      !isConnected ||
-      isReconnecting
-    )
-      return
+  async function sendMessage() {
+    if (!userInfo || value.trim() === "") return
 
-    // Only send the message if the conditions on the top gets fullfilled
-    const data = {
+    const content = value.trim()
+    const payload = {
       type: receiverId ? "direct" : "help",
-      content: value,
+      content,
       sender_id: userInfo.id,
       ...(receiverId && { receiver_id: receiverId }),
     }
 
-    // Send the message through WebSocket
-    socketRef.current.send(JSON.stringify(data))
+    if (
+      socketRef.current &&
+      isConnected &&
+      !isReconnecting &&
+      socketRef.current.readyState === WebSocket.OPEN
+    ) {
+      socketRef.current.send(JSON.stringify(payload))
+      setValue("")
+      return
+    }
 
-    setValue("") // Reset the prompt value
+    if (!receiverId) {
+      try {
+        const created = await chatService.sendHelpMessage(
+          token,
+          userInfo.id,
+          content,
+        )
+        const msg = firey.convertKeysToCamelCase(created) as TMessage
+        setMessages((prev) => {
+          const exists = prev.some((m) => m.id === msg.id)
+          return exists ? prev : [msg, ...prev]
+        })
+        setValue("")
+      } catch {
+        /* keep draft so user can retry */
+      }
+      return
+    }
+
+    try {
+      const created = await chatService.sendDirectMessage(receiverId, content)
+      const msg = firey.convertKeysToCamelCase(created) as TMessage
+      setMessages((prev) => {
+        const id = (msg as { idUuid?: string }).idUuid || msg.id
+        const exists = prev.some((m) => m.id === id || m.id === msg.id)
+        return exists
+          ? prev
+          : [
+              {
+                ...msg,
+                id,
+                senderId: (msg as { senderId?: string }).senderId || userInfo.id,
+                receiverId,
+              },
+              ...prev,
+            ]
+      })
+      setValue("")
+    } catch {
+      /* keep draft */
+    }
   }
 
   // Send message on Keyboard Press 'Enter'
@@ -136,6 +178,7 @@ export function useChat(role: string, receiverId?: string) {
     topRef,
     bottomRef,
     isFetchingNextPage,
+    isConnected,
     setValue,
     handleKeyDown,
   }

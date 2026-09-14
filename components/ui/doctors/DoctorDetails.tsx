@@ -22,6 +22,14 @@ import {
   ChatModal,
 } from "@/components"
 
+const FALLBACK_DOCTOR_IMG =
+  "https://res.cloudinary.com/firey/image/upload/v1708816390/iub/male_12.jpg"
+
+function doctorImageSrc(src?: string | null) {
+  const trimmed = src?.trim()
+  return trimmed ? trimmed : FALLBACK_DOCTOR_IMG
+}
+
 export default function DoctorInfoPage() {
   const searchParams = useSearchParams()
   const id = searchParams.get("id")
@@ -71,7 +79,7 @@ export default function DoctorInfoPage() {
   function handleModalClose() {
     if (!information) return
     setOpenAppointment(false)
-    router.replace(`/hospitals/doctors/info?id=${information.id}`)
+    router.replace(`/practices`)
   }
 
   // Doctor Not Found
@@ -95,10 +103,10 @@ export default function DoctorInfoPage() {
         {/* landing contents */}
         <div className="flex flex-col items-center md:gap-6">
           {/* doctor image */}
-          <div className="relative size-24 min-w-24 md:size-56 lg:size-80 md:min-w-56 lg:min-w-80 rounded-full md:rounded-lg ring-2 ring-sky-500 ring-offset-4">
+          <div className="relative size-24 shrink-0 rounded-full ring-2 ring-sky-500 ring-offset-4 md:size-56 md:min-w-56 md:rounded-lg lg:size-80 lg:min-w-80">
             <Image
               fill
-              src={information.imgSrc}
+              src={doctorImageSrc(information.imgSrc)}
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               alt={`${information.name.toLowerCase().trim()}.jpg`}
               style={{ objectFit: "cover" }}
@@ -111,26 +119,23 @@ export default function DoctorInfoPage() {
           </div>
 
           {/* doctor details */}
-          <div className="mt-3 md:mt-0 md:w-full">
+          <div className="mt-3 min-w-0 md:mt-0 md:w-full">
             <div className="flex flex-col items-center text-center">
-              <h3 className="text-base font-bold">{information.name}</h3>
-              <p className="text-sm font-semibold text-cyan-900 dark:text-neutral-400 opacity-70  leading-tight line-clamp-3">
+              <h3 className="break-words text-base font-bold">{information.name}</h3>
+              <p className="text-sm font-semibold leading-tight text-cyan-900 opacity-70 line-clamp-3 dark:text-neutral-400">
                 {information.description}
               </p>
               <Link
-                href={`/hospitals/${information.hospital.id}/info`}
-                className="text-sm mt-1 font-semibold opacity-80"
+                href={`/practices`}
+                className="mt-1 break-words text-sm font-semibold opacity-80"
               >
                 {information.hospital.name}
               </Link>
 
               {/* location with icon */}
               <Link
-                href={{
-                  pathname: "/hospitals/doctors",
-                  query: { location: information.hospital.city },
-                }}
-                className="flex items-center -ml-1 opacity-80"
+                href="/practices"
+                className="-ml-1 flex items-center opacity-80"
               >
                 <Icon name="pin" className="size-5" />
                 <span className="ml-1 text-sm font-semibold">
@@ -139,19 +144,19 @@ export default function DoctorInfoPage() {
               </Link>
             </div>
 
-            <div className="flex gap-3 md:gap-4 items-center mt-4 md:mt-5 max-w-96 mx-auto">
+            <div className="mx-auto mt-4 flex max-w-96 items-center gap-3 md:mt-5 md:gap-4">
               {/* experice */}
-              <div className="w-1/3 border dark:border-neutral-500 px-2 py-8 xxs:px-4 md:px-5 rounded-lg text-center">
-                <h5 className="text-base text-nowrap xxs:text-lg font-bold -mb-2">
+              <div className="w-1/3 rounded-lg border px-2 py-8 text-center dark:border-neutral-500 xxs:px-4 md:px-5">
+                <h5 className="mb-[-0.5rem] text-base font-bold leading-tight xxs:text-lg">
                   {information.experience} years+
                 </h5>
-                <span className="text-xs xxs:text-sm font-semibold">
+                <span className="text-xs font-semibold xxs:text-sm">
                   Experience
                 </span>
               </div>
 
               {/* consult controls */}
-              <div className="flex flex-col gap-2 w-2/3">
+              <div className="flex w-2/3 flex-col gap-2">
                 <Button className="center py-4" onClick={handleModalOpen}>
                   Consult online
                 </Button>

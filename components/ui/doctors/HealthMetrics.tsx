@@ -5,6 +5,7 @@ import {
   TPatientHealth,
 } from "@/types"
 import { firey } from "@/utils"
+import { CHRONIC_CONDITIONS_LABEL } from "@/lib/dummy/lifestyles"
 
 type Props = THealth
 
@@ -75,7 +76,7 @@ export default function HealthMetrics(props: Props) {
       value: props.physicalActivity || `NA`,
     },
     {
-      name: "Diabetes Records",
+      name: CHRONIC_CONDITIONS_LABEL,
       value: props.previousDiabetesRecords
         ? props.previousDiabetesRecords.length > 1
           ? firey.makeString(props.previousDiabetesRecords)

@@ -1,51 +1,62 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { readAccessTokenFromCookie } from "@/lib/wsOrigin"
 
+/** Low-level WebSocket hook with token query + reconnect. Prefer useLiveSocket for dashboards. */
 export function useSocket<T>(url: string | null, retryInterval: number = 5000) {
   const [values, setValues] = useState<T | null>(null)
   const [isConnected, setIsConnected] = useState<boolean>(false)
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false)
   const socketRef = useRef<WebSocket | null>(null)
-  const retryTimeout = useRef<NodeJS.Timeout | null>(null)
+  const retryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const closedRef = useRef(false)
 
   const connect = useCallback(() => {
-    if (!url) return
+    if (!url || closedRef.current) return
 
-    socketRef.current = new WebSocket(url)
+    const token = readAccessTokenFromCookie()
+    const withToken =
+      token && !url.includes("token=")
+        ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
+        : url
+
+    socketRef.current = new WebSocket(withToken)
 
     socketRef.current.onopen = () => {
       setIsConnected(true)
       setIsReconnecting(false)
-      console.log("websocket connected.")
     }
 
     socketRef.current.onclose = () => {
       setIsConnected(false)
-      console.log("websocket disconnected.")
+      if (closedRef.current) return
       setIsReconnecting(true)
-
-      // retry to connect again
       if (retryTimeout.current) clearTimeout(retryTimeout.current)
       retryTimeout.current = setTimeout(() => {
-        console.log("reconnecting to websocket...")
         connect()
       }, retryInterval)
     }
 
     socketRef.current.onmessage = (event: MessageEvent) => {
-      setValues(JSON.parse(event.data))
+      try {
+        setValues(JSON.parse(event.data) as T)
+      } catch {
+        /* ignore */
+      }
     }
 
     socketRef.current.onerror = () => {
-      if (!socketRef.current) return
-      socketRef.current.close() // close connection to trigger onclose
+      socketRef.current?.close()
     }
   }, [retryInterval, url])
 
   useEffect(() => {
+    closedRef.current = false
     if (url) connect()
 
     return () => {
+      closedRef.current = true
       if (retryTimeout.current) clearTimeout(retryTimeout.current)
+      socketRef.current?.close()
     }
   }, [url, connect])
 

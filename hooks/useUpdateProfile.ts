@@ -10,6 +10,10 @@ import { useApiMutation } from "./useApiMutation"
 import { queryClient } from "@/app/providers"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
+import {
+  fetchUserProfile,
+  USER_PROFILE_QUERY_KEY,
+} from "@/lib/queries/profile"
 
 const initialValues: TInfoOptions = {
   name: "",
@@ -45,8 +49,8 @@ export function useUpdateProfile(onSuccess?: () => void | Promise<void>) {
 
   // retrieve patient informations
   const { data: profile, isLoading: isInfoLoading } = useApi(
-    ["users:profile"],
-    async (_, token) => userService.profile(token),
+    USER_PROFILE_QUERY_KEY,
+    async (_, token) => fetchUserProfile(token),
     {
       // transform the values to have keys with camel casing
       select: (data) => firey.convertKeysToCamelCase(data) as TPatient,
@@ -94,7 +98,7 @@ export function useUpdateProfile(onSuccess?: () => void | Promise<void>) {
   } = useApiMutation<{
     payload: Record<string, unknown>
   }>(({ payload }, token) => userService.update(token, payload), {
-    onSuccess: () => queryClient.invalidateQueries(`users:profile`),
+    onSuccess: () => queryClient.invalidateQueries(USER_PROFILE_QUERY_KEY),
   })
 
   // mutation for updating patient health record
@@ -151,10 +155,16 @@ export function useUpdateProfile(onSuccess?: () => void | Promise<void>) {
         : undefined
     )
 
+    const profileGenderMissing =
+      !profile?.gender ||
+      !["male", "female", "others"].includes(
+        String(profile.gender).trim().toLowerCase(),
+      )
+
     const infoPayload = {
       ...(hasChanged(values.name, profile?.name) && { name: values.name }),
       ...(imgFile && { img_src: values.imgSrc }),
-      ...(hasChanged(values.gender, profile?.gender) && {
+      ...((hasChanged(values.gender, profile?.gender) || profileGenderMissing) && {
         gender: values.gender,
       }),
       ...(dateOfBirth && { date_of_birth: formatDate(values.dateOfBirth) }),

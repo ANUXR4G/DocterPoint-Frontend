@@ -24,16 +24,15 @@ export default function Button({
       whileTap={{ scale: 0.97 }}
       type={typeBtn}
       disabled={disabled}
-      className={`py-2 px-3 inline-flex items-center font-medium gap-x-2 text-sm rounded-lg border border-gray-200 ${className} ${
-        type === "primary" &&
-        `bg-blue-600 dark:bg-blue-700 text-white border-transparent hover:bg-blue-700`
-      } ${
-        type === "outline" &&
-        ` bg-white dark:bg-neutral-300 text-neutral-600 shadow-sm hover:bg-gray-50 hover:text-neutral-700 dark:hover:bg-neutral-200 focus:outline outline-offset-2 focus:outline-blue-400`
-      } ${
-        type === "secondary" &&
-        `text-white bg-gradient-to-r from-red-400 via-red-500 to-red-600 hover:bg-gradient-to-br dark:border-neutral-300`
-      } disabled:opacity-50 disabled:pointer-events-none font-semibold`}
+      className={`inline-flex items-center gap-x-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-all disabled:pointer-events-none disabled:opacity-50 ${className ?? ""} ${
+        type === "primary"
+          ? "border border-transparent bg-[var(--theme-primary)] text-[var(--theme-primary-foreground)] shadow-[0_8px_24px_-8px_color-mix(in_srgb,var(--theme-primary)_55%,transparent)] hover:bg-[var(--theme-primary-hover)] hover:-translate-y-0.5"
+          : type === "outline"
+            ? "border border-[var(--solune-border-strong)] bg-[var(--solune-surface)] text-[var(--solune-ink)] shadow-[var(--solune-shadow-card)] hover:shadow-[var(--solune-shadow-soft)] dark:border-white/12 dark:bg-[#242220] dark:text-white"
+            : type === "secondary"
+              ? "border border-[var(--solune-border-strong)] bg-[var(--solune-surface-muted)] text-[var(--solune-ink)] dark:border-white/12 dark:bg-[#2e2b28] dark:text-white"
+              : ""
+      }`}
       onClick={onClick}
     >
       {children}

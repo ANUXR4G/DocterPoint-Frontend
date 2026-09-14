@@ -285,7 +285,7 @@ export default function BookAppointmentModal({ isOpen, closeHandler }: Props) {
   // Handle booking confirmation
   function handleConfirmation() {
     // Redirect to update information if necessary information is was not provided
-    if (!userInfo?.name) return router.push("/patient/info")
+    if (!userInfo?.name) return router.push("/patient/profile")
 
     const payload = {
       doctor_id: details.doctorId,

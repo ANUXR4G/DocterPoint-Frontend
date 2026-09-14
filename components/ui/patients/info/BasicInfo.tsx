@@ -7,6 +7,7 @@ import { BasicSelect, DatePicker, Input, Icon } from "@/components"
 import { firey } from "@/utils"
 import { TInfoOptions } from "@/types"
 import { usePathname } from "next/navigation"
+import IdDocumentScan from "./IdDocumentScan"
 
 type Props = {
   values: TInfoOptions
@@ -102,6 +103,11 @@ export default function BasicInfo({
           </div>
         </div>
 
+        <IdDocumentScan
+          setValues={setValues}
+          enableModalMode={enableModalMode}
+        />
+
         {/* basics informations */}
         <div
           className={`p-2 w-full mt-3 flex flex-col gap-2 ${
@@ -118,7 +124,7 @@ export default function BasicInfo({
 
           {/* basic info options */}
           <div
-            className={`grid grid-cols-2 gap-x-4 ${
+            className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 ${
               enableModalMode
                 ? `pt-3 2xl:pt-5 gap-y-2.5`
                 : `gap-y-3 2xl:gap-y-4`
@@ -142,7 +148,7 @@ export default function BasicInfo({
                 enableModalMode ? `mt-[3px]` : `mt-0.5 2xl:[&_span]:text-base`
               }
               modalClassName={
-                pathaname === "/patient/info" ? `right-2` : `right-7`
+                pathaname === "/patient/profile" ? `right-2` : `right-7`
               }
               containerProps={{ tabIndex: 3 }}
             />

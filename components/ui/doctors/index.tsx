@@ -19,6 +19,14 @@ import {
   DoctorPageSkeleton,
 } from "@/components"
 
+const FALLBACK_DOCTOR_IMG =
+  "https://res.cloudinary.com/firey/image/upload/v1708816390/iub/male_12.jpg"
+
+function doctorImageSrc(src?: string | null) {
+  const trimmed = src?.trim()
+  return trimmed ? trimmed : FALLBACK_DOCTOR_IMG
+}
+
 export default function Doctors() {
   const pathname = usePathname()
   const router = useRouter()
@@ -54,7 +62,7 @@ export default function Doctors() {
           doctors: TDoctor[]
         }
       },
-      staleTime: 0, // Refetch on every query mount
+      staleTime: 60_000,
       keepPreviousData: true,
     }
   )
@@ -65,7 +73,7 @@ export default function Doctors() {
     doctor: TDoctor
   ) {
     e.preventDefault()
-    router.push(`/hospitals/doctors/info?id=${doctor.id}&popup=t`)
+    router.push(`/practices`)
   }
 
   // Handle prev indicator
@@ -134,7 +142,7 @@ export default function Doctors() {
 
   return (
     <div className="flex flex-col">
-      <h2 className="text-4xl font-bold leading-9 tracking-tighter">
+      <h2 className="break-words text-4xl font-bold leading-9 tracking-tighter">
         Find the best doctors around the city.
       </h2>
 
@@ -149,7 +157,7 @@ export default function Doctors() {
       <div
         className={
           data.doctors.length > 0
-            ? `grid grid-cols-1 xxs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 3xl:grid-cols-5 gap-2 md:gap-3 md:gap-y-4 mt-0 md:mt-1`
+            ? `grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 3xl:grid-cols-5 gap-2 md:gap-3 md:gap-y-4 mt-0 md:mt-1`
             : `w-full`
         }
       >
@@ -157,19 +165,16 @@ export default function Doctors() {
           data.doctors.map((props, idx) => (
             <Link
               key={`doctor_l_${idx}`}
-              href={{
-                pathname: "/hospitals/doctors/info",
-                query: { id: props.id },
-              }}
+              href="/practices"
             >
-              <div className="p-2 xl:p-2.5 bg-white dark:bg-zinc-800 shadow rounded-lg hover:shadow-md hover:cursor-pointer">
+              <div className="p-2 xl:p-2.5 bg-white dark:bg-zinc-800 shadow rounded-lg hover:shadow-md hover:cursor-pointer min-w-0">
                 {/* Doctor Image */}
                 <div className="relative w-full h-72 xxs:h-44 xs:h-64 lg:h-72 xl:h-80">
                   <Image
                     fill
-                    src={props.imgSrc}
+                    src={doctorImageSrc(props.imgSrc)}
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    alt="doctor.png"
+                    alt={props.name ? `${props.name}` : "Doctor"}
                     style={{ objectFit: "cover", filter: "contrast(0.9)" }}
                     priority
                     className="rounded-lg"
@@ -177,8 +182,8 @@ export default function Doctors() {
                 </div>
 
                 {/* Doctor Description */}
-                <div className="flex flex-col mt-2 ml-1">
-                  <h4 className="text-sm font-bold">{props.name}</h4>
+                <div className="flex min-w-0 flex-col mt-2 ml-1">
+                  <h4 className="truncate text-sm font-bold">{props.name}</h4>
                   <p className="text-xs font-bold opacity-80 leading-4 line-clamp-3 min-h-12">
                     {props.description}
                   </p>

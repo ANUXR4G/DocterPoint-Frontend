@@ -1,17 +1,15 @@
-import React from "react"
-import Icon from "../icons"
+"use client"
 
-type Props = {
-  className?: string
-}
+import ThinkingLoader from "@/components/loader/ThinkingLoader"
 
-export default function SimpleSpinner({ className }: Props) {
+/** Compact inline spinner replaced with thinking-orbs. */
+export default function SimpleSpinner({ className }: { className?: string }) {
   return (
-    <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 ${className}`}>
-      <Icon
-        name="spinning-loader"
-        className="fill-[--primary-black] dark:fill-[--primary-white]"
-      />
-    </div>
+    <ThinkingLoader
+      className={className}
+      size={20}
+      state="working"
+      label="Loading…"
+    />
   )
 }

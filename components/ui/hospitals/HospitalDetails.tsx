@@ -37,7 +37,7 @@ export default function HospitalDetails({ id }: Props) {
   return (
     <React.Fragment>
       <div className="flex flex-col items-center text-center">
-        <h1 className="text-5xl md:text-6xl leading-[54px] lg:leading-[60px] max-w-[778px] tracking-tighter font-extrabold fancy">
+        <h1 className="text-3xl sm:text-5xl md:text-6xl leading-[54px] lg:leading-[60px] max-w-[778px] tracking-tighter font-extrabold fancy break-words">
           {data.name}
         </h1>
         <div className="mt-5 size-56 min-w-56 md:size-80 md:min-w-80 relative rounded-2xl">
@@ -55,10 +55,7 @@ export default function HospitalDetails({ id }: Props) {
           {data.description}
         </p>
         <Link
-          href={{
-            pathname: "/hospitals/doctors",
-            query: { location: data.city },
-          }}
+          href="/practices"
           className="mt-3 flex items-center -ml-1 opacity-80"
         >
           <Icon name="pin" className="size-5" />

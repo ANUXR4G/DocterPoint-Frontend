@@ -1,97 +1,65 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { TypeAnalyticsParam } from "@/types"
 import { useAnalytics } from "@/hooks/useAnalysis"
-import { Button, Icon, GenderChart, ShinnyEfBtn } from "@/components"
+import { ShinnyEfBtn } from "@/components"
 import Link from "next/link"
+import {
+  AnalyticsPeriodFilter,
+  PatientGenderBarChart,
+} from "@/components/charts/DoctorCharts"
+
+const PERIOD_LABEL: Record<TypeAnalyticsParam, string> = {
+  day: "Today",
+  week: "This week",
+  month: "This month",
+  year: "This year",
+  yoy: "This vs last year",
+}
 
 export default function Trackings() {
-  const [hydrated, setHydrated] = useState(false)
   const [type, setType] = useState<TypeAnalyticsParam>("week")
 
-  // Retrieve the patient analytic metrics
-  const { patientMetrics, isLoading } = useAnalytics(type)
-
-  // Sort by different format of time periods 'week', 'month'
-  function changePeriod() {
-    if (type === "week") setType("month")
-    else setType("week")
-  }
-
-  useEffect(() => {
-    setHydrated(true)
-  }, [])
-
-  // Display loading skeleton UI
-  if (!hydrated && !isLoading)
-    return (
-      <div
-        role="status"
-        className="animate-pulse h-80 rounded-[26px] sm:h-[336px] w-full lg:order-3 col-span-4 lg:col-span-3 bg-gray-300/80 dark:bg-neutral-700/75"
-      >
-        <span className="sr-only">Loading...</span>
-      </div>
-    )
+  const { patientMetrics } = useAnalytics(type)
 
   const isEmpty = patientMetrics.every(
-    (item) => item.male === 0 && item.female === 0
+    (item) => item.male === 0 && item.female === 0,
   )
 
   return (
-    <div
-      className={`h-80 sm:h-[336px] w-full p-4 lg:order-3 col-span-4 lg:col-span-3 relative bg-neutral-200 dark:bg-neutral-800 rounded-[26px] shadow-sm border border-neutral-300 ${
-        isEmpty ? `sm:border-2 dark:border-neutral-700` : `dark:border-none`
-      } dark:gradient-border-black`}
-    >
-      {isEmpty && (
-        <div className="hidden sm:flex absolute center left-0 top-0 z-20 size-full rounded-3xl bg-black/80 dark:bg-black/50 backdrop-blur-sm">
-          <ShinnyEfBtn className="[&&]:cursor-default text-neutral-100 text-xs xxs:text-sm px-5 xs:px-8 py-3 xs:text-lg  gradient-border-green rounded-3xl z-10 backdrop-blur-[20px]">
-            No Patient Record Available This Week
-          </ShinnyEfBtn>
-        </div>
-      )}
-      <div className="select-none mt-3 hidden sm:flex items-center">
-        <div className="flex flex-col ml-4 text-start">
-          <h2 className="text-2xl font-bold text-neutral-600 dark:text-neutral-300">
+    <div className="relative rounded-2xl border border-neutral-300 bg-neutral-200 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="ml-1 flex flex-col text-start">
+          <h2 className="text-xl font-bold text-neutral-700 dark:text-neutral-200">
             Patient Trackings
           </h2>
-          <p className="text-neutral-500 text-sm font-semibold">
-            {type === "week" ? `This week` : `This year`}
+          <p className="text-sm font-semibold text-neutral-500">
+            {PERIOD_LABEL[type]}
           </p>
         </div>
-        <div className="relative flex gap-3 ml-auto mr-2.5">
-          <Button
-            type="outline"
-            className="relative w-48 center"
-            onClick={changePeriod}
-          >
-            <Icon
-              name="calendar"
-              className="size-5 -mr-0.5"
-              pathClassName="stroke-neutral-600"
-            />
-            <span>
-              {type === "week" ? `Change to months` : `Change to days`}
-            </span>
-          </Button>
+        <div className="relative ml-auto flex flex-wrap items-center gap-2">
+          <AnalyticsPeriodFilter value={type} onChange={setType} />
           <Link
-            className="bg-white dark:bg-neutral-300 text-neutral-600 shadow-sm hover:bg-gray-50 hover:text-neutral-700 dark:hover:bg-neutral-200 focus:outline outline-offset-2 focus:outline-blue-400 py-2 px-3 inline-flex items-center font-semibold gap-x-2 text-sm rounded-lg border border-gray-200"
-            href="/doctor/appointments/patients"
+            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-600 shadow-sm hover:bg-gray-50 dark:bg-neutral-300 dark:hover:bg-neutral-200"
+            href="/doctor/analytics"
           >
-            view patients
+            view analytics
           </Link>
         </div>
       </div>
-      <div className="size-full center flex-col text-neutral-500 font-medium sm:hidden">
-        <h2 className="text-3xl">Patient Trackings</h2>
-        <p>View in Large devices only</p>
-      </div>
-      {patientMetrics.length > 0 && (
-        <div className="h-full hidden sm:block">
-          <GenderChart data={patientMetrics} active={type} />
+
+      {isEmpty && type !== "yoy" ? (
+        <div className="mt-4 flex justify-center py-6">
+          <ShinnyEfBtn className="[&&]:cursor-default rounded-3xl px-6 py-3 text-sm text-neutral-100 gradient-border-green">
+            {`No Patient Record Available · ${PERIOD_LABEL[type]}`}
+          </ShinnyEfBtn>
         </div>
-      )}
+      ) : patientMetrics.length > 0 ? (
+        <div className="mt-3 h-[220px]">
+          <PatientGenderBarChart data={patientMetrics} active={type} />
+        </div>
+      ) : null}
     </div>
   )
 }

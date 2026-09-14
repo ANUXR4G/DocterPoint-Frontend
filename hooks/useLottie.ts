@@ -1,25 +1,36 @@
 import { useEffect, useRef } from "react"
-import lottie from "lottie-web"
 
 export function useLottie<T>(animationData: T) {
   const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (!ref.current) return
+    const container = ref.current
+    if (!container) return
 
-    lottie.loadAnimation({
-      container: ref.current,
-      renderer: "svg",
-      rendererSettings: {
-        // xMidYMid slice
-        preserveAspectRatio: "xMinYMin slice", //supports the same options as the svg element's preserveAspectRation property
-      },
-      loop: true,
-      autoplay: true,
-      animationData,
+    let cancelled = false
+    let animation: { destroy: () => void } | undefined
+
+    import("lottie-web").then(({ default: lottie }) => {
+      if (cancelled || !ref.current) return
+
+      ref.current.replaceChildren()
+      animation = lottie.loadAnimation({
+        container: ref.current,
+        renderer: "svg",
+        rendererSettings: {
+          preserveAspectRatio: "xMinYMin slice",
+        },
+        loop: true,
+        autoplay: true,
+        animationData,
+      })
     })
 
-    return () => lottie.destroy()
+    return () => {
+      cancelled = true
+      animation?.destroy()
+      container.replaceChildren()
+    }
   }, [animationData])
 
   return { ref }

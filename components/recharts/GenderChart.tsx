@@ -17,33 +17,6 @@ type Props = {
   active: TypeAnalyticsParam
 }
 
-const defaultData: AnalyticMetrics[] = [
-  {
-    name: "Sunday",
-    male: 10,
-    female: 4,
-    hasMetrics: false,
-  },
-  {
-    name: "Tuesday",
-    male: 5,
-    female: 3,
-    hasMetrics: false,
-  },
-  {
-    name: "Wednesday",
-    male: 6,
-    female: 5,
-    hasMetrics: false,
-  },
-  {
-    name: "Saturday",
-    male: 7,
-    female: 8,
-    hasMetrics: false,
-  },
-]
-
 function CustomTooltip({ active, payload, label, _type }: any) {
   if (active && payload && payload.length) {
     return (
@@ -98,14 +71,22 @@ export default function GenderChart({ data, active }: Props) {
         )
       : data
 
-  const isEmpty = values.every((item) => item.male === 0 && item.female === 0)
+  const isEmpty =
+    values.length === 0 ||
+    values.every((item) => item.male === 0 && item.female === 0)
 
-  const metrics = isEmpty ? defaultData : values
+  if (isEmpty) {
+    return (
+      <div className="flex h-[300px] items-center justify-center text-sm text-neutral-500">
+        No patient data for this period
+      </div>
+    )
+  }
 
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart
-        data={metrics}
+        data={values}
         margin={{
           top: 40,
           bottom: 64,

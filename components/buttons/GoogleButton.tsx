@@ -1,6 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { Icon } from "@/components"
 import { motion } from "framer-motion"
 
@@ -9,8 +8,6 @@ export function GoogleButton({
 }: {
   type?: "signup" | "login"
 }) {
-  const router = useRouter()
-
   const encodedState = encodeURIComponent(
     JSON.stringify({
       source: type === "login" ? "gg_login" : "gg_signup",
@@ -22,8 +19,10 @@ export function GoogleButton({
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API}/auth/google?state=${encodedState}`
       )
-      const url = await response.json()
-      router.push(url) // go to the google concent page
+      const url = (await response.text()).trim()
+      if (url.startsWith("http")) {
+        window.location.href = url
+      }
     } catch (error) {
       console.log(error)
     }

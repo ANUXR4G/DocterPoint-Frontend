@@ -175,29 +175,29 @@ export default function DatePicker({
   }, [updatePreviewDays])
 
   return (
-    <div className={containerClassName}>
-      <h4 className="text-sm font-semibold opacity-90 mb-0.5">
+    <div className={`relative w-full min-w-0 ${containerClassName ?? ""}`}>
+      <h4 className="mb-0.5 text-sm font-semibold opacity-90">
         {firey.camelToCapitalize(name)}
       </h4>
       <div
         ref={pickerRef}
         {...containerProps}
-        className="relative flex items-center justify-between px-3 py-1.5 border border-neutral-300 dark:border-neutral-600 text-sm rounded-sm cursor-pointer focus:outline focus:outline-blue-400"
+        className="relative flex w-full min-w-0 cursor-pointer items-center justify-between rounded-sm border border-neutral-300 px-3 py-1.5 text-sm focus:outline focus:outline-blue-400 dark:border-neutral-600"
         onClick={() => setIsCalendarOpen(true)}
       >
-        <span className="inline-block text-sm font-medium text-neutral-600 dark:text-neutral-400">
+        <span className="inline-block truncate text-sm font-medium text-neutral-600 dark:text-neutral-400">
           {selectedDay ? format(selectedDay, "dd/MM/yyyy") : "Select a date"}
         </span>
-        <Icon name="down-chevron" className="size-3.5" />
+        <Icon name="down-chevron" className="size-3.5 shrink-0" />
       </div>
 
       {/* calendar popover container */}
       {isCalendarOpen && (
         <motion.div
           ref={containerRef}
-          className={`max-w-72 min-h-[21rem] h-auto absolute z-10 w-full mt-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg shadow-lg py-4 overflow-hidden lg:max-w-80 lg:py-6 ${
-            direction === "right" ? `right-0` : `left-0`
-          } ${modalClassName && modalClassName}`}
+          className={`absolute z-20 mt-2 h-auto min-h-[21rem] w-[min(100%,18rem)] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-neutral-300 bg-white py-4 shadow-lg dark:border-neutral-600 dark:bg-neutral-800 sm:w-full sm:max-w-72 lg:max-w-80 lg:py-6 ${
+            direction === "right" ? `right-0 left-auto` : `left-0 right-auto`
+          } ${modalClassName ?? ""}`}
         >
           {/* years preview options */}
           <AnimatePresence>

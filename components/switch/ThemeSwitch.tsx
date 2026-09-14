@@ -9,44 +9,41 @@ export default function ThemeSwitch() {
   const { changeTheme, theme } = useAppContext()
   const [checked, setChecked] = useState<boolean>(false)
 
-  // handle changing theme on input change
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const isDarkSelected = e.target.checked
-    setChecked(e.target.checked)
-    if (isDarkSelected) {
-      changeTheme("dark")
-    } else {
-      changeTheme("light")
-    }
+    setChecked(isDarkSelected)
+    changeTheme(isDarkSelected ? "dark" : "light")
   }
 
-  // update the switch state
   useEffect(() => {
-    const root = document.documentElement
-    setChecked(!!root.classList.contains("dark"))
-  }, [])
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+    const isDark =
+      theme === "dark" ||
+      ((theme === "system" || !theme) && media.matches)
+    setChecked(isDark)
+  }, [theme])
 
   return (
-    <div className="py-1 px-2 rounded-md flex items-center gap-2 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60 hover:cursor-pointer group">
-      <div className="w-16 relative">
+    <div className="flex items-center gap-2 rounded-md px-2 py-1 hover:cursor-pointer hover:bg-zinc-200/70 group dark:hover:bg-neutral-700/60">
+      <div className="relative w-16">
         <input
           type="checkbox"
           id="theme-switch"
-          className="appearance-none hover:cursor-pointer w-full disabled:pointer-events-none border border-gray-300 dark:border-neutral-500 h-8 px-1 rounded-full before:inline-block before:size-6 before:mt-1 before:bg-white before:translate-x-0 checked:before:translate-x-[125%] before:rounded-full before:shadow before:transform before:ring-0 before:transition before:ease-in-out before:duration-200 dark:before:bg-neutral-200 dark:checked:before:bg-neutral-200"
+          className="h-8 w-full appearance-none rounded-full border border-gray-300 px-1 hover:cursor-pointer disabled:pointer-events-none before:mt-1 before:inline-block before:size-6 before:translate-x-0 before:rounded-full before:bg-white before:shadow before:ring-0 before:transition before:duration-200 before:ease-in-out checked:before:translate-x-[125%] dark:border-neutral-500 dark:before:bg-neutral-200 dark:checked:before:bg-neutral-200"
           onChange={handleChange}
           checked={checked}
         />
         <label htmlFor="theme-switch" className="sr-only">
           theme
         </label>
-        <div className="absolute top-1/2 -translate-y-1/2 -bottom-0.5 left-2 pointer-events-none ">
-          <Icon className="size-4 mt-[1px]" name="sun" />
+        <div className="pointer-events-none absolute -bottom-0.5 left-2 top-1/2 -translate-y-1/2">
+          <Icon className="mt-[1px] size-4" name="sun" />
         </div>
-        <div className="absolute top-1/2 -translate-y-1/2 -bottom-0.5 right-2 pointer-events-none ">
-          <Icon className="size-4 mt-[1px]" name="moon" />
+        <div className="pointer-events-none absolute -bottom-0.5 right-2 top-1/2 -translate-y-1/2">
+          <Icon className="mt-[1px] size-4" name="moon" />
         </div>
       </div>
-      <span className="-mt-0.5 text-sm font-semibold opacity-80 group-hover:opacity-100">
+      <span className="-mt-0.5 text-sm font-semibold text-neutral-700 opacity-80 group-hover:opacity-100 dark:text-neutral-200">
         Theme
       </span>
     </div>

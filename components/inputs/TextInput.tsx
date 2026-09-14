@@ -43,11 +43,11 @@ export default function Input({
         onBlur={onBlur}
         placeholder={placeHolder ? placeHolder : `Type ${name}`}
         spellCheck={false}
-        className={`text-sm font-medium border border-neutral-300 dark:border-neutral-600 ${
+        className={`form-input text-sm font-medium border border-neutral-300 dark:border-neutral-600 ${
           valid && `outline outline-1 outline-offset-1 outline-red-600`
-        } text-neutral-600 dark:text-neutral-400/80 bg-gray-200 dark:bg-neutral-700 placeholder:text-sm ${
+        } ${
           indent ? indent : `indent-1.5`
-        } py-1.5 rounded-[4px] -ml-0.5 autofill:shadow-[inset_0_0_0px_1000px_rgba(229,231,235,1)] dark:autofill:shadow-[inset_0_0_0px_1000px_rgba(64,64,64,1)] autofill:[-webkit-text-fill-color:rgba(82,82,82,1)] dark:autofill:[-webkit-text-fill-color:rgba(163,163,163,0.8)] autofill:caret-neutral-600`}
+        } py-1.5 rounded-[4px] -ml-0.5`}
       />
     </div>
   )

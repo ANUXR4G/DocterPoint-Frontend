@@ -48,8 +48,9 @@ async function getDoctorProfile(token: string) {
     `${process.env.NEXT_PUBLIC_API}/users/doctor/info`,
     {
       method: "GET",
+      credentials: "include",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: token ? `Bearer ${token}` : "",
         "Content-Type": "application/json",
       },
     }
@@ -242,6 +243,39 @@ async function fetchAnalytics(
   return response.json()
 }
 
+async function updateThemeBg(token: string, bgSrc: string | null) {
+  return updateThemePreferences(token, { bgSrc })
+}
+
+async function updateThemePreferences(
+  token: string,
+  data: { bgSrc?: string | null; textSize?: string | null },
+) {
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API}/users/doctor/theme`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    },
+  )
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.message || "Failed to update appearance preferences")
+  }
+  const json = await response.json()
+  return {
+    ...json,
+    bg_src: json?.data?.bg_src ?? json?.data?.bgSrc ?? data.bgSrc,
+    text_size:
+      json?.data?.text_size ?? json?.data?.textSize ?? data.textSize,
+  }
+}
+
 export const doctorServices = {
   search,
   getDoctors,
@@ -256,4 +290,6 @@ export const doctorServices = {
   getDoctorsFromHospital,
   getTotalAppointmentCount,
   getRequestedAppointments,
+  updateThemeBg,
+  updateThemePreferences,
 }

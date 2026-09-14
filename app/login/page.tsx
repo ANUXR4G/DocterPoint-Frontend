@@ -1,61 +1,100 @@
-import { Icon, Form, CoolKid, Background } from "@/components"
-import { GoogleButton } from "@/components/buttons/GoogleButton"
+import Link from "next/link"
+import AuthShell from "@/components/layout/AuthShell"
 
-export default async function LoginPage() {
-  const currentYear = new Date().getFullYear()
-
+export default function LoginHubPage() {
   return (
-    <main className="full center relative">
-      <Background name="half-box-pattern" className="hidden dark:block" />
-      <Background name="gradient-1" className="dark:hidden" />
-      <Background name="dotted-patern" className="dark:hidden" />
+    <AuthShell active="login">
+      <div className="mx-auto w-full min-w-0 max-w-lg self-start text-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-blue-600 dark:text-sky-400">
+          Account
+        </p>
+        <h1 className="mt-3 text-[clamp(2rem,8vw,3rem)] font-semibold tracking-[-0.04em] text-slate-900 dark:text-white sm:text-5xl">
+          Welcome back
+        </h1>
+        <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-600 dark:text-slate-400">
+          Patient, clinic, doctor, and admin portals are separate — pick the one that
+          matches how you use GlucoGuide.
+        </p>
 
-      <div className="center mx-auto px-4 max-w-2xl lg:flex-row lg:max-w-screen-3xl lg:px-8">
-        {/* login form */}
-        <div className="max-w-2xl">
-          {/* logo */}
-          <div className="flex flex-col items-center">
-            <div className="hidden screen [@media(max-height:864px)]:hidden md:flex flex-col items-center gap-2 mb-4">
-              <div className="flex items-center gap-2">
-                <Icon className="size-10" name="gluco-guide" />
-                <h3 className="font-extrabold text-3xl bg-gradient-to-r from-blue-800 to-indigo-900 bg-clip-text text-transparent dark:from-indigo-500 dark:to-blue-500">
-                  GlucoGuide
-                </h3>
-              </div>
-              {/* description */}
-              <p className="mt-2 mb-4 text-sm text-center px-2 opacity-80">
-                Glucoguide helps you find nearby hospitals, book doctor
-                appointments, track health records, and receive personalized
-                diet and exercise recommendations.
-              </p>
-            </div>
-            {/* form inner */}
-            <Form />
-          </div>
-
-          <div className="mt-6 relative text-center">
-            <div className="before:contents[''] before:absolute before:w-full before:h-0.5 before:left-0 before:top-1/2 -before:translate-y-1/2 before:bg-neutral-200/70 dark:before:bg-neutral-700 before:rounded-sm">
-              <span className="text-sm lg:text-base relative px-2.5 z-10 bg-neutral-50 dark:bg-zinc-900 dark:text-[#a3a3a3] text-gray-500 dark:continue-gray">
-                or continue with
-              </span>
-            </div>
-          </div>
-
-          {/* google provider */}
-          <GoogleButton />
-          <div className="mt-4">
-            <p className="text-neutral-500 text-center text-sm">
-              &#169; {currentYear} GlucoGuide. Your Trusted Partner in Diabetes
-              Management. For support, contact us at support@gguide.com. Keep
-              moving forward, one healthy step at a time.
+        <div className="mt-10 space-y-4 text-left">
+          <Link
+            href="/login/patient"
+            className="block rounded-2xl border border-sky-100 bg-white p-6 shadow-md shadow-blue-600/5 transition hover:border-blue-200 hover:shadow-lg dark:border-white/10 dark:bg-slate-900/80"
+          >
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">
+              Patient login
             </p>
-          </div>
-        </div>
-        {/* cool kid asset */}
-        <div className="hidden lg:flex w-3/4">
-          <CoolKid className="-mt-40 [@media(max-height:768px)]:-mb-10" />
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Book doctors, view appointments, and manage health records.
+            </p>
+            <p className="mt-3 border-t border-sky-100 pt-3 text-xs text-slate-500 dark:border-white/10">
+              Demo:{" "}
+              <span className="font-medium text-slate-800 dark:text-slate-200">
+                patient1@example.com
+              </span>{" "}
+              / Demo@12345
+            </p>
+          </Link>
+
+          <Link
+            href="/login/clinic"
+            className="block rounded-2xl border border-sky-100 bg-white p-6 shadow-md shadow-blue-600/5 transition hover:border-blue-200 hover:shadow-lg dark:border-white/10 dark:bg-slate-900/80"
+          >
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">
+              Clinic login
+            </p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Register or run a practice — schedules, directory, and queue
+              settings.
+            </p>
+            <p className="mt-3 border-t border-sky-100 pt-3 text-xs text-slate-500 dark:border-white/10">
+              Demo:{" "}
+              <span className="font-medium text-slate-800 dark:text-slate-200">
+                dr.demo@glucoguide.com
+              </span>{" "}
+              / Demo@12345
+            </p>
+          </Link>
+
+          <Link
+            href="/login/doctor"
+            className="block rounded-2xl border border-sky-100 bg-white p-6 shadow-md shadow-blue-600/5 transition hover:border-blue-200 hover:shadow-lg dark:border-white/10 dark:bg-slate-900/80"
+          >
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">
+              Doctor login
+            </p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Day-to-day queue, calendar, and patient bookings for providers.
+            </p>
+            <p className="mt-3 border-t border-sky-100 pt-3 text-xs text-slate-500 dark:border-white/10">
+              Demo:{" "}
+              <span className="font-medium text-slate-800 dark:text-slate-200">
+                dr.demo@glucoguide.com
+              </span>{" "}
+              / Demo@12345
+            </p>
+          </Link>
+
+          <Link
+            href="/login/admin"
+            className="block rounded-2xl border border-sky-100 bg-white p-6 shadow-md shadow-blue-600/5 transition hover:border-blue-200 hover:shadow-lg dark:border-white/10 dark:bg-slate-900/80"
+          >
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">
+              Admin login
+            </p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Platform control — patients, clinics, doctors, payments, and approvals.
+            </p>
+            <p className="mt-3 border-t border-sky-100 pt-3 text-xs text-slate-500 dark:border-white/10">
+              Demo:{" "}
+              <span className="font-medium text-slate-800 dark:text-slate-200">
+                admin@glucoguide.com
+              </span>{" "}
+              / Demo@12345
+            </p>
+          </Link>
         </div>
       </div>
-    </main>
+    </AuthShell>
   )
 }

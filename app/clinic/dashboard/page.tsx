@@ -1,0 +1,548 @@
+"use client"
+
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { format, startOfToday } from "date-fns"
+import { DoctorAnalytics } from "@/components"
+import DoctorQueue from "@/components/ui/doctors/pages/DoctorQueue"
+import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
+import {
+  CLINIC_SUBSCRIPTION_HREF,
+  practiceTabHref,
+} from "@/lib/doctorPracticeTabs"
+import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import { matchesQueueStatusFilter } from "@/lib/bookingStatus"
+import { useProctoSocket } from "@/hooks/useProctoSocket"
+
+const fieldClass =
+  "w-full rounded-xl border border-neutral-300 bg-transparent px-3 py-2.5 text-sm outline-none transition focus:border-[var(--theme-primary)] dark:border-neutral-600"
+
+function OnboardBanner() {
+  const searchParams = useSearchParams()
+  if (searchParams.get("onboarded") !== "1") return null
+
+  return (
+    <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/40">
+      <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+        Clinic account created — finish billing and WhatsApp setup when ready.
+      </p>
+      <Link
+        href="/clinic/subscription?onboarded=1"
+        className="mt-2 inline-flex text-sm font-semibold text-[var(--theme-primary)] hover:underline"
+      >
+        Open subscription &amp; setup →
+      </Link>
+    </div>
+  )
+}
+
+type DoctorSnap = {
+  id: string
+  name: string
+  waiting: number
+  inAppointment: number
+  booked: number
+  completed: number
+}
+
+const OPS_LINKS = [
+  {
+    href: practiceTabHref("setup"),
+    title: "Hours & blocks",
+    body: "Schedules, slot timing, and day overrides",
+  },
+  {
+    href: practiceTabHref("doctors"),
+    title: "Add doctors",
+    body: "Create logins and manage the clinic roster",
+  },
+  {
+    href: "/doctor/patients",
+    title: "Patients",
+    body: "Visit history and status edits",
+  },
+  {
+    href: "/doctor/analytics",
+    title: "Analytics",
+    body: "Practice and per-doctor breakdown",
+  },
+  {
+    href: "/clinic/queue",
+    title: "Full queue",
+    body: "Arrived → Start → Finish",
+  },
+  {
+    href: "/clinic/subscription",
+    title: "Subscription",
+    body: "Plans, trial, WhatsApp line",
+  },
+] as const
+
+function ClinicOpsHub() {
+  const [practiceId, setPracticeId] = useState<string | null>(null)
+  const [canManage, setCanManage] = useState(false)
+  const [doctors, setDoctors] = useState<DoctorSnap[]>([])
+  const [doctorCount, setDoctorCount] = useState(0)
+  const [totals, setTotals] = useState({
+    waiting: 0,
+    inAppointment: 0,
+    booked: 0,
+    completed: 0,
+  })
+  const [multiDoctorAllowed, setMultiDoctorAllowed] = useState(true)
+  const [entitlementHint, setEntitlementHint] = useState("")
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [formError, setFormError] = useState("")
+  const [formMessage, setFormMessage] = useState("")
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [phone, setPhone] = useState("")
+  const [specialty, setSpecialty] = useState("")
+  const [licenseNo, setLicenseNo] = useState("")
+
+  const loadRoster = useCallback(async () => {
+    const mine = await proctoService.getMyPractices()
+    if (
+      mine.status !== "successful" ||
+      !Array.isArray(mine.data) ||
+      !mine.data.length
+    ) {
+      setDoctors([])
+      setPracticeId(null)
+      setCanManage(false)
+      setDoctorCount(0)
+      return
+    }
+    const membership = (
+      mine.data as Array<{
+        role: string
+        practice: {
+          id: string
+          members?: Array<{
+            userId: string
+            role: string
+            isActive: boolean
+            user?: { name?: string | null; email?: string | null }
+          }>
+        }
+      }>
+    )[0]
+    const practice = membership?.practice
+    if (!practice?.id) return
+
+    setPracticeId(practice.id)
+    setCanManage(
+      membership.role === "PRACTICE_OWNER" ||
+        membership.role === "PRACTICE_ADMIN",
+    )
+
+    const date = format(startOfToday(), "yyyy-MM-dd")
+    const list = await proctoService.listPracticeBookings(practice.id, date)
+    const bookings = (
+      list.status === "successful" && Array.isArray(list.data) ? list.data : []
+    ) as Array<
+      ProctoBooking & {
+        providerId?: string
+        provider?: { id?: string; name?: string | null; email?: string | null }
+      }
+    >
+
+    const map = new Map<string, DoctorSnap>()
+    const members = (practice.members ?? []).filter(
+      (m) =>
+        m.isActive !== false &&
+        ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"].includes(m.role),
+    )
+    setDoctorCount(members.length)
+    for (const m of members) {
+      map.set(m.userId, {
+        id: m.userId,
+        name: m.user?.name || m.user?.email || "Doctor",
+        waiting: 0,
+        inAppointment: 0,
+        booked: 0,
+        completed: 0,
+      })
+    }
+
+    let waiting = 0
+    let inAppointment = 0
+    let booked = 0
+    let completed = 0
+    for (const b of bookings) {
+      const id = b.provider?.id || b.providerId || "unknown"
+      if (!map.has(id)) {
+        map.set(id, {
+          id,
+          name: b.provider?.name || b.provider?.email || "Doctor",
+          waiting: 0,
+          inAppointment: 0,
+          booked: 0,
+          completed: 0,
+        })
+      }
+      const row = map.get(id)!
+      if (matchesQueueStatusFilter(b.status, "waiting")) {
+        row.waiting += 1
+        waiting += 1
+      } else if (matchesQueueStatusFilter(b.status, "in_appointment")) {
+        row.inAppointment += 1
+        inAppointment += 1
+      } else if (
+        matchesQueueStatusFilter(b.status, "booked") ||
+        matchesQueueStatusFilter(b.status, "accepted")
+      ) {
+        row.booked += 1
+        booked += 1
+      } else if (String(b.status).toUpperCase() === "COMPLETED") {
+        row.completed += 1
+        completed += 1
+      }
+    }
+
+    setDoctors([...map.values()].sort((a, b) => a.name.localeCompare(b.name)))
+    setTotals({ waiting, inAppointment, booked, completed })
+
+    const billing = await proctoService.getPracticeBilling(practice.id)
+    if (billing.status === "successful" && billing.data) {
+      const ent = (
+        billing.data as {
+          entitlement?: {
+            usable?: boolean
+            features?: Record<string, unknown>
+          }
+        }
+      ).entitlement
+      const multi =
+        ent?.features?.multiDoctor === true ||
+        ent?.features?.multiDoctor === 1
+      const canAddMore = Boolean(ent?.usable) && (multi || members.length < 1)
+      setMultiDoctorAllowed(canAddMore)
+      if (!ent?.usable) {
+        setEntitlementHint(
+          "Active subscription required to add doctors. Open Subscription to subscribe.",
+        )
+      } else if (members.length >= 1 && !multi) {
+        setEntitlementHint(
+          "Multi-doctor clinics require Growth or Clinic. Upgrade under Subscription.",
+        )
+      } else {
+        setEntitlementHint("")
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadRoster()
+  }, [loadRoster])
+
+  useProctoSocket(
+    practiceId,
+    () => {
+      void loadRoster()
+    },
+    () => {
+      void loadRoster()
+    },
+  )
+
+  useEffect(() => {
+    function openFromHash() {
+      if (typeof window === "undefined") return
+      if (window.location.hash === "#add-doctor" && canManage) {
+        setShowAddForm(true)
+      }
+    }
+    openFromHash()
+    window.addEventListener("hashchange", openFromHash)
+    return () => window.removeEventListener("hashchange", openFromHash)
+  }, [canManage])
+
+  async function addDoctor() {
+    if (!practiceId) return
+    setFormError("")
+    setFormMessage("")
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      setFormError("Name, email, and password are required.")
+      return
+    }
+    if (password.trim().length < 6) {
+      setFormError("Password must be at least 6 characters.")
+      return
+    }
+    setBusy(true)
+    const res = await proctoService.addPracticeDoctor(practiceId, {
+      name: name.trim(),
+      email: email.trim(),
+      password: password.trim(),
+      phone: phone.trim() || undefined,
+      specialty: specialty.trim() || undefined,
+      licenseNo: licenseNo.trim() || undefined,
+    })
+    setBusy(false)
+    if (res.status !== "successful") {
+      setFormError(res.message || "Could not add doctor.")
+      return
+    }
+    setFormMessage("Doctor added. They can sign in with this email and password.")
+    setName("")
+    setEmail("")
+    setPassword("")
+    setPhone("")
+    setSpecialty("")
+    setLicenseNo("")
+    await loadRoster()
+  }
+
+  const chips = useMemo(
+    () => [
+      { label: "In waiting", value: totals.waiting, tone: "violet" },
+      { label: "Appointment started", value: totals.inAppointment, tone: "amber" },
+      { label: "Booked", value: totals.booked, tone: "sky" },
+      { label: "Appointment finished", value: totals.completed, tone: "green" },
+    ],
+    [totals],
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {chips.map((c) => (
+          <div
+            key={c.label}
+            className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900/40"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              {c.label}
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">{c.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {OPS_LINKS.map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className="rounded-2xl border border-neutral-200 bg-white p-4 transition hover:border-[var(--theme-primary)] dark:border-neutral-700 dark:bg-neutral-900/40"
+          >
+            <p className="font-semibold text-neutral-900 dark:text-white">
+              {l.title}
+            </p>
+            <p className="mt-1 text-sm text-neutral-500">{l.body}</p>
+          </Link>
+        ))}
+      </div>
+
+      <div
+        id="add-doctor"
+        className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-700"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-800/50">
+          <div>
+            <h2 className="text-sm font-semibold">
+              Doctors today
+              <span className="ml-2 text-xs font-medium text-neutral-500">
+                ({doctorCount})
+              </span>
+            </h2>
+            <p className="text-xs text-neutral-500">
+              Waiting room and visit counts by doctor
+            </p>
+          </div>
+          {canManage ? (
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddForm((v) => !v)
+                setFormError("")
+                setFormMessage("")
+              }}
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-[var(--theme-primary)] px-3 text-sm font-semibold text-white"
+            >
+              {showAddForm ? "Hide form" : "Add doctor"}
+            </button>
+          ) : null}
+        </div>
+
+        {doctors.length > 0 ? (
+          <ul className="divide-y divide-neutral-200 dark:divide-neutral-700">
+            {doctors.map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
+              >
+                <p className="font-medium">{d.name}</p>
+                <p className="text-xs text-neutral-500">
+                  Waiting {d.waiting} · In appt {d.inAppointment} · Booked{" "}
+                  {d.booked} · Done {d.completed}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="px-4 py-6 text-sm text-neutral-500">
+            No doctors on the roster yet. Add one below to open the clinic queue.
+          </p>
+        )}
+
+        {canManage && showAddForm ? (
+          <div className="border-t border-neutral-200 bg-white px-4 py-4 dark:border-neutral-700 dark:bg-neutral-900/40">
+            <p className="text-sm font-semibold">Add a doctor to this clinic</p>
+            <p className="mt-1 text-xs text-neutral-500">
+              They sign in at the doctor portal with the email and password you
+              set.
+            </p>
+
+            {!multiDoctorAllowed ? (
+              <div className="mt-4 space-y-3">
+                <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                  {entitlementHint ||
+                    "Upgrade to Growth or Clinic for multi-doctor."}
+                </p>
+                <Link
+                  href={CLINIC_SUBSCRIPTION_HREF}
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white"
+                >
+                  Open Subscription
+                </Link>
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <input
+                  placeholder="Doctor name *"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={fieldClass}
+                />
+                <input
+                  placeholder="Login email *"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={fieldClass}
+                />
+                <input
+                  placeholder="Login password *"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className={fieldClass}
+                />
+                <input
+                  placeholder="Phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className={fieldClass}
+                />
+                <input
+                  placeholder="Specialty"
+                  value={specialty}
+                  onChange={(e) => setSpecialty(e.target.value)}
+                  className={fieldClass}
+                />
+                <input
+                  placeholder="License no"
+                  value={licenseNo}
+                  onChange={(e) => setLicenseNo(e.target.value)}
+                  className={fieldClass}
+                />
+                <div className="sm:col-span-2">
+                  {(formError || formMessage) && (
+                    <p
+                      className={`mb-3 text-sm ${
+                        formError
+                          ? "text-red-600 dark:text-red-300"
+                          : "text-green-700 dark:text-green-400"
+                      }`}
+                    >
+                      {formError || formMessage}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void addDoctor()}
+                      className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Saving…" : "Add doctor"}
+                    </button>
+                    <Link
+                      href={practiceTabHref("doctors")}
+                      className="inline-flex h-11 items-center text-sm font-semibold text-[var(--theme-primary)] hover:underline"
+                    >
+                      Full roster →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+export default function ClinicDashboard() {
+  return (
+    <div className="dashboard-page-wide">
+      <Suspense fallback={null}>
+        <OnboardBanner />
+      </Suspense>
+
+      <DashboardPageHeader
+        eyebrow="Clinic portal"
+        title="Your practice today"
+        subtitle="Waiting room, doctor analytics, Hours & blocks, and patient status — clinic operations in one place."
+        actionBelow
+        action={
+          <>
+            <a href="#add-doctor" className="dashboard-btn-primary">
+              Add doctor
+            </a>
+            <Link href={CLINIC_SUBSCRIPTION_HREF} className="dashboard-btn-secondary">
+              Subscription
+            </Link>
+          </>
+        }
+      />
+
+      <ClinicOpsHub />
+
+      <DoctorAnalytics />
+
+      <section className="space-y-4">
+        <div className="flex h-12 flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="dashboard-section-title">Today&apos;s queue</h2>
+            <p className="dashboard-section-sub">
+              Arrived → In waiting → Appointment started → Appointment finished
+            </p>
+          </div>
+          <Link href="/clinic/queue" className="dashboard-link">
+            Full-screen queue →
+          </Link>
+        </div>
+
+        <div className="dashboard-section overflow-hidden">
+          <div className="max-h-[min(65vh,640px)] min-h-[20rem] overflow-auto p-2 sm:p-3">
+            <Suspense
+              fallback={
+                <p className="p-4 text-sm text-neutral-500">Loading queue…</p>
+              }
+            >
+              <DoctorQueue showFilters allowStatusControl />
+            </Suspense>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}

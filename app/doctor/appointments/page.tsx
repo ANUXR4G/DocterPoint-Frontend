@@ -1,13 +1,11 @@
-import { AppointmentAnalytics, DoctorAppointments } from "@/components"
+"use client"
 
-export default function DoctorAppointmentPage() {
+import DoctorAppointmentsList from "@/components/ui/doctors/pages/DoctorAppointmentsList"
+
+export default function DoctorAppointmentsPage() {
   return (
-    <div className="max-w-[1536px] mx-auto">
-      {/* Analysis Chart */}
-      <AppointmentAnalytics />
-
-      {/* Appointment History */}
-      <DoctorAppointments />
+    <div className="dashboard-page-wide">
+      <DoctorAppointmentsList />
     </div>
   )
 }

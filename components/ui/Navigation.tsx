@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect } from "react"
+import React, { useEffect, Suspense } from "react"
 import dynamic from "next/dynamic"
 import { AnimatePresence } from "framer-motion"
 import { usePathname, useRouter } from "next/navigation"
@@ -41,9 +41,15 @@ export default function Navigation() {
     <React.Fragment>
       <Header role={role} />
       <AnimatePresence>
-        {showMenu && <Menu role={role} logout={handleLogout} />}
+        {showMenu && (
+          <Suspense fallback={null}>
+            <Menu role={role} logout={handleLogout} />
+          </Suspense>
+        )}
       </AnimatePresence>
-      <Sidebar role={role} logout={handleLogout} />
+      <Suspense fallback={null}>
+        <Sidebar role={role} logout={handleLogout} />
+      </Suspense>
       {showHelp && (
         <ChatModal isOpen={showHelp} toggleChat={toggleHelp} role={role} />
       )}

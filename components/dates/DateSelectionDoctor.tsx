@@ -71,32 +71,39 @@ export default function DoctorDates({
     }
   }, [selectedMonth])
 
-  // handle automatic available date detection
-  useEffect(() => {
-    if (!dateAvailable(format(selectedDate, "iii"))) {
-      const updatedDate = addDays(selectedDate, 1)
-      const updatedMonth = format(updatedDate, "MMMM")
-      dateSelection(updatedDate, updatedMonth)
-    }
-
-    return
-  }, [dateAvailable, dateSelection, selectedDate, doctor])
-
   // handle active date navigation
   useEffect(() => {
     if (!datesRefs.current || !datesContainerRef.current) return
 
-    let currentRef = datesRefs.current.find(
-      (ref) => ref && ref.innerText.includes(format(selectedDate, "dd"))
+    const currentRef = datesRefs.current.find(
+      (ref) => ref && ref.innerText.includes(format(selectedDate, "dd")),
     )
 
     if (currentRef) {
-      return datesContainerRef.current.scroll({
+      datesContainerRef.current.scroll({
         left: currentRef.offsetLeft - 8,
         behavior: "smooth",
       })
     }
   }, [selectedDate])
+
+  // Advance to the next available weekday (bounded — never infinite-loop).
+  useEffect(() => {
+    const dayKey = format(selectedDate, "iii")
+    if (dateAvailable(dayKey)) return
+    if (!values.availableDays.length) return
+
+    let candidate = selectedDate
+    for (let i = 0; i < 62; i++) {
+      candidate = addDays(candidate, 1)
+      if (dateAvailable(format(candidate, "iii"))) {
+        if (!isSameDay(candidate, selectedDate)) {
+          dateSelection(candidate, format(candidate, "MMMM"))
+        }
+        return
+      }
+    }
+  }, [dateAvailable, dateSelection, selectedDate, values.availableDays.length])
 
   return (
     <div>

@@ -73,7 +73,7 @@ export default function RecentAppointments({ upcomingIds }: Props) {
               : _data.appointments,
         }
       },
-      staleTime: 0,
+      staleTime: 60_000,
     }
   )
 
@@ -187,20 +187,14 @@ export default function RecentAppointments({ upcomingIds }: Props) {
                   {/* doctor */}
                   <td className="p-2 text-sm font-medium text-gray-800 dark:text-neutral-300 min-w-32 max-w-36">
                     <div>
-                      <Link
-                        href={`/hospitals/doctors/info?id=${item.doctor.id}`}
-                      >
-                        {item.doctor.name}
-                      </Link>
+                      <Link href="/practices">{item.doctor.name}</Link>
                     </div>
                   </td>
 
                   {/* hospital details */}
                   <td className="p-2 text-sm font-medium text-gray-800 dark:text-neutral-300 min-w-36">
                     <div>
-                      <Link href={`/hospitals/${item.hospital.id}/info`}>
-                        {item.hospital.name}
-                      </Link>
+                      <Link href="/practices">{item.hospital.name}</Link>
                       <p className="text-xs font-semibold opacity-80">
                         {item.hospital.address}
                       </p>

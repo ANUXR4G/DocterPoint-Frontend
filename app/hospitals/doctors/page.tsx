@@ -1,9 +1,6 @@
-import { Doctors } from "@/components"
+import { redirect } from "next/navigation"
 
+/** Legacy doctors directory → canonical Find Care. */
 export default function DoctorsPage() {
-  return (
-    <div className="pb-10 lg:pb-12">
-      <Doctors />
-    </div>
-  )
+  redirect("/practices?view=doctors")
 }

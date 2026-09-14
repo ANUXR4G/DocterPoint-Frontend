@@ -70,10 +70,11 @@ export function useForm<T>({
 
     setIsSubmitting(true)
 
-    // handle the submission
-    await onSubmit(values)
-
-    setIsSubmitting(false)
+    try {
+      await onSubmit(values)
+    } finally {
+      setIsSubmitting(false)
+    }
   }, [values, validator, onSubmit])
 
   // make sure to always set the errors

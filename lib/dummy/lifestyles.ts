@@ -14,7 +14,11 @@ export const familyHistoryStatuses = [
 
 export const bloodGroups = ["A+", "A-", "O+", "O-", "B-", "B+", "AB-", "AB+"]
 
-export const diabetesTypes = [
+/** UI label for previous_diabetes_records (general health, not diabetes-only). */
+export const CHRONIC_CONDITIONS_LABEL = "Chronic conditions"
+
+/** Selectable chronic / long-term conditions (includes legacy diabetes type strings). */
+export const chronicConditions = [
   "Type 1",
   "Type 2",
   "Gestational",
@@ -26,4 +30,17 @@ export const diabetesTypes = [
   "None Diabetic",
   "Pre Diabetic",
   "Type 3c",
+  "Hypertension",
+  "Asthma",
+  "Heart disease",
+  "Thyroid disorder",
+  "Arthritis",
+  "Kidney disease",
+  "COPD",
+  "Epilepsy",
+  "Cancer (history)",
+  "None",
 ]
+
+/** @deprecated Use chronicConditions */
+export const diabetesTypes = chronicConditions

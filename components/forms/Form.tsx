@@ -6,7 +6,12 @@ import { motion } from "framer-motion"
 import { useMutation } from "react-query"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { firey } from "@/utils"
+import { cookies } from "@/utils/cookies"
 import { userService } from "@/lib/services/user"
+import {
+  PORTAL_COOKIE,
+  providerDashboard,
+} from "@/lib/providerPortal"
 import { validations } from "@/utils/validations"
 import { AuthValues, AuthValueType } from "@/types"
 import { useForm } from "@/hooks/useForm"
@@ -23,9 +28,13 @@ export default function Form() {
   const router = useRouter()
 
   const [authSuccess, setAuthSuccess] = useState<boolean>(false)
+  const [submitAttempted, setSubmitAttempted] = useState(false)
 
   const callbackURL = searchParams.get("callback")
   const googleStatus = searchParams.get("status")
+  const callbackQS = callbackURL
+    ? `?callback=${encodeURIComponent(callbackURL)}`
+    : ""
 
   const {
     values,
@@ -45,13 +54,11 @@ export default function Form() {
   const {
     data: loginData,
     isLoading: loginIsLoading,
-    isSuccess: loginSuccess,
-    error: loginError,
     mutate: loginMutate,
   } = useMutation({
     mutationFn: (credentials: AuthValueType) => userService.login(credentials),
     onSuccess: (data) => {
-      if (data.status) {
+      if (data?.status === "unsuccessful" || !data?.role) {
         setAuthSuccess(false)
       } else {
         setAuthSuccess(true)
@@ -62,13 +69,11 @@ export default function Form() {
   const {
     data: signupData,
     isLoading: signupIsLoading,
-    isSuccess: signupSuccess,
-    error: signupError,
     mutate: signupMutate,
   } = useMutation({
     mutationFn: (credentials: AuthValueType) => userService.signup(credentials),
     onSuccess: (data) => {
-      if (data.status) {
+      if (data?.status === "unsuccessful" || !data?.role) {
         setAuthSuccess(false)
       } else {
         setAuthSuccess(true)
@@ -76,7 +81,6 @@ export default function Form() {
     },
   })
 
-  // redirect to dashboard after successful authetication
   useEffect(() => {
     if (authSuccess) {
       const role = loginData?.role || signupData?.role
@@ -84,38 +88,41 @@ export default function Form() {
       const dateOfBith = loginData?.date_of_birth || signupData?.date_of_birth
 
       if (callbackURL) {
-        // redirect to callback url was provided
         router.push(`${process.env.NEXT_PUBLIC_URL}/${callbackURL}`)
       } else if (role === "user") {
-        // redirect based on the user role
         if (!name && !dateOfBith) {
-          router.push(`/patient/info`)
+          router.push(`/patient/profile`)
         } else {
           router.push("/patient/dashboard")
         }
+      } else if (role === "doctor") {
+        cookies.setCookie(PORTAL_COOKIE, "doctor", 60 * 60 * 24 * 30)
+        router.push("/doctor/dashboard")
       } else {
-        // fallback for other roles
         router.push(`/${role}/dashboard`)
       }
     }
   }, [loginData, signupData, router, callbackURL, authSuccess])
 
-  // handle authentication
   async function handleAuthentication(values: AuthValueType) {
-    const encryptedPass = await firey.generateEncryption(values.password) // encrypted password
-    // handle login request
+    let password = values.password
+    try {
+      password = await firey.generateEncryption(values.password!)
+    } catch (error) {
+      console.error("auth encryption failed:", error)
+    }
+
     if (pathname === "login") {
       loginMutate({
         email: values.email,
-        password: encryptedPass,
+        password,
       })
     }
 
-    // handle signup request
     if (pathname === "signup") {
       signupMutate({
         email: values.email,
-        password: encryptedPass,
+        password,
       })
     }
   }
@@ -136,7 +143,11 @@ export default function Form() {
             className="relative px-4 py-2 w-full m-2"
           >
             <Link
-              href={pathname === "login" ? "/signup" : "/login"}
+              href={
+                pathname === "login"
+                  ? `/signup${callbackQS}`
+                  : `/login/patient${callbackQS}`
+              }
               className={`relative z-10 font-medium transition ${
                 pathname === ctx ? `opacity-100` : `opacity-70`
               }`}
@@ -150,11 +161,11 @@ export default function Form() {
         ))}
       </div>
 
-      {/* email and password input */}
       <form
         className="mt-5 flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault()
+          setSubmitAttempted(true)
           handleSubmit()
         }}
       >
@@ -165,7 +176,7 @@ export default function Form() {
           value={values.email}
           onChange={handleChange}
           onBlur={handleBlur}
-          error={touched.email ? errors.email : undefined}
+          error={submitAttempted ? errors.email : undefined}
         />
         <IconInput
           icon="key"
@@ -175,7 +186,7 @@ export default function Form() {
           value={values.password}
           onChange={handleChange}
           onBlur={handleBlur}
-          error={touched.password ? errors.password : undefined}
+          error={submitAttempted ? errors.password : undefined}
         />
         {((loginData && loginData.status === "unsuccessful") ||
           (signupData && signupData.status === "unsuccessful") ||

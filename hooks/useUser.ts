@@ -3,6 +3,12 @@ import { useApi } from "./useApi"
 import { userService } from "@/lib/services/user"
 import { doctorServices } from "@/lib/services/doctor"
 import { TDoctor, TPatient } from "@/types"
+import {
+  fetchAccount,
+  fetchUserProfile,
+  USER_ACCOUNT_QUERY_KEY,
+  USER_PROFILE_QUERY_KEY,
+} from "@/lib/queries/profile"
 
 export function useUser<T = TPatient | TDoctor>(
   role: string | null
@@ -10,25 +16,29 @@ export function useUser<T = TPatient | TDoctor>(
   data?: T
   isLoading: boolean
 } {
-  // Retrieve user information based on their role
+  const isPatient = role === "user"
+  const isAdmin = role === "admin"
+
   const { data, isLoading } = useApi(
-    ["user:info"],
+    isPatient
+      ? USER_PROFILE_QUERY_KEY
+      : isAdmin
+        ? USER_ACCOUNT_QUERY_KEY
+        : ["user:info", { role: role ?? "" }],
     async (_, token) => {
       switch (role) {
-        // User Profile Information
         case "user":
-          return userService.profile(token)
-        // Doctor Profile Information
+          return fetchUserProfile(token)
+        case "admin":
+          return fetchAccount(token)
         case "doctor":
           return doctorServices.getDoctorProfile(token)
-
-        // Default Information as undefined
         default:
           return undefined
       }
     },
     {
-      // Tranform the data to contain keys maintaining camelCasing standard
+      enabled: role === "user" || role === "doctor" || role === "admin",
       select: (data) => firey.convertKeysToCamelCase(data) as T,
     }
   )

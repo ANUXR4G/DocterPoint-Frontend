@@ -94,7 +94,7 @@ export default function Activities() {
       {/* if required details are unavailable to generate suggestions */}
       {Array.isArray(suggestions) && (
         <div className="pt-9">
-          <EmptySuggestions onClick={() => router.push("/patient/info")} />
+          <EmptySuggestions onClick={() => router.push("/patient/profile")} />
         </div>
       )}
       <div className={`mt-3 flex flex-col gap-3`}>

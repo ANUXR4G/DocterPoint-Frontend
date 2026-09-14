@@ -1,5 +1,5 @@
 # use the offifical node.js runtime as the base image
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 # set the working directory inside the container
 WORKDIR /app

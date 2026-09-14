@@ -13,6 +13,12 @@ type Props = {
   error?: string
   className?: string
   inputClassName?: string
+  disabled?: boolean
+  readOnly?: boolean
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"]
+  maxLength?: number
+  autoComplete?: string
+  placeholder?: string
 }
 
 const IconInput = React.memo(function IconInput({
@@ -26,36 +32,59 @@ const IconInput = React.memo(function IconInput({
   value,
   className,
   inputClassName,
+  disabled,
+  readOnly,
+  inputMode,
+  maxLength,
+  autoComplete,
+  placeholder = " ",
 }: Props) {
+  const hasValue = String(value ?? "").length > 0
+  const hasError = Boolean(error)
   return (
     <div
-      className={`flex items-center relative h-16 border border-neutral-400 dark:border-neutral-600 rounded-md px-5 group ${
-        !!error && `outline outline-1 border-red-600 outline-red-600`
-      } ${className && className}`}
+      className={`form-input-shell flex w-full min-w-0 items-center relative min-h-[4.5rem] h-auto px-5 group ${
+        hasError
+          ? "!border-red-500 !shadow-[0_0_0_3px_rgba(239,68,68,0.12)] focus-within:!border-red-500 focus-within:!shadow-[0_0_0_3px_rgba(239,68,68,0.12)]"
+          : ""
+      } ${disabled || readOnly ? "opacity-70" : ""} ${className ?? ""}`}
     >
       {icon && (
-        <div className="mt-1 w-10 after:absolute after:contents[''] after:h-full after:border-r after:opacity-80 after:border-neutral-600 after:top-0 after:left-14">
-          <Icon name={icon} className="size-5 opacity-80" />
+        <div
+          className="flex h-14 shrink-0 items-center justify-center w-10 pr-3 mr-3 border-r self-center text-neutral-600 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600"
+          aria-hidden
+        >
+          <Icon name={icon} className="size-5 opacity-90" />
         </div>
       )}
-      <div className="relative w-full mt-3">
+      <div className="relative h-14 w-full min-w-0 flex-1">
         <input
-          type={type}
+          type={type ?? "text"}
           id={name}
           name={name}
-          className={`peer text-sm h-full block w-full px-4 py-2 border-none rounded-md focus:outline-none ${
-            inputClassName && inputClassName
-          }`}
+          className={`form-input peer block h-14 w-full min-w-0 rounded-md border-none bg-transparent pl-2.5 pr-1 text-base font-semibold leading-[3.5rem] focus:outline-none focus:pt-5 focus:pb-2 focus:leading-normal peer-[:not(:placeholder-shown)]:pt-5 peer-[:not(:placeholder-shown)]:pb-2 peer-[:not(:placeholder-shown)]:leading-normal placeholder:text-transparent dark:placeholder:text-transparent ${
+            hasValue ? "pt-5 pb-2 leading-normal" : ""
+          }${inputClassName ? ` ${inputClassName}` : ""}`}
           spellCheck="false"
-          placeholder=" "
+          placeholder={placeholder}
           value={value}
           onChange={onChange}
           onBlur={onBlur}
-          autoComplete={type === "password" ? "new-password" : "off"}
+          disabled={disabled}
+          readOnly={readOnly}
+          inputMode={inputMode}
+          maxLength={maxLength}
+          autoComplete={
+            autoComplete ?? (type === "password" ? "new-password" : "off")
+          }
         />
         <label
           htmlFor={name}
-          className="hover:cursor-text absolute text-xs text-gray-500 transition-all duration-200 transform left-4 font-medium -top-2 peer-placeholder-shown:top-0.5 peer-placeholder-shown:font-semibold peer-placeholder-shown:text-sm peer-focus:-top-2 peer-focus:text-xs peer-focus:font-medium peer-focus:text-blue-500 dark:peer-focus:text-blue-300"
+          className={`pointer-events-none absolute left-2.5 max-w-[calc(100%-0.75rem)] truncate font-semibold transition-all duration-200 text-neutral-500 dark:text-neutral-400 ${
+            hasValue
+              ? "top-2 translate-y-0 text-xs"
+              : "top-1/2 -translate-y-1/2 text-base font-medium text-neutral-600 dark:text-neutral-300 peer-focus:top-2 peer-focus:translate-y-0 peer-focus:text-xs peer-focus:text-blue-600 dark:peer-focus:text-sky-400"
+          } peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:translate-y-0 peer-[:not(:placeholder-shown)]:text-xs`}
         >
           {label}
         </label>

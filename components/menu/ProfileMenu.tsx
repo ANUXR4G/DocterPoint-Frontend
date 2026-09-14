@@ -5,6 +5,8 @@ import Link from "next/link"
 
 import { Icon, SimpleModal, ThemeSwitch } from "@/components"
 import { useAppContext } from "@/hooks/useAppContext"
+import { useRole } from "@/hooks/useRole"
+import { resolveUploadUrl } from "@/lib/uploads"
 import { TDoctor, TPatient } from "@/types"
 import { userService } from "@/lib/services/user"
 import { useRouter } from "next/navigation"
@@ -23,6 +25,7 @@ export default function ProfileMenu({
   closeModal,
 }: Props) {
   const router = useRouter()
+  const role = useRole()
 
   const { toggleHelp } = useAppContext()
 
@@ -54,7 +57,7 @@ export default function ProfileMenu({
           <Image
             fill
             src={
-              data?.imgSrc ||
+              resolveUploadUrl(data?.imgSrc) ||
               `${`https://res.cloudinary.com/firey/image/upload/v1708816390/iub/${
                 data?.gender
                   ? data.gender === `male`
@@ -63,10 +66,9 @@ export default function ProfileMenu({
                   : `male`
               }_12.jpg`}`
             }
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            sizes="36px"
             alt={`${data?.id}.jpg`}
             style={{ objectFit: "cover" }}
-            priority
             className="rounded-full"
           />
           {/* overlay */}
@@ -87,22 +89,41 @@ export default function ProfileMenu({
 
         {/* route options */}
         <div className="py-1">
-          <Link
-            href={"/patient/profile"}
-            className="w-full group flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60"
-            onClick={closeModal}
-          >
-            <div className="hover:[&_svg]:">
-              <Icon
-                name="human-circle"
-                className="size-5 opacity-80 group-hover:opacity-100"
-                pathClassName="dark:stroke-neutral-500 group-hover:dark:stroke-neutral-400"
-              />
-            </div>
-            <span className="text-sm font-semibold opacity-80 group-hover:opacity-100">
-              Profile
-            </span>
-          </Link>
+          {role === "user" || role === "patient" ? (
+            <Link
+              href={"/patient/profile"}
+              className="w-full group flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60"
+              onClick={closeModal}
+            >
+              <div className="hover:[&_svg]:">
+                <Icon
+                  name="human-circle"
+                  className="size-5 opacity-80 group-hover:opacity-100"
+                  pathClassName="dark:stroke-neutral-500 group-hover:dark:stroke-neutral-400"
+                />
+              </div>
+              <span className="text-sm font-semibold opacity-80 group-hover:opacity-100">
+                Profile
+              </span>
+            </Link>
+          ) : role === "doctor" ? (
+            <Link
+              href={"/settings?tab=practice"}
+              className="w-full group flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60"
+              onClick={closeModal}
+            >
+              <div className="hover:[&_svg]:">
+                <Icon
+                  name="human-circle"
+                  className="size-5 opacity-80 group-hover:opacity-100"
+                  pathClassName="dark:stroke-neutral-500 group-hover:dark:stroke-neutral-400"
+                />
+              </div>
+              <span className="text-sm font-semibold opacity-80 group-hover:opacity-100">
+                Practice
+              </span>
+            </Link>
+          ) : null}
           <Link
             href={"/settings"}
             className="w-full group flex items-center gap-2 py-2 rounded-md px-2.5 hover:bg-zinc-200/70 dark:hover:bg-neutral-700/60"

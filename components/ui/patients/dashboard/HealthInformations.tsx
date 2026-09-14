@@ -164,7 +164,7 @@ export default function HealthInformations({ isLoading, healthRecord }: Props) {
             <div className={`mt-auto ml-auto mr-4 mb-3`}>
               <Button
                 className="text-xs"
-                onClick={() => router.push("/patient/info")}
+                onClick={() => router.push("/patient/monitoring")}
               >
                 Start Monitoring
               </Button>

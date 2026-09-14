@@ -1,18 +1,10 @@
 import React from "react"
-import { Background, Navigation } from "@/components"
 
+/** Legacy route group — pages redirect to /practices. */
 export default function HospitalLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return (
-    <React.Fragment>
-      <Navigation />
-      <Background name="gradient-2" />
-      <div className="ml-auto md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)] p-4 xs:px-4">
-        {children}
-      </div>
-    </React.Fragment>
-  )
+  return children
 }

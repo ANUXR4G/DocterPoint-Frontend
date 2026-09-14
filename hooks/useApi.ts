@@ -31,7 +31,9 @@ export function useApi<
     queryFn: async () => {
       return fetcher(queryKey[1], token)
     },
+    retry: false,
     ...options,
+    enabled: Boolean(token) && (options?.enabled ?? true),
   })
 }
 

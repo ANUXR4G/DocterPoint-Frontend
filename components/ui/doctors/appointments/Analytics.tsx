@@ -1,6 +1,10 @@
 "use client"
 
-import { Button, GenderChart, Icon, ShinnyEfBtn } from "@/components"
+import {
+  AppointmentTrendLineChart,
+  AnalyticsPeriodFilter,
+  PatientGenderBarChart,
+} from "@/components/charts/DoctorCharts"
 import { useAnalytics } from "@/hooks/useAnalysis"
 import { useApi } from "@/hooks/useApi"
 import { useDoctor } from "@/hooks/useDoctor"
@@ -8,7 +12,6 @@ import { useUser } from "@/hooks/useUser"
 import { doctorServices } from "@/lib/services/doctor"
 import { TDoctorAppointment, TypeAnalyticsParam } from "@/types"
 import { format, startOfToday } from "date-fns"
-import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
 export default function Analytics() {
@@ -18,23 +21,15 @@ export default function Analytics() {
   const today = startOfToday()
   const currentCurrentMonth = format(today, "MMMM")
 
-  const router = useRouter()
-
   const { data } = useUser("doctor")
 
-  // Get the analytics metrics
-  const { isLoading } = useAnalytics(type)
-  const { appointmentMetrics } = useAnalytics(type) // This is changable to 'week'
-  const { calculatePercentage, totalAppointments } = useAnalytics("month")
+  const { isLoading, appointmentMetrics } = useAnalytics(type)
+  const { calculatePercentage, totalAppointments } = useAnalytics("year")
 
-  // Retrieve the requested appointments
-  const { data: requests, isLoading: isReqsLoading } =
-    useDoctor<TDoctorAppointment[]>("requested")
+  const { data: requests } = useDoctor<TDoctorAppointment[]>("requested")
 
-  // Get the increase/decrease percentage of visit metrics
   const appointmentAnalysis = calculatePercentage("appointments")
 
-  // Retrieve the appointments count that are scheduled for today
   const { data: totalAppointmentsToday } = useApi(
     [`doctor:${data?.id}:appointments:total`],
     (_, token) => {
@@ -50,17 +45,10 @@ export default function Analytics() {
     }
   )
 
-  // Sort by different format of time periods 'week', 'month'
-  function changePeriod() {
-    if (type === "week") setType("month")
-    else setType("week")
-  }
-
   useEffect(() => {
     setHydrated(true)
   }, [])
 
-  // Display loading skeleton UI
   if (!hydrated && !isLoading)
     return (
       <div
@@ -71,22 +59,16 @@ export default function Analytics() {
       </div>
     )
 
-  // Check if the metrics are empty
-  const isEmpty = appointmentMetrics.every(
-    (item) => item.male === 0 && item.female === 0
-  )
-
   return (
     <div>
-      {/* Appointment Metrics */}
-      <div className="min-h-40 w-full grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+      <div className="min-h-40 w-full grid grid-cols-1 gap-2 xxs:grid-cols-2 md:grid-cols-4 md:gap-3">
         <div className="size-full flex flex-col p-3 md:p-4 2xl:p-4 relative bg-neutral-200 dark:bg-neutral-800 rounded-[26px] shadow-sm border border-neutral-300 dark:border-none dark:gradient-border-black">
           <div className="size-full flex flex-col">
             <h3 className="text-md md:text-lg leading-5 md:leading-[22px] font-semibold md:font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
               Total Consultation
             </h3>
             <p className="ml-0.5 text-xs leading-5">{currentCurrentMonth}</p>
-            <h1 className="mt-auto ml-auto mr-4 font-bold text-5xl">
+            <h1 className="mt-auto ml-auto mr-4 font-bold text-3xl sm:text-5xl">
               {totalAppointments}
             </h1>
           </div>
@@ -98,13 +80,12 @@ export default function Analytics() {
               Total Consultation
             </h3>
             <p className="ml-0.5 text-xs leading-5">today</p>
-            <h1 className="mt-auto ml-auto mr-4 font-bold text-5xl">
+            <h1 className="mt-auto ml-auto mr-4 font-bold text-3xl sm:text-5xl">
               {totalAppointmentsToday || 0}
             </h1>
           </div>
         </div>
 
-        {/* Requested Consultaions */}
         <div className="size-full flex flex-col p-3 md:p-4 2xl:p-4 relative bg-neutral-200 dark:bg-neutral-800 rounded-[26px] shadow-sm border border-neutral-300 dark:border-none dark:gradient-border-black">
           <div className="size-full flex flex-col">
             <h3 className="text-md md:text-lg leading-5 md:leading-[22px] font-semibold md:font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
@@ -113,13 +94,12 @@ export default function Analytics() {
             <p className="ml-0.5 text-xs leading-5">
               Number of appointment requests on queue.
             </p>
-            <h1 className="mt-auto ml-auto mr-4 font-bold text-5xl">
+            <h1 className="mt-auto ml-auto mr-4 font-bold text-3xl sm:text-5xl">
               {requests && requests?.length > 0 ? `${requests.length}+` : 0}
             </h1>
           </div>
         </div>
 
-        {/* Visit Analytics (comparing last months statics) */}
         <div className="size-full flex flex-col p-3 md:p-4 2xl:p-4 relative bg-neutral-200 dark:bg-neutral-800 rounded-[26px] shadow-sm border border-neutral-300 dark:border-none dark:gradient-border-black">
           <div className="size-full flex flex-col">
             <h3 className="text-md md:text-lg leading-5 md:leading-[22px] font-semibold md:font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
@@ -146,10 +126,18 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Appointment Analytics Chart */}
-      <div>{/* Chart styling and code goes here */}</div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <AnalyticsPeriodFilter value={type} onChange={setType} />
+      </div>
 
-      <div />
+      <div className="mt-3 hidden sm:grid grid-cols-1 md:grid-cols-2 gap-3 h-52">
+        <div className="rounded-[26px] border border-neutral-300 dark:border-none dark:gradient-border-black bg-neutral-200 dark:bg-neutral-800 p-3">
+          <AppointmentTrendLineChart data={appointmentMetrics} active={type} />
+        </div>
+        <div className="rounded-[26px] border border-neutral-300 dark:border-none dark:gradient-border-black bg-neutral-200 dark:bg-neutral-800 p-3">
+          <PatientGenderBarChart data={appointmentMetrics} active={type} />
+        </div>
+      </div>
     </div>
   )
 }

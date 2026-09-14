@@ -44,7 +44,7 @@ export default function PopupModal({
       {open && (
         <React.Fragment>
           <div
-            className={`full w-screen fixed inset-0 z-[70] p-2 center prevent-scroll`}
+            className={`full w-full fixed inset-0 z-[70] p-2 center prevent-scroll`}
           >
             {/* modal inner */}
             <motion.div

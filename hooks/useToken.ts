@@ -3,26 +3,51 @@ import { cookies } from "@/utils/cookies"
 import { userService } from "@/lib/services/user"
 import { firey } from "@/utils"
 
-async function refreshAccessToken(token: string) {
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API}/auth/token/refresh`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+/** Shared in-flight refresh so many useToken() callers don't stampede the API. */
+let refreshPromise: Promise<string | null> | null = null
+
+async function refreshAccessToken(token: string): Promise<string | null> {
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API}/auth/token/refresh`,
+        {
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         },
+      )
+
+      // Rate-limited or transient — keep existing session; do not logout.
+      if (response.status === 429 || response.status >= 500) {
+        return cookies.getCookie("access_token") || token
       }
-    )
 
-    if (!response.ok) return null
+      // Auth failure — session is dead.
+      if (response.status === 401 || response.status === 403) {
+        return null
+      }
 
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.error("failed to retrieve refresh access token:", error)
-    return null
-  }
+      if (!response.ok) {
+        return cookies.getCookie("access_token") || token
+      }
+
+      await response.json().catch(() => null)
+      return cookies.getCookie("access_token") || token
+    } catch (error) {
+      console.error("failed to retrieve refresh access token:", error)
+      // Network blip — keep refresh token; caller can retry later.
+      return cookies.getCookie("access_token") || token
+    } finally {
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
 }
 
 function isTokenExpired(token: string) {
@@ -30,45 +55,63 @@ function isTokenExpired(token: string) {
   return firey.getTokenDuration(token) < Date.now() / 1000
 }
 
+function readValidAccessToken() {
+  const accessToken = cookies.getCookie("access_token")
+  if (accessToken && !isTokenExpired(accessToken)) return accessToken
+  return ""
+}
+
 export function useToken() {
-  const [token, setToken] = useState<string>(
-    cookies.getCookie("access_token") || cookies.getCookie("refresh_token")
-  )
+  const [token, setToken] = useState<string>(readValidAccessToken)
 
   useEffect(() => {
+    let cancelled = false
+
     async function fetcher() {
       try {
-        const accessToken = cookies.getCookie("access_token")
-        const accessTokenExpired = isTokenExpired(accessToken)
-
-        // check if the access token is still alive
-        if (!accessTokenExpired) {
-          setToken(accessToken)
+        const accessToken = readValidAccessToken()
+        if (accessToken) {
+          if (!cancelled) setToken(accessToken)
           return
         }
 
-        // check if the refresh token is still alive
         const refreshToken = cookies.getCookie("refresh_token")
-        if (!refreshToken || isTokenExpired(refreshToken)) {
-          await userService.logout()
+        if (!refreshToken) {
+          if (!cancelled) setToken("")
           return
         }
 
-        // verify and get a generate new tokens w the refresh token
+        if (isTokenExpired(refreshToken)) {
+          await userService.logout()
+          if (!cancelled) setToken("")
+          return
+        }
+
         const result = await refreshAccessToken(refreshToken)
 
+        if (cancelled) return
+
         if (result) {
-          setToken(result.access_token)
+          setToken(result)
         } else {
           await userService.logout()
+          setToken("")
         }
       } catch (error) {
         console.error("error fetching token:", error)
-        await userService.logout()
+        // Avoid logout storms on unexpected errors while a refresh cookie exists.
+        if (!cancelled) {
+          const fallback =
+            readValidAccessToken() || cookies.getCookie("refresh_token") || ""
+          setToken(fallback)
+        }
       }
     }
 
     fetcher()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return token

@@ -71,7 +71,7 @@ export default function Tasks({ data }: Props) {
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>,
     id?: string
   ) {
-    let appointmentLink = `/patient/appointments?popup=t&id=${id}`
+    let appointmentLink = `/patient/bookings${id ? `/${id}` : ""}`
     if (typeof window !== "undefined" && id) {
       e.preventDefault()
       if (e.ctrlKey) {
