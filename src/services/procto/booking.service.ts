@@ -18,6 +18,10 @@ import {
 } from "./slotEngine.js";
 import { NotificationService } from "./notification.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
+import {
+  buildDoctorVisitBrief,
+  formatPatientProblemNotes,
+} from "./patientProblemBrief.service.js";
 
 const MAX_BOOKING_DOCUMENTS = 5;
 
@@ -251,6 +255,31 @@ export const BookingService = {
       throw new AppError(404, "no schedule configured for this day.");
     }
 
+    const diseaseText = data.disease?.trim().slice(0, 500) || "";
+    let notesText = data.notes?.trim() || null;
+    let remarksSeed: string | null = null;
+
+    // AI visit brief → notes + seed doctorRemarks so the problem shows in Remarks.
+    if (diseaseText && !notesText) {
+      try {
+        const { brief } = await buildDoctorVisitBrief(diseaseText);
+        if (brief) {
+          notesText = formatPatientProblemNotes(diseaseText, brief);
+          remarksSeed = brief;
+        }
+      } catch (err) {
+        console.warn(
+          "[createBooking] patient problem brief failed (non-fatal):",
+          err instanceof Error ? err.message : err,
+        );
+        notesText = formatPatientProblemNotes(diseaseText, "");
+        remarksSeed = `Patient problem:\n${diseaseText}`;
+      }
+    } else if (diseaseText && !remarksSeed) {
+      // Client supplied notes — still seed remarks from disease if empty.
+      remarksSeed = `Patient problem:\n${diseaseText}`;
+    }
+
     // Serialize capacity check + create to reduce double-booking races
     const booking = await prisma.$transaction(async (tx) => {
       const [overrides, existingBookings] = await Promise.all([
@@ -334,8 +363,9 @@ export const BookingService = {
           tokenNumber,
           sessionDate,
           consultationType: data.consultationType,
-          disease: data.disease?.trim() || null,
-          notes: data.notes,
+          disease: diseaseText || null,
+          notes: notesText,
+          doctorRemarks: remarksSeed,
           ...(documents.length ? { documents } : {}),
         },
         include: { practice: true, location: true },
@@ -712,6 +742,9 @@ export const BookingService = {
       },
       updated.patientId ?? existing.patientId,
     ).catch(() => undefined);
+    void import("../opsSocket.js")
+      .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
+      .catch(() => undefined);
 
     return this.enrichBooking(updated);
   },
@@ -1023,6 +1056,7 @@ export const BookingService = {
               phone: true,
               gender: true,
               address: true,
+              imgSrc: true,
               patient: {
                 select: {
                   profession: true,
@@ -1050,6 +1084,7 @@ export const BookingService = {
               phone: true,
               gender: true,
               address: true,
+              imgSrc: true,
               patient: {
                 select: {
                   profession: true,
@@ -1103,6 +1138,7 @@ export const BookingService = {
               phone: linked.phone ?? linked.patient?.contactNumber ?? null,
               gender: linked.gender,
               address: linked.address,
+              imgSrc: linked.imgSrc,
               profession: linked.patient?.profession ?? null,
               dateOfBirth,
               contactNumber: linked.patient?.contactNumber ?? null,
@@ -1115,6 +1151,7 @@ export const BookingService = {
               phone: b.patientPhone,
               gender: null,
               address: null,
+              imgSrc: null,
               profession: null,
               dateOfBirth: null,
               contactNumber: b.patientPhone,

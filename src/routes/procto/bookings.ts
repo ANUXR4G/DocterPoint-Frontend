@@ -63,7 +63,7 @@ router.post(
       return ResponseHandler.unsuccessful(
         res,
         400,
-        "disease is required to book.",
+        "Please describe the problem / reason for visit.",
       );
     }
     const data = await BookingService.createBooking(body);
