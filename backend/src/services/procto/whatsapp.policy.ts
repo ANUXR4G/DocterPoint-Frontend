@@ -2,8 +2,16 @@
 
 import { L, type WaLang } from "./whatsapp.i18n.js";
 
+/**
+ * Inbound: patient asking for medical advice (not booking / uploading a visit file).
+ * Do NOT match "lab report" / "test result" — those are visit-document intents.
+ */
 const CLINICAL_RE =
-  /\b(diagnos|prescrib|medicine|medication|dosage|symptom|fever|sugar\s*level|insulin|lab\s*report|test\s*result|treatment|therapy|pain\s*in|chest\s*pain|suicide|overdose)\b/i;
+  /\b(diagnos(?:e|is|ed|ing)?|prescrib\w*|medication|dosage|symptom|fever|sugar\s*level|insulin|treatment for|therapy for|pain\s*in|chest\s*pain|suicide|overdose|what medicine|which medicine)\b/i;
+
+/** Outbound: only block replies that look like giving medical advice. */
+const CLINICAL_ADVICE_OUT_RE =
+  /\b(diagnos(?:e|is|ed|ing)?|prescrib\w*|you should take|take \d+\s*mg|dosage of|insulin dose|treatment for your|therapy for your)\b/i;
 
 const HANDOFF_RE =
   /\b(talk to (a )?(human|person|doctor|receptionist|someone)|human please|agent|real person|call me|इंसान|डॉक्टर से बात|स्टाफ)\b/i;
@@ -16,17 +24,27 @@ export function wantsHuman(text: string): boolean {
   return HANDOFF_RE.test(text);
 }
 
+/** True for structured bot menus (welcome / help) — never replace these. */
+function looksLikeBotMenu(reply: string): boolean {
+  return (
+    /\*(REGISTER|BOOK|DOCTORS|STATUS|FAQ|RESCHEDULE|CANCEL|REPORT|MY DOCS)\*/i.test(
+      reply,
+    ) || /\bWelcome to\b|\bमें आपका स्वागत है\b/i.test(reply)
+  );
+}
+
 /** Strip / block medical-advice style outbound content. */
 export function guardOutbound(reply: string, lang?: WaLang): string {
-  if (!looksClinical(reply)) return reply;
+  if (looksLikeBotMenu(reply)) return reply;
+  if (!CLINICAL_ADVICE_OUT_RE.test(reply)) return reply;
   return L(
     lang,
     "I can only help with *appointments* (book, reschedule, cancel) and clinic info like fees or timings.\n" +
       "For medical questions, please speak with the doctor during your visit.\n" +
-      "Reply *BOOK*, *STATUS*, or *DOCTORS* to continue.",
+      "Reply *BOOK*, *STATUS*, *REGISTER*, or *DOCTORS* to continue.",
     "मैं सिर्फ *अपॉइंटमेंट* (बुक, रीशेड्यूल, रद्द) और क्लिनिक जानकारी (फीस, समय) में मदद कर सकता/सकती हूँ।\n" +
       "मेडिकल सवालों के लिए अपनी विज़िट पर डॉक्टर से बात करें।\n" +
-      "जारी रखने के लिए *BOOK*, *STATUS*, या *DOCTORS* लिखें।",
+      "जारी रखने के लिए *BOOK*, *STATUS*, *REGISTER*, या *DOCTORS* लिखें।",
   );
 }
 

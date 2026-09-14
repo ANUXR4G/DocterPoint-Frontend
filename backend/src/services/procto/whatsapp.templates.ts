@@ -70,7 +70,7 @@ export const BotPrompts = {
           `• *DOCTORS* — list doctors at this clinic\n` +
           `• *BOOK* an appointment\n` +
           `• *STATUS* — view upcoming visits\n` +
-          `• *REPORT* — send a lab report / photo for your visit\n` +
+          `• *REPORT* — send a visit file / photo\n` +
           `• *MY DOCS* — list files already attached\n` +
           `• *CANCEL* a booking\n` +
           `• *RESCHEDULE* to a new time\n` +
@@ -84,7 +84,7 @@ export const BotPrompts = {
           `• *DOCTORS* — क्लिनिक के डॉक्टर देखें\n` +
           `• *BOOK* — अपॉइंटमेंट बुक करें\n` +
           `• *STATUS* — आने वाली विज़िट देखें\n` +
-          `• *REPORT* — विज़िट के लिए रिपोर्ट/फ़ोटो भेजें\n` +
+          `• *REPORT* — विज़िट के लिए फ़ाइल/फ़ोटो भेजें\n` +
           `• *MY DOCS* — जुड़े हुए फ़ाइल देखें\n` +
           `• *CANCEL* — बुकिंग रद्द करें\n` +
           `• *RESCHEDULE* — समय बदलें\n` +
