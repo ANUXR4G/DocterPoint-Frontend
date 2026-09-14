@@ -109,7 +109,7 @@ export default function PatientPhoneOtpLogin() {
             <p className="text-sm font-medium text-rose-600">{error}</p>
           ) : null}
           <Button
-            type="button"
+            typeBtn="button"
             disabled={busy || phone.replace(/\D/g, "").length < 10}
             onClick={() => void requestOtp()}
           >
@@ -138,7 +138,7 @@ export default function PatientPhoneOtpLogin() {
             <p className="text-sm font-medium text-rose-600">{error}</p>
           ) : null}
           <Button
-            type="button"
+            typeBtn="button"
             disabled={busy || code.replace(/\D/g, "").length < 6}
             onClick={() => void verifyOtp()}
           >
