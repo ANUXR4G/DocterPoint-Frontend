@@ -1,19 +1,23 @@
-# use the offifical python runtime as the base image
-FROM python:3.12-slim-bookworm
+FROM node:22-bookworm-slim
 
-# set the working directory inside the container
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /code
 
-# copy and set the required dependecies file to working directory
-COPY ./requirements.txt ./
+COPY package.json package-lock.json* ./
+RUN npm install
 
-# copy the rest of the application to working directory 
+COPY prisma ./prisma
+RUN npx prisma generate
+
 COPY . .
 
-# install the dependencies
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
-
+# Prefer tsx at runtime so a tsc emit issue cannot leave the service dead
+ENV NODE_ENV=production
 EXPOSE 3001
 
-# run the development command
-CMD ["python", "main.py"]
+RUN chmod +x /code/scripts/railway-start.sh
+
+CMD ["/code/scripts/railway-start.sh"]
