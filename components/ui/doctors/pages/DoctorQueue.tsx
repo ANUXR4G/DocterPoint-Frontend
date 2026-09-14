@@ -17,6 +17,7 @@ import {
 } from "@/lib/bookingStatus"
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
+import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 
 type Membership = {
   practice: {
@@ -52,6 +53,7 @@ type QueueBooking = ProctoBooking & {
     phone: string | null
     gender: string | null
     address: string | null
+    imgSrc?: string | null
     profession: string | null
     dateOfBirth: string | null
     contactNumber: string | null
@@ -407,14 +409,22 @@ export default function DoctorQueue({
                 className="flex flex-col gap-2 bg-white px-3 py-3 dark:bg-neutral-900/40"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-neutral-900 dark:text-white">
-                      {name}
-                    </p>
-                    <p className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
-                      {when}
-                      {b.provider?.name ? ` · ${b.provider.name}` : ""}
-                    </p>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <PatientAvatar
+                      name={name}
+                      imgSrc={p?.imgSrc}
+                      size="md"
+                      className="mt-0.5"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-neutral-900 dark:text-white">
+                        {name}
+                      </p>
+                      <p className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
+                        {when}
+                        {b.provider?.name ? ` · ${b.provider.name}` : ""}
+                      </p>
+                    </div>
                   </div>
                   <span
                     className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${bookingStatusClass(b.status)}`}
@@ -517,7 +527,14 @@ export default function DoctorQueue({
                       </Link>
                     </td>
                     <td className="px-3 py-3 align-middle">
-                      <p className="font-medium">{name}</p>
+                      <div className="flex items-center gap-2.5">
+                        <PatientAvatar
+                          name={name}
+                          imgSrc={p?.imgSrc}
+                          size="sm"
+                        />
+                        <p className="font-medium">{name}</p>
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 align-middle">
                       {phone}

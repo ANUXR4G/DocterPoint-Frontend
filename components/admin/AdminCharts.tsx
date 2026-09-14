@@ -15,6 +15,8 @@ import {
 import { Bar, Doughnut, Line } from "react-chartjs-2"
 import type { AdminAnalytics } from "@/lib/services/admin"
 import { formatInr } from "@/components/admin/AdminMetricCard"
+import { useAppContext } from "@/hooks/useAppContext"
+import { getThemeColor } from "@/lib/themeColors"
 
 ChartJS.register(
   CategoryScale,
@@ -46,6 +48,11 @@ type Props = {
   analytics: AdminAnalytics
 }
 
+function useAccent() {
+  const { themeColor } = useAppContext()
+  return getThemeColor(themeColor).primary
+}
+
 function withSeriesFilter<T extends { label: string }>(
   datasets: T[],
   visible?: Set<string> | null,
@@ -56,6 +63,7 @@ function withSeriesFilter<T extends { label: string }>(
 }
 
 export function RevenueTrendChart({ analytics }: Props) {
+  const accent = useAccent()
   return (
     <Line
       data={{
@@ -64,12 +72,12 @@ export function RevenueTrendChart({ analytics }: Props) {
           {
             label: "New subscription revenue",
             data: analytics.monthlyTrend.map((m) => m.revenue),
-            borderColor: "#2563eb",
-            backgroundColor: "rgba(37, 99, 235, 0.12)",
+            borderColor: accent,
+            backgroundColor: `${accent}1f`,
             fill: true,
             tension: 0.35,
             pointRadius: 4,
-            pointBackgroundColor: "#2563eb",
+            pointBackgroundColor: accent,
           },
         ],
       }}
@@ -100,6 +108,7 @@ export function RevenueTrendChart({ analytics }: Props) {
 }
 
 export function MonthComparisonChart({ analytics }: Props) {
+  const accent = useAccent()
   const { comparison } = analytics
   return (
     <Bar
@@ -109,7 +118,7 @@ export function MonthComparisonChart({ analytics }: Props) {
           {
             label: "This month",
             data: [comparison.revenue.thisMonth, comparison.bookings.thisMonth],
-            backgroundColor: "#2563eb",
+            backgroundColor: accent,
             borderRadius: 8,
           },
           {
@@ -279,6 +288,7 @@ export function GrowthLineChart({
   analytics,
   visibleSeries,
 }: Props & { visibleSeries?: Set<string> }) {
+  const accent = useAccent()
   return (
     <Line
       data={{
@@ -294,7 +304,7 @@ export function GrowthLineChart({
             {
               label: "New subscriptions",
               data: analytics.monthlyTrend.map((m) => m.newSubscriptions),
-              borderColor: "#2563eb",
+              borderColor: accent,
               tension: 0.35,
             },
           ],

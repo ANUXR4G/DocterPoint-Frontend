@@ -56,7 +56,12 @@ export async function openRazorpaySubscriptionCheckout(
       subscription_id: checkout.subscriptionId,
       name: "GlucoGuide",
       description: `${checkout.planName} · ₹${checkout.amountInr.toLocaleString("en-IN")}/mo`,
-      theme: { color: "#0099ff" },
+      theme: {
+        color:
+          getComputedStyle(document.documentElement)
+            .getPropertyValue("--theme-primary")
+            .trim() || "#b794f6",
+      },
       prefill: options?.prefill,
       handler: async (response: RazorpayPaymentResponse) => {
         try {

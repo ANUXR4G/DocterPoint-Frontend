@@ -69,18 +69,39 @@ function whatsappMeHref(raw: string): string | null {
 }
 
 export default function PracticeDetailPage() {
-  const { slug } = useParams<{ slug: string }>()
+  const params = useParams<{ slug: string | string[] }>()
+  const slugParam = params?.slug
+  const slug = decodeURIComponent(
+    String(Array.isArray(slugParam) ? slugParam[0] : slugParam ?? ""),
+  ).trim()
   const [practice, setPractice] = useState<Practice | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    if (!slug) return
+    if (!slug) {
+      setLoading(false)
+      setPractice(null)
+      setError("Practice not found.")
+      return
+    }
+    let cancelled = false
     setLoading(true)
+    setError("")
     proctoService.getPractice(slug).then((res) => {
-      if (res.status === "successful") setPractice(res.data as Practice)
-      else setPractice(null)
+      if (cancelled) return
+      if (res.status === "successful" && res.data) {
+        setPractice(res.data as Practice)
+        setError("")
+      } else {
+        setPractice(null)
+        setError(res.message || "Practice not found.")
+      }
       setLoading(false)
     })
+    return () => {
+      cancelled = true
+    }
   }, [slug])
 
   const clinicDoctors = practice ? getPracticeProviders(practice.members) : []
@@ -157,7 +178,9 @@ export default function PracticeDetailPage() {
         )}
 
         {!loading && !practice && (
-          <p className="mt-6 text-sm text-slate-500">Practice not found.</p>
+          <p className="mt-6 text-sm text-slate-500">
+            {error || "Practice not found."}
+          </p>
         )}
 
         {practice && (
@@ -266,8 +289,7 @@ export default function PracticeDetailPage() {
               <h2 className="dashboard-section-title text-lg">Reviews</h2>
               {practice.reviewsEnabled === false ? (
                 <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                  Reviews are available on Growth and Clinic plans for this
-                  practice.
+                  Reviews are not enabled for this practice yet.
                 </p>
               ) : (
                 <>

@@ -286,30 +286,31 @@ html.dark body {
     background-color: #1e293b;
   }
   .gg-auth .form-input-shell:focus-within {
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    border-color: var(--theme-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary) 22%, transparent);
   }
 
   .gg-auth button.gg-btn,
   .gg-auth .gg-btn,
   .gg-auth button[type="submit"].gg-btn {
-    background: #2563eb !important;
-    color: #ffffff !important;
+    background: var(--theme-primary) !important;
+    color: var(--theme-primary-foreground) !important;
     border: none !important;
     border-radius: 9999px !important;
-    box-shadow: 0 8px 24px -8px rgba(37, 99, 235, 0.45) !important;
+    box-shadow: 0 8px 24px -8px
+      color-mix(in srgb, var(--theme-primary) 45%, transparent) !important;
   }
   .gg-auth button.gg-btn:hover:not(:disabled),
   .gg-auth .gg-btn:hover:not(:disabled) {
-    background: #1d4ed8 !important;
+    background: var(--theme-primary-hover) !important;
     transform: translateY(-1px);
   }
 
   .gg-auth .gg-link {
-    color: #2563eb;
+    color: var(--theme-primary);
   }
   .dark .gg-auth .gg-link {
-    color: #38bdf8;
+    color: var(--theme-primary);
   }
 
   /* Public shell — SOLUNE light + dark */
@@ -424,9 +425,10 @@ html.dark body {
   }
 
   .gg-public .form-input-shell:focus-within {
-    border-color: #0099ff;
+    border-color: var(--theme-primary);
     outline: none;
-    box-shadow: 0 0 0 2px rgba(0, 153, 255, 0.25);
+    box-shadow: 0 0 0 2px
+      color-mix(in srgb, var(--theme-primary) 28%, transparent);
   }
 
   .gg-public .form-input-shell .form-input,
@@ -449,7 +451,7 @@ html.dark body {
   }
 
   .gg-public .form-input-shell input:focus ~ label {
-    color: #0099ff !important;
+    color: var(--theme-primary) !important;
   }
 
   .gg-public .form-input-shell [class*="border-r"] {
@@ -483,24 +485,38 @@ html.dark body {
 
   /* ── Dashboard page system (equal heights + aligned columns) ── */
   .dashboard-app {
-    --solune-canvas: #f0f9ff;
+    --solune-purple: var(--theme-primary);
+    --solune-canvas: color-mix(in srgb, var(--theme-primary) 8%, #ffffff);
     --solune-surface: #ffffff;
-    --solune-surface-muted: #f8fafc;
+    --solune-surface-muted: color-mix(in srgb, var(--theme-primary) 4%, #f8fafc);
     --solune-elevated: #ffffff;
     --solune-border: rgba(148, 163, 184, 0.28);
     --solune-border-strong: rgba(148, 163, 184, 0.4);
-    --solune-shadow-soft: 0 16px 48px -20px rgba(37, 99, 235, 0.14);
-    --solune-shadow-card: 0 4px 24px -8px rgba(37, 99, 235, 0.08);
+    --solune-shadow-soft: 0 16px 48px -20px
+      color-mix(in srgb, var(--theme-primary) 18%, transparent);
+    --solune-shadow-card: 0 4px 24px -8px
+      color-mix(in srgb, var(--theme-primary) 10%, transparent);
     --solune-ink: #0f172a;
     --solune-muted: #475569;
     --solune-soft: #334155;
-    --solune-nav-active: #e0f2fe;
-    --solune-purple-soft: #dbeafe;
-    --solune-gradient: linear-gradient(135deg, #2563eb 0%, #3b82f6 55%, #38bdf8 100%);
-    background: linear-gradient(165deg, #f0f9ff 0%, #ffffff 42%, #e0f2fe 100%);
+    --solune-nav-active: color-mix(in srgb, var(--theme-primary) 16%, #ffffff);
+    --solune-purple-soft: color-mix(in srgb, var(--theme-primary) 14%, #ffffff);
+    --solune-gradient: linear-gradient(
+      135deg,
+      var(--theme-primary) 0%,
+      var(--theme-primary-hover) 55%,
+      color-mix(in srgb, var(--theme-primary) 65%, white) 100%
+    );
+    background: linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--theme-primary) 10%, #ffffff) 0%,
+      #ffffff 42%,
+      color-mix(in srgb, var(--theme-primary) 14%, #ffffff) 100%
+    );
   }
 
   .dark .dashboard-app {
+    --solune-purple: var(--theme-primary);
     --solune-canvas: #0f172a;
     --solune-surface: #1e293b;
     --solune-surface-muted: #334155;
@@ -512,12 +528,17 @@ html.dark body {
     --solune-ink: #f1f5f9;
     --solune-muted: #94a3b8;
     --solune-soft: #cbd5e1;
-    --solune-nav-active: rgba(59, 130, 246, 0.18);
-    --solune-purple-soft: rgba(59, 130, 246, 0.16);
+    --solune-nav-active: color-mix(in srgb, var(--theme-primary) 22%, transparent);
+    --solune-purple-soft: color-mix(in srgb, var(--theme-primary) 18%, transparent);
     --solune-green-soft: rgba(52, 211, 153, 0.14);
     --solune-coral-soft: rgba(248, 113, 113, 0.14);
     --solune-amber-soft: rgba(251, 191, 36, 0.14);
-    --solune-gradient: linear-gradient(135deg, #2563eb 0%, #3b82f6 55%, #38bdf8 100%);
+    --solune-gradient: linear-gradient(
+      135deg,
+      var(--theme-primary) 0%,
+      var(--theme-primary-hover) 55%,
+      color-mix(in srgb, var(--theme-primary) 70%, white) 100%
+    );
     --color-ink: #f1f5f9;
     --dashboard-text: #f1f5f9;
     --dashboard-muted: #94a3b8;
@@ -531,7 +552,7 @@ html.dark body {
   .dashboard-app-canvas {
     background-image: radial-gradient(
       circle at 1px 1px,
-      rgba(37, 99, 235, 0.06) 1px,
+      color-mix(in srgb, var(--theme-primary) 8%, transparent) 1px,
       transparent 0
     );
     background-size: 22px 22px;
@@ -832,11 +853,14 @@ html.dark body {
   }
 
   /* SOLUNE stat accent chips */
-  .solune-stat-purple { background: var(--solune-purple-soft); color: #6b5ce7; }
+  .solune-stat-purple { background: var(--solune-purple-soft); color: var(--theme-primary); }
   .solune-stat-green { background: var(--solune-green-soft); color: #3d9a72; }
   .solune-stat-coral { background: var(--solune-coral-soft); color: #e06b6b; }
   .solune-stat-amber { background: var(--solune-amber-soft); color: #c49a12; }
-  .dark .solune-stat-purple { background: rgba(155, 138, 251, 0.15); color: #c4b5fd; }
+  .dark .solune-stat-purple {
+    background: color-mix(in srgb, var(--theme-primary) 18%, transparent);
+    color: var(--theme-primary);
+  }
   .dark .solune-stat-green { background: rgba(123, 196, 163, 0.15); color: #86efac; }
   .dark .solune-stat-coral { background: rgba(240, 138, 138, 0.15); color: #fca5a5; }
   .dark .solune-stat-amber { background: rgba(242, 201, 76, 0.15); color: #fde047; }
@@ -862,8 +886,8 @@ html.dark body {
   }
   .gg-chip-active:hover {
     border-color: transparent;
-    background-color: #0099ff;
-    color: #ffffff;
+    background-color: var(--theme-primary);
+    color: var(--theme-primary-foreground);
   }
 
   /* Shared Button + form controls inside public shell */
@@ -871,25 +895,27 @@ html.dark body {
   .gg-public button[class*="bg-blue-"],
   .gg-public .gg-card button[type="submit"],
   .gg-public .gg-card button.gg-btn {
-    background-color: #171717 !important;
-    color: #ffffff !important;
+    background-color: var(--theme-primary) !important;
+    color: var(--theme-primary-foreground) !important;
     border-color: transparent !important;
     border-radius: 9999px !important;
-    box-shadow: none !important;
+    box-shadow: 0 8px 24px -8px
+      color-mix(in srgb, var(--theme-primary) 40%, transparent) !important;
   }
 
   .dark .gg-public button.bg-blue-600,
   .dark .gg-public button[class*="bg-blue-"],
   .dark .gg-public .gg-card button[type="submit"],
   .dark .gg-public .gg-card button.gg-btn {
-    background-color: #ffffff !important;
-    color: #000000 !important;
+    background-color: var(--theme-primary) !important;
+    color: var(--theme-primary-foreground) !important;
   }
 
   .gg-public button.bg-blue-600:hover:not(:disabled),
   .gg-public button[class*="bg-blue-"]:hover:not(:disabled),
   .gg-public .gg-card button[type="submit"]:hover:not(:disabled),
   .gg-public .gg-card button.gg-btn:hover:not(:disabled) {
+    background-color: var(--theme-primary-hover) !important;
     transform: scale(0.98);
   }
 
@@ -921,12 +947,73 @@ html.dark body {
   .gg-public .gg-card button.gg-link {
     background: transparent !important;
     box-shadow: none !important;
-    color: #0099ff !important;
+    color: var(--theme-primary) !important;
   }
 
   .form-input-shell {
-    @apply bg-white border border-neutral-300 rounded-md
+    @apply bg-white border border-neutral-300 rounded-xl
       dark:bg-gg-shadow dark:border-gg-border;
+    box-sizing: border-box;
+  }
+
+  /* Nested control inside shell — shell owns border/size; input stays flush */
+  .form-input-shell .form-input {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  .form-input-shell:focus-within {
+    border-color: var(--theme-primary);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--theme-primary) 18%, transparent);
+  }
+
+  /* Dashboard forms: consistent control height + grid alignment */
+  .dashboard-app .form-input-shell {
+    height: 3.5rem;
+    min-height: 3.5rem;
+    max-height: 3.5rem;
+    border-radius: 0.75rem;
+  }
+
+  .dashboard-app input.form-input:not(.peer),
+  .dashboard-app select.form-input,
+  .dashboard-app textarea.form-input {
+    box-sizing: border-box;
+    min-height: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.75rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    line-height: 1.25;
+  }
+
+  .dashboard-app textarea.form-input {
+    height: auto;
+    min-height: 6rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .dashboard-app .form-input-shell input[type="number"],
+  .dashboard-app input.form-input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .dashboard-app .form-input-shell input[type="number"]::-webkit-outer-spin-button,
+  .dashboard-app .form-input-shell input[type="number"]::-webkit-inner-spin-button,
+  .dashboard-app input.form-input[type="number"]::-webkit-outer-spin-button,
+  .dashboard-app input.form-input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .dashboard-app form .grid .form-input-shell {
+    width: 100%;
+    align-self: start;
   }
 
   .form-input[type="date"],
@@ -1399,15 +1486,24 @@ html.dark body {
   }
 }
 
-/* Remap common blue accents → selected theme colour (shadcn-style) */
+/* Remap common blue / sky / indigo accents → selected theme colour */
+.bg-blue-400,
 .bg-blue-500,
 .bg-blue-600,
+.bg-blue-700,
+.bg-sky-400,
+.bg-sky-500,
+.bg-indigo-500,
+.bg-indigo-600,
 .bg-\[\#0099ff\],
 .hover\:bg-blue-600:hover,
 .hover\:bg-blue-700:hover,
+.hover\:bg-\[\#0099ff\]:hover,
 .hover\:bg-\[\#0088e6\]:hover,
+.dark\:hover\:bg-\[\#0099ff\]:hover,
 .dark .dark\:bg-blue-600,
-.dark .dark\:bg-blue-700 {
+.dark .dark\:bg-blue-700,
+.dark .dark\:bg-sky-500 {
   background-color: var(--theme-primary) !important;
 }
 
@@ -1415,19 +1511,65 @@ html.dark body {
   background-color: color-mix(in srgb, var(--theme-primary) 90%, transparent) !important;
 }
 
+.bg-\[\#0099ff\]\/5,
+.bg-\[\#0099ff\]\/10,
+.bg-blue-50,
+.bg-sky-50,
+.bg-sky-50\/95 {
+  background-color: color-mix(in srgb, var(--theme-primary) 10%, #ffffff) !important;
+}
+
+.bg-sky-100,
+.bg-blue-100 {
+  background-color: color-mix(in srgb, var(--theme-primary) 16%, #ffffff) !important;
+}
+
+.dark .dark\:bg-blue-500 {
+  background-color: var(--theme-primary) !important;
+}
+
+.dark .dark\:bg-blue-500\/10,
+.dark .dark\:bg-blue-500\/15,
+.dark .dark\:bg-\[\#0099ff\]\/10 {
+  background-color: color-mix(in srgb, var(--theme-primary) 15%, transparent) !important;
+}
+
 .text-blue-500,
 .text-blue-600,
 .text-blue-700,
-.text-\[\#0099ff\] {
+.text-blue-800,
+.text-sky-400,
+.text-sky-500,
+.text-sky-600,
+.text-sky-700,
+.text-indigo-500,
+.text-indigo-600,
+.text-\[\#0099ff\],
+.hover\:text-blue-600:hover,
+.hover\:text-blue-700:hover,
+.dark .dark\:text-sky-400,
+.dark .dark\:text-sky-300,
+.dark .dark\:text-blue-400 {
   color: var(--theme-primary) !important;
 }
 
+.border-blue-300,
+.border-blue-400,
 .border-blue-500,
 .border-blue-600,
+.border-\[\#0099ff\],
+.border-2.border-\[\#0099ff\],
 .outline-indigo-600,
-.outline-blue-600 {
+.outline-blue-600,
+.focus\:border-blue-400:focus,
+.focus\:border-\[var\(--theme-primary\)\]:focus {
   border-color: var(--theme-primary) !important;
   outline-color: var(--theme-primary) !important;
+}
+
+.border-\[\#0099ff\]\/40,
+.border-blue-200 {
+  border-color: color-mix(in srgb, var(--theme-primary) 40%, transparent) !important;
 }
 
 .from-blue-500,
@@ -1443,7 +1585,9 @@ html.dark body {
 .to-cyan-500,
 .to-indigo-500,
 .to-indigo-600,
-.to-indigo-900 {
+.to-indigo-900,
+.to-blue-500,
+.to-blue-600 {
   --tw-gradient-to: var(--theme-primary-hover) var(--tw-gradient-to-position) !important;
 }
 
@@ -1451,46 +1595,22 @@ html.dark body {
 .ring-blue-600,
 .ring-\[\#0099ff\],
 .focus\:ring-blue-500:focus,
+.focus\:ring-\[\#0099ff\]:focus,
 .focus-visible\:ring-blue-500:focus-visible,
 .focus-visible\:ring-\[\#0099ff\]:focus-visible {
   --tw-ring-color: var(--theme-primary) !important;
 }
 
-/* Dashboard + marketing home: lock healthcare blue (ignore user theme accent remap) */
-.dashboard-app .bg-blue-500,
-.dashboard-app .bg-blue-600,
-.dashboard-app .hover\:bg-blue-600:hover,
-.dashboard-app .hover\:bg-blue-700:hover,
-.dashboard-app .dark .dark\:bg-blue-600,
-.dashboard-app .dark .dark\:bg-blue-700 {
-  background-color: #2563eb !important;
+.focus\:ring-blue-100:focus {
+  --tw-ring-color: color-mix(in srgb, var(--theme-primary) 18%, transparent) !important;
 }
-.dashboard-app .hover\:bg-blue-700:hover {
-  background-color: #1d4ed8 !important;
+
+.shadow-blue-600\/25 {
+  --tw-shadow-color: color-mix(in srgb, var(--theme-primary) 25%, transparent) !important;
 }
-.dashboard-app .bg-blue-600\/90 {
-  background-color: rgb(37 99 235 / 0.9) !important;
-}
-.dashboard-app .text-blue-500,
-.dashboard-app .text-blue-600,
-.dashboard-app .text-blue-700,
-.dashboard-app .hover\:text-blue-600:hover {
-  color: #2563eb !important;
-}
-.dashboard-app .dark .dark\:text-sky-400 {
-  color: #38bdf8 !important;
-}
-.dashboard-app .border-blue-500,
-.dashboard-app .border-blue-600,
-.dashboard-app .focus\:border-blue-400:focus {
-  border-color: #2563eb !important;
-}
-.dashboard-app .focus\:ring-blue-100:focus,
-.dashboard-app .focus\:ring-blue-500:focus {
-  --tw-ring-color: rgb(219 234 254) !important;
-}
-.dashboard-app .shadow-blue-600\/25 {
-  --tw-shadow-color: rgb(37 99 235 / 0.25) !important;
+
+.shadow-\[0_0_0_1px_\#0099ff\] {
+  box-shadow: 0 0 0 1px var(--theme-primary) !important;
 }
 
 /* ── Light mode: stronger text contrast on pale surfaces ── */

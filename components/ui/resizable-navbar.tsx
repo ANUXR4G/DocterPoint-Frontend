@@ -11,7 +11,7 @@ import {
 import Link from "next/link"
 import React, { useRef, useState } from "react"
 
-/** SOLUNE design tokens (public chrome) */
+/** SOLUNE design tokens (public chrome) — accent follows user theme */
 const F = {
   canvas: "#f7f4f0",
   surface1: "#ffffff",
@@ -19,7 +19,7 @@ const F = {
   hairline: "rgba(45, 42, 38, 0.08)",
   ink: "#2d2a26",
   inkMuted: "#8a8580",
-  accent: "#b794f6",
+  accent: "var(--theme-primary)",
   onPrimary: "#ffffff",
 } as const
 
@@ -294,7 +294,7 @@ export const NavbarButton = ({
       "border border-[var(--solune-border-strong)] bg-[var(--solune-surface)] text-[var(--solune-ink)] dark:border-white/12 dark:bg-[#242220] dark:text-white",
     dark: "bg-[var(--solune-ink)] text-white",
     gradient:
-      "bg-gradient-to-br from-[#ff9a76] via-[#f7a8c4] to-[#b794f6] text-white shadow-[0_8px_24px_-8px_rgba(183,148,246,0.55)]",
+      "bg-[var(--theme-primary)] text-[var(--theme-primary-foreground)] shadow-[0_8px_24px_-8px_color-mix(in_srgb,var(--theme-primary)_55%,transparent)] hover:bg-[var(--theme-primary-hover)]",
   }
 
   if (href) {

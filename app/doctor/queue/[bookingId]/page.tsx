@@ -20,6 +20,7 @@ import {
 } from "@/lib/bookingStatus"
 import { useProctoSocket } from "@/hooks/useProctoSocket"
 import { patchBookingFields } from "@/lib/liveBooking"
+import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 
 type Medicine = { name: string; amount?: string; times?: string[] }
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
@@ -160,41 +161,70 @@ export default function VisitPage() {
     )
   }
 
-  function addMedicine() {
-    if (!medName.trim()) return
-    setMedicines((prev) => [
-      ...prev,
+  async function persistVisit(
+    nextMedicines: Medicine[],
+    nextDocuments: VisitDoc[] = documents,
+    opts?: { status?: string; successMessage?: string },
+  ) {
+    if (!bookingId || booking?.status === "COMPLETED") return false
+    setError("")
+    const res = await proctoService.updateBookingVisit(bookingId, {
+      doctorRemarks: remarks,
+      medicines: nextMedicines,
+      documents: nextDocuments,
+      ...(opts?.status ? { status: opts.status } : {}),
+    })
+    if (res.status !== "successful") {
+      setError(res.message || "Could not save visit.")
+      await load()
+      return false
+    }
+    setBooking(res.data as VisitBooking)
+    if (Array.isArray((res.data as VisitBooking).medicines)) {
+      setMedicines((res.data as VisitBooking).medicines || [])
+    }
+    if (Array.isArray((res.data as VisitBooking).documents)) {
+      setDocuments((res.data as VisitBooking).documents || [])
+    }
+    if (opts?.successMessage) setMessage(opts.successMessage)
+    return true
+  }
+
+  async function addMedicine() {
+    if (!medName.trim() || !bookingId) return
+    if (booking?.status === "COMPLETED") return
+    const next = [
+      ...medicines,
       {
         name: medName.trim(),
         amount: medAmount.trim() || "1",
         times: [...medTimes],
       },
-    ])
+    ]
+    setMedicines(next)
     setMedName("")
     setMedAmount("1")
     setMedTimes(["morning"])
+    setMessage("")
+    await persistVisit(next, documents, { successMessage: "Medicine saved." })
   }
 
-  function removeMedicine(idx: number) {
-    setMedicines((prev) => prev.filter((_, i) => i !== idx))
+  async function removeMedicine(idx: number) {
+    if (!bookingId || booking?.status === "COMPLETED") return
+    const next = medicines.filter((_, i) => i !== idx)
+    setMedicines(next)
+    setMessage("")
+    await persistVisit(next, documents, { successMessage: "Medicine removed." })
   }
 
   async function removeDocument(idx: number) {
     if (!bookingId || booking?.status === "COMPLETED") return
     const nextDocs = documents.filter((_, i) => i !== idx)
     setDocuments(nextDocs)
-    setError("")
-    const res = await proctoService.updateBookingVisit(bookingId, {
-      doctorRemarks: remarks,
-      medicines,
-      documents: nextDocs,
+    setMessage("")
+    await persistVisit(medicines, nextDocs, {
+      successMessage: "Document removed.",
     })
-    if (res.status !== "successful") {
-      setError(res.message || "Could not remove document.")
-      await load()
-      return
-    }
-    setBooking(res.data as VisitBooking)
   }
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -360,12 +390,21 @@ export default function VisitPage() {
       {/* Patient summary — one panel, no hidden sidebar scroll */}
       <section className="dashboard-panel !p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide opacity-50">
-              Patient
-            </p>
-            <h1 className="mt-1 text-2xl font-bold leading-tight">{patientName}</h1>
-            <p className="mt-1 text-sm opacity-70">{phone}</p>
+          <div className="flex min-w-0 items-start gap-4">
+            <PatientAvatar
+              name={patientName}
+              imgSrc={p?.imgSrc}
+              size="lg"
+            />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-50">
+                Patient
+              </p>
+              <h1 className="mt-1 text-2xl font-bold leading-tight">
+                {patientName}
+              </h1>
+              <p className="mt-1 text-sm opacity-70">{phone}</p>
+            </div>
           </div>
           <p className="text-sm font-medium opacity-80">
             {appointmentDate} · {slotLabel}
@@ -373,15 +412,17 @@ export default function VisitPage() {
         </div>
         <dl className="mt-4 grid gap-3 border-t border-neutral-200 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-3 dark:border-neutral-700">
           <Fact label="Doctor" value={dash(booking.provider?.name)} />
-          <Fact label="Disease / type" value={diseaseLabel} />
+          <Fact label="Problem (patient)" value={diseaseLabel} />
           <Fact label="Gender" value={dash(p?.gender)} />
           <Fact label="Age" value={ageFromDob(p?.dateOfBirth)} />
           <Fact label="Email" value={dash(p?.email)} />
           <Fact label="Channel" value={booking.channel?.replace(/_/g, " ") ?? "—"} />
           {booking.notes ? (
             <div className="sm:col-span-2 lg:col-span-3">
-              <dt className="text-xs opacity-50">Patient notes</dt>
-              <dd className="mt-0.5">{booking.notes}</dd>
+              <dt className="text-xs opacity-50">Patient problem &amp; AI brief</dt>
+              <dd className="mt-0.5 whitespace-pre-wrap leading-relaxed">
+                {booking.notes}
+              </dd>
             </div>
           ) : null}
         </dl>
@@ -392,6 +433,10 @@ export default function VisitPage() {
         <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
           Remarks
         </h2>
+        <p className="mt-1 text-xs opacity-60">
+          Prefills from the patient&apos;s problem with an AI visit brief. Edit
+          freely before finishing the visit.
+        </p>
         <textarea
           value={remarks}
           onChange={(e) => setRemarks(e.target.value)}
@@ -418,7 +463,7 @@ export default function VisitPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
-                    addMedicine()
+                    void addMedicine()
                   }
                 }}
                 placeholder="Medicine name"
@@ -433,7 +478,7 @@ export default function VisitPage() {
                 />
                 <button
                   type="button"
-                  onClick={addMedicine}
+                  onClick={() => void addMedicine()}
                   className="flex-1 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white"
                 >
                   Add
@@ -479,7 +524,7 @@ export default function VisitPage() {
                   {!isCompleted ? (
                     <button
                       type="button"
-                      onClick={() => removeMedicine(idx)}
+                      onClick={() => void removeMedicine(idx)}
                       className="shrink-0 text-xs font-medium text-red-600 hover:underline"
                     >
                       Remove
@@ -544,15 +589,20 @@ export default function VisitPage() {
               {documents.map((d, idx) => (
                 <li
                   key={`${d.url}-${idx}`}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 px-3 py-2 dark:border-neutral-700"
+                  className="flex items-center gap-2 rounded-xl border border-neutral-200 px-3 py-2 dark:border-neutral-700"
                 >
                   <a
                     href={d.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="truncate text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                   >
-                    {d.name}
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-blue-600 dark:bg-blue-500/15 dark:text-sky-400">
+                      <Icon name="written-page" className="size-4" />
+                    </span>
+                    <span className="truncate text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400">
+                      {d.name || "View document"}
+                    </span>
                   </a>
                   {!isCompleted ? (
                     <button

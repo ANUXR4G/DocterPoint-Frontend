@@ -14,10 +14,16 @@ function jsonError(status: number, message: string) {
 
 async function proxyToBackend(
   request: NextRequest,
-  pathSegments: string[],
+  pathSegments: string[] | undefined,
 ) {
-  const path = pathSegments.join("/")
-  const target = `${BACKEND_URL}/api/v1/${path}${request.nextUrl.search}`
+  const segments = Array.isArray(pathSegments) ? pathSegments : []
+  if (segments.length === 0) {
+    return jsonError(404, "API path not found.")
+  }
+  const safePath = segments
+    .map((s) => encodeURIComponent(decodeURIComponent(s)))
+    .join("/")
+  const target = `${BACKEND_URL}/api/v1/${safePath}${request.nextUrl.search}`
 
   const headers = new Headers()
   const authorization = request.headers.get("authorization")
@@ -44,7 +50,10 @@ async function proxyToBackend(
     })
   } catch (error) {
     console.error("[api proxy] backend unreachable:", target, error)
-    return jsonError(502, "Backend unavailable. Is the API running? Try: cd backend && yarn dev (default PORT=3002 in backend/.env when 3001 is in use).")
+    return jsonError(
+      502,
+      "Backend unavailable. Is the API running? Try: cd backend && yarn dev (default PORT=3001).",
+    )
   }
 
   const responseHeaders = new Headers()

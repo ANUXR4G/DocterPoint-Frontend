@@ -33,4 +33,9 @@ export function applyThemeColor(id: ThemeColor, root: HTMLElement = document.doc
   root.style.setProperty("--color-clinical-cyan", color.primary)
   root.style.setProperty("--color-cyan-soft", color.primary)
   root.style.setProperty("--dashboard-accent", color.primary)
+  root.style.setProperty("--solune-purple", color.primary)
+  root.style.setProperty(
+    "--solune-purple-soft",
+    `color-mix(in srgb, ${color.primary} 14%, #ffffff)`,
+  )
 }

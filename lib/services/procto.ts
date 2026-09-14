@@ -484,6 +484,7 @@ export type ProctoBooking = {
     dateOfBirth: string | null;
     contactNumber: string | null;
     emergencyNumber: string | null;
+    imgSrc?: string | null;
   } | null;
   doctorRemarks?: string | null;
   medicines?: Array<{ name: string; amount?: string; times?: string[] }> | null;

@@ -221,6 +221,20 @@ export default function Dashboard() {
             <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
               {formatWhen(nextVisit)}
             </p>
+            {Array.isArray(nextVisit.medicines) &&
+            nextVisit.medicines.length > 0 ? (
+              <p className="mt-1 truncate text-xs font-medium text-teal-700 dark:text-teal-300">
+                Medicines:{" "}
+                {nextVisit.medicines
+                  .map((m) => m.name)
+                  .filter(Boolean)
+                  .slice(0, 3)
+                  .join(", ")}
+                {nextVisit.medicines.length > 3
+                  ? ` +${nextVisit.medicines.length - 3}`
+                  : ""}
+              </p>
+            ) : null}
           </div>
           <span
             className={`inline-flex h-8 shrink-0 items-center rounded-full px-3 text-xs font-bold uppercase ${statusTone(nextVisit.status)}`}
