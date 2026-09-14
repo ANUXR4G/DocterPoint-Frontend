@@ -1549,6 +1549,15 @@ html:not(.dark) textarea::placeholder {
   opacity: 1;
 }
 
+/* Floating-label shells use a blank placeholder — never show it over the label */
+html:not(.dark) .form-input-shell input::placeholder,
+html:not(.dark) .form-input-shell textarea::placeholder,
+html.dark .form-input-shell input::placeholder,
+html.dark .form-input-shell textarea::placeholder {
+  color: transparent !important;
+  opacity: 0 !important;
+}
+
 html:not(.dark) .gg-public,
 html:not(.dark) .gg-auth {
   color: var(--solune-ink);
@@ -1626,6 +1635,12 @@ html.dark input::placeholder,
 html.dark textarea::placeholder {
   color: #78716c !important;
   opacity: 1;
+}
+
+html.dark .form-input-shell input::placeholder,
+html.dark .form-input-shell textarea::placeholder {
+  color: transparent !important;
+  opacity: 0 !important;
 }
 
 html.dark .form-input,
