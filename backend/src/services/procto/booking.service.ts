@@ -1024,7 +1024,27 @@ export const BookingService = {
     const bookings = await prisma.practiceBooking.findMany({
       where,
       orderBy: [{ slotStart: "asc" }, { tokenNumber: "asc" }],
-      include: {
+      select: {
+        id: true,
+        practiceId: true,
+        locationId: true,
+        providerId: true,
+        patientId: true,
+        patientPhone: true,
+        patientName: true,
+        mode: true,
+        status: true,
+        channel: true,
+        slotStart: true,
+        slotEnd: true,
+        tokenNumber: true,
+        sessionDate: true,
+        consultationType: true,
+        disease: true,
+        notes: true,
+        doctorRemarks: true,
+        createdAt: true,
+        updatedAt: true,
         location: {
           select: { id: true, name: true, address: true, city: true },
         },

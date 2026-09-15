@@ -159,7 +159,6 @@ export const proctoService = {
       const now = Date.now();
       if (cached && now - cached.at < TTL_MS) return cached.promise;
       const promise = proctoFetch("/procto/practices/mine").then((res) => {
-        // Don't cache auth failures
         if (res?.status !== "successful") {
           cached = null;
         }
@@ -169,6 +168,25 @@ export const proctoService = {
       return promise;
     };
   })(),
+
+  /**
+   * Single call: memberships + bookings (date / from-to). Prefer for queue &
+   * appointments to avoid mine→bookings waterfall.
+   */
+  getPracticeBootstrap: (opts?: {
+    date?: string;
+    from?: string;
+    to?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.date) params.set("date", opts.date);
+    if (opts?.from) params.set("from", opts.from);
+    if (opts?.to) params.set("to", opts.to);
+    const qs = params.toString();
+    return proctoFetch(
+      `/procto/practices/mine/bootstrap${qs ? `?${qs}` : ""}`,
+    );
+  },
 
   /**
    * `/procto/practices/mine` rows are memberships. Prefer practiceId / nested

@@ -18,6 +18,15 @@ import {
 } from "./slotEngine.js";
 import { last10Digits, normalizeGender } from "../../core/gender.js";
 
+const MEMBER_CACHE_TTL_MS = 60_000;
+const memberCache = new Map<
+  string,
+  { expires: number; member: { id: string; role: PracticeMemberRole; isActive: boolean; practiceId: string; userId: string } }
+>();
+
+const MINE_CACHE_TTL_MS = 30_000;
+const mineCache = new Map<string, { expires: number; data: unknown }>();
+
 function emptyGenderCounts() {
   return { male: 0, female: 0, others: 0, unknown: 0 };
 }
@@ -589,10 +598,25 @@ export const PracticeService = {
   },
 
   async assertMember(practiceId: string, userId: string) {
+    const key = `${practiceId}:${userId}`;
+    const cached = memberCache.get(key);
+    if (cached && cached.expires > Date.now()) {
+      return cached.member;
+    }
     const member = await prisma.practiceMember.findUnique({
       where: { practiceId_userId: { practiceId, userId } },
     });
     if (!member?.isActive) ResponseHandler.noPermission("not a member of this practice.");
+    memberCache.set(key, {
+      member: member!,
+      expires: Date.now() + MEMBER_CACHE_TTL_MS,
+    });
+    if (memberCache.size > 1000) {
+      const now = Date.now();
+      for (const [k, v] of memberCache) {
+        if (v.expires <= now) memberCache.delete(k);
+      }
+    }
     return member!;
   },
 
@@ -1377,6 +1401,22 @@ export const PracticeService = {
   },
 
   async getForUser(userId: string) {
+    const cached = mineCache.get(userId);
+    if (cached && cached.expires > Date.now()) {
+      return cached.data;
+    }
+    const data = await this.getForUserUncached(userId);
+    mineCache.set(userId, { data, expires: Date.now() + MINE_CACHE_TTL_MS });
+    if (mineCache.size > 200) {
+      const now = Date.now();
+      for (const [k, v] of mineCache) {
+        if (v.expires <= now) mineCache.delete(k);
+      }
+    }
+    return data;
+  },
+
+  async getForUserUncached(userId: string) {
     const rows = await prisma.practiceMember.findMany({
       where: { userId, isActive: true },
       include: {
@@ -1397,11 +1437,24 @@ export const PracticeService = {
             isActive: true,
             createdAt: true,
             updatedAt: true,
-            // Omit faqKb / webhook secrets — large and unused on dashboard loads
-            locations: { where: { isActive: true } },
+            locations: {
+              where: { isActive: true },
+              select: {
+                id: true,
+                name: true,
+                city: true,
+                address: true,
+                isActive: true,
+              },
+            },
             members: {
               where: { isActive: true },
-              include: {
+              select: {
+                id: true,
+                role: true,
+                userId: true,
+                doctorId: true,
+                isActive: true,
                 user: {
                   select: {
                     id: true,
@@ -1424,15 +1477,36 @@ export const PracticeService = {
       },
     });
 
-    // Normalize shape: top-level `id` is the practice UUID (what booking/billing
-    // routes expect). Membership PK is exposed as `membershipId` so clients
-    // never pass the wrong id into /bookings/practice/:practiceId.
     return rows.map((row) => ({
       ...row,
       membershipId: row.id,
       id: row.practiceId,
       practiceId: row.practiceId,
     }));
+  },
+
+  /** One round-trip for doctor queue/dashboard: memberships + today's bookings. */
+  async getDashboardBootstrap(
+    userId: string,
+    opts?: { date?: string; from?: string; to?: string },
+  ) {
+    const memberships = (await this.getForUser(userId)) as Array<{
+      practiceId?: string;
+      practice?: { id?: string };
+    }>;
+    const first = memberships[0];
+    const practiceId = first?.practiceId || first?.practice?.id;
+    if (!practiceId) {
+      return { memberships, bookings: [] as unknown[] };
+    }
+    await this.assertMember(practiceId, userId);
+    const { BookingService } = await import("./booking.service.js");
+    const bookings = await BookingService.listForPractice(practiceId, {
+      date: opts?.date,
+      from: opts?.from,
+      to: opts?.to,
+    });
+    return { memberships, practiceId, bookings };
   },
 
   /**

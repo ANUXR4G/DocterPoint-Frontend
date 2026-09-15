@@ -43,6 +43,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Accept before visit | After `SCHEDULED`/`REQUESTED`, doctor/clinic sets **`ACCEPTED`**, then Waiting → Started → Finished | Request must be accepted from web dashboard or doctor mobile |
 | Doctor analytics | Live Procto booking series only — no sample/demo chart fallbacks | Empty period shows “No data”; Clinic plan required for charts |
 | Live queue | Native `ws` `/api/v1/ws/procto/:practiceId` (JWT + practice membership) | Doctor/clinic queue + calendar without polling |
+| Dashboard load | `GET /procto/practices/mine/bootstrap` + JWT claims auth (no DB) | Avoid mine→bookings waterfall; re-login refreshes enriched JWT |
 | Patient visits live | Native `ws` `/api/v1/ws/patient` (JWT) | Patient web + Expo visit status |
 | Admin ops live | Native `ws` `/api/v1/ws/admin/ops` (platform admin JWT) | Replaces 20–30s support polling |
 | Mira AI | **HTTP only** (`POST /assistant/chat`) | No WebSocket for Mira FAB/chat/LLM |

@@ -45,6 +45,31 @@ router.get(
   },
 );
 
+/** Memberships + bookings in one response (cuts dashboard waterfall). */
+router.get(
+  "/mine/bootstrap",
+  requireAuth("practice:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await PracticeService.getDashboardBootstrap(
+        req.sessionUser!.id,
+        {
+          date: req.query.date as string | undefined,
+          from: req.query.from as string | undefined,
+          to: req.query.to as string | undefined,
+        },
+      );
+      return ResponseHandler.fetchSuccessful(
+        res,
+        "practice dashboard fetched.",
+        data,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.post(
   "/onboard",
   requireAuth("practice:write"),

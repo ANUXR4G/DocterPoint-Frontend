@@ -37,23 +37,17 @@ export default function Appointments() {
     let cancelled = false
     async function load() {
       setLoading(true)
-      const mine = await proctoService.getMyPractices()
-      if (cancelled) return
-      const practiceId = mine?.data?.[0]?.practice?.id as string | undefined
-      if (!practiceId) {
-        setRows([])
-        setLoading(false)
-        return
-      }
       const to = new Date()
       const from = new Date()
       from.setDate(from.getDate() - 14)
-      const res = await proctoService.listPracticeBookings(practiceId, {
+      const boot = await proctoService.getPracticeBootstrap({
         from: format(from, "yyyy-MM-dd"),
         to: format(to, "yyyy-MM-dd"),
       })
       if (cancelled) return
-      setRows((res?.data ?? []) as ProctoBooking[])
+      setRows(
+        (Array.isArray(boot?.data?.bookings) ? boot.data.bookings : []) as ProctoBooking[],
+      )
       setLoading(false)
     }
     void load()

@@ -93,6 +93,11 @@ export function base64ToUuid(base64Str: string): string {
 export interface TokenPayload {
   sub: string;
   scopes: string[];
+  /** Present on tokens issued after perf JWT enrichment — enables DB-free auth. */
+  role?: string;
+  email?: string;
+  name?: string | null;
+  imgSrc?: string | null;
   iat?: number;
   exp?: number;
 }
@@ -128,7 +133,14 @@ export function getUserToken(
   redirectUrl?: string,
 ): { responseBody: Record<string, unknown>; cookies: TokenCookies; redirect?: string } {
   const tokenScopes = scopes[user.role] ?? [];
-  const payload: TokenPayload = { sub: user.id, scopes: tokenScopes };
+  const payload: TokenPayload = {
+    sub: user.id,
+    scopes: tokenScopes,
+    role: user.role,
+    email: user.email,
+    name: user.name ?? null,
+    imgSrc: user.imgSrc ?? null,
+  };
 
   const accessTokenExpires = new Date(
     Date.now() +

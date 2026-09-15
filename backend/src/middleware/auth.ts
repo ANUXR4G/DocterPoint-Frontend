@@ -29,7 +29,7 @@ async function resolveDoctorProfile(userId: string, email: string) {
 }
 
 /** Short-lived session cache to avoid a Supabase round-trip on every API call. */
-const SESSION_CACHE_TTL_MS = 45_000;
+const SESSION_CACHE_TTL_MS = 120_000;
 const sessionCache = new Map<string, { expires: number; user: SessionUser }>();
 
 function rememberSession(key: string, user: SessionUser) {
@@ -37,13 +37,30 @@ function rememberSession(key: string, user: SessionUser) {
     user,
     expires: Date.now() + SESSION_CACHE_TTL_MS,
   });
-  // Opportunistic prune when the map grows
   if (sessionCache.size > 500) {
     const now = Date.now();
     for (const [k, v] of sessionCache) {
       if (v.expires <= now) sessionCache.delete(k);
     }
   }
+}
+
+/** Build a minimal session from enriched JWT claims (no DB). */
+function sessionFromJwtClaims(payload: {
+  sub?: string;
+  role?: string;
+  email?: string;
+  name?: string | null;
+  imgSrc?: string | null;
+}): SessionUser | null {
+  if (!payload.sub || !payload.role || !payload.email) return null;
+  return {
+    id: payload.sub,
+    email: payload.email,
+    role: payload.role,
+    name: payload.name ?? null,
+    imgSrc: payload.imgSrc ?? null,
+  };
 }
 
 declare global {
@@ -147,12 +164,19 @@ export function requireAuth(...requiredScopes: string[]) {
         ResponseHandler.noPermission("user doesn't have enough permission.");
       }
 
-      // Short TTL cache — pages often waterfall 2–3 auth'd calls; each used to
-      // cost a full Supabase round-trip (~1s+ on Railway).
       const cacheKey = `${userId}:${token!.slice(-16)}`;
       const cached = sessionCache.get(cacheKey);
       if (cached && cached.expires > Date.now()) {
         req.sessionUser = cached.user;
+        next();
+        return;
+      }
+
+      // Fast path: enriched JWT (role+email) — skip Supabase entirely.
+      const fromJwt = sessionFromJwtClaims(payload);
+      if (fromJwt) {
+        req.sessionUser = fromJwt;
+        rememberSession(cacheKey, fromJwt);
         next();
         return;
       }
@@ -197,7 +221,6 @@ export function requireAuth(...requiredScopes: string[]) {
           authenticatedUser.patient!,
         );
       } else if (authenticatedUser.role === "doctor") {
-        // Prefer join from the same query — avoid a second doctor round-trip.
         const doctorProfile =
           authenticatedUser.doctor ??
           (await resolveDoctorProfile(
@@ -243,6 +266,14 @@ export function attachSessionIfPresent() {
         next();
         return;
       }
+
+      const fromJwt = sessionFromJwtClaims(payload);
+      if (fromJwt) {
+        req.sessionUser = fromJwt;
+        next();
+        return;
+      }
+
       const user = await prisma.user.findUnique({
         where: { id: payload.sub },
         select: {
