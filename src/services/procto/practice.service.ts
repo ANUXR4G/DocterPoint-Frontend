@@ -805,9 +805,22 @@ export const PracticeService = {
   async listPatients(practiceId: string, actorUserId: string) {
     await this.assertMember(practiceId, actorUserId);
 
+    // Cap history — full-table scans + fat JSON columns were making this slow
+    // on Railway ↔ Supabase even for small clinics.
+    const since = new Date();
+    since.setDate(since.getDate() - 365);
+
     const bookings = await prisma.practiceBooking.findMany({
-      where: { practiceId },
+      where: {
+        practiceId,
+        OR: [
+          { createdAt: { gte: since } },
+          { slotStart: { gte: since } },
+          { sessionDate: { gte: since } },
+        ],
+      },
       orderBy: { createdAt: "desc" },
+      take: 1500,
       select: {
         id: true,
         patientPhone: true,
@@ -878,7 +891,14 @@ export const PracticeService = {
         bookings.map((b) => b.patientId).filter((id): id is string => !!id),
       ),
     ];
-    const phones = [...new Set(bookings.map((b) => b.patientPhone))];
+    const phones = [
+      ...new Set(
+        [...byPhone.values()]
+          .filter((row) => !row.patientId)
+          .map((row) => row.phone)
+          .filter(Boolean),
+      ),
+    ];
 
     const [providers, patientsById, usersByPhone] = await Promise.all([
       providerIds.length
@@ -1361,7 +1381,23 @@ export const PracticeService = {
       where: { userId, isActive: true },
       include: {
         practice: {
-          include: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            type: true,
+            specialty: true,
+            consultationFee: true,
+            registrationNo: true,
+            phone: true,
+            email: true,
+            whatsappBusinessNumber: true,
+            isDirectoryListed: true,
+            bgSrc: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+            // Omit faqKb / webhook secrets — large and unused on dashboard loads
             locations: { where: { isActive: true } },
             members: {
               where: { isActive: true },
