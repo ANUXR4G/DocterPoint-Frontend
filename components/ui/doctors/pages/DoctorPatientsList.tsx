@@ -104,6 +104,7 @@ export default function DoctorPatientsList() {
       setLoading(true)
       setError("")
     }
+    // Parallel: cached mine + patients (patients needs practice id from mine)
     const mine = await proctoService.getMyPractices()
     if (
       mine.status !== "successful" ||

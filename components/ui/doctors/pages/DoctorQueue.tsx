@@ -154,29 +154,18 @@ export default function DoctorQueue({
     async (opts?: { silent?: boolean }) => {
       if (!opts?.silent) setLoading(true)
       setError("")
-      const mine = await proctoService.getMyPractices()
-      if (
-        mine.status !== "successful" ||
-        !Array.isArray(mine.data) ||
-        !mine.data.length
-      ) {
+      const boot = await proctoService.getPracticeBootstrap({ date })
+      if (boot.status !== "successful" || !boot.data) {
         setMemberships([])
         setBookings([])
         if (!opts?.silent) setLoading(false)
-        if (mine.status !== "successful") {
-          setError(mine.message || "Could not load practice")
-        }
+        setError(boot.message || "Could not load practice")
         return
       }
-      setMemberships(mine.data as Membership[])
-      const pid = (mine.data as Membership[])[0]?.practice.id
-      if (!pid) {
-        if (!opts?.silent) setLoading(false)
-        return
-      }
-      const list = await proctoService.listPracticeBookings(pid, date)
-      if (list.status === "successful" && Array.isArray(list.data)) {
-        setBookings(list.data as QueueBooking[])
+      const membershipsData = (boot.data.memberships ?? []) as Membership[]
+      setMemberships(membershipsData)
+      if (Array.isArray(boot.data.bookings)) {
+        setBookings(boot.data.bookings as QueueBooking[])
       } else if (!opts?.silent) {
         setBookings([])
       }

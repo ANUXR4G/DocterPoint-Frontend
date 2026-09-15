@@ -39,17 +39,33 @@ export default function DoctorAppointmentsList({
       setLoading(true)
       setLoadError("")
     }
-    const mine = await proctoService.getMyPractices()
-    const practice = mine?.data?.[0]?.practice as
-      | { id: string; name: string }
-      | undefined
+    const today = new Date()
+    const boot = await proctoService.getPracticeBootstrap({
+      from: format(subDays(today, 90), "yyyy-MM-dd"),
+      to: format(addDays(today, 90), "yyyy-MM-dd"),
+    })
 
-    if (mine.status !== "successful" || !practice?.id) {
+    if (boot.status !== "successful" || !boot.data) {
       setRows([])
       setPracticeId(null)
       setPracticeName("")
       if (!opts?.silent) {
-        setLoadError(mine.message || "Could not load your practice.")
+        setLoadError(boot.message || "Could not load your practice.")
+        setLoading(false)
+      }
+      return
+    }
+
+    const memberships = (boot.data.memberships ?? []) as Array<{
+      practice?: { id: string; name: string }
+    }>
+    const practice = memberships[0]?.practice
+    if (!practice?.id) {
+      setRows([])
+      setPracticeId(null)
+      setPracticeName("")
+      if (!opts?.silent) {
+        setLoadError("Could not load your practice.")
         setLoading(false)
       }
       return
@@ -58,23 +74,8 @@ export default function DoctorAppointmentsList({
     setPracticeId(practice.id)
     setPracticeName(practice.name)
 
-    const today = new Date()
-    const res = await proctoService.listPracticeBookings(practice.id, {
-      from: format(subDays(today, 90), "yyyy-MM-dd"),
-      to: format(addDays(today, 90), "yyyy-MM-dd"),
-    })
-
-    if (res.status !== "successful") {
-      if (!opts?.silent) {
-        setRows([])
-        setLoadError(res.message || "Could not load appointments.")
-        setLoading(false)
-      }
-      return
-    }
-
     const list = sortBookingsByWhen(
-      (res.data ?? []) as ProctoBooking[],
+      (Array.isArray(boot.data.bookings) ? boot.data.bookings : []) as ProctoBooking[],
       "asc",
     )
     setRows(list)
