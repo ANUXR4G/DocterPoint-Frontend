@@ -6,8 +6,6 @@ import { addDays, format, subDays } from "date-fns"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
-  bookingStatusClass,
-  bookingStatusLabel,
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
@@ -216,11 +214,6 @@ export default function DoctorAppointmentsList({
                       {b.patientPhone || b.patient_phone || ""}
                     </p>
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${bookingStatusClass(b.status || "")}`}
-                  >
-                    {bookingStatusLabel(b.status || "")}
-                  </span>
                 </div>
                 <p className="mt-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                   {formatBookingWhenDetailed(b)}
@@ -233,7 +226,7 @@ export default function DoctorAppointmentsList({
                     status={b.status || "SCHEDULED"}
                     busy={busyId === b.id}
                     compact
-                    ariaLabel={`Status for ${b.patientName || "patient"}`}
+                    ariaLabel={`Update status for ${b.patientName || "patient"}`}
                     onChange={(status) => void onStatus(b.id, status)}
                   />
                 </div>
@@ -253,7 +246,6 @@ export default function DoctorAppointmentsList({
                 <tr>
                   <th className="px-4 py-3">Patient</th>
                   <th className="px-4 py-3">When</th>
-                  <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Reason</th>
                   <th className="px-4 py-3">Update status</th>
                   <th className="px-4 py-3 text-right">Visit</th>
@@ -271,13 +263,6 @@ export default function DoctorAppointmentsList({
                     <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
                       {formatBookingWhenDetailed(b)}
                     </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${bookingStatusClass(b.status || "")}`}
-                      >
-                        {bookingStatusLabel(b.status || "")}
-                      </span>
-                    </td>
                     <td className="max-w-[14rem] truncate px-4 py-3 text-xs">
                       {b.disease || b.consultationType || "—"}
                     </td>
@@ -286,7 +271,7 @@ export default function DoctorAppointmentsList({
                         status={b.status || "SCHEDULED"}
                         busy={busyId === b.id}
                         compact
-                        ariaLabel={`Status for ${b.patientName || "patient"}`}
+                        ariaLabel={`Update status for ${b.patientName || "patient"}`}
                         onChange={(status) => void onStatus(b.id, status)}
                       />
                     </td>
