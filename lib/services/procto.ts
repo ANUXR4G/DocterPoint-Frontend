@@ -152,7 +152,23 @@ export const proctoService = {
       body: JSON.stringify(body),
     }),
 
-  getMyPractices: () => proctoFetch("/procto/practices/mine"),
+  getMyPractices: (() => {
+    let cached: { at: number; promise: Promise<any> } | null = null;
+    const TTL_MS = 30_000;
+    return () => {
+      const now = Date.now();
+      if (cached && now - cached.at < TTL_MS) return cached.promise;
+      const promise = proctoFetch("/procto/practices/mine").then((res) => {
+        // Don't cache auth failures
+        if (res?.status !== "successful") {
+          cached = null;
+        }
+        return res;
+      });
+      cached = { at: now, promise };
+      return promise;
+    };
+  })(),
 
   /**
    * `/procto/practices/mine` rows are memberships. Prefer practiceId / nested
