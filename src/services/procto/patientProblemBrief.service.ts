@@ -1,4 +1,5 @@
 import { llmAvailable, llmChatProviders } from "../../lib/llm.js";
+import { cleanAssistantReply } from "../assistant.service.js";
 
 const SYSTEM = `You help clinic doctors prepare for outpatient visits in India (GlucoGuide).
 
@@ -17,9 +18,15 @@ Rules:
 - Max ~120 words. English. No emojis. Not for the patient.`;
 
 function cleanBrief(raw: string): string {
-  let text = String(raw ?? "")
-    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
-    .replace(/<\/?think\b[^>]*>/gi, "")
+  // Reuse Mira cleaner (strips Qwen <think> / planning leakage), then trim.
+  let text = cleanAssistantReply(raw);
+  if (!text) {
+    text = String(raw ?? "")
+      .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
+      .replace(/<\/?think\b[^>]*>/gi, "")
+      .trim();
+  }
+  text = text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/\n{3,}/g, "\n\n")
@@ -49,6 +56,12 @@ function fallbackBrief(patientText: string): string {
   ].join("\n");
 }
 
+function isCreditOrQuotaError(message: string): boolean {
+  return /credit|quota|billing|insufficient|payment|rate limit|depleted/i.test(
+    message,
+  );
+}
+
 /**
  * Turn patient booking problem text into a doctor-facing visit brief.
  * Never throws — falls back to a structured copy of the patient text.
@@ -61,13 +74,28 @@ export async function buildDoctorVisitBrief(
     return { brief: "", source: "fallback" };
   }
   if (!llmAvailable()) {
+    console.warn(
+      "[patientProblemBrief] no LLM keys (OPENAI_API_KEY / HF_TOKEN / DEEPSEEK_API_KEY)",
+    );
     return { brief: fallbackBrief(raw), source: "fallback" };
   }
 
-  const providers = llmChatProviders();
+  // Prefer HF/DeepSeek first when OpenAI is out of credits (common locally).
+  // OpenAI stays as a fallback if other providers miss.
+  const providers = llmChatProviders().slice().sort((a, b) => {
+    const rank = (p: { label: string }) =>
+      /openai/i.test(p.label) ? 2 : /huggingface/i.test(p.label) ? 0 : 1;
+    return rank(a) - rank(b);
+  });
+  console.info(
+    `[patientProblemBrief] trying providers: ${providers.map((p) => p.label).join(", ") || "(none)"}`,
+  );
+
   for (const provider of providers) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12_000);
+    // OpenAI credit failures are fast; keep HF cold-starts under ~20s.
+    const timeoutMs = /openai/i.test(provider.label) ? 10_000 : 20_000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const isHuggingFace = /huggingface/i.test(provider.label);
       const res = await fetch(provider.url, {
@@ -88,7 +116,7 @@ export async function buildDoctorVisitBrief(
               content: `Patient's problem / reason for visit:\n"""${raw}"""\n\n/no_think`,
             },
           ],
-          max_tokens: 280,
+          max_tokens: 320,
           ...(isHuggingFace
             ? { chat_template_kwargs: { enable_thinking: false } }
             : {}),
@@ -96,14 +124,38 @@ export async function buildDoctorVisitBrief(
       });
 
       const data = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{
+          message?: { content?: string; reasoning?: string };
+        }>;
+        error?: { message?: string } | string;
       };
-      if (!res.ok) continue;
+      if (!res.ok) {
+        const errMsg =
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.message || `${res.status}`;
+        console.warn(
+          `[patientProblemBrief] ${provider.label} HTTP ${res.status}: ${errMsg}`,
+        );
+        if (/openai/i.test(provider.label) && isCreditOrQuotaError(errMsg)) {
+          console.warn(
+            "[patientProblemBrief] OpenAI out of credits — falling through to next provider",
+          );
+        }
+        continue;
+      }
 
-      const brief = cleanBrief(data.choices?.[0]?.message?.content ?? "");
-      if (brief.length >= 40) {
+      const message = data.choices?.[0]?.message;
+      const brief = cleanBrief(message?.content || message?.reasoning || "");
+      if (brief.length >= 24) {
+        console.info(
+          `[patientProblemBrief] ok via ${provider.label} (${brief.length} chars)`,
+        );
         return { brief, source: "llm" };
       }
+      console.warn(
+        `[patientProblemBrief] ${provider.label} returned empty/short brief (${brief.length})`,
+      );
     } catch (err) {
       console.warn(
         `[patientProblemBrief] ${provider.label}:`,
@@ -114,6 +166,9 @@ export async function buildDoctorVisitBrief(
     }
   }
 
+  console.warn(
+    "[patientProblemBrief] all providers failed — using structured fallback",
+  );
   return { brief: fallbackBrief(raw), source: "fallback" };
 }
 
