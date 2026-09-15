@@ -1037,7 +1037,15 @@ export const BookingService = {
         bookings.map((b) => b.patientId).filter((id): id is string => !!id),
       ),
     ];
-    const phones = [...new Set(bookings.map((b) => b.patientPhone))];
+    // Only resolve by phone when booking has no patientId (guest / legacy).
+    const phones = [
+      ...new Set(
+        bookings
+          .filter((b) => !b.patientId)
+          .map((b) => b.patientPhone)
+          .filter(Boolean),
+      ),
+    ];
 
     const [providers, patientsById, usersByPhone] = await Promise.all([
       providerIds.length
