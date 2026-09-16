@@ -3,6 +3,7 @@ import { format, startOfToday } from "date-fns"
 import { months } from "@/lib/dummy/calender"
 import { AnalyticMetrics, TypeAnalytics, TypeAnalyticsParam } from "@/types"
 import { proctoService } from "@/lib/services/procto"
+import { usePracticeDashboardOptional } from "@/contexts/PracticeDashboardContext"
 import { useApi } from "./useApi"
 
 export function genderSum(g?: {
@@ -55,10 +56,14 @@ export function useAnalytics(
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [planLocked, setPlanLocked] = useState(false)
 
+  const dash = usePracticeDashboardOptional()
+  const practiceFromShell = dash?.practiceId ?? null
+
   const { data: mine, isLoading: mineLoading } = useApi(
     ["procto:practices:mine:analytics"],
     () => proctoService.getMyPractices(),
     {
+      enabled: !practiceFromShell,
       select: (res) => {
         if (res?.status !== "successful" || !Array.isArray(res.data)) {
           return null
@@ -72,6 +77,11 @@ export function useAnalytics(
   )
 
   useEffect(() => {
+    if (practiceFromShell) {
+      setPracticeId(practiceFromShell)
+      setPracticeName(dash?.practiceName ?? "")
+      return
+    }
     if (!mine) {
       setPracticeId(null)
       setPracticeName("")
@@ -79,7 +89,7 @@ export function useAnalytics(
     }
     setPracticeId(mine.id)
     setPracticeName(mine.name)
-  }, [mine])
+  }, [practiceFromShell, dash?.practiceName, mine])
 
   const today = startOfToday()
   const currentCurrentMonth = format(today, "MMMM")
@@ -278,7 +288,8 @@ export function useAnalytics(
   return {
     data: analyticsData,
     byDoctor,
-    isLoading: mineLoading || analyticsLoading,
+    isLoading:
+      (dash ? !dash.ready : mineLoading) || analyticsLoading,
     errorMessage,
     planLocked,
     totalPatients,

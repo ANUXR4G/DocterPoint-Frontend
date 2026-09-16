@@ -1488,7 +1488,12 @@ export const PracticeService = {
   /** One round-trip for doctor queue/dashboard: memberships + today's bookings. */
   async getDashboardBootstrap(
     userId: string,
-    opts?: { date?: string; from?: string; to?: string },
+    opts?: {
+      date?: string;
+      from?: string;
+      to?: string;
+      includePatients?: boolean;
+    },
   ) {
     const memberships = (await this.getForUser(userId)) as Array<{
       practiceId?: string;
@@ -1497,16 +1502,26 @@ export const PracticeService = {
     const first = memberships[0];
     const practiceId = first?.practiceId || first?.practice?.id;
     if (!practiceId) {
-      return { memberships, bookings: [] as unknown[] };
+      return {
+        memberships,
+        bookings: [] as unknown[],
+        patients: [] as unknown[],
+      };
     }
     await this.assertMember(practiceId, userId);
     const { BookingService } = await import("./booking.service.js");
-    const bookings = await BookingService.listForPractice(practiceId, {
-      date: opts?.date,
-      from: opts?.from,
-      to: opts?.to,
-    });
-    return { memberships, practiceId, bookings };
+    const includePatients = opts?.includePatients !== false;
+    const [bookings, patients] = await Promise.all([
+      BookingService.listForPractice(practiceId, {
+        date: opts?.date,
+        from: opts?.from,
+        to: opts?.to,
+      }),
+      includePatients
+        ? this.listPatients(practiceId, userId)
+        : Promise.resolve([]),
+    ]);
+    return { memberships, practiceId, bookings, patients };
   },
 
   /**

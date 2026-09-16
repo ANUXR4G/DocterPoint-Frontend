@@ -1,23 +1,18 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
-import { addDays, format, subDays } from "date-fns"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
-import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import { proctoService } from "@/lib/services/procto"
 import {
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
-import {
-  formatBookingWhenDetailed,
-  sortBookingsByWhen,
-} from "@/lib/bookingDisplay"
+import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
 import { PatientNameHover } from "@/components/ui/procto/PatientBookingHover"
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
-import { useProctoSocket } from "@/hooks/useProctoSocket"
-import { applyLiveBookingEvent } from "@/lib/liveBooking"
+import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 
 /** Clinic bookings from Procto — synced with backend queue/calendar. */
 export default function DoctorAppointmentsList({
@@ -25,112 +20,30 @@ export default function DoctorAppointmentsList({
 }: {
   portal?: "doctor" | "clinic"
 } = {}) {
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState("")
-  const [rows, setRows] = useState<ProctoBooking[]>([])
-  const [practiceId, setPracticeId] = useState<string | null>(null)
-  const [practiceName, setPracticeName] = useState("")
+  const {
+    ready,
+    loading,
+    error: loadError,
+    practiceName,
+    bookings: rows,
+    patchBooking,
+  } = usePracticeDashboard()
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
   const [busyId, setBusyId] = useState<string | null>(null)
-  const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [actionError, setActionError] = useState("")
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) {
-      setLoading(true)
-      setLoadError("")
-    }
-    const today = new Date()
-    const boot = await proctoService.getPracticeBootstrap({
-      from: format(subDays(today, 90), "yyyy-MM-dd"),
-      to: format(addDays(today, 90), "yyyy-MM-dd"),
-    })
-
-    if (boot.status !== "successful" || !boot.data) {
-      setRows([])
-      setPracticeId(null)
-      setPracticeName("")
-      if (!opts?.silent) {
-        setLoadError(boot.message || "Could not load your practice.")
-        setLoading(false)
-      }
-      return
-    }
-
-    const memberships = (boot.data.memberships ?? []) as Array<{
-      practice?: { id: string; name: string }
-    }>
-    const practice = memberships[0]?.practice
-    if (!practice?.id) {
-      setRows([])
-      setPracticeId(null)
-      setPracticeName("")
-      if (!opts?.silent) {
-        setLoadError("Could not load your practice.")
-        setLoading(false)
-      }
-      return
-    }
-
-    setPracticeId(practice.id)
-    setPracticeName(practice.name)
-
-    const list = sortBookingsByWhen(
-      (Array.isArray(boot.data.bookings) ? boot.data.bookings : []) as ProctoBooking[],
-      "asc",
-    )
-    setRows(list)
-    if (!opts?.silent) setLoading(false)
-  }, [])
-
-  function scheduleSoft() {
-    if (softTimer.current) clearTimeout(softTimer.current)
-    softTimer.current = setTimeout(() => void load({ silent: true }), 250)
-  }
-
-  useEffect(() => {
-    void load()
-    return () => {
-      if (softTimer.current) clearTimeout(softTimer.current)
-    }
-  }, [load])
-
-  useProctoSocket(
-    practiceId,
-    (event) => {
-      if (event.event === "conversation_updated") {
-        scheduleSoft()
-        return
-      }
-      const incoming = event.booking as Record<string, unknown> | undefined
-      setRows((prev) => {
-        const { next, needsRefresh } = applyLiveBookingEvent(
-          prev,
-          event.event,
-          incoming,
-        )
-        if (needsRefresh) scheduleSoft()
-        return sortBookingsByWhen(next, "asc")
-      })
-    },
-    scheduleSoft,
-  )
+  const showLoading = !ready && loading
 
   async function onStatus(id: string, status: string) {
     setBusyId(id)
-    setLoadError("")
+    setActionError("")
     const previous = rows.find((b) => b.id === id)?.status
-    setRows((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status } : b)),
-    )
+    patchBooking(id, { status })
     const res = await proctoService.updateBookingStatus(id, status)
     setBusyId(null)
     if (res.status !== "successful") {
-      if (previous) {
-        setRows((prev) =>
-          prev.map((b) => (b.id === id ? { ...b, status: previous } : b)),
-        )
-      }
-      setLoadError(res.message || "Could not update status")
+      if (previous) patchBooking(id, { status: previous })
+      setActionError(res.message || "Could not update status")
     }
   }
 
@@ -150,53 +63,36 @@ export default function DoctorAppointmentsList({
         title="Appointments"
         subtitle={
           practiceName
-            ? `${practiceName} · filter and update visit status`
-            : "Live clinic bookings — filter by status"
-        }
-        action={
-          <Link
-            href={portal === "clinic" ? "/clinic/queue" : "/doctor/calendar"}
-            className="inline-flex h-11 items-center rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-900 transition hover:border-blue-300 dark:border-white/15 dark:bg-white/5 dark:text-white"
-          >
-            {portal === "clinic" ? "Open queue" : "Open calendar"}
-          </Link>
+            ? `All visits for ${practiceName} (updates live).`
+            : "All visits (updates live)."
         }
       />
+
+      {actionError ? (
+        <p className="mb-3 text-sm text-red-700 dark:text-red-400" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+
+      {loadError && !rows.length ? (
+        <p className="text-sm text-red-700 dark:text-red-400" role="alert">
+          {loadError}
+        </p>
+      ) : null}
 
       <BookingStatusFilterBar
         value={statusFilter}
         onChange={setStatusFilter}
         statuses={rows.map((b) => b.status)}
-        className="border-b border-slate-200 pb-3 dark:border-white/10"
+        className="mt-2"
       />
 
-      {loadError ? (
-        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
-          <p>{loadError}</p>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="mt-2 font-semibold underline"
-          >
-            Retry
-          </button>
-        </div>
-      ) : null}
-
-      {loading ? (
-        <p className="mt-6 text-sm font-semibold text-neutral-500">Loading…</p>
+      {showLoading ? (
+        <p className="mt-4 text-sm text-neutral-500">Loading…</p>
       ) : filtered.length === 0 ? (
-        <div className="mt-8 rounded-2xl border border-dashed border-neutral-300 px-6 py-12 text-center dark:border-neutral-600">
-          <p className="text-base font-semibold text-neutral-700 dark:text-neutral-200">
-            No appointments match this status filter.
-          </p>
-          <Link
-            href={portal === "clinic" ? "/clinic/queue" : "/doctor/calendar"}
-            className="mt-3 inline-block text-sm font-bold text-[var(--theme-primary)] hover:underline"
-          >
-            {portal === "clinic" ? "View queue →" : "View calendar →"}
-          </Link>
-        </div>
+        <p className="mt-4 text-sm text-neutral-500">
+          No appointments in this filter.
+        </p>
       ) : (
         <>
           <ul className="mt-4 space-y-2 md:hidden">

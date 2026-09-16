@@ -20,6 +20,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
+  filterBookingsByRange,
+  usePracticeDashboard,
+} from "@/contexts/PracticeDashboardContext"
+import {
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
@@ -276,7 +280,13 @@ function BookingCard({
 }
 
 export default function AppointmentCalendar() {
-  const [loading, setLoading] = useState(true)
+  const {
+    memberships,
+    bookings: sharedBookings,
+    ready,
+    loading: shellLoading,
+    error: shellError,
+  } = usePracticeDashboard()
   const [error, setError] = useState("")
   const [practiceId, setPracticeId] = useState("")
   const [practiceName, setPracticeName] = useState("")
@@ -287,7 +297,7 @@ export default function AppointmentCalendar() {
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
   const [view, setView] = useState<ViewMode>("week")
   const [anchor, setAnchor] = useState(() => startOfToday())
-  const [bookings, setBookings] = useState<CalBooking[]>([])
+  const loading = !ready && shellLoading
   const [timeSlots, setTimeSlots] = useState<
     Array<{
       start: string
@@ -327,30 +337,18 @@ export default function AppointmentCalendar() {
     return eachDayOfInterval({ start, end })
   }, [anchor])
 
-  const init = useCallback(async () => {
-    setLoading(true)
-    setError("")
-    const mine = await proctoService.getMyPractices()
-    if (
-      mine.status !== "successful" ||
-      !Array.isArray(mine.data) ||
-      !mine.data.length
-    ) {
+  useEffect(() => {
+    if (!ready) return
+    setError(shellError || "")
+    if (!memberships.length) {
       setPracticeId("")
       setDoctors([])
-      setLoading(false)
-      if (mine.status !== "successful") {
-        setError(mine.message || "Could not load practice.")
-      }
       return
     }
 
-    const membership = (mine.data as Membership[])[0]
+    const membership = memberships[0] as unknown as Membership
     const practice = membership?.practice
-    if (!practice?.id) {
-      setLoading(false)
-      return
-    }
+    if (!practice?.id) return
 
     setPracticeId(practice.id)
     setPracticeName(practice.name)
@@ -372,24 +370,35 @@ export default function AppointmentCalendar() {
       new Map(roster.map((d) => [d.id, d])).values(),
     )
     setDoctors(unique)
-    setLoading(false)
-  }, [])
+  }, [ready, memberships, shellError])
 
-  const loadBookings = useCallback(async () => {
-    if (!practiceId) return
-    setError("")
-    const res = await proctoService.listPracticeBookings(practiceId, {
-      from: range.from,
-      to: range.to,
-      providerId: providerId === "all" ? undefined : providerId,
-    })
-    if (res.status === "successful" && Array.isArray(res.data)) {
-      setBookings(res.data as CalBooking[])
-    } else {
-      setBookings([])
-      setError(res.message || "Could not load appointments.")
+  const bookings = useMemo(() => {
+    if (!practiceId) return [] as CalBooking[]
+    let list = filterBookingsByRange(
+      sharedBookings,
+      range.from,
+      range.to,
+    ) as CalBooking[]
+    if (providerId !== "all") {
+      list = list.filter((b) => {
+        const pid = b.providerId ?? b.provider?.id
+        return pid === providerId
+      })
     }
-  }, [practiceId, range.from, range.to, providerId])
+    if (statusFilter !== "all") {
+      list = list.filter((b) =>
+        matchesQueueStatusFilter(b.status, statusFilter),
+      )
+    }
+    return list
+  }, [
+    practiceId,
+    sharedBookings,
+    range.from,
+    range.to,
+    providerId,
+    statusFilter,
+  ])
 
   const loadDaySlots = useCallback(async () => {
     if (!practiceId || view !== "day" || providerId === "all") {
@@ -407,14 +416,6 @@ export default function AppointmentCalendar() {
       setTimeSlots([])
     }
   }, [practiceId, view, providerId, anchor])
-
-  useEffect(() => {
-    void init()
-  }, [init])
-
-  useEffect(() => {
-    void loadBookings()
-  }, [loadBookings])
 
   useEffect(() => {
     void loadDaySlots()

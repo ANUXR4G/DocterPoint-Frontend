@@ -6,8 +6,12 @@ import { useRouter } from "next/navigation"
 import { endOfMonth, format, startOfMonth, startOfToday } from "date-fns"
 import { InsightStatCard } from "@/components/dashboard/InsightStatCard"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
-import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import { useAnalytics, genderSum } from "@/hooks/useAnalysis"
+import {
+  filterBookingsByDate,
+  filterBookingsByRange,
+  usePracticeDashboard,
+} from "@/contexts/PracticeDashboardContext"
 
 const AnalyticsChartsStrip = dynamic(
   () =>
@@ -22,6 +26,7 @@ const AnalyticsChartsStrip = dynamic(
 
 /** Metric cards + chart strip from live Procto practice bookings. */
 export default function Analytics() {
+  const { bookings: allBookings, patients, ready } = usePracticeDashboard()
   const [queueCount, setQueueCount] = useState(0)
   const [livePatients, setLivePatients] = useState(0)
   const [liveAppointments, setLiveAppointments] = useState(0)
@@ -50,49 +55,39 @@ export default function Analytics() {
   const appointmentsValue = planLocked ? liveAppointments : monthAppointments
 
   useEffect(() => {
-    if (!practiceId) {
-      setQueueCount(0)
-      setLivePatients(0)
-      setLiveAppointments(0)
+    if (!practiceId || !ready) {
+      if (!practiceId) {
+        setQueueCount(0)
+        setLivePatients(0)
+        setLiveAppointments(0)
+      }
       return
     }
-    let cancelled = false
     const today = startOfToday()
     const date = format(today, "yyyy-MM-dd")
     const from = format(startOfMonth(today), "yyyy-MM-dd")
     const to = format(endOfMonth(today), "yyyy-MM-dd")
 
-    void Promise.all([
-      proctoService.listPracticeBookings(practiceId, date),
-      proctoService.listPracticeBookings(practiceId, { from, to }),
-      proctoService.listPracticePatients(practiceId),
-    ]).then(([todayRes, monthRes, patientsRes]) => {
-      if (cancelled) return
-      const todayList = (todayRes?.data ?? []) as ProctoBooking[]
-      const monthList = (monthRes?.data ?? []) as ProctoBooking[]
-      const patients = Array.isArray(patientsRes?.data) ? patientsRes.data : []
+    const todayList = filterBookingsByDate(allBookings, date)
+    const monthList = filterBookingsByRange(allBookings, from, to)
 
-      const active = todayList.filter((b) => {
-        const s = (b.status || "").toUpperCase()
-        return [
-          "SCHEDULED",
-          "REQUESTED",
-          "ACCEPTED",
-          "IN_PROGRESS",
-          "BOOKED",
-          "CONFIRMED",
-          "WAITING",
-          "CHECKED_IN",
-        ].includes(s)
-      })
-      setQueueCount(active.length)
-      setLiveAppointments(monthList.length)
-      setLivePatients(patients.length)
+    const active = todayList.filter((b) => {
+      const s = (b.status || "").toUpperCase()
+      return [
+        "SCHEDULED",
+        "REQUESTED",
+        "ACCEPTED",
+        "IN_PROGRESS",
+        "BOOKED",
+        "CONFIRMED",
+        "WAITING",
+        "CHECKED_IN",
+      ].includes(s)
     })
-    return () => {
-      cancelled = true
-    }
-  }, [practiceId])
+    setQueueCount(active.length)
+    setLiveAppointments(monthList.length)
+    setLivePatients(patients.length)
+  }, [practiceId, ready, allBookings, patients.length])
 
   function handleNavigation(
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>,

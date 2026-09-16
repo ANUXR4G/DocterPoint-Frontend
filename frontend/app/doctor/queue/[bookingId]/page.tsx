@@ -1,11 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { Icon, ThinkingLoader } from "@/components"
 import { firey } from "@/utils"
-import { proctoService } from "@/lib/services/procto"
+import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import CareChatPanel from "@/components/ui/procto/CareChatPanel"
 import { getSessionUserId } from "@/lib/sessionUser"
@@ -18,8 +18,8 @@ import {
   bookingStatusClass,
   bookingStatusLabel,
 } from "@/lib/bookingStatus"
-import { useProctoSocket } from "@/hooks/useProctoSocket"
 import { patchBookingFields } from "@/lib/liveBooking"
+import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 
 type Medicine = { name: string; amount?: string; times?: string[] }
@@ -82,9 +82,21 @@ export default function VisitPage() {
   const params = useParams<{ bookingId: string }>()
   const router = useRouter()
   const bookingId = params.bookingId
+  const {
+    bookings: sharedBookings,
+    ready,
+    patchBooking: patchSharedBooking,
+  } = usePracticeDashboard()
+
+  const fromShared = useMemo(
+    () =>
+      sharedBookings.find((b) => b.id === bookingId) as VisitBooking | undefined,
+    [sharedBookings, bookingId],
+  )
 
   const [booking, setBooking] = useState<VisitBooking | null>(null)
   const [loading, setLoading] = useState(true)
+  const [detailLoaded, setDetailLoaded] = useState(false)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
   const [saving, setSaving] = useState(false)
@@ -97,21 +109,7 @@ export default function VisitPage() {
   const [medAmount, setMedAmount] = useState("1")
   const [medTimes, setMedTimes] = useState<string[]>(["morning"])
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!bookingId) return
-    if (!opts?.silent) {
-      setLoading(true)
-      setError("")
-    }
-    const res = await proctoService.getBooking(bookingId)
-    if (res.status !== "successful" || !res.data) {
-      if (!opts?.silent) {
-        setError(res.message || "Visit not found.")
-        setLoading(false)
-      }
-      return
-    }
-    const data = res.data as VisitBooking
+  const applyVisitData = useCallback((data: VisitBooking, opts?: { silent?: boolean }) => {
     setBooking(data)
     if (!opts?.silent) {
       setRemarks(data.doctorRemarks ?? "")
@@ -122,34 +120,55 @@ export default function VisitPage() {
       if (Array.isArray(data.medicines)) setMedicines(data.medicines)
       if (Array.isArray(data.documents)) setDocuments(data.documents)
     }
-  }, [bookingId])
+  }, [])
+
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!bookingId) return
+    if (!opts?.silent) {
+      setLoading(true)
+      setError("")
+    }
+    const res = await proctoService.getBooking(bookingId)
+    if (res.status !== "successful" || !res.data) {
+      if (!opts?.silent) {
+        setError(res.message || "Visit not found.")
+        if (!fromShared) setLoading(false)
+      }
+      return
+    }
+    applyVisitData(res.data as VisitBooking, opts)
+    setDetailLoaded(true)
+  }, [bookingId, fromShared, applyVisitData])
 
   useEffect(() => {
-    void load()
-  }, [load])
-
-  const practiceId = booking?.practiceId || booking?.practice?.id || null
-
-  useProctoSocket(
-    practiceId,
-    (event) => {
-      if (event.event === "conversation_updated") return
-      const incoming = event.booking as Record<string, unknown> | undefined
-      if (!incoming?.id || String(incoming.id) !== String(bookingId)) return
+    if (fromShared) {
       setBooking((prev) =>
-        prev ? patchBookingFields(prev, incoming) : prev,
+        prev
+          ? patchBookingFields(prev, fromShared as Record<string, unknown>)
+          : fromShared,
       )
-      if (
-        incoming.doctor_remarks !== undefined ||
-        incoming.doctorRemarks !== undefined ||
-        incoming.medicines !== undefined ||
-        incoming.documents !== undefined
-      ) {
-        void load({ silent: true })
-      }
-    },
-    () => void load({ silent: true }),
-  )
+      if (ready) setLoading(false)
+    }
+  }, [fromShared, ready])
+
+  useEffect(() => {
+    if (!bookingId) return
+    if (fromShared && ready) {
+      setLoading(false)
+      if (!detailLoaded) void load({ silent: true })
+      return
+    }
+    if (ready) void load()
+  }, [bookingId, fromShared, ready, detailLoaded, load])
+
+  useEffect(() => {
+    if (!fromShared) return
+    setBooking((prev) =>
+      prev
+        ? patchBookingFields(prev, fromShared as Record<string, unknown>)
+        : prev,
+    )
+  }, [fromShared])
 
   function toggleTime(time: string) {
     setMedTimes((prev) =>
@@ -179,13 +198,9 @@ export default function VisitPage() {
       await load()
       return false
     }
-    setBooking(res.data as VisitBooking)
-    if (Array.isArray((res.data as VisitBooking).medicines)) {
-      setMedicines((res.data as VisitBooking).medicines || [])
-    }
-    if (Array.isArray((res.data as VisitBooking).documents)) {
-      setDocuments((res.data as VisitBooking).documents || [])
-    }
+    const saved = res.data as VisitBooking
+    applyVisitData(saved, { silent: true })
+    patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
     if (opts?.successMessage) setMessage(opts.successMessage)
     return true
   }

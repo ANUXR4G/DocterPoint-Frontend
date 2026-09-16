@@ -2,12 +2,12 @@
 
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQueryClient } from "react-query"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import { TypeAnalyticsParam } from "@/types"
 import { useAnalytics } from "@/hooks/useAnalysis"
-import { useProctoSocket } from "@/hooks/useProctoSocket"
+import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import { AnalyticsPeriodFilter } from "@/components/charts/DoctorCharts"
 
 const DoctorAnalyticsChartPanel = dynamic(
@@ -40,6 +40,7 @@ const PERIOD_SUBTITLE: Record<TypeAnalyticsParam, string> = {
 
 export default function DoctorAnalyticsPage() {
   const queryClient = useQueryClient()
+  const { bookings } = usePracticeDashboard()
   const [type, setType] = useState<TypeAnalyticsParam>("week")
   const [providerId, setProviderId] = useState<string>("")
 
@@ -67,7 +68,15 @@ export default function DoctorAnalyticsPage() {
     ])
   }
 
-  useProctoSocket(practiceId, softRefreshAnalytics, softRefreshAnalytics)
+  const bookingsLiveKey = useMemo(
+    () => bookings.map((b) => `${b.id}:${b.status}`).join("|"),
+    [bookings],
+  )
+
+  useEffect(() => {
+    softRefreshAnalytics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on booking live updates
+  }, [bookingsLiveKey, practiceId])
 
   const maleTotal = patientMetrics.reduce((s, m) => s + m.male, 0)
   const femaleTotal = patientMetrics.reduce((s, m) => s + m.female, 0)

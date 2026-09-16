@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { proctoService, type ProctoBooking } from "@/lib/services/procto";
-import { useProctoSocket } from "@/hooks/useProctoSocket";
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader";
+import {
+  filterBookingsByDate,
+  usePracticeDashboard,
+} from "@/contexts/PracticeDashboardContext";
 
 import {
   DOCTOR_SUBSCRIPTION_HREF,
@@ -143,6 +146,13 @@ export function PracticeManagementPanel({ embedded = false }: { embedded?: boole
 }
 
 function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean }) {
+  const {
+    memberships: ctxMemberships,
+    bookings: ctxBookings,
+    ready: dashReady,
+    loading: dashLoading,
+    refresh: refreshDashboard,
+  } = usePracticeDashboard();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = embedded
@@ -239,11 +249,8 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
     null;
 
   const reloadMemberships = useCallback(async () => {
-    const res = await proctoService.getMyPractices();
-    if (res.status === "successful" && res.data?.length) {
-      setMemberships(res.data);
-    }
-  }, []);
+    await refreshDashboard({ silent: true });
+  }, [refreshDashboard]);
 
   const loadCalendar = useCallback(async () => {
     if (!practice || !providerId) return;
@@ -264,8 +271,12 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
   }, [practice, providerId]);
 
   useEffect(() => {
-    void reloadMemberships().finally(() => setLoading(false));
-  }, [reloadMemberships]);
+    if (!dashReady) return;
+    if (ctxMemberships.length) {
+      setMemberships(ctxMemberships as PracticeMember[]);
+    }
+    setLoading(false);
+  }, [dashReady, ctxMemberships]);
 
   useEffect(() => {
     if (!practice) return;
@@ -289,44 +300,55 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
     }
   }, [tab, practice, providerId, date, loadCalendar, loadSchedules, loadOverrides]);
 
-  const mergeBooking = useCallback(
-    (raw: ProctoBooking) => {
-      setCalendar((prev) => {
-        if (!prev) return prev;
+  useEffect(() => {
+    if (tab !== "calendar" || !practice || !providerId) return;
+    const dayBookings = filterBookingsByDate(ctxBookings, date);
+    setCalendar((prev) => {
+      if (!prev || prev.date !== date) return prev;
+      let bookings = [...prev.bookings];
+      for (const raw of dayBookings) {
+        const pid =
+          (raw as ProctoBooking & { providerId?: string }).providerId ??
+          raw.provider?.id;
+        if (pid && pid !== providerId) continue;
         const normalized = {
           id: raw.id,
-          patientPhone: raw.patient_phone,
-          patientName: raw.patient_name ?? null,
+          patientPhone:
+            raw.patientPhone ??
+            (raw as { patient_phone?: string }).patient_phone ??
+            "",
+          patientName:
+            raw.patientName ??
+            (raw as { patient_name?: string | null }).patient_name ??
+            null,
           mode: raw.mode,
           status: raw.status,
           channel: raw.channel,
-          slotStart: raw.slot_start ?? null,
-          tokenNumber: raw.token_number ?? null,
-          sessionDate: raw.session_date ?? null,
+          slotStart:
+            raw.slotStart ??
+            (raw as { slot_start?: string | null }).slot_start ??
+            null,
+          tokenNumber:
+            raw.tokenNumber ??
+            (raw as { token_number?: number | null }).token_number ??
+            null,
+          sessionDate:
+            raw.sessionDate ??
+            (raw as { session_date?: string | null }).session_date ??
+            null,
         };
-        const idx = prev.bookings.findIndex((b) => b.id === normalized.id);
-        const bookings =
-          idx >= 0
-            ? prev.bookings.map((b, i) => (i === idx ? { ...b, ...normalized } : b))
-            : [...prev.bookings, normalized];
-        return { ...prev, bookings };
-      });
-    },
-    [],
-  );
+        const idx = bookings.findIndex((b) => b.id === normalized.id);
+        if (idx >= 0) {
+          bookings[idx] = { ...bookings[idx], ...normalized };
+        } else {
+          bookings.push(normalized);
+        }
+      }
+      return { ...prev, bookings };
+    });
+  }, [ctxBookings, date, providerId, tab, practice]);
 
-  useProctoSocket(practice?.id ?? null, (event) => {
-    if (event.event === "conversation_updated") {
-      setMessage("Live update: WhatsApp inbox");
-      return;
-    }
-    if ("booking" in event && event.booking) {
-      mergeBooking(event.booking as ProctoBooking);
-      setMessage(`Live update: ${event.event.replace("_", " ")}`);
-    }
-  });
-
-  if (loading) {
+  if (loading || (!dashReady && dashLoading)) {
     return <p className="p-6 text-sm opacity-70">Loading practice dashboard…</p>;
   }
 
@@ -587,6 +609,7 @@ function InboxPanel({
   practiceId: string;
   onChanged: () => void;
 }) {
+  const { conversationTick } = usePracticeDashboard();
   const [rows, setRows] = useState<
     Array<{
       id: string;
@@ -606,13 +629,7 @@ function InboxPanel({
 
   useEffect(() => {
     void load();
-  }, [load]);
-
-  useProctoSocket(practiceId, (event) => {
-    if (event.event === "conversation_updated") {
-      void load();
-    }
-  });
+  }, [load, conversationTick]);
 
   useEffect(() => {
     let cancelled = false;

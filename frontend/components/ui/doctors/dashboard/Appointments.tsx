@@ -1,60 +1,54 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import { type ProctoBooking } from "@/lib/services/procto"
 import {
   bookingStatusLabel,
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
+import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 
 function patientLabel(b: ProctoBooking) {
   return (
-    b.patientName || b.patient_name || b.patient?.name || "Patient"
+    b.patientName ||
+    b.patient_name ||
+    b.patient?.name ||
+    b.patientPhone ||
+    b.patient_phone ||
+    "Patient"
   )
-}
-
-function whenLabel(b: ProctoBooking) {
-  const when =
-    b.slotStart ||
-    b.slot_start ||
-    b.sessionDate ||
-    b.session_date ||
-    b.createdAt
-  return when ? format(new Date(when), "dd MMM · HH:mm") : "—"
 }
 
 /** Recent clinic bookings table from Procto. */
 export default function Appointments() {
-  const [loading, setLoading] = useState(true)
-  const [rows, setRows] = useState<ProctoBooking[]>([])
+  const { ready, loading, bookings: allBookings } = usePracticeDashboard()
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      const to = new Date()
-      const from = new Date()
-      from.setDate(from.getDate() - 14)
-      const boot = await proctoService.getPracticeBootstrap({
-        from: format(from, "yyyy-MM-dd"),
-        to: format(to, "yyyy-MM-dd"),
-      })
-      if (cancelled) return
-      setRows(
-        (Array.isArray(boot?.data?.bookings) ? boot.data.bookings : []) as ProctoBooking[],
-      )
-      setLoading(false)
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const showLoading = !ready && loading
+
+  const rows = useMemo(() => {
+    const to = new Date()
+    const from = new Date()
+    from.setDate(from.getDate() - 14)
+    return allBookings.filter((b) => {
+      const slot = b.slotStart ?? (b as { slot_start?: string }).slot_start
+      const session =
+        b.sessionDate ?? (b as { session_date?: string }).session_date
+      const day = slot
+        ? String(slot).slice(0, 10)
+        : session
+          ? String(session).slice(0, 10)
+          : null
+      if (!day) return false
+      const fromIso = format(from, "yyyy-MM-dd")
+      const toIso = format(to, "yyyy-MM-dd")
+      return day >= fromIso && day <= toIso
+    })
+  }, [allBookings])
 
   const filtered = useMemo(
     () =>
@@ -83,7 +77,7 @@ export default function Appointments() {
         statuses={rows.map((b) => b.status)}
         className="mt-3"
       />
-      {loading ? (
+      {showLoading ? (
         <p className="ml-2.5 mt-2.5 text-sm font-semibold text-neutral-500">
           Loading…
         </p>
@@ -102,35 +96,23 @@ export default function Appointments() {
                       {b.patientPhone || b.patient_phone || ""}
                     </p>
                   </div>
-                  <span className="shrink-0 text-[10px] font-bold tracking-wide text-neutral-500">
+                  <span className="shrink-0 text-xs font-bold">
                     {bookingStatusLabel(b.status || "")}
                   </span>
                 </div>
-                <p className="mt-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                  {whenLabel(b)}
-                </p>
-                <p className="mt-0.5 truncate text-xs text-neutral-500">
+                <p className="mt-1 text-xs font-semibold opacity-70">
                   {b.disease || b.consultationType || "—"}
                 </p>
-                <Link
-                  href={`/doctor/queue/${b.id}`}
-                  className="mt-2 inline-block text-xs font-bold text-[var(--theme-primary)] hover:underline"
-                >
-                  Open visit →
-                </Link>
               </li>
             ))}
           </ul>
-
           <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-neutral-300 bg-white dark:border-neutral-600 dark:bg-neutral-800 md:block">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-neutral-100 text-xs font-bold uppercase dark:bg-neutral-900">
                 <tr>
                   <th className="px-4 py-3">Patient</th>
-                  <th className="px-4 py-3">When</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Disease</th>
-                  <th className="px-4 py-3 text-right">Open</th>
+                  <th className="px-4 py-3">Reason</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
@@ -138,26 +120,12 @@ export default function Appointments() {
                   <tr key={b.id}>
                     <td className="px-4 py-3 font-semibold">
                       {patientLabel(b)}
-                      <p className="text-xs font-medium opacity-60">
-                        {b.patientPhone || b.patient_phone}
-                      </p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
-                      {whenLabel(b)}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-bold">
+                    <td className="px-4 py-3">
                       {bookingStatusLabel(b.status || "")}
                     </td>
-                    <td className="max-w-[12rem] truncate px-4 py-3 text-xs">
+                    <td className="px-4 py-3">
                       {b.disease || b.consultationType || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/doctor/queue/${b.id}`}
-                        className="text-xs font-bold text-[var(--theme-primary)] hover:underline"
-                      >
-                        Visit
-                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -166,9 +134,9 @@ export default function Appointments() {
           </div>
         </>
       ) : (
-        <div className="ml-2.5 mt-2.5 flex text-sm font-semibold text-neutral-500">
-          No booking record matches this status filter
-        </div>
+        <p className="ml-2.5 mt-2.5 text-sm font-semibold text-neutral-500">
+          No recent bookings.
+        </p>
       )}
     </div>
   )

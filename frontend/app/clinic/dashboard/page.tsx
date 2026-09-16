@@ -13,7 +13,10 @@ import {
 } from "@/lib/doctorPracticeTabs"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import { matchesQueueStatusFilter } from "@/lib/bookingStatus"
-import { useProctoSocket } from "@/hooks/useProctoSocket"
+import {
+  filterBookingsByDate,
+  usePracticeDashboard,
+} from "@/contexts/PracticeDashboardContext"
 
 const fieldClass =
   "w-full rounded-xl border border-neutral-300 bg-transparent px-3 py-2.5 text-sm outline-none transition focus:border-[var(--theme-primary)] dark:border-neutral-600"
@@ -80,7 +83,7 @@ const OPS_LINKS = [
 ] as const
 
 function ClinicOpsHub() {
-  const [practiceId, setPracticeId] = useState<string | null>(null)
+  const { memberships, bookings: allBookings, ready } = usePracticeDashboard()
   const [canManage, setCanManage] = useState(false)
   const [doctors, setDoctors] = useState<DoctorSnap[]>([])
   const [doctorCount, setDoctorCount] = useState(0)
@@ -103,47 +106,26 @@ function ClinicOpsHub() {
   const [specialty, setSpecialty] = useState("")
   const [licenseNo, setLicenseNo] = useState("")
 
+  const practiceId = memberships[0]?.practice?.id ?? null
+
   const loadRoster = useCallback(async () => {
-    const mine = await proctoService.getMyPractices()
-    if (
-      mine.status !== "successful" ||
-      !Array.isArray(mine.data) ||
-      !mine.data.length
-    ) {
+    if (!memberships.length) {
       setDoctors([])
-      setPracticeId(null)
       setCanManage(false)
       setDoctorCount(0)
       return
     }
-    const membership = (
-      mine.data as Array<{
-        role: string
-        practice: {
-          id: string
-          members?: Array<{
-            userId: string
-            role: string
-            isActive: boolean
-            user?: { name?: string | null; email?: string | null }
-          }>
-        }
-      }>
-    )[0]
+    const membership = memberships[0]
     const practice = membership?.practice
     if (!practice?.id) return
 
-    setPracticeId(practice.id)
     setCanManage(
       membership.role === "PRACTICE_OWNER" ||
         membership.role === "PRACTICE_ADMIN",
     )
 
     const date = format(startOfToday(), "yyyy-MM-dd")
-    const list = await proctoService.listPracticeBookings(practice.id, date)
-    const bookings = (
-      list.status === "successful" && Array.isArray(list.data) ? list.data : []
-    ) as Array<
+    const bookings = filterBookingsByDate(allBookings, date) as Array<
       ProctoBooking & {
         providerId?: string
         provider?: { id?: string; name?: string | null; email?: string | null }
@@ -233,21 +215,12 @@ function ClinicOpsHub() {
         setEntitlementHint("")
       }
     }
-  }, [])
+  }, [memberships, allBookings])
 
   useEffect(() => {
+    if (!ready) return
     void loadRoster()
-  }, [loadRoster])
-
-  useProctoSocket(
-    practiceId,
-    () => {
-      void loadRoster()
-    },
-    () => {
-      void loadRoster()
-    },
-  )
+  }, [loadRoster, ready])
 
   useEffect(() => {
     function openFromHash() {

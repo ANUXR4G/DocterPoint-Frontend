@@ -1,10 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react"
+import { useMemo, useState, Fragment } from "react"
 import Link from "next/link"
 import { firey } from "@/utils"
-import { proctoService } from "@/lib/services/procto"
-import { useProctoSocket } from "@/hooks/useProctoSocket"
+import {
+  usePracticeDashboard,
+  type PracticePatientRow,
+} from "@/contexts/PracticeDashboardContext"
 import {
   bookingStatusClass,
   bookingStatusLabel,
@@ -14,20 +16,7 @@ import {
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 
-type PracticePatient = {
-  phone: string
-  name: string | null
-  patientId: string | null
-  email?: string | null
-  gender?: string | null
-  address?: string | null
-  imgSrc?: string | null
-  profession?: string | null
-  dateOfBirth?: string | null
-  bookingCount: number
-  lastVisitAt: string | null
-  lastStatus: string | null
-  providerNames: string[]
+type PracticePatient = PracticePatientRow & {
   recentBookings: Array<{
     id: string
     status: string
@@ -39,11 +28,6 @@ type PracticePatient = {
     sessionDate?: string | null
     createdAt?: string
   }>
-}
-
-type Membership = {
-  role: string
-  practice: { id: string; name: string }
 }
 
 function ageFromDob(dob?: string | null): string {
@@ -89,75 +73,19 @@ function diseaseOf(p: PracticePatient) {
 }
 
 export default function DoctorPatientsList() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [patients, setPatients] = useState<PracticePatient[]>([])
-  const [practiceId, setPracticeId] = useState<string | null>(null)
-  const [practiceName, setPracticeName] = useState("")
+  const {
+    ready,
+    loading,
+    error,
+    practiceName,
+    patients,
+    refresh,
+  } = usePracticeDashboard()
   const [query, setQuery] = useState("")
   const [expanded, setExpanded] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
-  const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) {
-      setLoading(true)
-      setError("")
-    }
-    // Parallel: cached mine + patients (patients needs practice id from mine)
-    const mine = await proctoService.getMyPractices()
-    if (
-      mine.status !== "successful" ||
-      !Array.isArray(mine.data) ||
-      !mine.data.length
-    ) {
-      setPatients([])
-      setPracticeId(null)
-      setPracticeName("")
-      if (!opts?.silent) {
-        setLoading(false)
-        if (mine.status !== "successful") {
-          setError(mine.message || "Could not load practice.")
-        }
-      }
-      return
-    }
-
-    const memberships = mine.data as Membership[]
-    const practice = memberships[0]?.practice
-    if (!practice?.id) {
-      setPatients([])
-      setPracticeId(null)
-      if (!opts?.silent) setLoading(false)
-      return
-    }
-
-    setPracticeId(practice.id)
-    setPracticeName(practice.name)
-    const list = await proctoService.listPracticePatients(practice.id)
-    if (list.status === "successful" && Array.isArray(list.data)) {
-      setPatients(list.data as PracticePatient[])
-      if (!opts?.silent) setError("")
-    } else if (!opts?.silent) {
-      setPatients([])
-      setError(list.message || "Could not load patients.")
-    }
-    if (!opts?.silent) setLoading(false)
-  }, [])
-
-  function scheduleSoft() {
-    if (softTimer.current) clearTimeout(softTimer.current)
-    softTimer.current = setTimeout(() => void load({ silent: true }), 250)
-  }
-
-  useEffect(() => {
-    void load()
-    return () => {
-      if (softTimer.current) clearTimeout(softTimer.current)
-    }
-  }, [load])
-
-  useProctoSocket(practiceId, scheduleSoft, scheduleSoft)
+  const showLoading = !ready && loading
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -183,7 +111,7 @@ export default function DoctorPatientsList() {
     })
   }, [patients, query, statusFilter])
 
-  if (loading) {
+  if (showLoading) {
     return (
       <div
         role="status"
@@ -201,7 +129,7 @@ export default function DoctorPatientsList() {
         <button
           type="button"
           className="mt-3 block underline"
-          onClick={() => void load()}
+          onClick={() => void refresh()}
         >
           Retry
         </button>

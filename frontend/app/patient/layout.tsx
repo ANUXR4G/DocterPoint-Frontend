@@ -1,12 +1,12 @@
 "use client"
 
 import React from "react"
-import AuthenticatedShell from "@/components/layout/AuthenticatedShell"
+import PatientDashboardShell from "@/components/layout/PatientDashboardShell"
 
 export default function PatientLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <AuthenticatedShell>{children}</AuthenticatedShell>
+  return <PatientDashboardShell>{children}</PatientDashboardShell>
 }

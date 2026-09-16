@@ -1,13 +1,15 @@
 "use client"
 
 import { format, startOfToday } from "date-fns"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { CoolKid } from "@/components"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
-import { useProctoSocket } from "@/hooks/useProctoSocket"
-import { applyLiveBookingEvent } from "@/lib/liveBooking"
+import {
+  filterBookingsByDate,
+  usePracticeDashboard,
+} from "@/contexts/PracticeDashboardContext"
 import { firey } from "@/utils"
 import {
   bookingStatusClass,
@@ -18,15 +20,6 @@ import {
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
-
-type Membership = {
-  practice: {
-    id: string
-    name: string
-    slug: string
-  }
-  userId: string
-}
 
 type QueueBooking = ProctoBooking & {
   patientPhone?: string
@@ -137,86 +130,42 @@ export default function DoctorQueue({
 } = {}) {
   const [today] = useState(() => startOfToday())
   const [date] = useState(() => new Date().toISOString().slice(0, 10))
-  const [memberships, setMemberships] = useState<Membership[]>([])
-  const [bookings, setBookings] = useState<QueueBooking[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
+  const {
+    ready,
+    loading,
+    error,
+    memberships,
+    refresh,
+    patchBooking,
+    bookings: allBookings,
+  } = usePracticeDashboard()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [providerFilter, setProviderFilter] = useState(initialProviderId)
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
+
+  const bookings = useMemo(
+    () =>
+      filterBookingsByDate(allBookings, date) as QueueBooking[],
+    [allBookings, date],
+  )
 
   const practiceId = memberships[0]?.practice.id
   const emptyShell = compact
     ? "flex min-h-48 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-sky-50/50 p-6 text-center dark:border-white/10 dark:bg-white/5"
     : "flex h-full min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-sky-50/50 p-10 text-center dark:border-white/10 dark:bg-white/5"
 
-  const load = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!opts?.silent) setLoading(true)
-      setError("")
-      const boot = await proctoService.getPracticeBootstrap({ date })
-      if (boot.status !== "successful" || !boot.data) {
-        setMemberships([])
-        setBookings([])
-        if (!opts?.silent) setLoading(false)
-        setError(boot.message || "Could not load practice")
-        return
-      }
-      const membershipsData = (boot.data.memberships ?? []) as Membership[]
-      setMemberships(membershipsData)
-      if (Array.isArray(boot.data.bookings)) {
-        setBookings(boot.data.bookings as QueueBooking[])
-      } else if (!opts?.silent) {
-        setBookings([])
-      }
-      if (!opts?.silent) setLoading(false)
-    },
-    [date],
-  )
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  useProctoSocket(practiceId ?? null, (event) => {
-    if (event.event === "conversation_updated") {
-      void load({ silent: true })
-      return
-    }
-    const incoming = event.booking as Record<string, unknown> | undefined
-    setBookings((prev) => {
-      const { next, needsRefresh } = applyLiveBookingEvent(
-        prev,
-        event.event,
-        incoming,
-      )
-      if (needsRefresh) {
-        queueMicrotask(() => {
-          void load({ silent: true })
-        })
-      }
-      return next
-    })
-  }, () => void load({ silent: true }))
-
   async function onStatus(id: string, status: string) {
     setBusyId(id)
-    setError("")
-    const previous = bookings.find((b) => b.id === id)?.status
-    setBookings((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status } : b)),
-    )
+    const previous = allBookings.find((b) => b.id === id)?.status
+    patchBooking(id, { status })
     const res = await proctoService.updateBookingStatus(id, status)
     setBusyId(null)
     if (res.status !== "successful") {
-      if (previous) {
-        setBookings((prev) =>
-          prev.map((b) => (b.id === id ? { ...b, status: previous } : b)),
-        )
-      }
-      setError(res.message || "Could not update status")
+      if (previous) patchBooking(id, { status: previous })
     }
   }
+
+  const showLoading = !ready && loading
 
   const doctors = useMemo(() => {
     const map = new Map<string, string>()
@@ -262,7 +211,7 @@ export default function DoctorQueue({
     [bookings],
   )
 
-  if (loading) {
+  if (showLoading) {
     return (
       <div
         role="status"
@@ -291,7 +240,7 @@ export default function DoctorQueue({
           <button
             type="button"
             className="mt-3 block underline"
-            onClick={() => void load()}
+            onClick={() => void refresh()}
           >
             Retry
           </button>
