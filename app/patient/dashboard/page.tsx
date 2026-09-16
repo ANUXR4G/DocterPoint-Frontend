@@ -1,18 +1,17 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useMemo } from "react"
 import { InsightStatCard } from "@/components/dashboard/InsightStatCard"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
-import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import type { ProctoBooking } from "@/lib/services/procto"
 import {
   formatBookingWhenDetailed,
   bookingWhenMs,
   isActiveBooking,
   sortBookingsByWhen,
 } from "@/lib/bookingDisplay"
-import { usePatientLiveSocket } from "@/hooks/useProctoSocket"
-import { applyLiveBookingEvent } from "@/lib/liveBooking"
+import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
 
 function statusTone(status: string) {
   switch ((status || "").toUpperCase()) {
@@ -47,66 +46,9 @@ function nextVisitLabel(booking: ProctoBooking | undefined) {
 }
 
 export default function Dashboard() {
-  const [bookings, setBookings] = useState<ProctoBooking[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState("")
-
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setLoading(true)
-    if (!opts?.silent) setLoadError("")
-    const res = await proctoService.getMyBookings()
-    if (res?.status === "successful") {
-      setBookings((res.data as ProctoBooking[]) ?? [])
-    } else if (!opts?.silent) {
-      setBookings([])
-      setLoadError(res?.message || "Could not load your bookings.")
-    }
-    if (!opts?.silent) setLoading(false)
-  }, [])
-
-  const softRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  function scheduleSoftRefresh() {
-    if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current)
-    softRefreshTimer.current = setTimeout(() => {
-      void load({ silent: true })
-    }, 250)
-  }
-
-  useEffect(() => {
-    void load()
-    return () => {
-      if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current)
-    }
-  }, [load])
-
-  usePatientLiveSocket(
-    true,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined
-      setBookings((prev) => {
-        const { next, needsRefresh } = applyLiveBookingEvent(
-          prev,
-          String(event.event),
-          incoming,
-        )
-        if (needsRefresh) scheduleSoftRefresh()
-        return next
-      })
-    },
-    () => scheduleSoftRefresh(),
-  )
+  const { bookings, loading, ready, error: loadError, refresh } =
+    usePatientDashboard()
+  const showLoading = !ready && loading
 
   const upcoming = useMemo(
     () => sortBookingsByWhen(bookings.filter(isActiveBooking), "asc"),
@@ -152,7 +94,7 @@ export default function Dashboard() {
         }
       />
 
-      {loading && bookings.length === 0 ? (
+      {showLoading && bookings.length === 0 ? (
         <div role="status" className="dashboard-grid-4 animate-pulse">
           {[0, 1, 2, 3].map((i) => (
             <div
@@ -249,7 +191,7 @@ export default function Dashboard() {
           <p>{loadError}</p>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void refresh()}
             className="mt-2 h-11 font-semibold underline"
           >
             Retry

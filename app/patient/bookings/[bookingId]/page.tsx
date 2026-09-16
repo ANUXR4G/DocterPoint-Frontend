@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import {
@@ -21,8 +21,8 @@ import { proctoService } from "@/lib/services/procto"
 import PracticeReviewForm from "@/components/ui/procto/PracticeReviewForm"
 import CareChatPanel from "@/components/ui/procto/CareChatPanel"
 import { getSessionUserId } from "@/lib/sessionUser"
-import { usePatientLiveSocket } from "@/hooks/useProctoSocket"
 import { patchBookingFields } from "@/lib/liveBooking"
+import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
 
 type Medicine = { name: string; amount?: string; times?: string[] }
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
@@ -169,14 +169,21 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 export default function PatientVisitPage() {
   const params = useParams<{ bookingId: string }>()
   const bookingId = params.bookingId
+  const { bookings: sharedBookings, ready, refresh } = usePatientDashboard()
+
+  const fromShared = useMemo(
+    () => sharedBookings.find((b) => b.id === bookingId) as VisitBooking | undefined,
+    [sharedBookings, bookingId],
+  )
 
   const [booking, setBooking] = useState<VisitBooking | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [cancelBusy, setCancelBusy] = useState(false)
   const [flash, setFlash] = useState("")
+  const [detailLoaded, setDetailLoaded] = useState(false)
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
+  const loadDetail = useCallback(async (opts?: { silent?: boolean }) => {
     if (!bookingId) return
     if (!opts?.silent) {
       setLoading(true)
@@ -186,51 +193,43 @@ export default function PatientVisitPage() {
     if (res.status !== "successful" || !res.data) {
       if (!opts?.silent) {
         setError(res.message || "Visit not found.")
-        setBooking(null)
+        if (!fromShared) setBooking(null)
         setLoading(false)
       }
       return
     }
     setBooking(res.data as VisitBooking)
+    setDetailLoaded(true)
     if (!opts?.silent) setLoading(false)
-  }, [bookingId])
+  }, [bookingId, fromShared])
 
   useEffect(() => {
-    void load()
-  }, [load])
-
-  usePatientLiveSocket(
-    Boolean(bookingId),
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined
-      if (!incoming?.id || String(incoming.id) !== String(bookingId)) return
+    if (fromShared) {
       setBooking((prev) =>
-        prev ? patchBookingFields(prev, incoming) : prev,
+        prev ? patchBookingFields(prev, fromShared as Record<string, unknown>) : fromShared,
       )
-      // Medicines / docs / remarks may arrive snake_case — refetch for full enriched shape
-      if (
-        incoming.medicines !== undefined ||
-        incoming.documents !== undefined ||
-        incoming.doctor_remarks !== undefined ||
-        incoming.doctorRemarks !== undefined
-      ) {
-        void load({ silent: true })
-      }
-    },
-    () => void load({ silent: true }),
-  )
+      if (ready) setLoading(false)
+    }
+  }, [fromShared, ready])
+
+  useEffect(() => {
+    if (!bookingId) return
+    if (fromShared && ready) {
+      setLoading(false)
+      if (!detailLoaded) void loadDetail({ silent: true })
+      return
+    }
+    if (ready) void loadDetail()
+  }, [bookingId, fromShared, ready, detailLoaded, loadDetail])
+
+  useEffect(() => {
+    if (!fromShared) return
+    setBooking((prev) =>
+      prev
+        ? patchBookingFields(prev, fromShared as Record<string, unknown>)
+        : fromShared,
+    )
+  }, [fromShared])
 
   async function cancelVisit() {
     if (!booking) return
@@ -247,7 +246,8 @@ export default function PatientVisitPage() {
     setCancelBusy(false)
     if (res.status === "successful") {
       setFlash("Appointment canceled.")
-      await load()
+      await refresh({ silent: true })
+      await loadDetail({ silent: true })
     } else {
       setFlash(res.message || "Cancel failed.")
     }
@@ -636,7 +636,7 @@ export default function PatientVisitPage() {
               bookingId={booking.id}
               defaultAuthorName={booking.patientName ?? ""}
               providerName={booking.provider?.name}
-              onSubmitted={() => void load()}
+              onSubmitted={() => void loadDetail({ silent: true })}
             />
           ) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">

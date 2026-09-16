@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
@@ -11,10 +11,8 @@ import {
 } from "@/lib/bookingStatusTone"
 import {
   formatBookingWhenDetailed,
-  sortBookingsByWhen,
 } from "@/lib/bookingDisplay"
-import { usePatientLiveSocket } from "@/hooks/useProctoSocket"
-import { applyLiveBookingEvent } from "@/lib/liveBooking"
+import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
 
 type PatientBooking = ProctoBooking & {
   doctorRemarks?: string | null
@@ -66,113 +64,20 @@ function canCancelStatus(status: string) {
 
 export default function MyBookings() {
   const router = useRouter()
-  const [bookings, setBookings] = useState<PatientBooking[]>(() => {
-    if (typeof window === "undefined") return []
-    try {
-      const raw = sessionStorage.getItem("gg_my_bookings")
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as {
-        at: number
-        data: PatientBooking[]
-      }
-      if (Date.now() - parsed.at > 45_000) return []
-      return Array.isArray(parsed.data) ? parsed.data : []
-    } catch {
-      return []
-    }
-  })
-  const [loading, setLoading] = useState(() => bookings.length === 0)
-  const [loadError, setLoadError] = useState("")
+  const {
+    bookings: rawBookings,
+    loading,
+    ready,
+    error: loadError,
+    refresh,
+  } = usePatientDashboard()
+  const bookings = rawBookings as PatientBooking[]
+  const showLoading = !ready && loading
+
   const [flash, setFlash] = useState<{ tone: "ok" | "err"; text: string } | null>(
     null,
   )
   const [busyId, setBusyId] = useState<string | null>(null)
-  const softRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const persist = useCallback((rows: PatientBooking[]) => {
-    try {
-      sessionStorage.setItem(
-        "gg_my_bookings",
-        JSON.stringify({ at: Date.now(), data: rows }),
-      )
-    } catch {
-      /* ignore quota */
-    }
-  }, [])
-
-  const load = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
-    if (!opts?.force && opts?.silent && bookings.length > 0) {
-      try {
-        const raw = sessionStorage.getItem("gg_my_bookings")
-        if (raw) {
-          const parsed = JSON.parse(raw) as { at: number }
-          if (Date.now() - parsed.at < 45_000) return
-        }
-      } catch {
-        /* continue fetch */
-      }
-    }
-    if (!opts?.silent) setLoading(true)
-    if (!opts?.silent) setLoadError("")
-    const res = await proctoService.getMyBookings()
-    if (res.status === "successful") {
-      const next = sortBookingsByWhen(
-        (res.data as PatientBooking[]) ?? [],
-        "desc",
-      )
-      setBookings(next)
-      persist(next)
-    } else if (!opts?.silent) {
-      setBookings([])
-      setLoadError(res.message ?? "Could not load bookings.")
-    }
-    if (!opts?.silent) setLoading(false)
-  }, [bookings.length, persist])
-
-  function scheduleSoftRefresh() {
-    if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current)
-    softRefreshTimer.current = setTimeout(() => {
-      void load({ silent: true })
-    }, 250)
-  }
-
-  useEffect(() => {
-    void load({ silent: bookings.length > 0 })
-    return () => {
-      if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once; load identity is stable enough
-  }, [])
-
-  usePatientLiveSocket(
-    true,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined
-      setBookings((prev) => {
-        const { next, needsRefresh } = applyLiveBookingEvent(
-          prev,
-          String(event.event),
-          incoming,
-        )
-        persist(next)
-        if (needsRefresh) scheduleSoftRefresh()
-        return next
-      })
-    },
-    () => scheduleSoftRefresh(),
-  )
 
   async function cancel(e: React.MouseEvent, id: string) {
     e.stopPropagation()
@@ -197,7 +102,7 @@ export default function MyBookings() {
     )
     setBusyId(null)
     if (res.status === "successful") {
-      await load()
+      await refresh({ silent: true })
       setFlash({ tone: "ok", text: "Appointment canceled." })
     } else {
       setFlash({ tone: "err", text: res.message ?? "Cancel failed." })
@@ -246,7 +151,7 @@ export default function MyBookings() {
           <p>{loadError}</p>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void refresh()}
             className="mt-2 font-semibold underline"
           >
             Retry
@@ -254,7 +159,7 @@ export default function MyBookings() {
         </div>
       ) : null}
 
-      {loading && bookings.length === 0 ? (
+      {showLoading && bookings.length === 0 ? (
         <div
           role="status"
           className="dashboard-panel h-64 animate-pulse !bg-slate-100 dark:!bg-slate-800"
@@ -263,7 +168,7 @@ export default function MyBookings() {
         </div>
       ) : null}
 
-      {!loading && !loadError && bookings.length === 0 ? (
+      {!showLoading && !loadError && bookings.length === 0 ? (
         <div className="dashboard-panel flex min-h-[12rem] flex-col items-center justify-center border-dashed text-center">
           <p className="text-base font-semibold text-slate-800 dark:text-slate-200">
             No online bookings yet

@@ -1,46 +1,31 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { format, startOfToday } from "date-fns"
-import { CoolKid } from "@/components"
-import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import { type ProctoBooking } from "@/lib/services/procto"
+import {
+  filterBookingsByDate,
+  usePracticeDashboard,
+} from "@/contexts/PracticeDashboardContext"
 
 /** Today's clinic bookings sidebar (Procto) — replaces legacy appointment requests. */
 export default function Requests() {
   const [today] = useState(() => startOfToday())
-  const [loading, setLoading] = useState(true)
-  const [bookings, setBookings] = useState<ProctoBooking[]>([])
+  const { ready, loading, bookings: allBookings } = usePracticeDashboard()
+  const showLoading = !ready && loading
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      const mine = await proctoService.getMyPractices()
-      if (cancelled) return
-      if (mine.status !== "successful" || !mine.data?.[0]?.practice?.id) {
-        setBookings([])
-        setLoading(false)
-        return
-      }
-      const practiceId = mine.data[0].practice.id as string
-      const date = format(today, "yyyy-MM-dd")
-      const res = await proctoService.listPracticeBookings(practiceId, date)
-      if (cancelled) return
-      const list = ((res?.data ?? []) as ProctoBooking[]).filter((b) => {
+  const bookings = useMemo(() => {
+    const date = format(today, "yyyy-MM-dd")
+    return filterBookingsByDate(allBookings, date)
+      .filter((b) => {
         const s = (b.status || "").toUpperCase()
         return s !== "CANCELED" && s !== "COMPLETED" && s !== "NO_SHOW"
       })
-      setBookings(list.slice(0, 8))
-      setLoading(false)
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [today])
+      .slice(0, 8) as ProctoBooking[]
+  }, [allBookings, today])
 
-  if (loading) {
+  if (showLoading) {
     return (
       <div
         role="status"
@@ -79,30 +64,18 @@ export default function Requests() {
             href="/doctor/queue"
             className="text-center text-sm font-bold text-[var(--theme-primary)] hover:underline"
           >
-            Full queue →
+            Open full queue →
           </Link>
         </div>
       ) : (
-        <div className="center hidden size-full rounded-[26px] bg-neutral-800 text-white lg:flex">
-          <div className="mt-4 flex flex-col">
-            <h3 className="text-5xl font-bold 2xl:text-6xl 2xl:leading-10">
-              {format(today, "d")}
-            </h3>
-            <div className="ml-2 flex flex-col 2xl:mb-1 2xl:mt-1">
-              <span className="text-2xl font-bold 2xl:text-4xl 2xl:leading-9">
-                {format(today, "MMMM")}
-              </span>
-              <span className="ml-1 mt-1 text-sm font-semibold leading-4 opacity-65">
-                {format(today, "iiii")}
-              </span>
-              <span className="ml-1 mt-1 text-sm font-semibold leading-4 opacity-65">
-                no active bookings today
-              </span>
-              <div className="size-48">
-                <CoolKid />
-              </div>
-            </div>
-          </div>
+        <div className="hidden min-h-[200px] flex-col items-center justify-center rounded-[26px] bg-neutral-200 p-6 text-center dark:bg-neutral-800 lg:flex">
+          <p className="text-sm font-semibold opacity-70">No active visits today.</p>
+          <Link
+            href="/doctor/queue"
+            className="mt-3 text-sm font-bold text-[var(--theme-primary)] hover:underline"
+          >
+            Open queue
+          </Link>
         </div>
       )}
     </div>
