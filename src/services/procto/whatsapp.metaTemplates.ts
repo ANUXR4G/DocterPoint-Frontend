@@ -282,6 +282,26 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
     requiresTemplateOutsideWindow: true,
     audience: "patient",
   },
+  {
+    key: "PRESCRIPTION_UPDATE",
+    metaName: "docline_prescription",
+    category: "UTILITY",
+    language: "en",
+    body:
+      "Prescription update from {{practice_name}}.\n" +
+      "Doctor: {{provider_name}}\n" +
+      "Medicines: {{medicines_preview}}\n" +
+      "Open the GlucoGuide app or patient portal for full details.\n" +
+      "Reply STOP to opt out of appointment alerts.",
+    examples: {
+      practice_name: "City Care Clinic",
+      provider_name: "Dr Anjali Mehta",
+      medicines_preview: "Metformin 500mg — morning, night",
+    },
+    paramNames: ["practice_name", "provider_name", "medicines_preview"],
+    requiresTemplateOutsideWindow: true,
+    audience: "patient",
+  },
 ];
 
 export function getMetaTemplateByKey(key: string): MetaTemplateDef | undefined {
@@ -426,6 +446,12 @@ export function payloadToMetaParams(
         remarks_preview: s("remarksPreview", "None noted"),
         medicines_preview: s("medicinesPreview", "None prescribed"),
         documents_preview: s("documentsPreview", "None attached"),
+      };
+    case "PRESCRIPTION_UPDATE":
+      return {
+        practice_name: s("practiceName", "your clinic"),
+        provider_name: s("providerName", "your doctor"),
+        medicines_preview: s("medicinesPreview", "None prescribed"),
       };
     default:
       return {};

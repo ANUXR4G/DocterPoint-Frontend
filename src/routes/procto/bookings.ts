@@ -105,19 +105,18 @@ router.get(
   requireAuth("booking:read"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await PracticeService.assertMember(
-        param(req.params.practiceId),
+      const practiceId = param(req.params.practiceId);
+      const providerId = await PracticeService.resolveDataProviderScope(
+        practiceId,
         req.sessionUser!.id,
+        req.query.providerId as string | undefined,
       );
-      const data = await BookingService.listForPractice(
-        param(req.params.practiceId),
-        {
-          date: req.query.date as string | undefined,
-          from: req.query.from as string | undefined,
-          to: req.query.to as string | undefined,
-          providerId: req.query.providerId as string | undefined,
-        },
-      );
+      const data = await BookingService.listForPractice(practiceId, {
+        date: req.query.date as string | undefined,
+        from: req.query.from as string | undefined,
+        to: req.query.to as string | undefined,
+        providerId,
+      });
       return ResponseHandler.fetchSuccessful(res, "practice bookings fetched.", data);
     } catch (error) {
       next(error);
@@ -236,7 +235,11 @@ router.get(
           allowedFull = true;
         } else {
           try {
-            await PracticeService.assertMember(data.practiceId, user.id);
+            await PracticeService.assertCanViewBooking(
+              data.practiceId,
+              user.id,
+              data.providerId,
+            );
             allowedFull = true;
           } catch {
             allowedFull = false;

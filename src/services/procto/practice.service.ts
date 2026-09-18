@@ -58,6 +58,83 @@ export function clearListPublicCache() {
   listPublicCache.clear();
 }
 
+function clearMineCacheFor(userId: string) {
+  mineCache.delete(userId);
+}
+
+/** Default Mon–Fri clinic hours so booking works immediately after add/register. */
+async function seedDefaultProviderSchedule(opts: {
+  practiceId: string;
+  locationId: string;
+  providerId: string;
+  workingDays?: number[];
+  bookingType?: "TIME" | "TOKEN";
+  startTime?: string;
+  endTime?: string;
+  breakStartTime?: string;
+  breakEndTime?: string;
+  slotDurationMins?: number;
+  patientsPerSlot?: number;
+}) {
+  const workingDays = (
+    opts.workingDays?.length ? opts.workingDays : [1, 2, 3, 4, 5]
+  ).filter((d) => d >= 0 && d <= 6);
+  if (workingDays.length === 0) return;
+
+  const existing = await prisma.providerSchedule.count({
+    where: {
+      practiceId: opts.practiceId,
+      providerId: opts.providerId,
+      isActive: true,
+    },
+  });
+  if (existing > 0) return;
+
+  const mode =
+    opts.bookingType === "TOKEN" ? ScheduleMode.TOKEN_BASED : ScheduleMode.TIME_BASED;
+  const startTime = opts.startTime || "09:00";
+  const endTime = opts.endTime || "17:00";
+  const slotMins = Math.min(
+    120,
+    Math.max(5, Number(opts.slotDurationMins) || 15),
+  );
+  const patientsPerSlot = Math.min(
+    50,
+    Math.max(1, Number(opts.patientsPerSlot) || 1),
+  );
+  const breakStart = opts.breakStartTime?.trim() || "13:00";
+  const breakEnd = opts.breakEndTime?.trim() || "14:00";
+
+  await prisma.providerSchedule.createMany({
+    data: workingDays.map((dayOfWeek) => ({
+      practiceId: opts.practiceId,
+      locationId: opts.locationId,
+      providerId: opts.providerId,
+      dayOfWeek,
+      mode,
+      slotIntervalMin: mode === ScheduleMode.TIME_BASED ? slotMins : null,
+      startTime: mode === ScheduleMode.TIME_BASED ? startTime : null,
+      endTime: mode === ScheduleMode.TIME_BASED ? endTime : null,
+      maxPerSlot: patientsPerSlot,
+      sessionStart: mode === ScheduleMode.TOKEN_BASED ? startTime : null,
+      sessionEnd: mode === ScheduleMode.TOKEN_BASED ? endTime : null,
+      maxTokens:
+        mode === ScheduleMode.TOKEN_BASED
+          ? Math.max(
+              patientsPerSlot,
+              Math.floor(
+                ((minutesOf(endTime) - minutesOf(startTime)) / slotMins) *
+                  patientsPerSlot,
+              ),
+            )
+          : null,
+      breakStartTime: breakStart || null,
+      breakEndTime: breakEnd || null,
+      isActive: true,
+    })),
+  });
+}
+
 export const PracticeService = {
   async onboardPractice(data: {
     name: string;
@@ -73,6 +150,8 @@ export const PracticeService = {
     appointmentValidityDays?: number;
     doctorName?: string;
     doctors?: OnboardDoctorInput[];
+    /** Start a 14-day trial on this plan during registration. */
+    planId?: string;
     /** Clinic cover / profile image URL (S3 or CDN). */
     bgSrc?: string;
     photoUrl?: string;
@@ -92,7 +171,7 @@ export const PracticeService = {
     if (doctors.length > 0) {
       throw new AppError(
         403,
-        "Multi-doctor clinics require Growth or Clinic. Create the practice first, subscribe under Billing, then add doctors.",
+        "Doctors are added from the clinic dashboard after registration — not during signup. Independently registered doctors cannot join a clinic.",
       );
     }
     const practiceType: PracticeType =
@@ -148,14 +227,8 @@ export const PracticeService = {
       const email = doc.email.trim().toLowerCase();
       const existing = await prisma.user.findUnique({ where: { email } });
       if (existing) {
-        // Link existing doctor account to this practice if possible
-        if (existing.role === "doctor") {
-          createdDoctorMembers.push({
-            userId: existing.id,
-            role: "DOCTOR",
-            doctorId: existing.id,
-          });
-        }
+        // Never attach independently registered doctors during onboard.
+        // Clinics add staff only via dashboard createDoctor.
         continue;
       }
 
@@ -208,7 +281,7 @@ export const PracticeService = {
     // Until a pool line is LIVE, Tel and optional WA hint stay aligned.
     const publicPhone = phoneDigits || waDigits || null;
 
-    return prisma.practice.create({
+    const practice = await prisma.practice.create({
       data: {
         name: data.name,
         slug,
@@ -224,7 +297,7 @@ export const PracticeService = {
         faqKb: data.faqKb ?? {
           address: `${data.location.address}, ${data.location.city}`,
           fee: `₹${consultationFee}`,
-          timings: "See schedule on the clinic profile or ask for available slots.",
+          timings: "Mon–Fri 09:00–17:00 (doctors set exact hours when added).",
           parking: "Ask the clinic for parking details.",
           documents: "Bring a valid ID and any prior reports if you have them.",
         },
@@ -240,7 +313,8 @@ export const PracticeService = {
             {
               userId: data.ownerUserId,
               role: ownerRole,
-              doctorId: ownerRole === "DOCTOR" ? data.ownerUserId : undefined,
+              // Clinic owners keep a doctorId so they can use Doctor Login too.
+              doctorId: data.ownerUserId,
             },
             ...createdDoctorMembers.map((m) => ({
               userId: m.userId,
@@ -257,6 +331,60 @@ export const PracticeService = {
         },
       },
     });
+
+    // Registration-time trial so the clinic dashboard is usable immediately.
+    if (data.planId?.trim()) {
+      try {
+        const { BillingService } = await import("./billing.service.js");
+        await BillingService.selectPlan(
+          practice.id,
+          data.planId.trim(),
+          data.ownerUserId,
+          "trial",
+        );
+      } catch {
+        // Practice is still created; billing can be finished from Subscription.
+      }
+    }
+
+    clearMineCacheFor(data.ownerUserId);
+
+    // Auto-add registration Tel to Meta WABA phone list (+ GlucoGuide number pool).
+    const regPhone =
+      practice.phone ||
+      practice.whatsappBusinessNumber ||
+      data.phone?.replace(/\D/g, "").slice(-10) ||
+      "";
+    if (regPhone) {
+      void import("./metaWhatsApp.service.js")
+        .then(({ MetaWhatsAppService }) =>
+          MetaWhatsAppService.ensurePhoneListedAtRegistration({
+            practiceId: practice.id,
+            phoneNumber: regPhone,
+            displayName: practice.name,
+          }),
+        )
+        .then((r) => {
+          if (r.ok) {
+            console.log(
+              `[Meta] registration phone ${regPhone} → ${r.mode}` +
+                (r.phoneNumberId ? ` id=${r.phoneNumberId}` : ""),
+            );
+          } else {
+            console.warn(
+              `[Meta] registration phone ${regPhone} deferred: ${r.message}`,
+            );
+          }
+        })
+        .catch((err) =>
+          console.warn(
+            "[Meta] registration phone provision failed:",
+            err instanceof Error ? err.message : err,
+          ),
+        );
+    }
+
+    return practice;
   },
 
   async listPublic(filters?: { specialty?: string; city?: string; q?: string }) {
@@ -631,6 +759,66 @@ export const PracticeService = {
     return member;
   },
 
+  /**
+   * Clinic owners/admins manage any provider; clinic-staff doctors manage
+   * only themselves (own schedule / profile / leave).
+   */
+  async assertCanManageProvider(
+    practiceId: string,
+    actorUserId: string,
+    providerId: string,
+  ) {
+    const member = await this.assertMember(practiceId, actorUserId);
+    if (
+      member.role === "PRACTICE_OWNER" ||
+      member.role === "PRACTICE_ADMIN"
+    ) {
+      return member;
+    }
+    if (providerId !== actorUserId) {
+      throw new AppError(
+        403,
+        "Clinic staff doctors can only manage their own schedule and profile. Clinic owners manage the full roster.",
+      );
+    }
+    return member;
+  },
+
+  /**
+   * Clinic-wide booking/patient lists are for owners/admins only.
+   * Staff doctors are forced to their own providerId (even if the client
+   * omits or spoofs the query param).
+   */
+  async resolveDataProviderScope(
+    practiceId: string,
+    actorUserId: string,
+    requestedProviderId?: string | null,
+  ): Promise<string | undefined> {
+    const member = await this.assertMember(practiceId, actorUserId);
+    const isAdmin =
+      member.role === "PRACTICE_OWNER" || member.role === "PRACTICE_ADMIN";
+    const requested = requestedProviderId?.trim() || undefined;
+    if (!isAdmin) {
+      if (requested && requested !== actorUserId) {
+        throw new AppError(
+          403,
+          "Clinic staff doctors can only view their own appointments and patients. Clinic owners see the full roster.",
+        );
+      }
+      return actorUserId;
+    }
+    return requested;
+  },
+
+  /** Staff doctors may open visits assigned to them; clinic admins any visit. */
+  async assertCanViewBooking(
+    practiceId: string,
+    actorUserId: string,
+    providerId: string,
+  ) {
+    await this.resolveDataProviderScope(practiceId, actorUserId, providerId);
+  },
+
   async addMember(
     practiceId: string,
     data: { userId: string; role: PracticeMemberRole; doctorId?: string },
@@ -640,6 +828,39 @@ export const PracticeService = {
     if (data.role === "DOCTOR" || data.role === "PRACTICE_OWNER") {
       const { assertCanAddDoctor } = await import("./planEntitlements.js");
       await assertCanAddDoctor(practiceId);
+    }
+    if (data.role === "DOCTOR") {
+      const target = await prisma.user.findUnique({
+        where: { id: data.userId },
+        select: { createdBy: true, role: true },
+      });
+      if (!target || target.role !== "doctor") {
+        throw new AppError(400, "That account is not a doctor.");
+      }
+      const prior = await prisma.practiceMember.findUnique({
+        where: {
+          practiceId_userId: { practiceId, userId: data.userId },
+        },
+      });
+      if (!prior) {
+        const solo = await prisma.practiceMember.findFirst({
+          where: {
+            userId: data.userId,
+            isActive: true,
+            practice: { type: "SOLO" },
+          },
+        });
+        if (
+          target.createdBy === "self_attempted" ||
+          solo ||
+          target.createdBy === "clinic_owner_signup"
+        ) {
+          throw new AppError(
+            400,
+            "Independently registered doctors cannot be added to a clinic. Create a new doctor from the clinic dashboard instead.",
+          );
+        }
+      }
     }
     return prisma.practiceMember.create({
       data: {
@@ -652,7 +873,8 @@ export const PracticeService = {
   },
 
   /**
-   * Create or link a doctor account and add them to the clinic roster.
+   * Create a clinic-staff doctor from the dashboard (new account only).
+   * Independently registered doctors cannot be linked into a clinic.
    */
   async createDoctor(
     practiceId: string,
@@ -696,7 +918,23 @@ export const PracticeService = {
       if (existingMember?.isActive) {
         throw new AppError(400, "Doctor is already on this clinic roster.");
       }
-      // Optional: update password when linking if provided
+      // Reactivate only if this email was previously on THIS clinic roster.
+      // Never link independently registered / solo doctors.
+      if (!existingMember) {
+        throw new AppError(
+          400,
+          "Independently registered doctors cannot be added to a clinic. Create a new doctor account from the clinic dashboard (use a different email if needed).",
+        );
+      }
+      if (
+        user.createdBy === "self_attempted" ||
+        user.createdBy === "clinic_owner_signup"
+      ) {
+        throw new AppError(
+          400,
+          "Independently registered doctors cannot be added to a clinic. Create a new doctor account from the clinic dashboard instead.",
+        );
+      }
       if (data.password?.trim()) {
         if (data.password.trim().length < 6) {
           throw new AppError(400, "Password must be at least 6 characters.");
@@ -723,19 +961,23 @@ export const PracticeService = {
           },
         });
       }
-      const member = existingMember
-        ? await prisma.practiceMember.update({
-            where: { id: existingMember.id },
-            data: { isActive: true, role: "DOCTOR", doctorId: user.id },
-          })
-        : await prisma.practiceMember.create({
-            data: {
-              practiceId,
-              userId: user.id,
-              role: "DOCTOR",
-              doctorId: user.id,
-            },
-          });
+      const member = await prisma.practiceMember.update({
+        where: { id: existingMember.id },
+        data: { isActive: true, role: "DOCTOR", doctorId: user.id },
+      });
+      const practiceLoc = await prisma.clinicLocation.findFirst({
+        where: { practiceId, isActive: true },
+        select: { id: true },
+      });
+      if (practiceLoc) {
+        await seedDefaultProviderSchedule({
+          practiceId,
+          locationId: practiceLoc.id,
+          providerId: user.id,
+        });
+      }
+      clearMineCacheFor(user.id);
+      clearMineCacheFor(actorUserId);
       return {
         member,
         user: { id: user.id, name: user.name, email: user.email, phone: user.phone },
@@ -763,7 +1005,7 @@ export const PracticeService = {
           create: {
             description: data.specialty?.trim()
               ? `${data.specialty.trim()} — clinic staff doctor.`
-              : "Clinic staff doctor — complete your profile.",
+              : "General Medicine — clinic staff doctor.",
             hospitalId: hospital.id,
             availableTimes: "Mon–Fri 09:00–17:00",
             experience: 0,
@@ -784,6 +1026,21 @@ export const PracticeService = {
         doctorId: user.id,
       },
     });
+
+    const practiceLoc = await prisma.clinicLocation.findFirst({
+      where: { practiceId, isActive: true },
+      select: { id: true },
+    });
+    if (practiceLoc) {
+      await seedDefaultProviderSchedule({
+        practiceId,
+        locationId: practiceLoc.id,
+        providerId: user.id,
+      });
+    }
+
+    clearMineCacheFor(user.id);
+    clearMineCacheFor(actorUserId);
 
     return {
       member,
@@ -827,7 +1084,10 @@ export const PracticeService = {
    * Distinct patients from practice bookings, with recent visit summary.
    */
   async listPatients(practiceId: string, actorUserId: string) {
-    await this.assertMember(practiceId, actorUserId);
+    const providerScope = await this.resolveDataProviderScope(
+      practiceId,
+      actorUserId,
+    );
 
     // Cap history — full-table scans + fat JSON columns were making this slow
     // on Railway ↔ Supabase even for small clinics.
@@ -837,6 +1097,7 @@ export const PracticeService = {
     const bookings = await prisma.practiceBooking.findMany({
       where: {
         practiceId,
+        ...(providerScope ? { providerId: providerScope } : {}),
         OR: [
           { createdAt: { gte: since } },
           { slotStart: { gte: since } },
@@ -1056,7 +1317,7 @@ export const PracticeService = {
     },
     actorUserId: string,
   ) {
-    await this.assertMember(practiceId, actorUserId);
+    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
 
     // Only one booking mode (time OR token) per provider at a location.
     await prisma.providerSchedule.deleteMany({
@@ -1130,7 +1391,7 @@ export const PracticeService = {
         throw new AppError(400, "Extra slots are only available for time-based booking.");
       }
     } else {
-      await this.assertMember(practiceId, actorUserId);
+      await this.assertCanManageProvider(practiceId, actorUserId, providerId);
     }
 
     const dayStart = startOfLocalDay(parseLocalDate(data.date));
@@ -1153,7 +1414,13 @@ export const PracticeService = {
       where: {
         practiceId,
         providerId,
-        status: BookingStatus.SCHEDULED,
+        status: {
+          in: [
+            BookingStatus.SCHEDULED,
+            BookingStatus.REQUESTED,
+            BookingStatus.ACCEPTED,
+          ],
+        },
         OR: [
           { sessionDate: dayStart },
           { slotStart: { gte: dayStart, lte: dayEnd } },
@@ -1182,9 +1449,20 @@ export const PracticeService = {
   },
 
   async getSchedules(practiceId: string, providerId?: string, actorUserId?: string) {
-    if (actorUserId) await this.assertMember(practiceId, actorUserId);
+    const scoped =
+      actorUserId != null
+        ? await this.resolveDataProviderScope(
+            practiceId,
+            actorUserId,
+            providerId,
+          )
+        : providerId;
     return prisma.providerSchedule.findMany({
-      where: { practiceId, ...(providerId ? { providerId } : {}), isActive: true },
+      where: {
+        practiceId,
+        ...(scoped ? { providerId: scoped } : {}),
+        isActive: true,
+      },
       include: { location: true },
     });
   },
@@ -1195,11 +1473,18 @@ export const PracticeService = {
     date?: string,
     actorUserId?: string,
   ) {
-    if (actorUserId) await this.assertMember(practiceId, actorUserId);
+    const scoped =
+      actorUserId != null
+        ? await this.resolveDataProviderScope(
+            practiceId,
+            actorUserId,
+            providerId,
+          )
+        : providerId;
     return prisma.scheduleOverride.findMany({
       where: {
         practiceId,
-        ...(providerId ? { providerId } : {}),
+        ...(scoped ? { providerId: scoped } : {}),
         ...(date ? { date: startOfLocalDay(parseLocalDate(date)) } : {}),
       },
       orderBy: { date: "desc" },
@@ -1226,9 +1511,9 @@ export const PracticeService = {
     },
     actorUserId: string,
   ) {
-    await this.assertMember(practiceId, actorUserId);
+    await this.assertAdmin(practiceId, actorUserId);
     if (data.bgSrc !== undefined) {
-      await this.assertAdmin(practiceId, actorUserId);
+      // already admin
     }
 
     let nextConsultationFee: number | undefined;
@@ -1477,12 +1762,24 @@ export const PracticeService = {
       },
     });
 
-    return rows.map((row) => ({
-      ...row,
-      membershipId: row.id,
-      id: row.practiceId,
-      practiceId: row.practiceId,
-    }));
+    return rows.map((row) => {
+      const isAdmin =
+        row.role === "PRACTICE_OWNER" || row.role === "PRACTICE_ADMIN";
+      // Staff doctors must not receive other clinic doctors' PII in the roster.
+      const practice = isAdmin
+        ? row.practice
+        : {
+            ...row.practice,
+            members: row.practice.members.filter((m) => m.userId === userId),
+          };
+      return {
+        ...row,
+        practice,
+        membershipId: row.id,
+        id: row.practiceId,
+        practiceId: row.practiceId,
+      };
+    });
   },
 
   /** One round-trip for doctor queue/dashboard: memberships + today's bookings. */
@@ -1508,7 +1805,10 @@ export const PracticeService = {
         patients: [] as unknown[],
       };
     }
-    await this.assertMember(practiceId, userId);
+    const providerScope = await this.resolveDataProviderScope(
+      practiceId,
+      userId,
+    );
     const { BookingService } = await import("./booking.service.js");
     const includePatients = opts?.includePatients !== false;
     const [bookings, patients] = await Promise.all([
@@ -1516,6 +1816,7 @@ export const PracticeService = {
         date: opts?.date,
         from: opts?.from,
         to: opts?.to,
+        providerId: providerScope,
       }),
       includePatients
         ? this.listPatients(practiceId, userId)
@@ -1546,7 +1847,7 @@ export const PracticeService = {
     },
     actorUserId: string,
   ) {
-    await this.assertMember(practiceId, actorUserId);
+    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
 
     const workingDays = Array.from(
       new Set((data.workingDays ?? []).map(Number).filter((d) => d >= 0 && d <= 6)),
@@ -1743,7 +2044,11 @@ export const PracticeService = {
     periodType: string,
     providerId?: string | null,
   ) {
-    await this.assertMember(practiceId, actorUserId);
+    const scopedProviderId = await this.resolveDataProviderScope(
+      practiceId,
+      actorUserId,
+      providerId,
+    );
 
     // Keep plan feature matrix in sync (queueAnalytics on all paid plans).
     const { NumberPoolService } = await import("./numberPool.service.js");
@@ -1773,7 +2078,9 @@ export const PracticeService = {
     }
 
     const providerFilter =
-      providerId && isUuid(providerId) ? providerId : undefined;
+      scopedProviderId && isUuid(scopedProviderId)
+        ? scopedProviderId
+        : undefined;
 
     type Bucket = {
       label: string;

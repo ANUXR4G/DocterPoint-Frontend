@@ -148,7 +148,7 @@ router.post(
         return ResponseHandler.unsuccessful(
           res,
           400,
-          "imageBase64 is required (JPG/PNG/WEBP of the ID).",
+          "imageBase64 is required (JPG/PNG/WEBP/PDF of the ID).",
         );
       }
 
@@ -188,7 +188,7 @@ router.post(
         return ResponseHandler.unsuccessful(
           res,
           400,
-          "imageBase64 is required (JPG/PNG/WEBP of the document).",
+          "imageBase64 is required (JPG/PNG/WEBP/PDF of the document).",
         );
       }
 

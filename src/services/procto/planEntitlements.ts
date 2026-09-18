@@ -130,11 +130,13 @@ export async function assertBookingQuota(practiceId: string) {
 }
 
 export async function countActiveDoctors(practiceId: string) {
+  // Only rostered DOCTOR members count toward seat limits.
+  // PRACTICE_OWNER (clinic admin) is not a billable practicing seat.
   return prisma.practiceMember.count({
     where: {
       practiceId,
       isActive: true,
-      role: { in: ["DOCTOR", "PRACTICE_OWNER"] },
+      role: "DOCTOR",
     },
   });
 }

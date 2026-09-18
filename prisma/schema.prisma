@@ -612,3 +612,4 @@ model PracticeReview {
   @@index([providerId, isPublished])
   @@map("practice_reviews")
 }
+

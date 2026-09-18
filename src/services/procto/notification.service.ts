@@ -43,6 +43,29 @@ function whenFields(booking: {
   };
 }
 
+function formatMedicinesPreview(
+  medicines: Array<{
+    name?: string;
+    amount?: string;
+    times?: string[];
+  }>,
+): string {
+  const medLines = medicines
+    .map((m) => {
+      const name = String(m.name || "").trim();
+      if (!name) return "";
+      const dose = String(m.amount || "").trim();
+      const times = Array.isArray(m.times)
+        ? m.times.filter(Boolean).join(", ")
+        : "";
+      return [name, dose, times].filter(Boolean).join(" — ");
+    })
+    .filter(Boolean);
+
+  if (medLines.length === 0) return "None prescribed";
+  return medLines.join("; ").slice(0, 280);
+}
+
 /** Prefer practice phone, then owner/doctor user phone. */
 export async function resolveClinicNotifyPhone(practiceId: string): Promise<string | null> {
   const practice = await prisma.practice.findUnique({
@@ -333,26 +356,13 @@ export const NotificationService = {
       ? (booking.documents as Array<{ name?: string; url?: string }>)
       : [];
 
-    const medLines = medicines
-      .map((m) => {
-        const name = String(m.name || "").trim();
-        if (!name) return "";
-        const dose = String(m.amount || "").trim();
-        const times = Array.isArray(m.times) ? m.times.filter(Boolean).join(", ") : "";
-        return [name, dose, times].filter(Boolean).join(" — ");
-      })
-      .filter(Boolean);
-
+    const medicinesPreview = formatMedicinesPreview(medicines);
     const remarks = String(booking.doctorRemarks || "").trim();
     const remarksPreview = remarks
       ? remarks.length > 220
         ? `${remarks.slice(0, 219)}…`
         : remarks
       : "None noted";
-    const medicinesPreview =
-      medLines.length === 0
-        ? "None prescribed"
-        : medLines.join("; ").slice(0, 280);
     const documentsPreview =
       documents.length === 0
         ? "None attached"
@@ -372,6 +382,44 @@ export const NotificationService = {
         remarksPreview,
         medicinesPreview,
         documentsPreview,
+        ...whenFields(booking),
+      },
+    });
+  },
+
+  /**
+   * Patient WhatsApp: prescription / medicines when the doctor saves them
+   * during an open visit (before finish). Finish still sends VISIT_SUMMARY.
+   */
+  async enqueuePrescriptionUpdate(bookingId: string) {
+    const booking = await loadBooking(bookingId);
+    if (!booking) return null;
+
+    const medicines = Array.isArray(booking.medicines)
+      ? (booking.medicines as Array<{
+          name?: string;
+          amount?: string;
+          times?: string[];
+        }>)
+      : [];
+    if (!medicines.length) return null;
+
+    const medicinesPreview = formatMedicinesPreview(medicines);
+    if (!medicinesPreview || medicinesPreview === "None prescribed") {
+      return null;
+    }
+
+    return createAndEnqueue({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.BOOKING_CONFIRMATION,
+      payload: {
+        to: booking.patientPhone,
+        templateKey: "PRESCRIPTION_UPDATE",
+        recipientRole: "patient",
+        practiceName: booking.practice.name,
+        providerName: booking.provider?.name ?? "",
+        medicinesPreview,
         ...whenFields(booking),
       },
     });

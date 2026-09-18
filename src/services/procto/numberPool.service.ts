@@ -93,6 +93,111 @@ export const NumberPoolService = {
   },
 
   /**
+   * Link a registration Tel to a practice WhatsAppNumber row (admin Meta list).
+   * Used when Meta add succeeds (VERIFYING) or for MOCK demos (LIVE).
+   * Soft-idempotent: returns existing practice line if already linked.
+   */
+  async linkRegistrationNumber(
+    practiceId: string,
+    data: {
+      phoneNumber: string;
+      displayName?: string;
+      wabaPhoneNumberId?: string;
+      wabaId?: string;
+      status: "LIVE" | "VERIFYING" | "ASSIGNED";
+      provider: "MOCK" | "META_CLOUD_API";
+      notes?: string;
+    },
+  ) {
+    const practice = await prisma.practice.findUnique({
+      where: { id: practiceId },
+    });
+    if (!practice) throw new AppError(404, "Practice not found");
+
+    const phone = digitsOnly(data.phoneNumber);
+    if (phone.length < 10) {
+      throw new AppError(400, "phoneNumber must be a valid 10-digit Indian mobile");
+    }
+
+    const already = await prisma.whatsAppNumber.findUnique({
+      where: { practiceId },
+    });
+    if (already) return already;
+
+    const phoneTaken = await prisma.whatsAppNumber.findUnique({
+      where: { phoneNumber: phone },
+    });
+    if (
+      phoneTaken &&
+      phoneTaken.practiceId &&
+      phoneTaken.practiceId !== practiceId
+    ) {
+      throw new AppError(
+        409,
+        "This phone number is already linked to another clinic.",
+      );
+    }
+
+    const metaId = data.wabaPhoneNumberId?.trim() || "";
+    if (metaId) {
+      const wabaTaken = await prisma.whatsAppNumber.findFirst({
+        where: {
+          wabaPhoneNumberId: metaId,
+          NOT: { practiceId },
+        },
+      });
+      if (wabaTaken?.practiceId) {
+        throw new AppError(
+          409,
+          "This Meta Phone Number ID is already linked to another clinic.",
+        );
+      }
+    }
+
+    const status =
+      data.status === "LIVE"
+        ? WhatsAppNumberStatus.LIVE
+        : data.status === "ASSIGNED"
+          ? WhatsAppNumberStatus.ASSIGNED
+          : WhatsAppNumberStatus.VERIFYING;
+    const provider =
+      data.provider === "META_CLOUD_API"
+        ? ProvisioningProvider.META_CLOUD_API
+        : ProvisioningProvider.MOCK;
+
+    return prisma.$transaction(async (tx) => {
+      const payload = {
+        practiceId,
+        status,
+        provider,
+        wabaId: data.wabaId?.trim() || null,
+        wabaPhoneNumberId: metaId || null,
+        displayName: data.displayName?.trim() || practice.name,
+        verificationStatus:
+          status === WhatsAppNumberStatus.LIVE ? "verified" : "pending",
+        displayNameStatus:
+          status === WhatsAppNumberStatus.LIVE ? "approved" : "pending",
+        templatesStatus:
+          status === WhatsAppNumberStatus.LIVE ? "approved" : "pending",
+        activatedAt: status === WhatsAppNumberStatus.LIVE ? new Date() : null,
+        notes: data.notes ?? "Linked at registration",
+      };
+
+      const row = phoneTaken
+        ? await tx.whatsAppNumber.update({
+            where: { id: phoneTaken.id },
+            data: payload,
+          })
+        : await tx.whatsAppNumber.create({
+            data: { phoneNumber: phone, ...payload },
+          });
+
+      await syncPracticeBotPhone(tx, practiceId, phone);
+      return row;
+    });
+  },
+
+  /**
    * Assign next AVAILABLE number to a practice (mock Meta verification advances to LIVE).
    * Sets practice.whatsappBusinessNumber AND practice.phone (profile Tel = bot number).
    * Never stamps the shared env WHATSAPP_PHONE_NUMBER_ID onto this row —

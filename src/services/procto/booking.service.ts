@@ -356,7 +356,7 @@ export const BookingService = {
           patientName: data.patientName,
           patientId: data.patientId,
           mode,
-          status: BookingStatus.SCHEDULED,
+          status: BookingStatus.ACCEPTED,
           channel,
           slotStart,
           slotEnd,
@@ -430,6 +430,19 @@ export const BookingService = {
         where: { practiceId_userId: { practiceId: existing.practiceId, userId: actorUserId } },
       });
       if (!member?.isActive) ResponseHandler.noPermission("not authorized.");
+      const role = member!.role;
+      const isAdmin =
+        role === "PRACTICE_OWNER" || role === "PRACTICE_ADMIN";
+      if (
+        !isAdmin &&
+        existing.providerId &&
+        existing.providerId !== actorUserId
+      ) {
+        throw new AppError(
+          403,
+          "You can only update status for your own appointments. Clinic owners can manage the full roster.",
+        );
+      }
     }
 
     const terminal: BookingStatus[] = [
@@ -639,7 +652,7 @@ export const BookingService = {
           slotEnd,
           tokenNumber,
           sessionDate,
-          status: BookingStatus.SCHEDULED,
+          status: BookingStatus.ACCEPTED,
         },
         include: { practice: true, location: true },
       });
@@ -686,6 +699,19 @@ export const BookingService = {
       where: { practiceId_userId: { practiceId: existing.practiceId, userId: actorUserId } },
     });
     if (!member?.isActive) ResponseHandler.noPermission("not authorized.");
+    const role = member!.role;
+    const isAdmin =
+      role === "PRACTICE_OWNER" || role === "PRACTICE_ADMIN";
+    if (
+      !isAdmin &&
+      existing.providerId &&
+      existing.providerId !== actorUserId
+    ) {
+      throw new AppError(
+        403,
+        "You can only edit visits assigned to you. Clinic owners can manage the full roster.",
+      );
+    }
 
     if (
       existing.status === BookingStatus.COMPLETED ||
@@ -703,6 +729,12 @@ export const BookingService = {
     const medicines = normalizeMedicines(data.medicines);
     const documents = normalizeBookingDocuments(data.documents);
     const nextStatus = data.status ? parseBookingStatus(data.status) : undefined;
+
+    const prevMedsKey = JSON.stringify(existing.medicines ?? []);
+    const nextMedsKey = JSON.stringify(medicines);
+    const medicinesChanged =
+      data.medicines !== undefined && prevMedsKey !== nextMedsKey;
+    const hasMedicines = medicines.length > 0;
 
     const updated = await prisma.practiceBooking.update({
       where: { id: bookingId },
@@ -731,6 +763,11 @@ export const BookingService = {
     if (nextStatus === BookingStatus.COMPLETED) {
       void NotificationService.enqueueVisitSummary(bookingId).catch((err) =>
         console.warn("visit summary notification failed (non-fatal):", err),
+      );
+    } else if (medicinesChanged && hasMedicines) {
+      // Mid-visit prescription save → patient WhatsApp (finish uses VISIT_SUMMARY).
+      void NotificationService.enqueuePrescriptionUpdate(bookingId).catch((err) =>
+        console.warn("prescription WhatsApp notify failed (non-fatal):", err),
       );
     }
 

@@ -27,9 +27,12 @@ export function wantsHuman(text: string): boolean {
 /** True for structured bot menus (welcome / help) — never replace these. */
 function looksLikeBotMenu(reply: string): boolean {
   return (
-    /\*(REGISTER|BOOK|DOCTORS|STATUS|FAQ|RESCHEDULE|CANCEL|REPORT|MY DOCS)\*/i.test(
+    /\*(REGISTER|BOOK|DOCTORS|STATUS|FAQ|RESCHEDULE|CANCEL|REPORT|MY DOCS|LANGUAGE)\*/i.test(
       reply,
-    ) || /\bWelcome to\b|\bमें आपका स्वागत है\b/i.test(reply)
+    ) ||
+    /\bWelcome to\b|\bमें आपका स्वागत है\b|\bHow can I help you\b|\bमैं कैसे मदद करूँ\b/i.test(
+      reply,
+    )
   );
 }
 
