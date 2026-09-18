@@ -465,6 +465,27 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
     .replace(/[\uFE0F\u20E3]/g, ""); // emoji variation / keycap
   if (!raw) return null;
 
+  // Interactive list row ids from the welcome / HELP menu
+  const listPick = /^menu:([a-z_]+)$/i.exec(raw);
+  if (listPick) {
+    const key = listPick[1]!.toLowerCase();
+    const map: Record<string, MenuShortcut> = {
+      book: "book",
+      doctors: "doctors",
+      status: "status",
+      register: "register",
+      faq: "faq",
+      cancel: "cancel",
+      reschedule: "reschedule",
+      language: "language",
+      lang: "language",
+      report: "report",
+      help: "help",
+      menu: "help",
+    };
+    return map[key] ?? null;
+  }
+
   // "1", "1.", "1)", "1️⃣", "option 1"
   const m = raw.match(/^(?:option\s*)?([1-9])(?:\s*[.)]?)?$/i);
   if (!m) return null;
