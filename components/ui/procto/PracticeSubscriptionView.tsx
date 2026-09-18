@@ -14,6 +14,7 @@ type Props = {
 function SubscriptionContent({ portal }: Props) {
   const searchParams = useSearchParams()
   const autoPlanId = searchParams.get("subscribePlan")
+  const waVerify = searchParams.get("waVerify") === "1"
   const { loading, practiceId, practiceName, canManage } = usePracticeMembership()
 
   return (
@@ -28,6 +29,13 @@ function SubscriptionContent({ portal }: Props) {
         }
       />
 
+      {waVerify ? (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+          Your registration mobile was added to Meta. Scroll to{" "}
+          <strong>WhatsApp booking line</strong> and enter the SMS OTP to go
+          LIVE.
+        </div>
+      ) : null}
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (

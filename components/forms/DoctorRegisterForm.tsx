@@ -78,6 +78,13 @@ export default function DoctorRegisterForm({
       setError("Fill Dr Name, license number, email, and password.")
       return
     }
+    const phoneDigits = phone.replace(/\D/g, "").slice(-10)
+    if (phoneDigits.length !== 10) {
+      setError(
+        "Enter a valid 10-digit mobile — this becomes your WhatsApp bot number.",
+      )
+      return
+    }
     if (!address.trim()) {
       setError("Enter your clinic / practice address.")
       return
@@ -117,7 +124,7 @@ export default function DoctorRegisterForm({
             licenseNo: licenseNo.trim(),
             email: email.trim(),
             password: encryptedPass,
-            phone: phone.trim() || undefined,
+            phone: phoneDigits,
             address: address.trim(),
             city: city.trim() || undefined,
             consultationFee: fee,
@@ -147,7 +154,8 @@ export default function DoctorRegisterForm({
       cookies.setCookie(PORTAL_COOKIE, "doctor", 60 * 60 * 24 * 30)
       const { proctoService } = await import("@/lib/services/procto")
       proctoService.invalidateMyPracticesCache()
-      router.push("/doctor/dashboard?onboarded=1")
+      // VERIFYING lines need in-app Meta OTP under Billing / Subscription.
+      router.push("/doctor/subscription?waVerify=1")
     } catch {
       setSubmitting(false)
       setError("Registration failed. Try again.")
@@ -213,7 +221,7 @@ export default function DoctorRegisterForm({
         <IconInput
           icon="phone"
           name="phone"
-          label="Phone"
+          label="Mobile (WhatsApp bot) *"
           value={phone}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setPhone(e.target.value)
