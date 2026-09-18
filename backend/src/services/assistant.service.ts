@@ -246,7 +246,7 @@ export const AssistantService = {
     throw new AppError(
       502,
       /depleted|credits|quota|rate limit/i.test(lastError)
-        ? "Mira’s AI credits are used up. Add OPENAI_API_KEY or top up Hugging Face credits on the server, then try again."
+        ? "Mira’s AI credits are used up. Check OPENAI_API_KEY billing on the server, then try again."
         : lastError,
     );
   },

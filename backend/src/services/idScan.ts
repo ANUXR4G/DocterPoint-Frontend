@@ -279,7 +279,7 @@ async function callVisionModel(
   if (!settings.hfToken && !settings.openaiApiKey) {
     throw new AppError(
       503,
-      "Document scan is not configured. Set HF_TOKEN or OPENAI_API_KEY on the server.",
+      "Document scan is not configured. Set OPENAI_API_KEY on the server.",
     );
   }
 

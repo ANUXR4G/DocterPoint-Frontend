@@ -461,25 +461,23 @@ async function replyStatus(
   practice: PracticeCtx,
   patientPhone: string,
   lang: WaLang,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const bookings = await BookingService.listForPatient({ phone: patientPhone });
   const mine = bookings.filter((b) => b.practiceId === practice.id);
   if (!mine.length) {
     const patient = await PatientService.findByPhone(patientPhone);
     if (!patient) {
-      return {
-        reply:
-          lang === "hi"
-            ? "अभी कोई अपॉइंटमेंट नहीं — और आप रजिस्टर्ड नहीं हैं।\nएक साथ रजिस्टर और शेड्यूल के लिए *BOOK* लिखें।"
-            : "No appointments yet — and you're not registered.\nReply *BOOK* to register and schedule in one flow.",
-      };
-    }
-    return {
-      reply:
+      return withMainMenu(
         lang === "hi"
-          ? "इस क्लिनिक पर आपकी कोई अपॉइंटमेंट नहीं है। शेड्यूल के लिए *BOOK* लिखें।"
-          : "You have no appointments at this clinic. Reply *BOOK* to schedule.",
-    };
+          ? "अभी कोई अपॉइंटमेंट नहीं — और आप रजिस्टर्ड नहीं हैं।\nविकल्पों के लिए नीचे *Menu* दबाएँ।"
+          : "No appointments yet — and you're not registered.\nTap *Menu* below for options.",
+      );
+    }
+    return withMainMenu(
+      lang === "hi"
+        ? "इस क्लिनिक पर आपकी कोई अपॉइंटमेंट नहीं है।\nविकल्पों के लिए नीचे *Menu* दबाएँ।"
+        : "You have no appointments at this clinic.\nTap *Menu* below for options.",
+    );
   }
   const lines = mine.slice(0, 5).map((b) => {
     const docs = Array.isArray(b.documents) ? b.documents.length : 0;
@@ -494,8 +492,8 @@ async function replyStatus(
   return {
     reply:
       lang === "hi"
-        ? `*${practice.name}* पर आपकी अपॉइंटमेंट:\n${lines.join("\n")}\n\nरिपोर्ट जोड़ने के लिए फ़ोटो/PDF भेजें, या *REPORT* लिखें।`
-        : `Your appointments at ${practice.name}:\n${lines.join("\n")}\n\nSend a photo/PDF to attach a report, or reply *REPORT*.`,
+        ? `*${practice.name}* पर आपकी अपॉइंटमेंट:\n${lines.join("\n")}\n\nरिपोर्ट जोड़ने के लिए फ़ोटो/PDF भेजें।`
+        : `Your appointments at ${practice.name}:\n${lines.join("\n")}\n\nSend a photo/PDF to attach a report.`,
   };
 }
 
@@ -506,7 +504,7 @@ async function dispatchMenuIntent(opts: {
   patientPhone: string;
   state: ConversationState;
   lang: WaLang;
-}): Promise<{ reply: string } | null> {
+}): Promise<OrchestratorResult | null> {
   const { intent, convId, practice, patientPhone, state, lang } = opts;
   switch (intent) {
     case "status":
@@ -953,7 +951,7 @@ async function advanceAfterDate(
   convId: string,
   practice: PracticeCtx,
   state: ConversationState,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   const providers = state.providerChoices?.length
     ? state.providerChoices
@@ -986,7 +984,7 @@ async function startBookFlow(
   practice: PracticeCtx,
   slots: NluSlots,
   prev: ConversationState = {},
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(prev.preferredLanguage);
   const location = practice.locations[0];
   if (!location) return { reply: BotPrompts.notConfigured(lang) };
@@ -1057,10 +1055,10 @@ async function startBookFlow(
       (lang === "hi"
         ? `*${providers[0]!.name}* के साथ बुकिंग।\n`
         : `Booking with *${providers[0]!.name}*.\n`) +
-        `${BotPrompts.askDate(lang)}\n` +
+        `${BotPrompts.askDate(lang)}` +
         (lang === "hi"
-          ? `(अगला खाली दिन: *${suggested}* — *Dates* दबाएँ।)`
-          : `(Next open day: *${suggested}* — tap *Dates*.)`),
+          ? `\n(अगला खाली दिन: *${suggested}*)`
+          : `\n(Next open day: *${suggested}*)`),
       suggested,
     );
   }
@@ -1073,7 +1071,7 @@ async function askModeForDay(
   convId: string,
   practice: PracticeCtx,
   state: ConversationState,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   const locationId = state.locationId!;
   const providerId = state.providerId!;
@@ -1118,7 +1116,7 @@ async function continueAfterMode(
   convId: string,
   practice: PracticeCtx,
   state: ConversationState,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   const locationId = state.locationId!;
   const providerId = state.providerId!;
@@ -1242,7 +1240,7 @@ async function confirmBooking(
   practice: PracticeCtx,
   state: ConversationState,
   patientPhone: string,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   try {
     const existing = await PatientService.findByPhone(patientPhone);
@@ -1262,7 +1260,7 @@ async function confirmBooking(
     });
     await saveState(convId, idleState(state));
     const detail = bookingWhenLabel(booking);
-    return { reply: BotPrompts.bookingConfirmed(practice.name, detail, lang) };
+    return withMainMenu(BotPrompts.bookingConfirmed(practice.name, detail, lang));
   } catch (err) {
     await saveState(convId, idleState(state));
     const msg = err instanceof Error ? err.message : "Could not create booking.";
@@ -1354,13 +1352,12 @@ async function applyIdScanToRegister(
   const existing = await PatientService.findByPhone(patientPhone);
   if (existing) {
     await saveState(convId, { ...state, step: "idle" });
-    return {
-      reply:
-        BotPrompts.idOcrAlreadyRegistered(existing.name || "", lang) +
+    return withMainMenu(
+      BotPrompts.idOcrAlreadyRegistered(existing.name || "", lang) +
         (scan.name
           ? `\n\n(Read from ID: *${scan.name}* — profile not changed.)`
           : ""),
-    };
+    );
   }
 
   const name = (scan.name || state.regName || "").trim();
@@ -1398,12 +1395,12 @@ async function startRegisterFlow(
   convId: string,
   patientPhone: string,
   prev: ConversationState = {},
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(prev.preferredLanguage);
   const existing = await PatientService.findByPhone(patientPhone);
   if (existing) {
     await saveState(convId, idleState(prev));
-    return { reply: BotPrompts.alreadyRegistered(existing.name || "", lang) };
+    return withMainMenu(BotPrompts.alreadyRegistered(existing.name || "", lang));
   }
   await saveState(convId, {
     ...keepPrefs(prev),
@@ -1418,7 +1415,7 @@ async function ensureRegisteredThenBook(
   patientPhone: string,
   slots: NluSlots,
   prev: ConversationState = {},
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(prev.preferredLanguage);
   const existing = await PatientService.findByPhone(patientPhone);
   if (existing) {
@@ -1438,7 +1435,7 @@ async function confirmRegister(
   practice: PracticeCtx,
   state: ConversationState,
   patientPhone: string,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   if (!state.regGender) {
     state.step = "awaiting_register_gender";
@@ -1476,18 +1473,24 @@ async function confirmRegister(
           ) +
           "\n\n" +
           bookReply.reply,
+        doctorList: bookReply.doctorList,
+        replyButtons: bookReply.replyButtons,
+        dateList: bookReply.dateList,
+        slotList: bookReply.slotList,
+        bookingList: bookReply.bookingList,
+        menuList: bookReply.menuList,
       };
     }
 
     await saveState(convId, idleState(state));
-    return {
-      reply: BotPrompts.registered(
+    return withMainMenu(
+      BotPrompts.registered(
         {
           name: result.name || state.regName!,
         },
         resolveLang(state.preferredLanguage),
       ),
-    };
+    );
   } catch (err) {
     await saveState(convId, idleState(state));
     const msg = err instanceof Error ? err.message : "Could not register.";
@@ -1659,7 +1662,7 @@ async function runOrchestratorCore(input: {
   if (state.step && state.step !== "idle" && isTimedOut(state)) {
     state = idleState(state);
     await saveState(convId, state);
-    return { reply: BotPrompts.idleReset(lang) };
+    return withMainMenu(BotPrompts.idleReset(lang));
   }
 
   // Global menu commands (typed or WhatsApp button) — always win over mid-flow steps
@@ -1761,7 +1764,7 @@ async function runOrchestratorCore(input: {
     }
     if (/^(no|n|nope|cancel)$/i.test(text.trim())) {
       await saveState(convId, idleState(state));
-      return { reply: BotPrompts.registrationCanceled(lang) };
+      return withMainMenu(BotPrompts.registrationCanceled(lang));
     }
     return withYesNo(
       BotPrompts.askRegisterConfirm(
@@ -1900,7 +1903,7 @@ async function runOrchestratorCore(input: {
         { skipPatientNotification: true },
       );
       await saveState(convId, idleState(state));
-      return { reply: BotPrompts.canceled(lang) };
+      return withMainMenu(BotPrompts.canceled(lang));
     }
     if (nlu.intent === "confirm_no" || /^(no|n)$/i.test(text.trim())) {
       await saveState(convId, idleState(state));
@@ -2228,7 +2231,7 @@ async function runOrchestratorCore(input: {
     return { reply: escalateReply(lang) };
   }
   await saveState(convId, { ...state, failedTurns: fails });
-  return { reply: BotPrompts.fallback(lang) };
+  return withMainMenu(BotPrompts.fallback(lang));
 }
 
 export { normalizePhone };

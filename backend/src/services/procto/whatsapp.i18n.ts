@@ -15,8 +15,8 @@ export function resolveLang(value: unknown): WaLang {
 /** Bilingual first-step prompt — shown before any other bot copy. */
 export function askPreferredLanguage(): string {
   return (
-    "Please choose your preferred language / कृपया अपनी भाषा चुनें:\n\n" +
-    "Tap *English* or *हिंदी* below (or reply *1* / *2*)."
+    "Please choose your preferred language / कृपया अपनी भाषा चुनें.\n\n" +
+    "Use the buttons below."
   );
 }
 

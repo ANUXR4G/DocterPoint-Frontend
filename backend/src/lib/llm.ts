@@ -11,7 +11,7 @@ export type LlmChatProvider = {
 
 /**
  * Shared OpenAI-compatible chat providers.
- * OpenAI first when set (faster); HF / DeepSeek as fallbacks.
+ * OpenAI first when set; Hugging Face / DeepSeek as fallbacks only.
  */
 export function llmChatProviders(opts?: {
   /** Include OpenAI (gpt-4o-mini). */

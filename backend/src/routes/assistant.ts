@@ -120,7 +120,7 @@ router.post(
         return res.status(503).json({
           status: "unsuccessful",
           message:
-            "Server speech transcription is not configured (set OPENAI_API_KEY or HF_TOKEN).",
+            "Server speech transcription is not configured (set OPENAI_API_KEY).",
         });
       }
 
