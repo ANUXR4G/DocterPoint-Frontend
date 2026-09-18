@@ -17,7 +17,7 @@ import { isDoctorNavActive } from "@/components/ui/doctors/DoctorPortalLinks"
 import { isClinicNavActive } from "@/components/ui/clinics/ClinicPortalLinks"
 import { isAdminNavActive } from "@/components/ui/admin/AdminPortalLinks"
 import { cookies } from "@/utils/cookies"
-import { navRoleFromContext } from "@/lib/providerPortal"
+import { navRoleFromContext, dashboardBrandLabel } from "@/lib/providerPortal"
 import { useAdminSupportUnread } from "@/hooks/useAdminSupportUnread"
 
 type Props = {
@@ -114,7 +114,7 @@ export default function Menu({ role, logout }: Props) {
               GlucoGuide
             </h3>
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-500">
-              Care portal
+              {dashboardBrandLabel(navRole)}
             </p>
           </div>
         </div>

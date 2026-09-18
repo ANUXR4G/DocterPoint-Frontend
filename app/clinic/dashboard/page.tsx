@@ -53,12 +53,12 @@ const OPS_LINKS = [
   {
     href: practiceTabHref("setup"),
     title: "Hours & blocks",
-    body: "Schedules, slot timing, and day overrides",
+    body: "Override any doctor’s hours, slots, and leave",
   },
   {
-    href: practiceTabHref("doctors"),
-    title: "Add doctors",
-    body: "Create logins and manage the clinic roster",
+    href: "/clinic/doctors",
+    title: "Doctors overview",
+    body: "Override settings, queue status, analytics",
   },
   {
     href: "/doctor/patients",
@@ -66,14 +66,14 @@ const OPS_LINKS = [
     body: "Visit history and status edits",
   },
   {
-    href: "/doctor/analytics",
+    href: "/clinic/analytics",
     title: "Analytics",
-    body: "Practice and per-doctor breakdown",
+    body: "All doctors, then analyze one by one",
   },
   {
     href: "/clinic/queue",
     title: "Full queue",
-    body: "Arrived → Start → Finish",
+    body: "Change patient status for every doctor",
   },
   {
     href: "/clinic/subscription",
@@ -201,13 +201,14 @@ function ClinicOpsHub() {
       const multi =
         ent?.features?.multiDoctor === true ||
         ent?.features?.multiDoctor === 1
-      const canAddMore = Boolean(ent?.usable) && (multi || members.length < 1)
+      const doctorSeats = members.filter((m) => m.role === "DOCTOR").length
+      const canAddMore = Boolean(ent?.usable) && (multi || doctorSeats < 1)
       setMultiDoctorAllowed(canAddMore)
       if (!ent?.usable) {
         setEntitlementHint(
           "Active subscription required to add doctors. Open Subscription to subscribe.",
         )
-      } else if (members.length >= 1 && !multi) {
+      } else if (doctorSeats >= 1 && !multi) {
         setEntitlementHint(
           "Multi-doctor clinics require Growth or Clinic. Upgrade under Subscription.",
         )
@@ -349,11 +350,27 @@ function ClinicOpsHub() {
                 key={d.id}
                 className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
               >
-                <p className="font-medium">{d.name}</p>
-                <p className="text-xs text-neutral-500">
-                  Waiting {d.waiting} · In appt {d.inAppointment} · Booked{" "}
-                  {d.booked} · Done {d.completed}
-                </p>
+                <div className="min-w-0">
+                  <p className="font-medium">{d.name}</p>
+                  <p className="text-xs text-neutral-500">
+                    Waiting {d.waiting} · In appt {d.inAppointment} · Booked{" "}
+                    {d.booked} · Done {d.completed}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={`/clinic/analytics?doctor=${encodeURIComponent(d.id)}`}
+                    className="text-xs font-semibold text-blue-600 hover:underline dark:text-sky-400"
+                  >
+                    Analyze
+                  </Link>
+                  <Link
+                    href={`/clinic/queue?doctor=${encodeURIComponent(d.id)}`}
+                    className="text-xs font-semibold text-neutral-600 hover:underline dark:text-neutral-300"
+                  >
+                    Queue
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>
@@ -367,8 +384,11 @@ function ClinicOpsHub() {
           <div className="border-t border-neutral-200 bg-white px-4 py-4 dark:border-neutral-700 dark:bg-neutral-900/40">
             <p className="text-sm font-semibold">Add a doctor to this clinic</p>
             <p className="mt-1 text-xs text-neutral-500">
-              They sign in at the doctor portal with the email and password you
-              set.
+              They sign in at{" "}
+              <strong>Doctor Login</strong> with the email and password you set.
+              They manage their own queue, schedule, and visits; the clinic
+              still manages the roster (add / deactivate). Independently
+              registered doctors cannot be linked.
             </p>
 
             {!multiDoctorAllowed ? (
@@ -473,7 +493,7 @@ export default function ClinicDashboard() {
       <DashboardPageHeader
         eyebrow="Clinic portal"
         title="Your practice today"
-        subtitle="Waiting room, doctor analytics, Hours & blocks, and patient status — clinic operations in one place."
+        subtitle="Waiting room, full doctors overview, per-doctor analytics, Hours & blocks — clinic operations in one place."
         actionBelow
         action={
           <>

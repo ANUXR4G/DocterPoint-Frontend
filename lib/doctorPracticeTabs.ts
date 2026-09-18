@@ -18,9 +18,16 @@ export const DOCTOR_PATIENTS_HREF = "/doctor/patients"
 export const DOCTOR_SUBSCRIPTION_HREF = "/doctor/subscription"
 export const CLINIC_SUBSCRIPTION_HREF = "/clinic/subscription"
 
-export function practiceTabHref(tab: PracticeTab | "patients"): string {
+export function practiceTabHref(
+  tab: PracticeTab | "patients",
+  opts?: { doctorId?: string },
+): string {
   if (tab === "patients") return DOCTOR_PATIENTS_HREF
-  return `/settings?tab=practice&subtab=${tab}`
+  const doctorQs =
+    opts?.doctorId?.trim()
+      ? `&doctor=${encodeURIComponent(opts.doctorId.trim())}`
+      : ""
+  return `/settings?tab=practice&subtab=${tab}${doctorQs}`
 }
 
 /** Legacy `/doctor/practice?tab=` URLs → settings practice panel. */

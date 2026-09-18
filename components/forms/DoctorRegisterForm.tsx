@@ -38,6 +38,10 @@ export default function DoctorRegisterForm({
   const [licenseNo, setLicenseNo] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [phone, setPhone] = useState("")
+  const [address, setAddress] = useState("")
+  const [city, setCity] = useState("")
+  const [consultationFee, setConsultationFee] = useState("500")
   const [bookingType, setBookingType] = useState<"TIME" | "TOKEN">("TIME")
   const [workingDays, setWorkingDays] = useState<number[]>([1, 2, 3, 4, 5])
   const [startTime, setStartTime] = useState("09:00")
@@ -61,14 +65,25 @@ export default function DoctorRegisterForm({
     if (data.licenseNo) setLicenseNo(data.licenseNo.trim())
     else if (data.registrationNo) setLicenseNo(data.registrationNo.trim())
     if (data.email) setEmail(data.email.trim().toLowerCase())
+    if (data.phone) setPhone(data.phone.trim())
+    if (data.address) setAddress(data.address.trim())
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
 
+    const fee = Number(consultationFee)
     if (!name.trim() || !licenseNo.trim() || !email.trim() || !password) {
       setError("Fill Dr Name, license number, email, and password.")
+      return
+    }
+    if (!address.trim()) {
+      setError("Enter your clinic / practice address.")
+      return
+    }
+    if (!Number.isFinite(fee) || fee <= 0) {
+      setError("Enter a consultation fee greater than 0.")
       return
     }
     if (workingDays.length === 0) {
@@ -102,6 +117,10 @@ export default function DoctorRegisterForm({
             licenseNo: licenseNo.trim(),
             email: email.trim(),
             password: encryptedPass,
+            phone: phone.trim() || undefined,
+            address: address.trim(),
+            city: city.trim() || undefined,
+            consultationFee: fee,
             bookingType,
             workingDays,
             startTime,
@@ -126,6 +145,8 @@ export default function DoctorRegisterForm({
       }
 
       cookies.setCookie(PORTAL_COOKIE, "doctor", 60 * 60 * 24 * 30)
+      const { proctoService } = await import("@/lib/services/procto")
+      proctoService.invalidateMyPracticesCache()
       router.push("/doctor/dashboard?onboarded=1")
     } catch {
       setSubmitting(false)
@@ -145,6 +166,11 @@ export default function DoctorRegisterForm({
 
       <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         2. Doctor profile
+      </p>
+      <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+        This creates your own independent practice and dashboard (with a 14-day
+        trial). Clinics cannot add this account to their roster — clinic staff
+        are created from the clinic dashboard only.
       </p>
       <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
         <IconInput
@@ -182,6 +208,45 @@ export default function DoctorRegisterForm({
           value={password}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setPassword(e.target.value)
+          }
+        />
+        <IconInput
+          icon="phone"
+          name="phone"
+          label="Phone"
+          value={phone}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setPhone(e.target.value)
+          }
+        />
+        <IconInput
+          icon="written-page"
+          name="consultationFee"
+          type="number"
+          label="Consultation fee (₹) *"
+          value={consultationFee}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setConsultationFee(e.target.value)
+          }
+        />
+        <div className="min-[480px]:col-span-2">
+          <IconInput
+            icon="written-page"
+            name="address"
+            label="Clinic / practice address *"
+            value={address}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setAddress(e.target.value)
+            }
+          />
+        </div>
+        <IconInput
+          icon="written-page"
+          name="city"
+          label="City"
+          value={city}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setCity(e.target.value)
           }
         />
       </div>

@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button, Icon, IconInput, ThemeUI } from "@/components"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
@@ -222,9 +223,46 @@ function DoctorOrClinicAccountSettings() {
 
   if (!membership) {
     return (
-      <p className="text-base font-medium opacity-80">
-        No practice linked yet. Complete clinic or doctor onboarding first.
-      </p>
+      <div className="space-y-3 rounded-2xl border border-dashed border-neutral-300 p-5 dark:border-neutral-600">
+        <p className="text-base font-medium">No practice linked to this account</p>
+        <p className="text-sm opacity-70">
+          There are two doctor types:
+        </p>
+        <ul className="list-disc space-y-1 pl-5 text-sm opacity-80">
+          <li>
+            <strong>Independent doctor</strong> — register at Doctor Login
+            (creates your own solo practice).
+          </li>
+          <li>
+            <strong>Clinic doctor</strong> — created by a clinic from their
+            dashboard (you use Doctor Login with the email/password they set).
+          </li>
+        </ul>
+        <p className="text-sm opacity-70">
+          If you just re-seeded the database, sign out and sign in again so your
+          session matches the new accounts.
+        </p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Link
+            href="/login/doctor?mode=register"
+            className="inline-flex h-10 items-center rounded-lg bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white"
+          >
+            Register independent doctor
+          </Link>
+          <Link
+            href="/login/clinic?mode=register"
+            className="inline-flex h-10 items-center rounded-lg border border-neutral-300 px-4 text-sm font-semibold dark:border-neutral-600"
+          >
+            Register clinic
+          </Link>
+          <Link
+            href="/login/doctor"
+            className="inline-flex h-10 items-center rounded-lg border border-neutral-300 px-4 text-sm font-semibold dark:border-neutral-600"
+          >
+            Doctor login
+          </Link>
+        </div>
+      </div>
     )
   }
 

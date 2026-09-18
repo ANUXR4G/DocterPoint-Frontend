@@ -286,6 +286,8 @@ export default function AppointmentCalendar() {
     ready,
     loading: shellLoading,
     error: shellError,
+    isClinicAdmin,
+    actorUserId,
   } = usePracticeDashboard()
   const [error, setError] = useState("")
   const [practiceId, setPracticeId] = useState("")
@@ -298,6 +300,11 @@ export default function AppointmentCalendar() {
   const [view, setView] = useState<ViewMode>("week")
   const [anchor, setAnchor] = useState(() => startOfToday())
   const loading = !ready && shellLoading
+
+  useEffect(() => {
+    if (!ready || isClinicAdmin || !actorUserId) return
+    setProviderId(actorUserId)
+  }, [ready, isClinicAdmin, actorUserId])
   const [timeSlots, setTimeSlots] = useState<
     Array<{
       start: string
@@ -559,18 +566,24 @@ export default function AppointmentCalendar() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-semibold opacity-70">Doctor</span>
-            <select
-              value={providerId}
-              onChange={(e) => setProviderId(e.target.value)}
-              className="form-input min-w-[12rem] rounded-xl border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600"
-            >
-              <option value="all">All doctors</option>
-              {doctors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+            {isClinicAdmin ? (
+              <select
+                value={providerId}
+                onChange={(e) => setProviderId(e.target.value)}
+                className="form-input min-w-[12rem] rounded-xl border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600"
+              >
+                <option value="all">All doctors</option>
+                {doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                {doctors.find((d) => d.id === providerId)?.name || "You"}
+              </span>
+            )}
           </label>
           {view === "day" ? (
             <input

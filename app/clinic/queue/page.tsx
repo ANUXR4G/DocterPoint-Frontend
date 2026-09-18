@@ -1,8 +1,22 @@
 "use client"
 
 import { Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import DoctorQueue from "@/components/ui/doctors/pages/DoctorQueue"
+
+function ClinicQueueInner() {
+  const searchParams = useSearchParams()
+  const doctor = searchParams.get("doctor") || ""
+
+  return (
+    <DoctorQueue
+      showFilters
+      allowStatusControl
+      initialProviderId={doctor}
+    />
+  )
+}
 
 export default function ClinicQueuePage() {
   return (
@@ -11,7 +25,7 @@ export default function ClinicQueuePage() {
         compact
         eyebrow="Clinic"
         title="Today's queue"
-        subtitle="Front desk can set visit status: Arrived, In waiting, Appointment started, Appointment finished."
+        subtitle="Filter by doctor and update waiting / in progress / completed / no-show for any patient."
       />
       <div className="dashboard-panel min-h-0 flex-1 !p-3 sm:!p-4">
         <Suspense
@@ -19,7 +33,7 @@ export default function ClinicQueuePage() {
             <p className="text-sm text-slate-500">Loading queue…</p>
           }
         >
-          <DoctorQueue showFilters allowStatusControl />
+          <ClinicQueueInner />
         </Suspense>
       </div>
     </div>

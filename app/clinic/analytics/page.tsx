@@ -4,18 +4,18 @@ import { Suspense } from "react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import DoctorAnalyticsPage from "@/components/ui/doctors/pages/DoctorAnalyticsPage"
 
-export default function DoctorAnalyticsRoute() {
+export default function ClinicAnalyticsRoute() {
   return (
     <div className="dashboard-page-wide">
       <DashboardPageHeader
-        eyebrow="Doctor"
+        eyebrow="Clinic"
         title={
           <>
-            Patient{" "}
+            Doctors{" "}
             <span className="text-blue-600 dark:text-sky-400">analytics</span>
           </>
         }
-        subtitle="Track patient visits by gender over time. Switch between weekly and monthly views."
+        subtitle="Overview of every doctor, then drill into one doctor’s charts and visit mix."
       />
       <div className="dashboard-panel">
         <Suspense
@@ -23,7 +23,10 @@ export default function DoctorAnalyticsRoute() {
             <p className="text-sm text-slate-500">Loading analytics…</p>
           }
         >
-          <DoctorAnalyticsPage portal="doctor" />
+          <DoctorAnalyticsPage
+            portal="clinic"
+            subscriptionHref="/clinic/subscription"
+          />
         </Suspense>
       </div>
     </div>
