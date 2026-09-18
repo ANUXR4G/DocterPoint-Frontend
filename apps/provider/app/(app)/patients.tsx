@@ -10,20 +10,25 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   EmptyState,
   ErrorText,
   PageTitle,
   StatusBadge,
+  SurfaceCard,
 } from "@/components/ui";
+import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { resolveMediaUrl } from "@/lib/media";
 import { usePractice } from "@/lib/practiceContext";
+import { dockClearance } from "@/lib/dockLayout";
 import { fetchPracticePatients } from "@/lib/procto";
 import type { PracticePatient } from "@/lib/types";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, shadows, space } from "@/lib/theme";
 
 export default function PatientsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { practiceId, membership } = usePractice();
   const [rows, setRows] = useState<PracticePatient[]>([]);
   const [q, setQ] = useState("");
@@ -57,142 +62,142 @@ export default function PatientsScreen() {
   }, [rows, q]);
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={async () => {
-            setRefreshing(true);
-            await load();
-            setRefreshing(false);
-          }}
-          tintColor={colors.brand}
+    <View style={styles.root}>
+      <PremiumAtmosphere />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await load();
+              setRefreshing(false);
+            }}
+            tintColor={colors.brand}
+          />
+        }
+        keyboardShouldPersistTaps="handled"
+      >
+        <PageTitle
+          eyebrow={membership?.practice.name}
+          title="Patients"
+          subtitle={`${rows.length} in your practice roster`}
         />
-      }
-      keyboardShouldPersistTaps="handled"
-    >
-      <PageTitle
-        eyebrow={membership?.practice.name}
-        title="Patients"
-        subtitle={`${rows.length} in your practice roster`}
-      />
 
-      <TextInput
-        value={q}
-        onChangeText={setQ}
-        placeholder="Search name or phone"
-        placeholderTextColor={colors.inkFaint}
-        style={styles.search}
-        autoCorrect={false}
-      />
+        <TextInput
+          value={q}
+          onChangeText={setQ}
+          placeholder="Search name or phone"
+          placeholderTextColor={colors.inkFaint}
+          style={styles.search}
+          autoCorrect={false}
+        />
 
-      <ErrorText text={error} />
+        <ErrorText text={error} />
 
-      {filtered.length === 0 ? (
-        <EmptyState text="No patients match this search." />
-      ) : (
-        filtered.map((p) => {
-          const key = p.patientId || p.phone;
-          const open = expanded === key;
-          const visits = p.recentBookings ?? p.recent ?? [];
-          return (
-            <View key={key} style={styles.card}>
-              <Pressable
-                onPress={() => setExpanded(open ? null : key)}
-                style={styles.row}
-              >
-                {resolveMediaUrl(p.imgSrc) ? (
-                  <Image
-                    source={{ uri: resolveMediaUrl(p.imgSrc)! }}
-                    style={styles.avatar}
-                  />
-                ) : (
-                  <View style={[styles.avatar, styles.avatarFallback]}>
-                    <Text style={styles.avatarInitial}>
-                      {(p.name || p.phone || "?").charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{p.name || p.phone}</Text>
-                  <Text style={styles.meta}>
-                    {p.phone} · {p.bookingCount} visits
-                  </Text>
-                  {p.lastStatus ? (
-                    <View style={{ marginTop: 8 }}>
-                      <StatusBadge status={p.lastStatus} />
-                    </View>
-                  ) : null}
-                </View>
-              </Pressable>
-              {open ? (
-                <View style={styles.recent}>
-                  {visits.length === 0 ? (
-                    <Text style={styles.visitLabel}>No recent visits.</Text>
+        {filtered.length === 0 ? (
+          <EmptyState text="No patients match this search." />
+        ) : (
+          filtered.map((p) => {
+            const key = p.patientId || p.phone;
+            const open = expanded === key;
+            const visits = p.recentBookings ?? p.recent ?? [];
+            return (
+              <SurfaceCard key={key}>
+                <Pressable
+                  onPress={() => setExpanded(open ? null : key)}
+                  style={styles.row}
+                >
+                  {resolveMediaUrl(p.imgSrc) ? (
+                    <Image
+                      source={{ uri: resolveMediaUrl(p.imgSrc)! }}
+                      style={styles.avatar}
+                    />
                   ) : (
-                    visits.slice(0, 8).map((b) => (
-                      <Pressable
-                        key={b.id}
-                        onPress={() => router.push(`/(app)/visit/${b.id}`)}
-                        style={styles.visitRow}
-                      >
-                        <Text style={styles.visitLabel}>
-                          {(b.sessionDate || b.slotStart || "")
-                            .toString()
-                            .slice(0, 10)}{" "}
-                          · {String(b.status || "").replace(/_/g, " ")}
-                        </Text>
-                        <Text style={styles.openLink}>Open</Text>
-                      </Pressable>
-                    ))
+                    <View style={[styles.avatar, styles.avatarFallback]}>
+                      <Text style={styles.avatarInitial}>
+                        {(p.name || p.phone || "?").charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
                   )}
-                </View>
-              ) : null}
-            </View>
-          );
-        })
-      )}
-    </ScrollView>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name}>{p.name || p.phone}</Text>
+                    <Text style={styles.meta}>
+                      {p.phone} · {p.bookingCount} visits
+                    </Text>
+                    {p.lastStatus ? (
+                      <View style={{ marginTop: 8 }}>
+                        <StatusBadge status={p.lastStatus} />
+                      </View>
+                    ) : null}
+                  </View>
+                </Pressable>
+                {open ? (
+                  <View style={styles.recent}>
+                    {visits.length === 0 ? (
+                      <Text style={styles.visitLabel}>No recent visits.</Text>
+                    ) : (
+                      visits.slice(0, 8).map((b) => (
+                        <Pressable
+                          key={b.id}
+                          onPress={() => router.push(`/(app)/visit/${b.id}`)}
+                          style={styles.visitRow}
+                        >
+                          <Text style={styles.visitLabel}>
+                            {(b.sessionDate || b.slotStart || "")
+                              .toString()
+                              .slice(0, 10)}{" "}
+                            · {String(b.status || "").replace(/_/g, " ")}
+                          </Text>
+                          <Text style={styles.openLink}>Open</Text>
+                        </Pressable>
+                      ))
+                    )}
+                  </View>
+                ) : null}
+              </SurfaceCard>
+            );
+          })
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: space.xl, paddingBottom: 120 },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: space.xl, paddingTop: space.lg },
   search: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.paperRaised,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 15,
     color: colors.ink,
-    borderRadius: 12,
+    borderRadius: radii.lg,
     marginBottom: space.lg,
-  },
-  card: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.paperRaised,
-    borderRadius: 16,
-    padding: space.lg,
-    marginBottom: space.md,
+    ...shadows.soft,
   },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 16,
     backgroundColor: colors.line,
   },
   avatarFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brandLight,
   },
-  avatarInitial: { fontSize: 16, fontWeight: "700", color: "#fff" },
+  avatarInitial: { fontSize: 16, fontWeight: "700", color: colors.brand },
   name: { fontSize: 16, fontWeight: "600", color: colors.ink },
   meta: { marginTop: 4, fontSize: 13, color: colors.inkSoft },
   recent: {
@@ -206,6 +211,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    backgroundColor: colors.sky50,
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   visitLabel: { fontSize: 13, color: colors.inkSoft, flex: 1 },
   openLink: { fontSize: 13, fontWeight: "600", color: colors.brand },

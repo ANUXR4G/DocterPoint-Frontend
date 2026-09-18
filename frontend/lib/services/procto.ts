@@ -5,6 +5,7 @@ const base =
   process.env.NEXT_PUBLIC_API ?? "http://localhost:3000/api/v1";
 
 let refreshPromise: Promise<string | null> | null = null;
+let invalidateMyPracticesCacheImpl: (() => void) | null = null;
 
 async function ensureAccessToken(): Promise<string> {
   const access = cookies.getCookie("access_token");
@@ -155,6 +156,9 @@ export const proctoService = {
   getMyPractices: (() => {
     let cached: { at: number; promise: Promise<any> } | null = null;
     const TTL_MS = 30_000;
+    invalidateMyPracticesCacheImpl = () => {
+      cached = null;
+    };
     return () => {
       const now = Date.now();
       if (cached && now - cached.at < TTL_MS) return cached.promise;
@@ -168,6 +172,11 @@ export const proctoService = {
       return promise;
     };
   })(),
+
+  /** Call after login / register / onboard so roster is not stuck on a stale cache. */
+  invalidateMyPracticesCache: () => {
+    invalidateMyPracticesCacheImpl?.();
+  },
 
   /**
    * Single call: memberships + bookings (date / from-to). Prefer for queue &

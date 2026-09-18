@@ -9,10 +9,10 @@ import {
   PageTitle,
   PrimaryButton,
 } from "@/components/ui";
-import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
+import { DashMetric, PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { usePractice } from "@/lib/practiceContext";
 import { fetchPracticeAnalytics } from "@/lib/procto";
-import { colors, radii, space } from "@/lib/theme";
+import { colors, dash, dashOrder, radii, space } from "@/lib/theme";
 import { dockClearance } from "@/lib/dockLayout";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
 
@@ -149,7 +149,10 @@ export default function AnalyticsScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + space.lg, paddingBottom: dockClearance + 24 },
+          {
+            paddingTop: space.lg,
+            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+          },
         ]}
       >
       <PageTitle
@@ -185,49 +188,71 @@ export default function AnalyticsScreen() {
       {!loading && !error ? (
         <>
           <View style={styles.metrics}>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricValue}>{totals.appointments}</Text>
-              <Text style={styles.metricLabel}>Appointments</Text>
-            </View>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricValue}>{totals.patients}</Text>
-              <Text style={styles.metricLabel}>Patients</Text>
-            </View>
+            <DashMetric
+              label="Appointments"
+              value={totals.appointments}
+              tone="blue"
+            />
+            <DashMetric
+              label="Patients"
+              value={totals.patients}
+              tone="teal"
+            />
           </View>
 
           {buckets.length === 0 ? (
             <EmptyState text="No data for this period." />
           ) : (
-            buckets.map((b) => (
-              <View key={b.label} style={styles.barRow}>
-                <Text style={styles.barLabel} numberOfLines={1}>
-                  {b.label}
-                </Text>
-                <View style={styles.barTrack}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      { width: `${(b.appointments / maxAppt) * 100}%` },
-                    ]}
-                  />
+            buckets.map((b, i) => {
+              const tone = dash[dashOrder[i % dashOrder.length]!];
+              return (
+                <View key={b.label} style={styles.barRow}>
+                  <Text style={styles.barLabel} numberOfLines={1}>
+                    {b.label}
+                  </Text>
+                  <View style={[styles.barTrack, { backgroundColor: tone.soft }]}>
+                    <View
+                      style={[
+                        styles.barFill,
+                        {
+                          width: `${(b.appointments / maxAppt) * 100}%`,
+                          backgroundColor: tone.solid,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.barValue, { color: tone.ink }]}>
+                    {b.appointments}
+                  </Text>
                 </View>
-                <Text style={styles.barValue}>{b.appointments}</Text>
-              </View>
-            ))
+              );
+            })
           )}
 
           {doctors.length > 0 ? (
             <>
               <Text style={styles.section}>By doctor</Text>
-              {doctors.map((d) => (
-                <View key={d.providerId} style={styles.card}>
-                  <Text style={styles.docName}>{d.name}</Text>
-                  <Text style={styles.meta}>
-                    {d.bookings} bookings · {d.completed} done · {d.waiting}{" "}
-                    waiting · {d.inProgress} in progress
-                  </Text>
-                </View>
-              ))}
+              {doctors.map((d, i) => {
+                const tone = dash[dashOrder[i % dashOrder.length]!];
+                return (
+                  <View
+                    key={d.providerId}
+                    style={[
+                      styles.card,
+                      { borderColor: tone.border, backgroundColor: tone.bg },
+                    ]}
+                  >
+                    <View style={[styles.docDot, { backgroundColor: tone.solid }]} />
+                    <Text style={[styles.docName, { color: tone.ink }]}>
+                      {d.name}
+                    </Text>
+                    <Text style={[styles.meta, { color: tone.ink }]}>
+                      {d.bookings} bookings · {d.completed} done · {d.waiting}{" "}
+                      waiting · {d.inProgress} in progress
+                    </Text>
+                  </View>
+                );
+              })}
             </>
           ) : null}
         </>
@@ -243,21 +268,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: space.xl },
   chips: { flexDirection: "row", flexWrap: "wrap", marginBottom: space.md },
   metrics: { flexDirection: "row", gap: 12, marginBottom: space.lg },
-  metricCard: {
-    flex: 1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    padding: space.lg,
-  },
-  metricValue: {
-    fontSize: 28,
-    fontWeight: "600",
-    color: colors.navy,
-    letterSpacing: -0.5,
-  },
-  metricLabel: { marginTop: 4, fontSize: 12, color: colors.inkSoft },
   barRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -267,13 +277,13 @@ const styles = StyleSheet.create({
   barLabel: { width: 88, fontSize: 12, color: colors.inkSoft },
   barTrack: {
     flex: 1,
-    height: 10,
+    height: 12,
     backgroundColor: colors.brandMist,
     borderRadius: 999,
     overflow: "hidden",
   },
-  barFill: { height: "100%", backgroundColor: colors.brand, borderRadius: 999 },
-  barValue: { width: 28, textAlign: "right", fontSize: 12, color: colors.ink },
+  barFill: { height: "100%", borderRadius: 999 },
+  barValue: { width: 28, textAlign: "right", fontSize: 12, fontWeight: "700" },
   section: {
     marginTop: space.lg,
     marginBottom: space.sm,
@@ -285,12 +295,19 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.white,
     borderRadius: radii.xl,
     padding: space.lg,
-    marginBottom: 8,
+    marginBottom: space.md,
+    overflow: "hidden",
   },
-  docName: { fontSize: 15, fontWeight: "600", color: colors.ink },
-  meta: { marginTop: 4, fontSize: 13, color: colors.inkSoft },
+  docDot: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  docName: { fontSize: 15, fontWeight: "700" },
+  meta: { marginTop: 4, fontSize: 13, opacity: 0.8 },
 });

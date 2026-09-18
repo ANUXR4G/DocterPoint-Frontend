@@ -105,6 +105,8 @@ export type AuthValueType = {
   email: string
   password: string
   role?: "user" | "doctor" | "admin"
+  /** Separates Clinic Login from Doctor Login for provider accounts. */
+  portal?: "clinic" | "doctor"
   name?: string
   phone?: string
   gender?: "male" | "female" | "others"

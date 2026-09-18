@@ -14,18 +14,38 @@ export class DoctorService {
     });
     if (existing) return existing;
 
+    // JWT fast-path can accept a token after reseed/delete; never create a
+    // doctor row for a missing user (FK doctors_id_fkey → users.id).
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new AppError(
+        401,
+        "Session is invalid or expired. Please sign in again.",
+      );
+    }
+
     const hospital = await AuthService.ensureIndependentHospital();
-    await prisma.doctor.create({
-      data: {
-        id: userId,
-        description: "Practice doctor — complete your profile.",
-        hospitalId: hospital.id,
-        availableTimes: "Mon–Fri 09:00–17:00",
-        experience: 0,
-        emails: [email],
-        contactNumbers: [],
-      },
-    });
+    try {
+      await prisma.doctor.create({
+        data: {
+          id: userId,
+          description: "Practice doctor — complete your profile.",
+          hospitalId: hospital.id,
+          availableTimes: "Mon–Fri 09:00–17:00",
+          experience: 0,
+          emails: [email || user.email],
+          contactNumbers: user.phone ? [user.phone] : [],
+        },
+      });
+    } catch (error) {
+      // Concurrent ensure — another request created the row first.
+      const race = await prisma.doctor.findUnique({
+        where: { id: userId },
+        include: { user: true },
+      });
+      if (race) return race;
+      throw error;
+    }
 
     return prisma.doctor.findUniqueOrThrow({
       where: { id: userId },

@@ -139,21 +139,17 @@ export function useAnalytics(
       (data as { __error?: boolean }).__error
     ) {
       const msg = String(
-        (data as { message?: string }).message ??
-          "Queue analytics requires the Clinic plan.",
+        (data as { message?: string }).message ?? "Analytics unavailable",
       )
       setErrorMessage(msg)
-      setPlanLocked(
-        /active subscription|subscribe|renew|billing|clinic plan|upgrade|queue analytics|does not include|practice analytics/i.test(
-          msg,
-        ),
-      )
+      setPlanLocked(/subscription|plan|upgrade|locked/i.test(msg))
       setTotalPatients(0)
       setTotalAppointments(0)
       return
     }
     setErrorMessage(null)
     setPlanLocked(false)
+
     if (!data || typeof data !== "object") {
       setTotalPatients(0)
       setTotalAppointments(0)
@@ -225,10 +221,10 @@ export function useAnalytics(
   const analyticsData =
     data && typeof data === "object" && !("__error" in data)
       ? (() => {
-          const raw = data as TypeAnalytics & { __byDoctor?: unknown }
-          const { __byDoctor: _bd, ...series } = raw as TypeAnalytics & {
+          const raw = data as TypeAnalytics & {
             __byDoctor?: unknown
           }
+          const { __byDoctor: _bd, ...series } = raw
           return series as TypeAnalytics
         })()
       : undefined

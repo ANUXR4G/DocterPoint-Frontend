@@ -14,6 +14,18 @@ function num(v: unknown): number | null | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+/** Prefer explicit keys; allow empty string so remarks can clear. */
+function optionalStr(
+  ...candidates: unknown[]
+): string | null | undefined {
+  for (const v of candidates) {
+    if (v === undefined) continue
+    if (v === null) return null
+    return String(v)
+  }
+  return undefined
+}
+
 export function patchBookingFields<T extends { id: string }>(
   existing: T,
   incoming: LiveBookingPayload,
@@ -30,12 +42,20 @@ export function patchBookingFields<T extends { id: string }>(
     str(incoming.patient_phone) ?? str(incoming.patientPhone)
   const mode = str(incoming.mode)
   const channel = str(incoming.channel)
-  const doctorRemarks =
-    str(incoming.doctor_remarks) ?? str(incoming.doctorRemarks)
+  const doctorRemarks = optionalStr(
+    incoming.doctor_remarks,
+    incoming.doctorRemarks,
+  )
   const medicines =
     incoming.medicines !== undefined ? incoming.medicines : undefined
   const documents =
     incoming.documents !== undefined ? incoming.documents : undefined
+  const disease = optionalStr(incoming.disease)
+  const notes = optionalStr(incoming.notes)
+  const consultationType = optionalStr(
+    incoming.consultation_type,
+    incoming.consultationType,
+  )
 
   return {
     ...existing,
@@ -60,6 +80,11 @@ export function patchBookingFields<T extends { id: string }>(
       : {}),
     ...(medicines !== undefined ? { medicines } : {}),
     ...(documents !== undefined ? { documents } : {}),
+    ...(disease !== undefined ? { disease } : {}),
+    ...(notes !== undefined ? { notes } : {}),
+    ...(consultationType !== undefined
+      ? { consultationType, consultation_type: consultationType }
+      : {}),
   } as T
 }
 
@@ -82,4 +107,56 @@ export function applyLiveBookingEvent<T extends { id: string }>(
   const next = [...prev]
   next[idx] = patchBookingFields(next[idx]!, incoming)
   return { next, needsRefresh: false }
+}
+
+type PatientRowWithVisits = {
+  phone: string
+  lastStatus?: string | null
+  lastVisitAt?: string | Date | null
+  recentBookings?: Array<{ id: string } & Record<string, unknown>>
+}
+
+/**
+ * Keep Patients → recent visits in sync with live booking patches
+ * (remarks / status / meds), not only the queue list.
+ */
+export function patchPatientsFromBooking<T extends PatientRowWithVisits>(
+  patients: T[],
+  incoming: LiveBookingPayload | undefined,
+): T[] {
+  if (!incoming?.id) return patients
+  const id = String(incoming.id)
+  const phone =
+    str(incoming.patient_phone) ?? str(incoming.patientPhone) ?? undefined
+
+  let touched = false
+  const next = patients.map((patient) => {
+    const recent = patient.recentBookings
+    if (!Array.isArray(recent) || !recent.length) return patient
+    const idx = recent.findIndex((b) => b.id === id)
+    if (idx < 0) {
+      // New visit for this phone — soft-refresh will pick it up.
+      if (phone && patient.phone === phone) touched = true
+      return patient
+    }
+    touched = true
+    const updatedRecent = [...recent]
+    updatedRecent[idx] = patchBookingFields(recent[idx]!, incoming)
+    const patched = updatedRecent[idx]!
+    const status = str(patched.status) ?? patient.lastStatus
+    const visitAt =
+      str(patched.slotStart) ??
+      str(patched.slot_start) ??
+      str(patched.sessionDate) ??
+      str(patched.session_date) ??
+      patient.lastVisitAt
+    return {
+      ...patient,
+      recentBookings: updatedRecent,
+      lastStatus: status ?? patient.lastStatus,
+      lastVisitAt: visitAt ?? patient.lastVisitAt,
+    }
+  })
+
+  return touched ? next : patients
 }

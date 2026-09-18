@@ -158,6 +158,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
   const tabParam = embedded
     ? searchParams.get("subtab")
     : searchParams.get("tab");
+  const doctorParam = searchParams.get("doctor");
   const subscribePlan = searchParams.get("subscribePlan");
 
   useEffect(() => {
@@ -174,11 +175,6 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
       router.replace("/doctor/patients");
     }
   }, [tabParam, router]);
-
-  const practiceTabUrl = useCallback(
-    (t: Tab) => (embedded ? practiceTabHref(t) : `/doctor/practice?tab=${t}`),
-    [embedded],
-  );
 
   const initialTab: Tab =
     tabParam === "calendar" ||
@@ -248,6 +244,18 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
     membership?.userId ||
     null;
 
+  const practiceTabUrl = useCallback(
+    (t: Tab, doctorId?: string | null) => {
+      const id = doctorId ?? providerId;
+      if (embedded) {
+        return practiceTabHref(t, id ? { doctorId: id } : undefined);
+      }
+      const doctorQs = id ? `&doctor=${encodeURIComponent(id)}` : "";
+      return `/doctor/practice?tab=${t}${doctorQs}`;
+    },
+    [embedded, providerId],
+  );
+
   const reloadMemberships = useCallback(async () => {
     await refreshDashboard({ silent: true });
   }, [refreshDashboard]);
@@ -280,16 +288,26 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
 
   useEffect(() => {
     if (!practice) return;
+    const fromQuery =
+      doctorParam &&
+      practice.members.some((m) => m.userId === doctorParam)
+        ? doctorParam
+        : null;
     const preferred =
+      fromQuery ??
       practice.members.find((m) => m.role === "DOCTOR")?.userId ??
       practice.members.find((m) => m.role === "PRACTICE_OWNER")?.userId ??
       membership?.userId ??
       null;
     setSelectedProviderId((prev) => {
+      if (!isClinicAdmin) {
+        return membership?.userId ?? preferred;
+      }
+      if (fromQuery) return fromQuery;
       if (prev && practice.members.some((m) => m.userId === prev)) return prev;
       return preferred;
     });
-  }, [practice, membership?.userId]);
+  }, [practice, membership?.userId, isClinicAdmin, doctorParam]);
 
   useEffect(() => {
     if (!practice || !providerId) return;
@@ -375,13 +393,20 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
           subtitle="Schedule, team, and WhatsApp inbox"
           action={
             <div className="flex flex-wrap items-center gap-2">
-              {rosterDoctors.length > 1 &&
+              {isClinicAdmin &&
+                rosterDoctors.length >= 1 &&
                 (tab === "calendar" || tab === "setup") && (
                   <select
                     value={providerId ?? ""}
-                    onChange={(e) => setSelectedProviderId(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setSelectedProviderId(next);
+                      router.replace(practiceTabUrl(tab, next), {
+                        scroll: false,
+                      });
+                    }}
                     className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-slate-800"
-                    aria-label="Select doctor"
+                    aria-label="Select doctor to override"
                   >
                     {rosterDoctors.map((m) => (
                       <option key={m.userId} value={m.userId}>
@@ -412,13 +437,20 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
             {practice?.name || "Practice"}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            {rosterDoctors.length > 1 &&
+            {isClinicAdmin &&
+              rosterDoctors.length >= 1 &&
               (tab === "calendar" || tab === "setup") && (
                 <select
                   value={providerId ?? ""}
-                  onChange={(e) => setSelectedProviderId(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSelectedProviderId(next);
+                    router.replace(practiceTabUrl(tab, next), {
+                      scroll: false,
+                    });
+                  }}
                   className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-slate-800"
-                  aria-label="Select doctor"
+                  aria-label="Select doctor to override"
                 >
                   {rosterDoctors.map((m) => (
                     <option key={m.userId} value={m.userId}>
@@ -521,6 +553,13 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
 
       {tab === "setup" && practice && providerId && (
         <div className="space-y-4">
+          {isClinicAdmin ? (
+            <p className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs text-sky-950 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100">
+              Clinic override: you can change this doctor&apos;s weekly hours,
+              booking mode, validity, and leave blocks. Doctors can also edit
+              their own settings from Doctor Login.
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Setup">
             {(
               [

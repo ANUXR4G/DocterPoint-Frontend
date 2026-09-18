@@ -98,6 +98,11 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/clinic/appointments",
     },
     {
+      name: "Doctors",
+      icon: "doctor",
+      dest: "/clinic/doctors",
+    },
+    {
       name: "Patients",
       icon: "two-people",
       dest: "/doctor/patients",
@@ -110,17 +115,12 @@ export const routes: Record<string, TRouteProps[]> = {
     {
       name: "Analytics",
       icon: "beat-graphics",
-      dest: "/doctor/analytics",
+      dest: "/clinic/analytics",
     },
     {
       name: "Hours & blocks",
       icon: "calendar",
       dest: "/settings?tab=practice&subtab=setup",
-    },
-    {
-      name: "Doctors",
-      icon: "doctor",
-      dest: "/settings?tab=practice&subtab=doctors",
     },
     {
       name: "Subscription",

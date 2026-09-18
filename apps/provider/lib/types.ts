@@ -133,10 +133,6 @@ export function nextActions(status: string): Array<{ status: string; label: stri
     case "SCHEDULED":
     case "REQUESTED":
     case "BOOKED":
-      return [
-        { status: "ACCEPTED", label: "Accept" },
-        { status: "CANCELED", label: "Decline" },
-      ];
     case "ACCEPTED":
     case "CONFIRMED":
       return [

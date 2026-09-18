@@ -71,7 +71,7 @@ frontend yarn dev ──►  :3000  (pages + /api/v1 proxy)
 
 Middleware: unauthenticated `/patient/*` and `/doctor/*` redirect to the matching login with `?callback=…`.
 
-On `/login/patient?mode=register`, patients **upload a government ID first**; OCR autofills name, DOB, gender, address, and contact into the form. They review/edit, add emergency contact / profession / email / password, then create the account. Guest OCR: `POST /auth/id-scan`. Logged-in scan also on `/patient/info` and Profile → Edit via `POST /patient/profile/id-scan` (`OPENAI_API_KEY` / `HF_TOKEN`).
+On `/login/patient?mode=register`, patients **upload a government ID first**; OCR autofills name, DOB, gender, address, and contact into the form. They review/edit, add emergency contact / profession / email / password, then create the account. Guest OCR: `POST /auth/id-scan` (JPG/PNG/WEBP/**PDF** — PDF page 1 is rasterized then vision-OCR’d). Logged-in scan also on `/patient/info` and Profile → Edit via `POST /patient/profile/id-scan` (`OPENAI_API_KEY` / `HF_TOKEN`).
 
 On `/login/doctor?mode=register` and `/login/clinic?mode=register`, providers can **upload a visiting card, letterhead, medical licence, or clinic registration** to autofill name / clinic / licence / reg no / phone / email / address. Guest OCR: `POST /auth/doc-scan`.
 
@@ -168,13 +168,13 @@ BookingService.getAvailability(practiceId, providerId, locationId, date)
         ▼
 BookingService.createBooking({ slotStart | sessionDate, mode, patientPhone, … })
         │
-        ├─ PracticeBooking row (SCHEDULED)
+        ├─ PracticeBooking row (ACCEPTED — auto-accepted)
         ├─ optional patient phone sync
         └─ async: notify queue + Socket broadcast
 ```
 
 Status lifecycle (doctor queue):  
-`SCHEDULED` → `IN_PROGRESS` → `COMPLETED` · or `CANCELED` / `NO_SHOW`.
+`ACCEPTED` → `WAITING` → `IN_PROGRESS` → `COMPLETED` · or `CANCELED` / `NO_SHOW`.
 
 ---
 
@@ -216,7 +216,7 @@ All browser calls go through `http://localhost:3000/api/v1/…`.
 
 **Patients only** — doctor / clinic / staff phone numbers are refused (use the web portal). LLM NLU when configured; otherwise regex (structured steps skip LLM for speed). Meta Cloud send when env is set; otherwise **simulated** sends.
 
-**GlucoGuide number pool:** Ops adds numbers via `POST /api/v1/procto/admin/numbers`, assigns with `POST .../numbers/assign` `{ "practiceId": "..." }` (admin JWT). LIVE / connected numbers set **both** `practice.whatsappBusinessNumber` and `practice.phone` (clinic Settings **Tel** = the WhatsApp bot patients message). Self-serve Connect under Billing does the same. Profile Tel cannot diverge while a line is active — change the line via Billing → WhatsApp or admin reassignment. Provisioning SLA target **24–72h** once Meta is live; local uses `MOCK` provider.
+**GlucoGuide number pool:** Ops adds numbers via `POST /api/v1/procto/admin/numbers`, assigns with `POST .../numbers/assign` `{ "practiceId": "..." }` (admin JWT). **Registration also auto-provisions:** clinic/doctor Tel at signup is POSTed to the platform Meta WABA (`/{WABA_ID}/phone_numbers`) when `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_WABA_ID` are set, then linked in `WhatsAppNumber` (VERIFYING until Meta OTP; MOCK LIVE locally). LIVE / connected numbers set **both** `practice.whatsappBusinessNumber` and `practice.phone` (clinic Settings **Tel** = the WhatsApp bot patients message). Self-serve Connect under Billing does the same. Profile Tel cannot diverge while a line is active — change the line via Billing → WhatsApp or admin reassignment. Provisioning SLA target **24–72h** once Meta is live; local uses `MOCK` provider.
 
 ```
 Inbound → practice resolve → staff gate
@@ -230,9 +230,9 @@ Inbound → practice resolve → staff gate
         → BookingService + NotificationService (confirm / reminder / queue)
 ```
 
-**Voice notes:** Patient sends a WhatsApp voice message → Meta webhook `type=audio` → download via Graph API → speech-to-text (`OPENAI_API_KEY` Whisper, else `HF_TOKEN`) → same orchestrator path as typed text. Optional `WHATSAPP_STT_LANGUAGE=hi` (or `en`) to bias Whisper. Local test:
+**Voice notes:** Patient sends a WhatsApp voice message → Meta webhook `type=audio` → download via Graph API → speech-to-text (`OPENAI_API_KEY` Whisper, else `HF_TOKEN`) → same orchestrator as typed text. No fixed phrase format is required: one note can carry date + time + doctor (“book tomorrow at 10 am with Kabir”). Unclear / empty STT replies asking the patient to speak again or type freely. Spoken times are matched to the nearest open slot when available. Optional `WHATSAPP_STT_LANGUAGE=hi` (or `en`) to bias Whisper. Local test:
 
-**Visit documents (patient → doctor):** Outside active *REGISTER* steps, inbound WhatsApp *image* or *PDF* (`type=image|document`) downloads via Graph → uploads to Cloudinary (same `gluco-guide-users` preset as portal) → appends to the patient’s open `PracticeBooking.documents` (max 5) → live `booking_updated` + care-chat ping to the doctor. Caption becomes the file name. Reply *REPORT* for how-to; *MY DOCS* / *STATUS* list attachments. Active register flow + captions like “Aadhaar/PAN/ID” still use ID OCR.
+**Visit documents (patient → doctor):** Outside active *REGISTER* steps, inbound WhatsApp *image* or *PDF* (`type=image|document`) downloads via Graph → uploads to Cloudinary (same `gluco-guide-users` preset as portal) → appends to the patient’s open `PracticeBooking.documents` (max 5) → live `booking_updated` + care-chat ping to the doctor. Caption becomes the file name. Reply *REPORT* for how-to; *MY DOCS* / *STATUS* list attachments. Active register flow + captions like “Aadhaar/PAN/ID” still use ID OCR — **JPG/PNG/PDF** (PDF page 1 is rasterized, then the same vision OCR as photos).
 
 ```json
 POST /api/v1/procto/whatsapp/webhook/test
@@ -248,17 +248,18 @@ Or send `audioBase64` + `mimeType` to exercise live STT.
 
 **Care chat ↔ WhatsApp (two-way):** Doctor messages from portal/app care chat fan out to the patient WhatsApp line (`chat.whatsappFanout.ts`) and mark the conversation `handed_off`. Patient text replies on that line are mirrored into care chat (`chat.whatsappInbound.ts`) and pushed on the same `_CHAT` WebSocket rooms; booking commands (`BOOK`, `BOT`, etc.) still go to the orchestrator.
 
-**Visit summary to patient:** When a doctor finishes a visit (`COMPLETED`), `NotificationService.enqueueVisitSummary` sends remarks / medicines / document count on WhatsApp (`VISIT_SUMMARY` / `docline_visit_summary`, free-form fallback). The same fields are on booking APIs for the patient portal and mobile app.
+**Visit summary to patient:** When a doctor finishes a visit (`COMPLETED`), `NotificationService.enqueueVisitSummary` sends remarks / medicines / document count on WhatsApp (`VISIT_SUMMARY` / `docline_visit_summary`, free-form fallback). **Prescription mid-visit:** saving medicines on an open visit enqueues `PRESCRIPTION_UPDATE` / `docline_prescription` to the patient WhatsApp (skipped on finish so only the full summary is sent). The same fields are on booking APIs for the patient portal and mobile app.
 
 **Automated patient path**
-1. *BOOK* without an account → quick register (name + gender) → continues into booking
-2. Sole doctor / sole mode / sole slot are auto-selected
-3. Suggests next open day when booking with a single doctor
-4. Confirmations + clinic alerts + 30‑min / token-morning reminders run via workers
+1. *HELP* / welcome menu is numbered — reply `1`–`9` (or the keyword) when idle: 1 BOOK · 2 DOCTORS · 3 STATUS · 4 REGISTER · 5 FAQ · 6 CANCEL · 7 RESCHEDULE · 8 LANGUAGE · 9 REPORT. Digits during doctor/slot pick still choose that option, not the menu.
+2. *BOOK* without an account → quick register (name → gender → optional email Yes/No → confirm) → continues into booking. Email is optional (Yes asks for address; No skips). Sign-in remains mobile OTP.
+3. Sole doctor / sole mode / sole slot are auto-selected
+4. Suggests next open day when booking with a single doctor
+5. Confirmations + clinic alerts + 30‑min / token-morning reminders run via workers
 
-**Register flow (standalone):** `REGISTER` → name → gender → YES  
+**Register flow (standalone):** `REGISTER` → name → gender → email Yes/No → (email if Yes) → YES  
 **Doctors list:** `DOCTORS` (or “list doctors” / “who are the doctors”)  
-**Book flow (registered):** `BOOK` → date → (doctor if needed) → (mode if needed) → slot → YES
+**Book flow (registered):** `BOOK` → date (**Dates** list = next 7 working days) → (doctor if needed) → (mode buttons if needed) → slot (**time buttons** or *Slots* list) → **Yes/No** buttons
 
 Local test (no Meta account):
 
@@ -268,7 +269,7 @@ Local test (no Meta account):
    ```json
    { "from": "9876543210", "to": "<practice whatsappBusinessNumber>", "body": "HELP" }
    ```
-4. Scripted: `REGISTER` → name → gender → `YES` → `DOCTORS` → `BOOK` → … → `STATUS` → `RESCHEDULE` → `CANCEL`
+4. Scripted: `HELP` → `1` (or `BOOK`) → … ; also `REGISTER` → name → gender → `YES` → `DOCTORS` → `BOOK` → … → `STATUS` → `RESCHEDULE` → `CANCEL`
 
 Outbound templates (patient + clinic): confirmation, reminder (~30 min slot / morning-of token), cancel, reschedule, override impact, queue alert (`IN_PROGRESS`).
 

@@ -305,7 +305,11 @@ router.get(
         type,
         providerId,
       );
-      return res.json(data);
+      return ResponseHandler.fetchSuccessful(
+        res,
+        "practice analytics fetched.",
+        data,
+      );
     } catch (error) {
       next(error);
     }

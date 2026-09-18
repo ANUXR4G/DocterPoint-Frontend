@@ -136,12 +136,12 @@ Want fastest pilot
 
 When the line is live, patients can message and get:
 
-- Register (type name **or send Aadhaar/PAN/ID photo** → OCR autofills)
+- Register (type name **or send Aadhaar/PAN/ID photo or PDF** → OCR autofills → optional email Yes/No)
 - Book appointment
 - Check status
 - Cancel / reschedule
 - Voice notes (speech-to-text)
-- ID photo OCR (same vision stack as web `/auth/id-scan` — needs `OPENAI_API_KEY` or `HF_TOKEN`)
+- ID photo/PDF OCR (same vision stack as web `/auth/id-scan` — PDF page 1 rasterized; needs `OPENAI_API_KEY` or `HF_TOKEN`)
 - Reminders (via UTILITY templates)
 - **STOP** to opt out of alerts
 
@@ -230,7 +230,7 @@ No. The number must be on Meta’s Business platform.
 **One number per clinic (practice).** All doctors in that clinic share it.
 
 **Can patients send lab reports on WhatsApp?**  
-Yes. With an open appointment, send a *photo* or *PDF* on the clinic line — it attaches to the visit for the doctor (GlucoGuide portal + provider app). Reply *REPORT* for steps; *MY DOCS* to list files. ID photos during *REGISTER* still autofill signup (OCR), not visit docs.
+Yes. With an open appointment, send a *photo* or *PDF* on the clinic line — it attaches to the visit for the doctor (GlucoGuide portal + provider app). Reply *REPORT* for steps; *MY DOCS* to list files. ID photos/**PDFs** during *REGISTER* still autofill signup (OCR), not visit docs.
 
 **How fast can we go live?**  
 Pool assign can be same day. Meta approval usually **1–3 days**.

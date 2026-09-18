@@ -48,48 +48,31 @@ export const BotPrompts = {
     const hello = patientName
       ? L(lang, `Hi *${patientName}*!`, `नमस्ते *${patientName}*!`)
       : L(lang, "Hi!", "नमस्ते!");
-    const registeredHint = patientName
-      ? L(
-          lang,
-          `You're signed in on this number.\n\n`,
-          `आप इस नंबर पर साइन-इन हैं।\n\n`,
-        )
-      : L(
-          lang,
-          `New here? Reply *REGISTER* (quick — name + gender) or go straight to *BOOK*.\n\n`,
-          `नए हैं? *REGISTER* लिखें (नाम + लिंग) या सीधे *BOOK* करें।\n\n`,
-        );
     return (
       L(
         lang,
         `${hello} Welcome to *${practiceName}*.\n\n` +
-          `This chat is for *patients* only.\n` +
-          registeredHint +
-          `I can help you:\n` +
-          `• *REGISTER* — create a patient account\n` +
-          `• *DOCTORS* — list doctors at this clinic\n` +
-          `• *BOOK* an appointment\n` +
-          `• *STATUS* — view upcoming visits\n` +
-          `• *REPORT* — send a visit file / photo\n` +
-          `• *MY DOCS* — list files already attached\n` +
-          `• *CANCEL* a booking\n` +
-          `• *RESCHEDULE* to a new time\n` +
-          `• *FAQ* — fees, timings, address\n` +
-          `• *LANGUAGE* — change language`,
+          `How can I help you? Reply with a *number* or keyword:\n\n` +
+          `*1* · *BOOK* — pick a doctor → date → slot\n` +
+          `*2* · *DOCTORS* — see the doctor list\n` +
+          `*3* · *STATUS* — your upcoming visits\n` +
+          `*4* · *REGISTER* — create your patient profile\n` +
+          `*5* · *FAQ* — clinic info & fees\n` +
+          `*6* · *CANCEL* — cancel a visit\n` +
+          `*7* · *RESCHEDULE* — change date/time\n` +
+          `*8* · *LANGUAGE* — English / हिंदी\n` +
+          `*9* · *REPORT* — attach a report or document`,
         `${hello} *${practiceName}* में आपका स्वागत है।\n\n` +
-          `यह चैट सिर्फ *मरीज़ों* के लिए है।\n` +
-          registeredHint +
-          `मैं इनमें मदद कर सकता/सकती हूँ:\n` +
-          `• *REGISTER* — मरीज़ अकाउंट बनाएँ\n` +
-          `• *DOCTORS* — क्लिनिक के डॉक्टर देखें\n` +
-          `• *BOOK* — अपॉइंटमेंट बुक करें\n` +
-          `• *STATUS* — आने वाली विज़िट देखें\n` +
-          `• *REPORT* — विज़िट के लिए फ़ाइल/फ़ोटो भेजें\n` +
-          `• *MY DOCS* — जुड़े हुए फ़ाइल देखें\n` +
-          `• *CANCEL* — बुकिंग रद्द करें\n` +
-          `• *RESCHEDULE* — समय बदलें\n` +
-          `• *FAQ* — फीस, समय, पता\n` +
-          `• *LANGUAGE* / *भाषा* — भाषा बदलें`,
+          `मैं कैसे मदद करूँ? *नंबर* या कीवर्ड से जवाब दें:\n\n` +
+          `*1* · *BOOK* — डॉक्टर चुनें → तारीख → स्लॉट\n` +
+          `*2* · *DOCTORS* — डॉक्टर सूची\n` +
+          `*3* · *STATUS* — आने वाली विज़िट\n` +
+          `*4* · *REGISTER* — मरीज़ प्रोफ़ाइल बनाएँ\n` +
+          `*5* · *FAQ* — क्लिनिक जानकारी और फीस\n` +
+          `*6* · *CANCEL* — विज़िट रद्द करें\n` +
+          `*7* · *RESCHEDULE* — तारीख/समय बदलें\n` +
+          `*8* · *LANGUAGE* — English / हिंदी\n` +
+          `*9* · *REPORT* — रिपोर्ट या दस्तावेज़ भेजें`,
       )
     );
   },
@@ -102,9 +85,9 @@ export const BotPrompts = {
     return L(
       lang,
       "To book, we need a quick patient profile first.\n" +
-        "Send a clear photo of your *Aadhaar / PAN / ID*, or type your *full name*.",
+        "Send a clear *photo or PDF* of your *Aadhaar / PAN / ID* (JPG/PNG/PDF), or type your *full name*.",
       "बुकिंग के लिए पहले छोटा मरीज़ प्रोफ़ाइल चाहिए।\n" +
-        "अपने *आधार / पैन / ID* की साफ़ फ़ोटो भेजें, या अपना *पूरा नाम* लिखें।",
+        "अपने *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* (JPG/PNG/PDF) भेजें, या अपना *पूरा नाम* लिखें।",
     );
   },
 
@@ -112,17 +95,17 @@ export const BotPrompts = {
     return L(
       lang,
       "Let's create your patient account.\n" +
-        "Send a clear photo of your *Aadhaar / PAN / ID*, or type your *full name*.",
+        "Send a clear *photo or PDF* of your *Aadhaar / PAN / ID* (JPG/PNG/PDF), or type your *full name*.",
       "आइए आपका मरीज़ अकाउंट बनाते हैं।\n" +
-        "अपने *आधार / पैन / ID* की साफ़ फ़ोटो भेजें, या अपना *पूरा नाम* लिखें।",
+        "अपने *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* (JPG/PNG/PDF) भेजें, या अपना *पूरा नाम* लिखें।",
     );
   },
 
   askRegisterGender(lang?: WaLang): string {
     return L(
       lang,
-      "What is your gender? Reply *MALE*, *FEMALE*, or *OTHERS*.",
-      "आपका लिंग क्या है? *MALE*, *FEMALE*, या *OTHERS* लिखें।",
+      "What is your gender? Tap *Male*, *Female*, or *Others*.",
+      "आपका लिंग क्या है? *Male*, *Female*, या *Others* दबाएँ।",
     );
   },
 
@@ -134,6 +117,16 @@ export const BotPrompts = {
     );
   },
 
+  askRegisterEmailOpt(lang?: WaLang): string {
+    return L(
+      lang,
+      "Would you like to add an *email* to your profile?\n" +
+        "Tap *Yes* or *No* (you always sign in with your mobile number).",
+      "क्या आप प्रोफ़ाइल में *ईमेल* जोड़ना चाहते हैं?\n" +
+        "*Yes* या *No* दबाएँ (लॉगिन हमेशा मोबाइल नंबर से होगा)।",
+    );
+  },
+
   askRegisterConfirm(summary: string, thenBook?: boolean, lang?: WaLang): string {
     const next = thenBook
       ? L(lang, "\nAfter this we'll continue to *booking*.", "\nइसके बाद *बुकिंग* जारी रखेंगे।")
@@ -141,24 +134,24 @@ export const BotPrompts = {
     return L(
       lang,
       `Confirm registration:${next}\n${summary}\n\n` +
-        `Reply *YES* to create your account or *NO* to cancel.`,
+        `Tap *Yes* to create your account or *No* to cancel.`,
       `रजिस्ट्रेशन कन्फ़र्म करें:${next}\n${summary}\n\n` +
-        `अकाउंट बनाने के लिए *YES*, रद्द करने के लिए *NO* लिखें।`,
+        `अकाउंट बनाने के लिए *Yes*, रद्द करने के लिए *No* दबाएँ।`,
     );
   },
 
   idOcrProcessing(lang?: WaLang): string {
     return L(
       lang,
-      "📄 Got your ID photo — reading details…",
-      "📄 ID फ़ोटो मिल गई — विवरण पढ़ रहा/रही हूँ…",
+      "📄 Got your ID — reading details…",
+      "📄 ID मिल गई — विवरण पढ़ रहा/रही हूँ…",
     );
   },
 
   idOcrNotConfigured(lang?: WaLang): string {
     return L(
       lang,
-      "ID photo scan isn't enabled on this line yet. Please type your *full name* to register, " +
+      "ID scan isn't enabled on this line yet. Please type your *full name* to register, " +
         "or reply *HELP* for options.",
       "इस लाइन पर ID स्कैन अभी चालू नहीं है। रजिस्टर करने के लिए अपना *पूरा नाम* लिखें, " +
         "या विकल्पों के लिए *HELP* लिखें।",
@@ -168,9 +161,9 @@ export const BotPrompts = {
   idOcrFailed(lang?: WaLang): string {
     return L(
       lang,
-      "I couldn't read that image. Send a clear, well-lit photo of your Aadhaar/PAN (JPG/PNG), " +
+      "I couldn't read that file. Send a clear, well-lit *photo or PDF* of your Aadhaar/PAN (JPG/PNG/PDF), " +
         "or type your *full name*.",
-      "उस फ़ोटो को पढ़ नहीं पाया/पाई। आधार/पैन की साफ़, अच्छी रोशनी वाली फ़ोटो (JPG/PNG) भेजें, " +
+      "उस फ़ाइल को पढ़ नहीं पाया/पाई। आधार/पैन की साफ़ *फ़ोटो या PDF* (JPG/PNG/PDF) भेजें, " +
         "या अपना *पूरा नाम* लिखें।",
     );
   },
@@ -198,9 +191,9 @@ export const BotPrompts = {
     return L(
       lang,
       `Read from your ID — confirm registration:${next}\n${summary}\n\n` +
-        `Reply *YES* to create your account, *NO* to cancel, or send another ID photo.`,
+        `Tap *Yes* to create your account, *No* to cancel, or send another ID photo.`,
       `ID से पढ़ा — रजिस्ट्रेशन कन्फ़र्म करें:${next}\n${summary}\n\n` +
-        `*YES* से अकाउंट बनाएँ, *NO* से रद्द करें, या दूसरी ID फ़ोटो भेजें।`,
+        `*Yes* से अकाउंट बनाएँ, *No* से रद्द करें, या दूसरी ID फ़ोटो भेजें।`,
     );
   },
 
@@ -211,9 +204,9 @@ export const BotPrompts = {
   unsupportedMedia(lang?: WaLang): string {
     return L(
       lang,
-      "Please send *text*, a *voice note*, an *ID photo* (to register), or a *report* (JPG/PNG/PDF) for your visit.\n" +
+      "Please send *text*, a *voice note*, an *ID photo/PDF* (to register), or a *report* (JPG/PNG/PDF) for your visit.\n" +
         "Reply *REPORT* for how to attach files, or *HELP* for options.",
-      "कृपया *टेक्स्ट*, *वॉइस नोट*, रजिस्टर के लिए *ID फ़ोटो*, या विज़िट के लिए *रिपोर्ट* (JPG/PNG/PDF) भेजें।\n" +
+      "कृपया *टेक्स्ट*, *वॉइस नोट*, रजिस्टर के लिए *ID फ़ोटो/PDF*, या विज़िट के लिए *रिपोर्ट* (JPG/PNG/PDF) भेजें।\n" +
         "फ़ाइल जोड़ने का तरीका जानने के लिए *REPORT*, या विकल्पों के लिए *HELP* लिखें।",
     );
   },
@@ -233,13 +226,13 @@ export const BotPrompts = {
         "1. Book a visit (*BOOK*) if you don’t have one yet\n" +
         "2. Send a *photo* or *PDF* here (optional caption = file name)\n" +
         "3. The clinic sees it on your visit in GlucoGuide\n\n" +
-        "Tip: for signup ID scan, reply *REGISTER* first, then send Aadhaar/PAN.\n" +
+        "Tip: for signup ID scan, reply *REGISTER* first, then send Aadhaar/PAN (JPG/PNG/PDF).\n" +
         "Reply *MY DOCS* to list files already attached.",
       "डॉक्टर से रिपोर्ट साझा करने के लिए:\n" +
         "1. अगर अपॉइंटमेंट नहीं है तो *BOOK* करें\n" +
         "2. यहाँ *फ़ोटो* या *PDF* भेजें (कैप्शन = फ़ाइल नाम)\n" +
         "3. क्लिनिक इसे GlucoGuide विज़िट में देखेगा\n\n" +
-        "रजिस्टर ID स्कैन के लिए पहले *REGISTER*, फिर आधार/पैन भेजें।\n" +
+        "रजिस्टर ID स्कैन के लिए पहले *REGISTER*, फिर आधार/पैन (JPG/PNG/PDF) भेजें।\n" +
         "जुड़ी फ़ाइलें देखने के लिए *MY DOCS* लिखें।",
     );
   },
@@ -249,10 +242,10 @@ export const BotPrompts = {
       lang,
       "I don’t see an open appointment to attach this to.\n" +
         "Reply *BOOK* to schedule, then send the file again.\n" +
-        "Or reply *REGISTER* and send an ID photo to create your account.",
+        "Or reply *REGISTER* and send an ID photo/PDF to create your account.",
       "इस फ़ाइल को जोड़ने के लिए कोई खुली अपॉइंटमेंट नहीं मिली।\n" +
         "पहले *BOOK* करें, फिर फ़ाइल फिर भेजें।\n" +
-        "या अकाउंट बनाने के लिए *REGISTER* लिखकर ID फ़ोटो भेजें।",
+        "या अकाउंट बनाने के लिए *REGISTER* लिखकर ID फ़ोटो/PDF भेजें।",
     );
   },
 
@@ -375,32 +368,62 @@ export const BotPrompts = {
   askDate(lang?: WaLang): string {
     return L(
       lang,
-      "Which date? Reply *TODAY*, *TOMORROW*, or a date like *15-09-2026* / *2026-09-15*.",
-      "कौन सी तारीख? *TODAY*, *TOMORROW*, या *15-09-2026* / *2026-09-15* जैसा लिखें।",
+      "Which date?\nTap *Dates* and pick one of the next *7 working days*, or type *DD-MM-YYYY* (e.g. *16-09-2026*).",
+      "कौन सी तारीख?\n*Dates* दबाकर अगले *7 काम के दिनों* में से चुनें, या *DD-MM-YYYY* लिखें (जैसे *16-09-2026*)।",
     );
+  },
+
+  doctorSelectedAskDate(
+    doctorName: string,
+    suggested?: string | null,
+    lang?: WaLang,
+  ): string {
+    const head = L(
+      lang,
+      `✅ *${doctorName}* selected.\n\n`,
+      `✅ *${doctorName}* चुने गए।\n\n`,
+    );
+    const hint = suggested
+      ? L(
+          lang,
+          `\n\n💡 Next open day on the list: *${suggested}*.`,
+          `\n\n💡 सूची में अगला खाली दिन: *${suggested}*।`,
+        )
+      : "";
+    return head + BotPrompts.askDate(lang) + hint;
   },
 
   dateInvalid(lang?: WaLang): string {
     return L(
       lang,
-      "That date isn't clear. Reply *TODAY*, *TOMORROW*, or DD-MM-YYYY (e.g. *15-09-2026*).",
-      "तारीख समझ नहीं आई। *TODAY*, *TOMORROW*, या DD-MM-YYYY लिखें (जैसे *15-09-2026*)।",
+      "That date isn't clear. Pick a day from the *Dates* list, or type *DD-MM-YYYY* (e.g. *15-09-2026*).",
+      "तारीख समझ नहीं आई। *Dates* सूची से चुनें, या *DD-MM-YYYY* लिखें (जैसे *15-09-2026*)।",
+    );
+  },
+
+  voiceDateUnclear(lang?: WaLang): string {
+    return L(
+      lang,
+      "I couldn't catch a clear date in your voice note.\n" +
+        "Please say something like *tomorrow at 10 am*, or pick a day from the *Dates* list.",
+      "वॉइस नोट में तारीख साफ़ नहीं मिली।\n" +
+        "कृपया *कल सुबह 10 बजे* जैसा बोलें, या *Dates* सूची से दिन चुनें।",
     );
   },
 
   datePast(lang?: WaLang): string {
     return L(
       lang,
-      "That date is in the past. Reply *TODAY*, *TOMORROW*, or a future date (DD-MM-YYYY).",
-      "वह तारीख बीत चुकी है। *TODAY*, *TOMORROW*, या आने वाली तारीख (DD-MM-YYYY) लिखें।",
+      "That date is in the past. Pick a day from the *Dates* list, or type a future *DD-MM-YYYY*.",
+      "वह तारीख बीत चुकी है। *Dates* सूची से चुनें, या आने वाली तारीख (*DD-MM-YYYY*) लिखें।",
     );
   },
 
   dateTooFar(lang?: WaLang): string {
     return L(
       lang,
-      "Please pick a date within the next 6 months. Reply *TODAY*, *TOMORROW*, or DD-MM-YYYY.",
-      "कृपया अगले 6 महीनों की तारीख चुनें। *TODAY*, *TOMORROW*, या DD-MM-YYYY लिखें।",
+      "Please pick a date within the next 6 months — use the *Dates* list or *DD-MM-YYYY*.",
+      "कृपया अगले 6 महीनों की तारीख चुनें — *Dates* सूची या *DD-MM-YYYY*।",
     );
   },
 
@@ -408,13 +431,13 @@ export const BotPrompts = {
     const hint = suggested
       ? L(
           lang,
-          `\nNext open day: *${suggested}* — reply that date, *TODAY*, or *TOMORROW*.`,
-          `\nअगला खाली दिन: *${suggested}* — वह तारीख, *TODAY*, या *TOMORROW* लिखें।`,
+          `\nNext open day: *${suggested}* — pick it from *Dates*, or type that date.`,
+          `\nअगला खाली दिन: *${suggested}* — *Dates* से चुनें, या वह तारीख लिखें।`,
         )
       : L(
           lang,
-          "\nTry another date: *TODAY*, *TOMORROW*, or DD-MM-YYYY.",
-          "\nदूसरी तारीख आज़माएँ: *TODAY*, *TOMORROW*, या DD-MM-YYYY।",
+          "\nTry another day from the *Dates* list, or type *DD-MM-YYYY*.",
+          "\n*Dates* सूची से दूसरा दिन चुनें, या *DD-MM-YYYY* लिखें।",
         );
     return (
       L(
@@ -437,15 +460,21 @@ export const BotPrompts = {
       );
     }
     const lines = options.map((o) => {
-      const detail = o.detail?.trim();
-      return detail
-        ? `${o.index}. *${o.name}*\n   ${detail}`
-        : `${o.index}. *${o.name}*`;
+      const specialty =
+        o.detail
+          ?.replace(/^Specialization:\s*/i, "")
+          .split("·")[0]
+          ?.trim() || "";
+      return specialty
+        ? `• *${o.name}* — ${specialty}`
+        : `• *${o.name}*`;
     });
     return L(
       lang,
-      `Which doctor?\n${lines.join("\n")}\n\nReply with the number or the doctor's name.`,
-      `कौन सा डॉक्टर?\n${lines.join("\n")}\n\nनंबर या डॉक्टर का नाम लिखें।`,
+      `*Choose your doctor*\n${lines.join("\n")}\n\n` +
+        `Tap *Doctors* to pick one (or type the doctor’s name).`,
+      `*अपना डॉक्टर चुनें*\n${lines.join("\n")}\n\n` +
+        `*Doctors* दबाकर चुनें (या डॉक्टर का नाम लिखें)।`,
     );
   },
 
@@ -463,9 +492,13 @@ export const BotPrompts = {
       );
     }
     const lines = options.map((o) => {
-      const detail = o.detail?.trim();
-      return detail
-        ? `${o.index}. *${o.name}*\n   ${detail}`
+      const specialty =
+        o.detail
+          ?.replace(/^Specialization:\s*/i, "")
+          .split("·")[0]
+          ?.trim() || "";
+      return specialty
+        ? `${o.index}. *${o.name}* — ${specialty}`
         : `${o.index}. *${o.name}*`;
     });
     const link = clinicUrl?.trim()
@@ -474,9 +507,9 @@ export const BotPrompts = {
     return L(
       lang,
       `Doctors at *${practiceName}*:\n${lines.join("\n")}${link}\n\n` +
-        `Reply *BOOK* to schedule a visit, or *HELP* for the menu.`,
+        `Reply *BOOK* to schedule — you’ll pick a doctor next.`,
       `*${practiceName}* के डॉक्टर:\n${lines.join("\n")}${link}\n\n` +
-        `विज़िट बुक करने के लिए *BOOK*, या मेनू के लिए *HELP* लिखें।`,
+        `बुक करने के लिए *BOOK* — अगले कदम पर डॉक्टर चुनें।`,
     );
   },
 
@@ -484,12 +517,12 @@ export const BotPrompts = {
     const opts: string[] = [];
     if (hasTime) {
       opts.push(
-        L(lang, "• *TIME* — pick a time slot", "• *TIME* — समय स्लॉट चुनें"),
+        L(lang, "• *Time slot* — pick a clock time", "• *Time slot* — समय चुनें"),
       );
     }
     if (hasToken) {
       opts.push(
-        L(lang, "• *TOKEN* — take a queue token", "• *TOKEN* — कतार का टोकन लें"),
+        L(lang, "• *Token* — take a queue number", "• *Token* — कतार का नंबर लें"),
       );
     }
     if (!opts.length) {
@@ -501,8 +534,8 @@ export const BotPrompts = {
     }
     return L(
       lang,
-      `How would you like to book?\n${opts.join("\n")}`,
-      `आप कैसे बुक करना चाहेंगे?\n${opts.join("\n")}`,
+      `How would you like to book?\n${opts.join("\n")}\n\nTap a button below.`,
+      `आप कैसे बुक करना चाहेंगे?\n${opts.join("\n")}\n\nनीचे बटन दबाएँ।`,
     );
   },
 
@@ -517,11 +550,11 @@ export const BotPrompts = {
         "उस दिन कोई खाली स्लॉट नहीं। दूसरी तारीख आज़माएँ।",
       );
     }
-    const lines = slots.map((s) => `${s.index}. ${s.label}`);
+    const lines = slots.map((s) => `• ${s.label}`);
     return L(
       lang,
-      `Available slots:\n${lines.join("\n")}\n\nReply with the number to choose.`,
-      `उपलब्ध स्लॉट:\n${lines.join("\n")}\n\nचुनने के लिए नंबर लिखें।`,
+      `Available times:\n${lines.join("\n")}\n\nTap a time button (or open *Slots*).`,
+      `उपलब्ध समय:\n${lines.join("\n")}\n\nसमय बटन दबाएँ (या *Slots* खोलें)।`,
     );
   },
 
@@ -535,25 +568,25 @@ export const BotPrompts = {
     return L(
       lang,
       `Next token on ${date}: *#${token}* (${sessionStart}–${sessionEnd}).\n` +
-        `Reply *YES* to confirm or *NO* to cancel.`,
+        `Tap *Yes* to confirm or *No* to cancel.`,
       `${date} का अगला टोकन: *#${token}* (${sessionStart}–${sessionEnd})।\n` +
-        `कन्फ़र्म करने के लिए *YES*, रद्द करने के लिए *NO* लिखें।`,
+        `कन्फ़र्म के लिए *Yes*, रद्द करने के लिए *No* दबाएँ।`,
     );
   },
 
   askConfirm(summary: string, lang?: WaLang): string {
     return L(
       lang,
-      `${summary}\n\nReply *YES* to confirm or *NO* to cancel.`,
-      `${summary}\n\nकन्फ़र्म करने के लिए *YES*, रद्द करने के लिए *NO* लिखें।`,
+      `${summary}\n\nTap *Yes* to confirm or *No* to cancel.`,
+      `${summary}\n\nकन्फ़र्म के लिए *Yes*, रद्द करने के लिए *No* दबाएँ।`,
     );
   },
 
   askCancelConfirm(summary: string, lang?: WaLang): string {
     return L(
       lang,
-      `Cancel this booking?\n${summary}\n\nReply *YES* to cancel or *NO* to keep it.`,
-      `यह बुकिंग रद्द करें?\n${summary}\n\nरद्द करने के लिए *YES*, रखने के लिए *NO* लिखें।`,
+      `Cancel this booking?\n${summary}\n\nTap *Yes* to cancel or *No* to keep it.`,
+      `यह बुकिंग रद्द करें?\n${summary}\n\nरद्द करने के लिए *Yes*, रखने के लिए *No* दबाएँ।`,
     );
   },
 
@@ -568,11 +601,11 @@ export const BotPrompts = {
         "रीशेड्यूल करने के लिए कोई सक्रिय बुकिंग नहीं है।",
       );
     }
-    const lines = options.map((o) => `${o.index}. ${o.label}`);
+    const lines = options.map((o) => `• ${o.label}`);
     return L(
       lang,
-      `Which booking should we reschedule?\n${lines.join("\n")}`,
-      `किस बुकिंग का समय बदलें?\n${lines.join("\n")}`,
+      `Which booking should we reschedule?\n${lines.join("\n")}\n\nTap a button (or open *Bookings*).`,
+      `किस बुकिंग का समय बदलें?\n${lines.join("\n")}\n\nबटन दबाएँ (या *Bookings* खोलें)।`,
     );
   },
 
@@ -595,24 +628,48 @@ export const BotPrompts = {
   voiceFailed(lang?: WaLang): string {
     return L(
       lang,
-      "I received your voice note but couldn't transcribe it. Please send REGISTER, DOCTORS, BOOK, STATUS, CANCEL, or RESCHEDULE as text.",
-      "वॉइस नोट मिला, लेकिन टेक्स्ट नहीं बना पाया/पाई। कृपया REGISTER, DOCTORS, BOOK, STATUS, CANCEL या RESCHEDULE टेक्स्ट में भेजें।",
+      "Your voice note wasn't clear enough for me to understand.\n" +
+        "Please send another voice note a bit slower, or type freely — for example:\n" +
+        "• *Book tomorrow at 10 am*\n" +
+        "• *Status*\n" +
+        "• *Register* + your name\n" +
+        "No special format needed.",
+      "आपका वॉइस नोट साफ़ समझ नहीं आया।\n" +
+        "कृपया थोड़ा धीरे दूसरा वॉइस नोट भेजें, या सीधे लिखें — जैसे:\n" +
+        "• *कल सुबह 10 बजे बुक करो*\n" +
+        "• *Status*\n" +
+        "• *Register* + अपना नाम\n" +
+        "किसी खास फ़ॉर्मैट की ज़रूरत नहीं।",
     );
+  },
+
+  voiceUnclear(lang?: WaLang): string {
+    return BotPrompts.voiceFailed(lang);
   },
 
   voiceSttNotConfigured(lang?: WaLang): string {
     return L(
       lang,
-      "Voice notes aren't enabled on this line yet. Please type REGISTER, DOCTORS, BOOK, STATUS, CANCEL, or RESCHEDULE.",
-      "इस लाइन पर वॉइस नोट अभी चालू नहीं हैं। कृपया REGISTER, DOCTORS, BOOK, STATUS, CANCEL या RESCHEDULE टाइप करें।",
+      "Voice notes aren't enabled on this line yet. Please type what you need in your own words — e.g. *Book tomorrow at 10 am*, *Status*, or *Register*.",
+      "इस लाइन पर वॉइस नोट अभी चालू नहीं हैं। अपनी बात सीधे लिखें — जैसे *कल 10 बजे बुक*, *Status*, या *Register*।",
     );
   },
 
   voiceProcessing(lang?: WaLang): string {
     return L(
       lang,
-      "🎧 Got your voice note — converting to text…",
-      "🎧 वॉइस नोट मिला — टेक्स्ट में बदल रहा/रही हूँ…",
+      "🎧 Got your voice note — listening…",
+      "🎧 वॉइस नोट मिला — सुन रहा/रही हूँ…",
+    );
+  },
+
+  voiceHeard(transcript: string, lang?: WaLang): string {
+    const short =
+      transcript.length > 120 ? `${transcript.slice(0, 117)}…` : transcript;
+    return L(
+      lang,
+      `Heard: "_${short}_"`,
+      `सुना: "_${short}_"`,
     );
   },
 

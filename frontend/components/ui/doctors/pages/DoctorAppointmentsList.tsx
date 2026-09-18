@@ -63,8 +63,12 @@ export default function DoctorAppointmentsList({
         title="Appointments"
         subtitle={
           practiceName
-            ? `All visits for ${practiceName} (updates live).`
-            : "All visits (updates live)."
+            ? portal === "clinic"
+              ? `All visits for ${practiceName} — clinic can change status for any doctor’s patients.`
+              : `All visits for ${practiceName} (updates live).`
+            : portal === "clinic"
+              ? "All clinic visits — change patient status for any doctor."
+              : "All visits (updates live)."
         }
       />
 

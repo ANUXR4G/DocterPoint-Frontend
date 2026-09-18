@@ -13,7 +13,7 @@ import { clearSession } from "@/lib/api";
 import { usePractice, usePracticeLabel } from "@/lib/practiceContext";
 import { fetchConversations, setConversationStatus } from "@/lib/procto";
 import { doctorWebPath } from "@/lib/webPortal";
-import { colors, radii, space } from "@/lib/theme";
+import { colors, radii, shadows, space } from "@/lib/theme";
 import { dockClearance } from "@/lib/dockLayout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -38,6 +38,10 @@ export default function ProfileScreen() {
   const [pane, setPane] = useState<"info" | "whatsapp">("info");
   const [rows, setRows] = useState<Conv[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const isClinicAdmin =
+    membership?.role === "PRACTICE_OWNER" ||
+    membership?.role === "PRACTICE_ADMIN";
 
   const loadInbox = useCallback(async () => {
     if (!practiceId) return;
@@ -77,13 +81,13 @@ export default function ProfileScreen() {
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + space.lg,
-            paddingBottom: dockClearance + 24,
+            paddingTop: space.lg,
+            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
           },
         ]}
       >
       <PageTitle
-        eyebrow="Doctor"
+        eyebrow={isClinicAdmin ? "Clinic" : "Doctor"}
         title={membership?.practice.name ?? "No practice"}
         subtitle={label}
       />
@@ -137,8 +141,16 @@ export default function ProfileScreen() {
           <Text style={styles.section}>Day tools</Text>
           <View style={styles.chips}>
             <Chip
+              label="Home dashboard"
+              onPress={() => router.push("/(app)/dashboard")}
+            />
+            <Chip
               label="Appointments list"
               onPress={() => router.push("/(app)/appointments")}
+            />
+            <Chip
+              label="Analytics"
+              onPress={() => router.push("/(app)/analytics")}
             />
             <Chip label="Hours & blocks" onPress={() => router.push("/(app)/schedule")} />
             <Chip label="Plans & billing" onPress={() => router.push("/(app)/subscriptions")} />
@@ -149,7 +161,7 @@ export default function ProfileScreen() {
           <Text style={styles.section}>On the web portal</Text>
           <Text style={styles.hint}>
             Team roster, practice profile, and theme stay on the web (same
-            doctor login).
+            Doctor / Clinic login).
           </Text>
           <View style={styles.chips}>
             <Chip
@@ -162,7 +174,11 @@ export default function ProfileScreen() {
             />
             <Chip
               label="Web dashboard"
-              onPress={() => openWeb("/doctor/dashboard")}
+              onPress={() =>
+                openWeb(
+                  isClinicAdmin ? "/clinic/dashboard" : "/doctor/dashboard",
+                )
+              }
             />
           </View>
         </>
@@ -226,6 +242,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     padding: space.lg,
     marginBottom: space.md,
+    ...shadows.card,
   },
   row: { fontSize: 14, color: colors.ink, marginBottom: 6 },
   hint: {

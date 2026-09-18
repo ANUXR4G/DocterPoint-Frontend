@@ -1,5 +1,6 @@
 "use client"
 
+import { Suspense } from "react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import DoctorAnalyticsPage from "@/components/ui/doctors/pages/DoctorAnalyticsPage"
 
@@ -17,7 +18,13 @@ export default function DoctorAnalyticsRoute() {
         subtitle="Track patient visits by gender over time. Switch between weekly and monthly views."
       />
       <div className="dashboard-panel">
-        <DoctorAnalyticsPage />
+        <Suspense
+          fallback={
+            <p className="text-sm text-slate-500">Loading analytics…</p>
+          }
+        >
+          <DoctorAnalyticsPage portal="doctor" />
+        </Suspense>
       </div>
     </div>
   )

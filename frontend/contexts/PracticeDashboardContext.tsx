@@ -13,7 +13,10 @@ import {
 import { addDays, format, subDays } from "date-fns"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import { useProctoSocket } from "@/hooks/useProctoSocket"
-import { applyLiveBookingEvent } from "@/lib/liveBooking"
+import {
+  applyLiveBookingEvent,
+  patchPatientsFromBooking,
+} from "@/lib/liveBooking"
 import { sortBookingsByWhen } from "@/lib/bookingDisplay"
 
 export type PracticeMembership = {
@@ -25,6 +28,7 @@ export type PracticeMembership = {
     id: string
     name: string
     slug?: string
+    type?: string
     members?: Array<{
       userId: string
       role: string
@@ -69,6 +73,18 @@ type PracticeDashboardValue = {
   memberships: PracticeMembership[]
   practiceId: string | null
   practiceName: string | null
+  /** SOLO | CLINIC | MEDICAL_CENTER — from primary membership. */
+  practiceType: string | null
+  /** Self-registered independent doctor (SOLO practice). */
+  isIndependentPractice: boolean
+  /** Clinic-rostered staff doctor (not owner/admin). */
+  isClinicStaffDoctor: boolean
+  /** Current user's membership role on the primary practice. */
+  membershipRole: string | null
+  /** Current user id from membership (provider id for staff doctors). */
+  actorUserId: string | null
+  /** PRACTICE_OWNER or PRACTICE_ADMIN — can manage full roster / clinic settings. */
+  isClinicAdmin: boolean
   bookings: ProctoBooking[]
   patients: PracticePatientRow[]
   /** Increments when WhatsApp inbox may have changed (single shared WS). */
@@ -84,7 +100,17 @@ const PracticeDashboardContext = createContext<PracticeDashboardValue | null>(
 
 export function bookingDateIso(b: ProctoBooking): string | null {
   const slot = b.slotStart ?? (b as { slot_start?: string }).slot_start
-  if (slot) return String(slot).slice(0, 10)
+  if (slot) {
+    const d = new Date(String(slot))
+    if (!Number.isNaN(d.getTime())) {
+      // Local calendar day — UTC ISO slice(0,10) shifts evening IST slots
+      // to the previous UTC day and empties "today" queues.
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, "0")
+      const day = String(d.getDate()).padStart(2, "0")
+      return `${y}-${m}-${day}`
+    }
+  }
   const session =
     b.sessionDate ?? (b as { session_date?: string }).session_date
   if (session) return String(session).slice(0, 10)
@@ -127,6 +153,17 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
 
   const practiceId = memberships[0]?.practice?.id ?? null
   const practiceName = memberships[0]?.practice?.name ?? null
+  const practiceType = memberships[0]?.practice?.type ?? null
+  const membershipRole = memberships[0]?.role ?? null
+  const actorUserId = memberships[0]?.userId ?? null
+  const isClinicAdmin =
+    membershipRole === "PRACTICE_OWNER" ||
+    membershipRole === "PRACTICE_ADMIN"
+  const isIndependentPractice = practiceType === "SOLO"
+  const isClinicStaffDoctor =
+    !isIndependentPractice &&
+    membershipRole === "DOCTOR" &&
+    !isClinicAdmin
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
@@ -138,33 +175,48 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       to: format(addDays(today, 90), "yyyy-MM-dd"),
     })
 
-    if (boot.status !== "successful" || !boot.data) {
+    let mem: PracticeMembership[] = []
+    let nextBookings: ProctoBooking[] = []
+    let nextPatients: PracticePatientRow[] = []
+
+    if (boot.status === "successful" && boot.data) {
+      mem = (boot.data.memberships ?? []) as PracticeMembership[]
+      nextBookings = (Array.isArray(boot.data.bookings)
+        ? boot.data.bookings
+        : []) as ProctoBooking[]
+      nextPatients = (Array.isArray(boot.data.patients)
+        ? boot.data.patients
+        : []) as PracticePatientRow[]
+    }
+
+    // Fallback: independent SOLO / clinic-staff still load if bootstrap fails.
+    if (!mem.length) {
+      proctoService.invalidateMyPracticesCache()
+      const mine = await proctoService.getMyPractices()
+      if (mine.status === "successful" && Array.isArray(mine.data)) {
+        mem = mine.data as PracticeMembership[]
+      }
+    }
+
+    if (!mem.length) {
       if (!opts?.silent) {
         setMemberships([])
         setBookings([])
         setPatients([])
-        setError(boot.message || "Could not load practice.")
+        setError(
+          boot.status !== "successful"
+            ? boot.message || "Could not load practice."
+            : null,
+        )
         setLoading(false)
         setReady(true)
       }
       return
     }
 
-    const mem = (boot.data.memberships ?? []) as PracticeMembership[]
     setMemberships(mem)
-    setBookings(
-      sortBookingsByWhen(
-        (Array.isArray(boot.data.bookings)
-          ? boot.data.bookings
-          : []) as ProctoBooking[],
-        "asc",
-      ),
-    )
-    setPatients(
-      (Array.isArray(boot.data.patients)
-        ? boot.data.patients
-        : []) as PracticePatientRow[],
-    )
+    setBookings(sortBookingsByWhen(nextBookings, "asc"))
+    setPatients(nextPatients)
     if (!opts?.silent) {
       setLoading(false)
       setReady(true)
@@ -201,6 +253,11 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
         if (needsRefresh) scheduleSoftRefresh()
         return sortBookingsByWhen(next, "asc")
       })
+      // Keep Patients → recent visits (remarks / status) in sync with queue.
+      setPatients((prev) => patchPatientsFromBooking(prev, incoming))
+      if (event.event === "booking_created") {
+        scheduleSoftRefresh()
+      }
     },
     scheduleSoftRefresh,
   )
@@ -222,6 +279,12 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       memberships,
       practiceId,
       practiceName,
+      practiceType,
+      isIndependentPractice,
+      isClinicStaffDoctor,
+      membershipRole,
+      actorUserId,
+      isClinicAdmin,
       bookings,
       patients,
       conversationTick,
@@ -236,6 +299,12 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       memberships,
       practiceId,
       practiceName,
+      practiceType,
+      isIndependentPractice,
+      isClinicStaffDoctor,
+      membershipRole,
+      actorUserId,
+      isClinicAdmin,
       bookings,
       patients,
       conversationTick,

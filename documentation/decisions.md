@@ -9,7 +9,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Canonical product | **GlucoGuide only** (`frontend/` + `backend/` on `:3000` / `:3001`) | Single product for patients, clinics, and doctors |
 | Parallel DocLine monorepo (`apps/api`, `apps/web`) | **Removed** | Was a mistaken dual stack from an old build prompt; do not revive |
 | Patient mobile | Expo `apps/mobile` → `:3001` | Patient book + visits |
-| Doctor mobile | Expo `apps/provider` → `:3001` (branded GlucoGuide Doctor) | Queue, calendar, patients, visit notes/CareChat, **practice subscription/billing**; analytics stay on web |
+| Doctor mobile | Expo `apps/provider` → `:3001` (branded GlucoGuide Doctor) | Queue, calendar, patients, visit notes/CareChat, **practice subscription/billing**, analytics; same Doctor Login as web |
 
 ## Auth (web)
 
@@ -30,7 +30,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Practice booking | `Practice` + `PracticeBooking` + schedules/overrides (Procto) | Clinic token/slot booking separate from legacy hospital appointments |
 | Legacy appointments | Still present (`Appointment`, doctor dashboards) | Older GlucoGuide hospital flow coexists with practice bookings |
 | Multi-doctor clinic | `PracticeMember` roles (`PRACTICE_OWNER`, `DOCTOR`, …) | City Care–style multi-provider clinics |
-| Tenant isolation | Practice membership + auth scopes | Doctors only manage their practice data |
+| Tenant isolation | Practice membership + auth scopes; **clinic staff (`DOCTOR`) scoped to own `providerId`** on bookings/patients/analytics (owners/admins see clinic-wide) | Doctors only manage their own roster; clinic portal sees all |
 | `/practices/mine` shape | Top-level `id` = **practice UUID**; `membershipId` = membership PK | Prevents booking/billing 403 when clients use `row.id` as practiceId |
 
 ## Booking & realtime
@@ -40,7 +40,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Slot engine | Server-side availability from `ProviderSchedule` + overrides | Single source of truth for open slots/tokens |
 | Booking identity | `patientPhone` required; optional `patientId` when logged in | Guest book + logged-in book both work |
 | Patient problem at book | Required `disease` text; AI visit brief → `notes` + seeds `doctorRemarks` | Doctor sees problem + AI explanation in Remarks; not a diagnosis |
-| Accept before visit | After `SCHEDULED`/`REQUESTED`, doctor/clinic sets **`ACCEPTED`**, then Waiting → Started → Finished | Request must be accepted from web dashboard or doctor mobile |
+| Accept before visit | Bookings are **auto-accepted** (`ACCEPTED`) on create/reschedule — no manual Accept | Front desk starts at Arrived → Started → Finished |
 | Doctor analytics | Live Procto booking series only — no sample/demo chart fallbacks | Empty period shows “No data”; Clinic plan required for charts |
 | Live queue | Native `ws` `/api/v1/ws/procto/:practiceId` (JWT + practice membership) | Doctor/clinic queue + calendar without polling |
 | Dashboard load | `GET /procto/practices/mine/bootstrap` + JWT claims auth (no DB) | Avoid mine→bookings waterfall; re-login refreshes enriched JWT |
@@ -49,7 +49,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Mira AI | **HTTP only** (`POST /assistant/chat`) | No WebSocket for Mira FAB/chat/LLM |
 | Post-visit ratings | Clinic + doctor stars after `COMPLETED` | Zomato-style; one review per booking |
 | Notifications | Redis BullMQ + WhatsApp (Meta when env set, else simulate); **notification worker runs in-process with API** (`NOTIFICATION_WORKER_INLINE=0` to disable) | Booking HTTP must not fail if notify fails; PENDING rows were stuck when only `yarn dev` ran without `worker:notifications` |
-| WhatsApp booking bot | DeepSeek NLU + regex fallback; multi-step orchestrator in `backend/`; **patients only** | Patient register/book/status/cancel/reschedule via chat; doctors/clinics use web portal; clinic alerts on confirm/cancel/reschedule/queue |
+| WhatsApp booking bot | DeepSeek/OpenAI NLU + regex fallback; multi-step orchestrator in `backend/`; **patients only**; voice notes = STT → free-form NLU (date+time in one utterance; clarify if unclear) | Patient register/book/status/cancel/reschedule via chat or voice; doctors/clinics use web portal; clinic alerts on confirm/cancel/reschedule/queue |
 | Language choice | `1`/`English` → en; `2`/`Hindi`/`hin` → hi; bare **`hi` is greeting, not Hindi** | Avoid mis-setting language on "hi" |
 | Meta #131037 | Mark notification `SKIPPED` (display name not approved) | Do not leave infinite PENDING/FAILED retries when Meta blocks the number |
 

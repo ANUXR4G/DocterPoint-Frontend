@@ -7,11 +7,14 @@ const prisma = new PrismaClient();
 const DEMO_PASSWORD = "Demo@12345";
 
 /**
- * Minimal demo: exactly one clinic, one doctor, one patient.
- * Doctor owns the clinic (CLINIC) — use /login/doctor or /login/clinic with the same account.
+ * Demo: clinic owner + clinic staff doctor + independent solo doctor + patient.
+ * Independent doctors are not linkable into clinics — clinic staff are created
+ * from the clinic dashboard only.
  */
 async function main() {
-  console.log("Seeding minimal GlucoGuide demo (1 clinic · 1 doctor · 1 patient)…");
+  console.log(
+    "Seeding GlucoGuide demo (clinic owner + staff + independent doctor · 1 patient)…",
+  );
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
@@ -31,22 +34,46 @@ async function main() {
     },
   });
 
-  const doctorUser = await prisma.user.create({
+  const clinicOwner = await prisma.user.create({
     data: {
       email: "dr.demo@glucoguide.com",
       password: passwordHash,
       role: "doctor",
       name: "Dr. Ananya Sharma",
       phone: "9876543210",
+      createdBy: "clinic_owner_signup",
       doctor: {
         create: {
           description:
-            "Endocrinologist specializing in Type 1 & Type 2 diabetes management.",
+            "Endocrinology — Type 1 & Type 2 diabetes management.",
           hospitalId: hospital.id,
           availableTimes: "Mon–Sat 9:00–17:00",
           experience: 12,
           emails: ["dr.demo@glucoguide.com"],
           contactNumbers: ["+919876543210"],
+          appointmentValidityDays: 7,
+        },
+      },
+    },
+    include: { doctor: true },
+  });
+
+  const staffDoctor = await prisma.user.create({
+    data: {
+      email: "dr.staff@glucoguide.com",
+      password: passwordHash,
+      role: "doctor",
+      name: "Dr. Kabir Mehta",
+      phone: "9876543211",
+      createdBy: "clinic_doctor_add",
+      doctor: {
+        create: {
+          description: "Diabetology — general diabetes consultations.",
+          hospitalId: hospital.id,
+          availableTimes: "Mon–Sat 9:00–17:00",
+          experience: 5,
+          emails: ["dr.staff@glucoguide.com"],
+          contactNumbers: ["+919876543211"],
           appointmentValidityDays: 7,
         },
       },
@@ -83,17 +110,103 @@ async function main() {
         },
       },
       members: {
-        create: {
-          userId: doctorUser.id,
-          role: "PRACTICE_OWNER",
-          doctorId: doctorUser.id,
-        },
+        create: [
+          {
+            userId: clinicOwner.id,
+            role: "PRACTICE_OWNER",
+            doctorId: clinicOwner.id,
+          },
+          {
+            userId: staffDoctor.id,
+            role: "DOCTOR",
+            doctorId: staffDoctor.id,
+          },
+        ],
       },
     },
     include: { locations: true },
   });
 
   const location = practice.locations[0]!;
+  const doctorUser = staffDoctor;
+
+  // Independent individual doctor (own SOLO practice — WhatsApp line 9990052082)
+  const soloDoctor = await prisma.user.create({
+    data: {
+      email: "dr.solo@glucoguide.com",
+      password: passwordHash,
+      role: "doctor",
+      name: "Dr. Priya Nair",
+      phone: "9990052082",
+      createdBy: "self_attempted",
+      doctor: {
+        create: {
+          description: "Independent endocrinologist — solo practice.",
+          hospitalId: hospital.id,
+          availableTimes: "Mon–Fri 10:00–18:00",
+          experience: 8,
+          emails: ["dr.solo@glucoguide.com"],
+          contactNumbers: ["+919990052082"],
+          appointmentValidityDays: 7,
+          licenseNo: "IND-SOLO-1001",
+        },
+      },
+    },
+    include: { doctor: true },
+  });
+
+  const soloPractice = await prisma.practice.create({
+    data: {
+      name: "Dr. Priya Nair Clinic",
+      slug: "dr-priya-nair-clinic",
+      type: "SOLO",
+      specialty: "Endocrinology",
+      consultationFee: 700,
+      phone: "9990052082",
+      whatsappBusinessNumber: "9990052082",
+      email: "dr.solo@glucoguide.com",
+      registrationNo: "IND-SOLO-1001",
+      isActive: true,
+      isDirectoryListed: true,
+      locations: {
+        create: {
+          name: "Main Clinic",
+          address: "Indiranagar 100 Feet Road",
+          city: "Bangalore",
+        },
+      },
+      members: {
+        create: {
+          userId: soloDoctor.id,
+          role: "DOCTOR",
+          doctorId: soloDoctor.id,
+        },
+      },
+    },
+    include: { locations: true },
+  });
+
+  const soloLocation = soloPractice.locations[0]!;
+  for (const day of [
+    { dayOfWeek: 1, startTime: "10:00", endTime: "14:00" },
+    { dayOfWeek: 3, startTime: "10:00", endTime: "14:00" },
+    { dayOfWeek: 5, startTime: "10:00", endTime: "14:00" },
+  ]) {
+    await prisma.providerSchedule.create({
+      data: {
+        practiceId: soloPractice.id,
+        locationId: soloLocation.id,
+        providerId: soloDoctor.id,
+        dayOfWeek: day.dayOfWeek,
+        mode: ScheduleMode.TIME_BASED,
+        slotIntervalMin: 20,
+        startTime: day.startTime,
+        endTime: day.endTime,
+        maxPerSlot: 1,
+        isActive: true,
+      },
+    });
+  }
 
   const scheduleDays = [
     {
@@ -158,6 +271,19 @@ async function main() {
     });
   }
 
+  // Owner also practices — so clinic WhatsApp BOOK shows both doctors + specialty.
+  for (const day of scheduleDays) {
+    await prisma.providerSchedule.create({
+      data: {
+        practiceId: practice.id,
+        locationId: location.id,
+        providerId: clinicOwner.id,
+        ...day,
+        isActive: true,
+      },
+    });
+  }
+
   const patientUser = await prisma.user.create({
     data: {
       email: "patient1@example.com",
@@ -179,7 +305,16 @@ async function main() {
     include: { patient: true },
   });
 
-  // One sample booking so queue / patient list are not empty
+  // Sample bookings so Today queue + calendar are never empty after seed.
+  // Keep a "today" slot even if the wall clock is past 11:00 — demo boards
+  // still need a visible appointment on the current calendar day.
+  // Status ACCEPTED matches auto-accept product behaviour (not raw SCHEDULED).
+  const todaySlot = new Date();
+  todaySlot.setHours(11, 0, 0, 0);
+
+  const todayWaiting = new Date();
+  todayWaiting.setHours(11, 30, 0, 0);
+
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(10, 0, 0, 0);
@@ -193,10 +328,62 @@ async function main() {
       patientPhone: "9999973601",
       patientName: "Ravi Kumar",
       mode: ScheduleMode.TIME_BASED,
-      status: "SCHEDULED",
+      status: "WAITING",
       channel: "WEB_PORTAL",
+      disease: "Blood sugar follow-up",
+      slotStart: todaySlot,
+      slotEnd: new Date(todaySlot.getTime() + 30 * 60_000),
+    },
+  });
+
+  await prisma.practiceBooking.create({
+    data: {
+      practiceId: practice.id,
+      locationId: location.id,
+      providerId: clinicOwner.id,
+      patientId: patientUser.patient!.id,
+      patientPhone: "9999973601",
+      patientName: "Ravi Kumar",
+      mode: ScheduleMode.TIME_BASED,
+      status: "ACCEPTED",
+      channel: "WEB_PORTAL",
+      disease: "Thyroid review",
+      slotStart: todayWaiting,
+      slotEnd: new Date(todayWaiting.getTime() + 30 * 60_000),
+    },
+  });
+
+  await prisma.practiceBooking.create({
+    data: {
+      practiceId: practice.id,
+      locationId: location.id,
+      providerId: clinicOwner.id,
+      patientId: patientUser.patient!.id,
+      patientPhone: "9999973601",
+      patientName: "Ravi Kumar",
+      mode: ScheduleMode.TIME_BASED,
+      status: "ACCEPTED",
+      channel: "WEB_PORTAL",
+      disease: "General consultation",
       slotStart: tomorrow,
       slotEnd: new Date(tomorrow.getTime() + 30 * 60_000),
+    },
+  });
+
+  await prisma.practiceBooking.create({
+    data: {
+      practiceId: soloPractice.id,
+      locationId: soloLocation.id,
+      providerId: soloDoctor.id,
+      patientId: patientUser.patient!.id,
+      patientPhone: "9999973601",
+      patientName: "Ravi Kumar",
+      mode: ScheduleMode.TIME_BASED,
+      status: "ACCEPTED",
+      channel: "WEB_PORTAL",
+      disease: "Endocrine consult",
+      slotStart: todaySlot,
+      slotEnd: new Date(todaySlot.getTime() + 30 * 60_000),
     },
   });
 
@@ -215,6 +402,8 @@ async function main() {
   );
   const plans = await NumberPoolService.ensureDefaultPlans();
   const clinicPlan = plans.find((p) => p.name === "Clinic")!;
+  const starterPlan =
+    plans.find((p) => p.name === "Starter") ?? plans[0]!;
 
   await prisma.practiceSubscription.create({
     data: {
@@ -224,6 +413,17 @@ async function main() {
       currentPeriodStart: new Date(),
       currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60_000),
       notes: "Demo clinic — Clinic plan (live analytics + full features)",
+    },
+  });
+
+  await prisma.practiceSubscription.create({
+    data: {
+      practiceId: soloPractice.id,
+      planId: starterPlan.id,
+      status: "ACTIVE",
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60_000),
+      notes: "Demo independent doctor — Starter plan + WhatsApp 9990052082",
     },
   });
 
@@ -240,7 +440,7 @@ async function main() {
       displayNameStatus: "approved",
       templatesStatus: "approved",
       activatedAt: new Date(),
-      notes: "Minimal demo WhatsApp line",
+      notes: "Minimal demo WhatsApp line (clinic)",
     },
   });
 
@@ -249,11 +449,37 @@ async function main() {
     data: { whatsappBusinessNumber: "9876543210" },
   });
 
+  // Independent doctor WhatsApp line — +91 99900 52082
+  const soloMetaPhoneId =
+    process.env.GLUCOGUIDE_OTP_PHONE_NUMBER_ID ||
+    process.env.WHATSAPP_PHONE_NUMBER_ID ||
+    null;
+  await prisma.whatsAppNumber.create({
+    data: {
+      phoneNumber: "9990052082",
+      displayName: soloPractice.name,
+      status: "LIVE",
+      provider: soloMetaPhoneId ? "META_CLOUD_API" : "MOCK",
+      practiceId: soloPractice.id,
+      wabaPhoneNumberId: soloMetaPhoneId,
+      wabaId: process.env.WHATSAPP_WABA_ID || null,
+      verificationStatus: "verified",
+      displayNameStatus: "approved",
+      templatesStatus: "approved",
+      activatedAt: new Date(),
+      notes: "Independent doctor demo line (+91 99900 52082)",
+    },
+  });
+
   await NumberPoolService.syncMetaUtilityTemplates();
 
   console.log("\n✅ Minimal seed complete\n");
   console.log("  Clinic:   Dr. Ananya Sharma Clinic  (/practices/dr-ananya-sharma-clinic)");
-  console.log("  Doctor:   dr.demo@glucoguide.com");
+  console.log("  Clinic WA:           +91 98765 43210");
+  console.log("  Clinic Login:        dr.demo@glucoguide.com  (owner)");
+  console.log("  Clinic staff Login:  dr.staff@glucoguide.com  (Doctor Login)");
+  console.log("  Independent doctor:  dr.solo@glucoguide.com  (own SOLO practice)");
+  console.log("  Independent WA:      +91 99900 52082");
   console.log("  Patient:  patient1@example.com");
   console.log("  Admin:    admin@glucoguide.com");
   console.log(`  Password: ${DEMO_PASSWORD}  (all of the above)\n`);

@@ -270,9 +270,10 @@ export default function DoctorPatientsList() {
                                     ? new Date(b.createdAt).toLocaleDateString()
                                     : "—"}
                             </p>
-                            {b.doctorRemarks ? (
-                              <p className="mt-1 opacity-80">
-                                Remarks: {b.doctorRemarks}
+                            {b.doctorRemarks?.trim() ? (
+                              <p className="mt-1 whitespace-pre-wrap text-sm opacity-90">
+                                <span className="font-semibold">Remarks: </span>
+                                {b.doctorRemarks}
                               </p>
                             ) : null}
                             <Link
@@ -427,9 +428,12 @@ export default function DoctorPatientsList() {
                                             ).toLocaleDateString()
                                           : "—"}
                                   </p>
-                                  {b.doctorRemarks ? (
-                                    <p className="mt-1 opacity-80">
-                                      Remarks: {b.doctorRemarks}
+                                  {b.doctorRemarks?.trim() ? (
+                                    <p className="mt-1 whitespace-pre-wrap text-sm opacity-90">
+                                      <span className="font-semibold">
+                                        Remarks:{" "}
+                                      </span>
+                                      {b.doctorRemarks}
                                     </p>
                                   ) : null}
                                   <Link

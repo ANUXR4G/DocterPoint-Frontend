@@ -362,7 +362,7 @@ export default function VisitPage() {
     <div
       className={`dashboard-page-wide space-y-5 ${isCompleted ? "pb-8" : "pb-28"}`}
     >
-      {/* Nav */}
+      {/* duplicate status in nav is enough — banner also shows status */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <button
@@ -385,11 +385,6 @@ export default function VisitPage() {
             Patients
           </Link>
         </div>
-        <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${bookingStatusClass(booking.status)}`}
-        >
-          {bookingStatusLabel(booking.status)}
-        </span>
       </div>
 
       {isCompleted ? (
@@ -402,40 +397,83 @@ export default function VisitPage() {
         </p>
       ) : null}
 
-      {/* Patient summary — one panel, no hidden sidebar scroll */}
-      <section className="dashboard-panel !p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-4">
-            <PatientAvatar
-              name={patientName}
-              imgSrc={p?.imgSrc}
-              size="lg"
-            />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-50">
-                Patient
-              </p>
-              <h1 className="mt-1 text-2xl font-bold leading-tight">
-                {patientName}
-              </h1>
-              <p className="mt-1 text-sm opacity-70">{phone}</p>
+      {/* Patient name banner — all visit identity details in one strip */}
+      <section
+        className="overflow-hidden rounded-2xl border border-neutral-200 bg-[var(--theme-surface,theme(colors.white))] shadow-sm dark:border-neutral-700"
+        aria-label={`Patient ${patientName}`}
+      >
+        <div className="bg-[color-mix(in_srgb,var(--theme-primary)_12%,transparent)] px-5 py-6 sm:px-8 dark:bg-[color-mix(in_srgb,var(--theme-primary)_22%,transparent)]">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-4">
+              <PatientAvatar
+                name={patientName}
+                imgSrc={p?.imgSrc}
+                size="lg"
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--theme-primary)] opacity-90">
+                  Appointment · {appointmentDate} · {slotLabel}
+                </p>
+                <h1 className="mt-1 break-words text-3xl font-bold leading-tight tracking-tight text-neutral-900 sm:text-4xl dark:text-white">
+                  {patientName}
+                </h1>
+                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                  <span>{phone}</span>
+                  <span className="opacity-40" aria-hidden>
+                    ·
+                  </span>
+                  <span>
+                    Age {ageFromDob(p?.dateOfBirth)}
+                    {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
+                  </span>
+                </p>
+              </div>
             </div>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${bookingStatusClass(booking.status)}`}
+            >
+              {bookingStatusLabel(booking.status)}
+            </span>
           </div>
-          <p className="text-sm font-medium opacity-80">
-            {appointmentDate} · {slotLabel}
-          </p>
         </div>
-        <dl className="mt-4 grid gap-3 border-t border-neutral-200 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-3 dark:border-neutral-700">
-          <Fact label="Doctor" value={dash(booking.provider?.name)} />
-          <Fact label="Problem (patient)" value={diseaseLabel} />
-          <Fact label="Gender" value={dash(p?.gender)} />
+
+        <dl className="grid gap-x-4 gap-y-3 border-t border-neutral-200 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8 dark:border-neutral-700">
+          <Fact label="Date of birth" value={dash(p?.dateOfBirth)} />
           <Fact label="Age" value={ageFromDob(p?.dateOfBirth)} />
+          <Fact label="Gender" value={dash(p?.gender)} />
+          <Fact label="Phone" value={phone} />
           <Fact label="Email" value={dash(p?.email)} />
-          <Fact label="Channel" value={booking.channel?.replace(/_/g, " ") ?? "—"} />
+          <Fact label="Profession" value={dash(p?.profession)} />
+          <Fact label="Address" value={dash(p?.address)} />
+          <Fact label="Problem" value={diseaseLabel} />
+          <Fact label="Doctor" value={dash(booking.provider?.name)} />
+          <Fact
+            label="Location"
+            value={
+              booking.location
+                ? [booking.location.name, booking.location.city]
+                    .filter(Boolean)
+                    .join(", ") || "—"
+                : "—"
+            }
+          />
+          <Fact
+            label="Mode"
+            value={booking.mode?.replace(/_/g, " ") || "—"}
+          />
+          <Fact
+            label="Channel"
+            value={booking.channel?.replace(/_/g, " ") || "—"}
+          />
+          {booking.tokenNumber != null ? (
+            <Fact label="Token" value={`#${booking.tokenNumber}`} />
+          ) : null}
           {booking.notes ? (
             <div className="sm:col-span-2 lg:col-span-3">
-              <dt className="text-xs opacity-50">Patient problem &amp; AI brief</dt>
-              <dd className="mt-0.5 whitespace-pre-wrap leading-relaxed">
+              <dt className="text-xs opacity-50">
+                Patient problem &amp; AI brief
+              </dt>
+              <dd className="mt-0.5 whitespace-pre-wrap leading-relaxed font-medium">
                 {booking.notes}
               </dd>
             </div>

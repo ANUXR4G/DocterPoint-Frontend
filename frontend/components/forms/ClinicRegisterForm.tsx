@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
 import { firey } from "@/utils"
 import { cookies } from "@/utils/cookies"
 import { userService, type ProfessionalScanResult } from "@/lib/services/user"
@@ -15,13 +14,6 @@ type ClinicRegisterFormProps = {
   onSwitchLogin: () => void
 }
 
-type DoctorRow = {
-  id: string
-  name: string
-  email: string
-  specialty: string
-}
-
 type ClinicPlan = {
   id: string
   name: string
@@ -30,19 +22,10 @@ type ClinicPlan = {
   features?: Record<string, unknown>
 }
 
-function newDoctorRow(): DoctorRow {
-  return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    name: "",
-    email: "",
-    specialty: "",
-  }
-}
-
 /**
- * Clinic registration:
- * Clinic Name, Address, Reg No, Tel, Email
- * + optional doctors to add to the clinic
+ * Clinic registration creates the owner account + CLINIC practice + trial.
+ * Doctors are added later from the clinic dashboard (never by linking
+ * independently registered doctor accounts).
  */
 export default function ClinicRegisterForm({
   onSwitchLogin,
@@ -50,11 +33,12 @@ export default function ClinicRegisterForm({
   const router = useRouter()
   const [clinicName, setClinicName] = useState("")
   const [address, setAddress] = useState("")
+  const [city, setCity] = useState("")
+  const [consultationFee, setConsultationFee] = useState("500")
   const [registrationNo, setRegistrationNo] = useState("")
   const [telNo, setTelNo] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [doctors, setDoctors] = useState<DoctorRow[]>([])
   const [plans, setPlans] = useState<ClinicPlan[]>([])
   const [selectedPlanId, setSelectedPlanId] = useState<string>("")
   const [plansLoading, setPlansLoading] = useState(true)
@@ -78,16 +62,6 @@ export default function ClinicRegisterForm({
     }
   }, [])
 
-  function updateDoctor(id: string, patch: Partial<DoctorRow>) {
-    setDoctors((rows) =>
-      rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
-    )
-  }
-
-  function removeDoctor(id: string) {
-    setDoctors((rows) => rows.filter((row) => row.id !== id))
-  }
-
   function applyDocumentScan(data: ProfessionalScanResult) {
     if (data.clinicName) setClinicName(data.clinicName)
     else if (data.name) setClinicName(data.name)
@@ -96,27 +70,13 @@ export default function ClinicRegisterForm({
     else if (data.licenseNo) setRegistrationNo(data.licenseNo)
     if (data.phone) setTelNo(data.phone)
     if (data.email) setEmail(data.email)
-
-    // If a doctor name / specialty is on the card, seed one optional doctor row.
-    if (data.name && data.clinicName && data.name !== data.clinicName) {
-      setDoctors((rows) => {
-        if (rows.some((r) => r.name.trim() || r.email.trim())) return rows
-        return [
-          {
-            ...newDoctorRow(),
-            name: data.name!,
-            specialty: data.specialty ?? "",
-            email: data.email && data.email !== email ? data.email : "",
-          },
-        ]
-      })
-    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
 
+    const fee = Number(consultationFee)
     if (
       !clinicName.trim() ||
       !address.trim() ||
@@ -128,18 +88,8 @@ export default function ClinicRegisterForm({
       setError("Fill Clinic Name, Address, Reg No, Tel, Email, and password.")
       return
     }
-
-    const filledDoctors = doctors.filter((d) => d.name.trim() || d.email.trim())
-    for (const d of filledDoctors) {
-      if (!d.name.trim() || !d.email.trim()) {
-        setError("Each added doctor needs both name and email.")
-        return
-      }
-    }
-    if (filledDoctors.length > 0) {
-      setError(
-        "Extra doctors are added after you subscribe to Growth or Clinic. Clear the doctor list, create the clinic, then open Billing → Doctors.",
-      )
+    if (!Number.isFinite(fee) || fee <= 0) {
+      setError("Enter a consultation fee greater than 0.")
       return
     }
 
@@ -156,6 +106,7 @@ export default function ClinicRegisterForm({
         email: email.trim(),
         password: encryptedPass,
         role: "doctor",
+        portal: "clinic",
         name: clinicName.trim(),
         phone: telNo.trim(),
       })
@@ -167,41 +118,45 @@ export default function ClinicRegisterForm({
       }
 
       cookies.setCookie(PORTAL_COOKIE, "clinic", 60 * 60 * 24 * 30)
+      proctoService.invalidateMyPracticesCache()
 
-      const cityGuess =
+      const cityResolved =
+        city.trim() ||
         address
           .split(",")
           .map((p) => p.trim())
           .filter(Boolean)
-          .at(-1) || "India"
+          .at(-1) ||
+        "India"
 
       const onboard = await proctoService.onboardPractice({
         name: clinicName.trim(),
         type: "CLINIC",
         specialty: "General",
+        consultationFee: fee,
         registrationNo: registrationNo.trim(),
         phone: telNo.trim(),
         email: email.trim(),
+        planId: selectedPlanId,
         location: {
           name: "Main Clinic",
           address: address.trim(),
-          city: cityGuess,
+          city: cityResolved,
         },
       })
 
       setSubmitting(false)
 
       if (onboard?.status === "successful") {
-        const planQs = selectedPlanId
-          ? `&subscribePlan=${encodeURIComponent(selectedPlanId)}`
-          : ""
-        router.push(
-          `/clinic/subscription?onboarded=1${planQs}`,
-        )
+        proctoService.invalidateMyPracticesCache()
+        router.push("/clinic/dashboard?onboarded=1")
         return
       }
 
-      setError(onboard?.message ?? "Clinic account created — finish setup next.")
+      setError(
+        onboard?.message ??
+          "Clinic account created, but practice setup failed. Open the clinic dashboard to finish.",
+      )
       router.push("/clinic/dashboard")
     } catch {
       setSubmitting(false)
@@ -224,9 +179,9 @@ export default function ClinicRegisterForm({
       </p>
       <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
         <IconInput
-          icon="home"
+          icon="doctor"
           name="clinicName"
-          label="Clinic Name *"
+          label="Clinic name *"
           value={clinicName}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setClinicName(e.target.value)
@@ -235,15 +190,15 @@ export default function ClinicRegisterForm({
         <IconInput
           icon="written-page"
           name="registrationNo"
-          label="Reg No *"
+          label="Registration no. *"
           value={registrationNo}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setRegistrationNo(e.target.value)
           }
         />
-        <div className="min-w-0 min-[480px]:col-span-2">
+        <div className="min-[480px]:col-span-2">
           <IconInput
-            icon="pin"
+            icon="written-page"
             name="address"
             label="Address *"
             value={address}
@@ -252,6 +207,25 @@ export default function ClinicRegisterForm({
             }
           />
         </div>
+        <IconInput
+          icon="written-page"
+          name="city"
+          label="City"
+          value={city}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setCity(e.target.value)
+          }
+        />
+        <IconInput
+          icon="written-page"
+          name="consultationFee"
+          label="Consultation fee (₹) *"
+          type="number"
+          value={consultationFee}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setConsultationFee(e.target.value)
+          }
+        />
         <IconInput
           icon="phone"
           name="telNo"
@@ -282,139 +256,53 @@ export default function ClinicRegisterForm({
         />
       </div>
 
-      <div className="mt-6 flex flex-col gap-2 min-[400px]:flex-row min-[400px]:items-center min-[400px]:justify-between">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#0099ff]">
-          3. Doctors in this clinic
+      <div className="mt-6 rounded-xl border border-dashed border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-slate-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-slate-200">
+        <p className="font-semibold text-slate-900 dark:text-white">
+          Ready after registration
         </p>
-        <button
-          type="button"
-          onClick={() => setDoctors((rows) => [...rows, newDoctorRow()])}
-          className="w-full rounded-full border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-100 min-[400px]:w-auto dark:border-[#333] dark:text-white dark:hover:bg-[#1c1c1c]"
-        >
-          + Add doctor
-        </button>
+        <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+          Your clinic, location, fee, and 14-day trial start here. Then add
+          doctor logins from the clinic dashboard — they sign in at Doctor Login
+          under this clinic. Independently registered doctors cannot be linked.
+        </p>
       </div>
-      <p className="gg-muted mt-1 text-xs">
-        Optional draft only — multi-doctor requires Growth or Clinic. Clear this
-        list to register, then add doctors under Practice after you subscribe.
-      </p>
 
-      {doctors.length === 0 ? (
-        <p className="gg-faint mt-3 rounded-xl border border-dashed border-neutral-300 px-4 py-6 text-center text-sm dark:border-[#333]">
-          No doctors added yet. Click “Add doctor” to include providers.
-        </p>
+      <p className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+        3. Choose a plan (starts as free trial)
+      </p>
+      {plansLoading ? (
+        <p className="text-sm text-neutral-500">Loading plans…</p>
       ) : (
-        <ul className="mt-3 space-y-3">
-          {doctors.map((doc, index) => (
-            <li
-              key={doc.id}
-              className="rounded-xl border border-neutral-200 p-3 dark:border-[#262626]"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-neutral-500">
-                  Doctor {index + 1}
-                </span>
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {plans.map((plan) => {
+            const selected = plan.id === selectedPlanId
+            return (
+              <li key={plan.id}>
                 <button
                   type="button"
-                  onClick={() => removeDoctor(doc.id)}
-                  className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                  onClick={() => setSelectedPlanId(plan.id)}
+                  className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+                    selected
+                      ? "border-blue-500 bg-blue-50 shadow-sm dark:border-sky-400 dark:bg-sky-950/40"
+                      : "border-neutral-200 hover:border-neutral-300 dark:border-[#333] dark:hover:border-[#555]"
+                  }`}
                 >
-                  Remove
+                  <p className="text-sm font-semibold">{plan.name}</p>
+                  <p className="mt-0.5 text-xs text-neutral-500">
+                    ₹{plan.priceMonthlyInr}/mo · 14-day trial
+                  </p>
                 </button>
-              </div>
-              <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3">
-                <IconInput
-                  icon="doctor"
-                  name={`doctor-name-${doc.id}`}
-                  label="Doctor name *"
-                  value={doc.name}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    updateDoctor(doc.id, { name: e.target.value })
-                  }
-                />
-                <IconInput
-                  icon="envelope"
-                  name={`doctor-email-${doc.id}`}
-                  label="Doctor email *"
-                  value={doc.email}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    updateDoctor(doc.id, { email: e.target.value })
-                  }
-                />
-                <IconInput
-                  icon="written-page"
-                  name={`doctor-specialty-${doc.id}`}
-                  label="Specialty"
-                  value={doc.specialty}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    updateDoctor(doc.id, { specialty: e.target.value })
-                  }
-                />
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
 
-      <p className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-        4. Subscription plan
-      </p>
-      <p className="gg-muted mb-3 text-xs">
-        Pick a plan now — after registration you&apos;ll complete payment
-        (or start a trial from Billing).
-      </p>
-      {plansLoading ? (
-        <div className="h-28 animate-pulse rounded-xl border border-neutral-200 bg-neutral-100 dark:border-[#333] dark:bg-[#1c1c1c]" />
-      ) : plans.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 px-4 py-6 text-center text-sm text-neutral-500 dark:border-[#333]">
-          Plans unavailable — you can subscribe after registration from Billing.
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {plans.map((plan) => {
-            const selected = selectedPlanId === plan.id
-            return (
-              <button
-                key={plan.id}
-                type="button"
-                onClick={() => setSelectedPlanId(plan.id)}
-                className={`rounded-xl border p-4 text-left transition ${
-                  selected
-                    ? "border-[#0099ff] bg-[#0099ff]/5 shadow-[0_0_0_1px_#0099ff]"
-                    : "border-neutral-200 hover:border-neutral-300 dark:border-[#333] dark:hover:border-[#444]"
-                }`}
-              >
-                <p className="font-semibold text-neutral-900 dark:text-white">
-                  {plan.name}
-                </p>
-                <p className="mt-1 text-lg font-semibold tabular-nums">
-                  ₹{plan.priceMonthlyInr.toLocaleString("en-IN")}
-                  <span className="text-sm font-medium text-neutral-500">
-                    /mo
-                  </span>
-                </p>
-                {plan.maxBookingsPerMonth ? (
-                  <p className="mt-2 text-xs text-neutral-500">
-                    Up to {plan.maxBookingsPerMonth} bookings / month
-                  </p>
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {error ? (
+        <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>
+      ) : null}
 
-      {error && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="mt-4 rounded-2xl bg-red-500/15 py-2.5 text-center"
-        >
-          <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
-        </motion.div>
-      )}
-
-      <div className="mt-5 flex justify-center">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <Button
           className="gg-btn center !w-full !border-transparent !py-3.5 !text-base sm:!w-auto sm:min-w-[220px]"
           typeBtn="submit"
@@ -428,17 +316,17 @@ export default function ClinicRegisterForm({
               />
             </div>
           ) : (
-            "Register & continue to payment"
+            "Create clinic account"
           )}
         </Button>
-      </div>
-
-      <p className="gg-muted mt-4 text-center text-sm">
-        Already registered?{" "}
-        <button type="button" onClick={onSwitchLogin} className="gg-link">
-          Clinic login
+        <button
+          type="button"
+          onClick={onSwitchLogin}
+          className="text-sm font-medium text-blue-600 hover:underline dark:text-sky-400"
+        >
+          Already have a clinic? Log in
         </button>
-      </p>
+      </div>
     </form>
   )
 }

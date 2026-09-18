@@ -9,6 +9,7 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import { BlurView } from "expo-blur";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { dockLayout } from "@/lib/dockLayout";
 import { colors, shadows } from "@/lib/theme";
 
@@ -48,10 +49,11 @@ export type FloatingDockProps = {
 
 /** Only these routes get a dock icon, in this order. */
 const DOCK_ORDER = [
+  "dashboard",
   "queue",
+  "appointments",
   "calendar",
   "patients",
-  "analytics",
   "profile",
 ] as const;
 
@@ -59,7 +61,13 @@ const TAB_ICONS: Record<
   string,
   { label: string; active: IconName; idle: IconName }
 > = {
+  dashboard: { label: "Home", active: "home", idle: "home-outline" },
   queue: { label: "Today", active: "list", idle: "list-outline" },
+  appointments: {
+    label: "Appts",
+    active: "calendar-number",
+    idle: "calendar-number-outline",
+  },
   calendar: {
     label: "Calendar",
     active: "calendar",
@@ -121,7 +129,7 @@ function DockItem({
           <Ionicons
             name={focused ? iconActive : iconIdle}
             size={ICON_SIZE}
-            color={focused ? colors.navy : colors.inkSoft}
+            color={focused ? colors.brand : colors.inkSoft}
           />
         </View>
       </View>
@@ -134,6 +142,7 @@ export function FloatingDock({
   descriptors,
   navigation,
 }: FloatingDockProps) {
+  const insets = useSafeAreaInsets();
   const byName = new Map(state.routes.map((r) => [r.name, r]));
   const visible = DOCK_ORDER.map((name) => byName.get(name)).filter(
     (r): r is TabRoute => !!r,
@@ -141,7 +150,13 @@ export function FloatingDock({
   const focusedKey = state.routes[state.index]?.key;
 
   return (
-    <View pointerEvents="box-none" style={styles.wrap}>
+    <View
+      pointerEvents="box-none"
+      style={[
+        styles.wrap,
+        { bottom: dockLayout.bottom + Math.max(insets.bottom - 4, 0) },
+      ]}
+    >
       <View style={[styles.dockShell, shadows.dock]}>
         <View style={styles.dockClip}>
           <BlurView
@@ -197,7 +212,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: dockLayout.bottom,
     alignItems: "center",
     paddingHorizontal: dockLayout.horizontal,
   },
@@ -244,9 +258,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.92)",
   },
   bubbleFocused: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.brandLight,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(17, 24, 39, 0.08)",
+    borderColor: "rgba(37, 99, 235, 0.18)",
   },
   bubblePressed: {
     opacity: 0.72,

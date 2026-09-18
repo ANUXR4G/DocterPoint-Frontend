@@ -1,17 +1,21 @@
-# GlucoGuide Doctor (Expo)
+# GlucoGuide Doctor / Clinic (Expo)
 
-Doctor mobile app — day-to-day queue, calendar, patients, visit notes, and **practice subscription / billing**.
+Provider mobile app — **Home dashboard**, day queue, calendar, patients, visit notes, and **practice subscription / billing**.
 
-Same `PracticeBooking` engine as the web doctor dashboard, patient app, and WhatsApp.
+Same `PracticeBooking` engine as the web doctor/clinic portals, patient app, and WhatsApp.
 
 ## Features
 
 | Screen | Behavior |
 |--------|----------|
-| Login | Email + password (`role: doctor`) |
-| Queue / Schedule | Today's list **or** week calendar (List \| Calendar switch) · open visit |
+| Login | Doctor **or** Clinic portal (`role: doctor` + `portal`) · demo accounts |
+| Register | Independent doctor signup · **clinic register** (owner + practice + trial) |
+| Home | Today metrics · quick actions (queue, calendar, patients, analytics, plans) |
+| Queue | Today's list · status filters · open visit |
+| Calendar | Week view of upcoming visits |
 | Patients | Practice roster · search · recent visits |
-| Plans | Practice subscription · trial / Razorpay activate · plan change |
+| Analytics | Patients and bookings over time |
+| Plans | Practice subscription · trial / Razorpay · plan change |
 | Visit | Status · remarks · medicines · Care chat |
 | More | WhatsApp takeover · hours/blocks · web portal links · practice switch |
 
@@ -21,7 +25,7 @@ Same `PracticeBooking` engine as the web doctor dashboard, patient app, and What
 # API (GlucoGuide backend on :3001)
 cd backend && npm run dev
 
-# Doctor app (Metro port 8082 beside patient Expo)
+# Provider app (Metro port 8082 beside patient Expo)
 cd apps/provider
 npm install
 npm start
@@ -33,9 +37,13 @@ On a **physical device**, point both at your LAN / tunnel hosts.
 
 ## Demo
 
-- `dr.demo@glucoguide.com` / `Demo@12345`
+- Clinic / owner: `dr.demo@glucoguide.com` / `Demo@12345` (sign in as **Clinic**)
+- Staff: `dr.staff@glucoguide.com` / `Demo@12345`
+- Solo doctor: `dr.solo@glucoguide.com` / `Demo@12345` (sign in as **Doctor**)
 - See [login.md](../../documentation/login.md)
+
+Login matches the web portals (`portal: doctor` | `clinic`). New clinics and independent doctors can register in-app.
 
 ## Architecture note
 
-This is the **doctor** surface of `apps/provider` (not a clinic-admin-only app). Central entity: `PracticeBooking`. Subscriptions are **practice** plans (not patient).
+Central entity: `PracticeBooking`. Subscriptions are **practice** plans (not patient). Clinic-admin tools (hours, team) use the same membership roles as web.

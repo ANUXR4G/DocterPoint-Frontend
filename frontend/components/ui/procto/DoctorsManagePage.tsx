@@ -235,8 +235,9 @@ export default function DoctorsManagePage() {
           </p>
           <h1 className="mt-1 text-3xl font-bold lg:text-4xl">Doctors</h1>
           <p className="mt-2 max-w-xl text-sm opacity-70">
-            Manage doctors for {practice?.name}. Deactivate existing doctors or add
-            new ones to the clinic.
+            Manage doctors for {practice?.name}. Create new staff logins from
+            this dashboard only — independently registered doctors cannot be
+            linked.
           </p>
         </div>
         {memberships.length > 1 ? (
@@ -303,6 +304,22 @@ export default function DoctorsManagePage() {
                       {m.user.doctor.description}
                     </p>
                   ) : null}
+                  {canManage ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Link
+                        href={practiceTabHref("setup", { doctorId: m.userId })}
+                        className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                      >
+                        Override settings
+                      </Link>
+                      <Link
+                        href={`/clinic/queue?doctor=${encodeURIComponent(m.userId)}`}
+                        className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs font-semibold dark:border-neutral-600"
+                      >
+                        Patient status
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
                 {canManage && m.role === "DOCTOR" ? (
                   <button
@@ -330,8 +347,9 @@ export default function DoctorsManagePage() {
         <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900/50">
           <h2 className="text-lg font-semibold">Add new doctor</h2>
           <p className="mt-1 text-xs opacity-60">
-            Set the doctor&apos;s email and password — they use those
-            credentials to log in to the doctor portal.
+            Creates a new doctor account. They use Doctor Login to manage their
+            own queue, schedule, and visits; you keep roster control here.
+            Independent doctor emails cannot be linked.
           </p>
 
           {!canManage ? (

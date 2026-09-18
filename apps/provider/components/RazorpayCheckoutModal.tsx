@@ -1,6 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, space } from "@/lib/theme";
 import type { RazorpaySubCheckout } from "@/lib/procto";
 
@@ -89,8 +89,6 @@ export function RazorpayCheckoutModal({
   onSuccess,
   onClose,
 }: Props) {
-  const insets = useSafeAreaInsets();
-
   function onMessage(event: WebViewMessageEvent) {
     try {
       const data = JSON.parse(event.nativeEvent.data) as {
@@ -122,7 +120,7 @@ export function RazorpayCheckoutModal({
       animationType="slide"
       onRequestClose={() => onClose()}
     >
-      <View style={[styles.root, { paddingTop: insets.top }]}>
+      <SafeAreaView style={styles.root} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.header}>
           <Text style={styles.title}>Razorpay</Text>
           <Pressable onPress={() => onClose()} hitSlop={12}>
@@ -138,7 +136,7 @@ export function RazorpayCheckoutModal({
           startInLoadingState
           style={styles.webview}
         />
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }

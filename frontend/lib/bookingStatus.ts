@@ -9,7 +9,6 @@ export function bookingStatusLabel(status: string): string {
     case "SCHEDULED":
     case "REQUESTED":
     case "BOOKED":
-      return "Requested"
     case "CONFIRMED":
     case "ACCEPTED":
       return "Accepted"
@@ -77,7 +76,6 @@ export function bookingStatusControlOptions(): Array<{
   label: string
 }> {
   return [
-    { status: "SCHEDULED", label: "Requested" },
     { status: "ACCEPTED", label: "Accepted" },
     { status: "WAITING", label: "In waiting" },
     { status: "IN_PROGRESS", label: "Appointment started" },
@@ -92,7 +90,8 @@ export function bookingStatusControlValue(status: string): string {
   switch (String(status || "").toUpperCase()) {
     case "REQUESTED":
     case "BOOKED":
-      return "SCHEDULED"
+    case "SCHEDULED":
+      return "ACCEPTED"
     case "CONFIRMED":
       return "ACCEPTED"
     case "CHECKED_IN":
@@ -105,8 +104,8 @@ export function bookingStatusControlValue(status: string): string {
 }
 
 /**
- * Queue actions:
- * Requested → Accept → Arrived (Waiting) → Appointment started → Appointment finished
+ * Queue actions (auto-accepted on book — no manual Accept step):
+ * Accepted → Arrived (Waiting) → Appointment started → Appointment finished
  */
 export function bookingNextActions(
   status: string,
@@ -115,10 +114,6 @@ export function bookingNextActions(
     case "SCHEDULED":
     case "REQUESTED":
     case "BOOKED":
-      return [
-        { status: "ACCEPTED", label: "Accept" },
-        { status: "CANCELED", label: "Decline" },
-      ]
     case "ACCEPTED":
     case "CONFIRMED":
       return [
@@ -164,15 +159,22 @@ export function matchesQueueStatusFilter(
   const s = String(status || "").toUpperCase()
   switch (filter) {
     case "booked":
-      return ["SCHEDULED", "REQUESTED", "BOOKED"].includes(s)
+      // Legacy "requested" bucket — auto-accept means these are treated as accepted.
+      return false
     case "accepted":
-      return s === "ACCEPTED" || s === "CONFIRMED"
+      return [
+        "SCHEDULED",
+        "REQUESTED",
+        "BOOKED",
+        "ACCEPTED",
+        "CONFIRMED",
+      ].includes(s)
     case "waiting":
       return s === "WAITING" || s === "CHECKED_IN"
     case "in_appointment":
       return s === "IN_PROGRESS"
     case "done":
-      return ["COMPLETED", "CANCELED", "NO_SHOW"].includes(s)
+      return ["COMPLETED", "CANCELED", "CANCELLED", "NO_SHOW"].includes(s)
     default:
       return true
   }

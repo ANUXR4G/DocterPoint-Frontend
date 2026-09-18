@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { firey } from "@/utils"
 import { cookies } from "@/utils/cookies"
 import { userService } from "@/lib/services/user"
+import { proctoService } from "@/lib/services/procto"
 import {
   PORTAL_COOKIE,
   type ProviderPortal,
@@ -63,9 +64,10 @@ const COPY: Record<
   },
   doctor: {
     title: "Doctor",
-    subtitle: "Sign in to your queue, calendar, and patient bookings.",
+    subtitle:
+      "Independent practice or clinic-staff login — queue, calendar, and visits.",
     registerHint:
-      "Dr Name, license, booking type, schedule, and slot settings.",
+      "Creates your own solo practice. Clinics cannot add this account later — clinic staff are created from the clinic dashboard.",
     registerTab: "Register",
     registerCta: "Create doctor account",
     nameLabel: "Full name (Dr.)",
@@ -77,9 +79,10 @@ const COPY: Record<
   },
   clinic: {
     title: "Clinic",
-    subtitle: "Register and run your practice — schedules, directory, and queue.",
+    subtitle:
+      "Clinic owner login — manage roster, billing, and practice settings.",
     registerHint:
-      "Creates the clinic owner account. Next you’ll add practice profile and location.",
+      "Creates the clinic owner account. Add doctors only from the clinic dashboard after you subscribe.",
     registerTab: "Register",
     registerCta: "Create clinic account",
     nameLabel: "Owner / admin name",
@@ -219,6 +222,7 @@ export default function RoleAuthForm({
     if (role === "doctor") {
       const portal: ProviderPortal = audience === "clinic" ? "clinic" : "doctor"
       cookies.setCookie(PORTAL_COOKIE, portal, 60 * 60 * 24 * 30)
+      proctoService.invalidateMyPracticesCache()
 
       if (audience === "clinic" && mode === "register") {
         router.push("/clinic/dashboard?onboarded=1")
@@ -248,6 +252,9 @@ export default function RoleAuthForm({
         email: formValues.email!,
         password: encryptedPass,
         role: copy.role,
+        ...(audience === "clinic" || audience === "doctor"
+          ? { portal: audience }
+          : {}),
       }
 
       if (mode === "login") {
@@ -263,6 +270,9 @@ export default function RoleAuthForm({
         email: formValues.email!,
         password: formValues.password!,
         role: copy.role,
+        ...(audience === "clinic" || audience === "doctor"
+          ? { portal: audience }
+          : {}),
       }
       if (mode === "login") {
         loginMutate(payload)

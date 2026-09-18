@@ -21,10 +21,13 @@ import {
 } from "./whatsapp.i18n.js";
 import {
   exactMenuIntent,
+  matchPreferredSlotIndex,
+  menuNumberShortcut,
   parsePatientDate,
   parseSlotsRegex,
+  parseSpokenTime,
   parseUtterance,
-  stepUsesLlm,
+  shouldUseLlmForMessage,
   type BotIntent,
   type NluSlots,
 } from "./whatsapp.nlu.js";
@@ -59,6 +62,7 @@ export type ConversationStep =
   | "awaiting_reschedule_slot"
   | "awaiting_register_name"
   | "awaiting_register_gender"
+  | "awaiting_register_email_opt"
   | "awaiting_register_email"
   | "awaiting_register_confirm";
 
@@ -76,13 +80,23 @@ export type ConversationState = {
   rescheduleBookingId?: string;
   pendingSummary?: string;
   slotChoices?: Array<{ start: string; label: string }>;
-  providerChoices?: Array<{ id: string; name: string; detail?: string }>;
+  providerChoices?: Array<{
+    id: string;
+    name: string;
+    detail?: string;
+    specialty?: string;
+  }>;
   bookingChoices?: Array<{ id: string; label: string }>;
   regName?: string;
   regGender?: string;
   regEmail?: string;
   regDob?: string | null;
   regAddress?: string | null;
+  /** Preferred visit time from free speech / voice (clock or day-part). */
+  preferredTimeText?: string;
+  preferredHour?: number;
+  preferredMinute?: number;
+  preferredPeriod?: "morning" | "afternoon" | "evening" | "night";
   /** After register succeeds, auto-start booking */
   afterRegister?: "book";
   pendingBookSlots?: NluSlots;
@@ -95,6 +109,207 @@ export type ConversationState = {
   /** Preferred reply language (set on first contact) */
   preferredLanguage?: "en" | "hi";
 };
+
+export type DoctorListRow = {
+  id: string;
+  name: string;
+  specialty?: string;
+  detail?: string;
+};
+
+export type OrchestratorResult = {
+  reply: string;
+  /** When set (2+ doctors), WhatsApp sends a tappable list for demos. */
+  doctorList?: DoctorListRow[];
+  /** Reply buttons (max 3) — e.g. Yes/No, or ≤3 time slots. */
+  replyButtons?: Array<{ id: string; title: string }>;
+  /** Next working days as a tappable list (date:YYYY-MM-DD). */
+  dateList?: Array<{ iso: string; label: string }>;
+  /** Time slots as a tappable list (when more than 3 open times). */
+  slotList?: Array<{ index: number; label: string }>;
+  /** Reschedule booking pick as a tappable list (when more than 3). */
+  bookingList?: Array<{ index: number; label: string }>;
+};
+
+function withDoctorList(
+  reply: string,
+  providers: Array<{
+    id: string;
+    name: string;
+    detail?: string;
+    specialty?: string;
+  }>,
+): OrchestratorResult {
+  if (providers.length < 2) return { reply };
+  return {
+    reply,
+    doctorList: providers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      specialty: p.specialty,
+      detail: p.detail,
+    })),
+  };
+}
+
+/** Next N clinic working days (skips Sundays — same default as suggestDefaultDate). */
+function nextWorkingDayIsos(count = 7, from: Date = new Date()): string[] {
+  const out: string[] = [];
+  const start = new Date(from);
+  start.setHours(12, 0, 0, 0);
+  for (let i = 0; i < 28 && out.length < count; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    if (d.getDay() === 0) continue;
+    out.push(formatLocalDate(d));
+  }
+  return out;
+}
+
+function dateChipLabel(iso: string, todayIso: string, tomorrowIso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  const base = Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+  if (iso === todayIso) return `Today · ${base}`.slice(0, 24);
+  if (iso === tomorrowIso) return `Tom · ${base}`.slice(0, 24);
+  return base.slice(0, 24);
+}
+
+/** Next 7 working days as a WhatsApp *Dates* list (no numbered reply). */
+function withDateButtons(
+  reply: string,
+  suggestedIso?: string | null,
+): OrchestratorResult {
+  const today = formatLocalDate(new Date());
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrow = formatLocalDate(tomorrowDate);
+
+  const isos = nextWorkingDayIsos(7);
+  const suggested = suggestedIso?.trim();
+  if (suggested && !isos.includes(suggested)) {
+    isos.unshift(suggested);
+    if (isos.length > 7) isos.length = 7;
+  }
+
+  const dateList = isos.map((iso) => ({
+    iso,
+    label: dateChipLabel(iso, today, tomorrow),
+  }));
+
+  return {
+    reply: reply.trim(),
+    dateList,
+  };
+}
+
+function withYesNo(reply: string): OrchestratorResult {
+  return {
+    reply,
+    replyButtons: [
+      { id: "yes", title: "Yes" },
+      { id: "no", title: "No" },
+    ],
+  };
+}
+
+function withGenderButtons(reply: string): OrchestratorResult {
+  return {
+    reply,
+    replyButtons: [
+      { id: "male", title: "Male" },
+      { id: "female", title: "Female" },
+      { id: "others", title: "Others" },
+    ],
+  };
+}
+
+function withModeButtons(
+  reply: string,
+  hasToken: boolean,
+  hasTime: boolean,
+): OrchestratorResult {
+  const buttons: Array<{ id: string; title: string }> = [];
+  if (hasTime) buttons.push({ id: "mode:TIME_BASED", title: "Time slot" });
+  if (hasToken) buttons.push({ id: "mode:TOKEN_BASED", title: "Token" });
+  return { reply, ...(buttons.length ? { replyButtons: buttons } : {}) };
+}
+
+/** ≤3 slots → reply buttons; more → interactive list. No “reply with number”. */
+function withSlotPicker(
+  reply: string,
+  choices: Array<{ label: string }>,
+): OrchestratorResult {
+  if (!choices.length) return { reply };
+  if (choices.length <= 3) {
+    return {
+      reply,
+      replyButtons: choices.map((c, i) => ({
+        id: `slot:${i + 1}`,
+        title: c.label.slice(0, 20),
+      })),
+    };
+  }
+  return {
+    reply,
+    slotList: choices.map((c, i) => ({
+      index: i + 1,
+      label: c.label,
+    })),
+  };
+}
+
+/** Reschedule booking pick — buttons if ≤3, else list. */
+function withBookingPicker(
+  reply: string,
+  choices: Array<{ label: string }>,
+): OrchestratorResult {
+  if (!choices.length) return { reply };
+  if (choices.length <= 3) {
+    return {
+      reply,
+      replyButtons: choices.map((c, i) => ({
+        id: `booking:${i + 1}`,
+        title: c.label.slice(0, 20),
+      })),
+    };
+  }
+  return {
+    reply,
+    bookingList: choices.map((c, i) => ({
+      index: i + 1,
+      label: c.label,
+    })),
+  };
+}
+
+/** Map date button ids to text parsePatientDate understands. */
+function normalizeDateInput(text: string): string {
+  const raw = text.trim();
+  const m = /^date:(today|tomorrow|(\d{4}-\d{2}-\d{2}))$/i.exec(raw);
+  if (!m) return raw;
+  const kind = m[1]!.toLowerCase();
+  if (kind === "today") return "TODAY";
+  if (kind === "tomorrow") return "TOMORROW";
+  return kind;
+}
+
+/** Map slot:N / booking:N tap (or plain number) to 1-based index. */
+function parseSlotChoiceIndex(text: string, fallback?: number): number | null {
+  const tap = /^(?:slot|booking):(\d+)$/i.exec(text.trim());
+  if (tap) {
+    const n = Number(tap[1]);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof fallback === "number" && Number.isFinite(fallback)) return fallback;
+  const n = Number(text.trim());
+  return Number.isFinite(n) ? n : null;
+}
 
 type PracticeCtx = Practice & {
   locations: ClinicLocation[];
@@ -138,6 +353,29 @@ function keepPrefs(state: ConversationState): Pick<
 
 function idleState(state: ConversationState): ConversationState {
   return { ...keepPrefs(state), step: "idle", aiDisclosed: true };
+}
+
+/** Copy spoken date/time preferences from NLU onto conversation state. */
+function applyTimePreferenceFromSlots(
+  state: ConversationState,
+  slots: NluSlots,
+  text?: string,
+): ConversationState {
+  const spoken = text ? parseSpokenTime(text) : {};
+  const preferredHour =
+    slots.preferredHour ?? spoken.preferredHour ?? state.preferredHour;
+  const preferredMinute =
+    slots.preferredMinute ?? spoken.preferredMinute ?? state.preferredMinute;
+  const preferredPeriod =
+    slots.preferredPeriod ?? spoken.preferredPeriod ?? state.preferredPeriod;
+  const preferredTimeText =
+    slots.timeText ?? spoken.timeText ?? state.preferredTimeText;
+  return {
+    ...state,
+    ...(preferredHour != null ? { preferredHour, preferredMinute: preferredMinute ?? 0 } : {}),
+    ...(preferredPeriod ? { preferredPeriod } : {}),
+    ...(preferredTimeText ? { preferredTimeText } : {}),
+  };
 }
 
 function bookingWhenLabel(b: {
@@ -212,8 +450,8 @@ async function dispatchMenuIntent(opts: {
       return startRegisterFlow(convId, patientPhone, state);
     case "doctors": {
       const providers = await loadProviders(practice.id);
-      return {
-        reply: BotPrompts.doctorsList(
+      return withDoctorList(
+        BotPrompts.doctorsList(
           practice.name,
           providers.map((p, i) => ({
             index: i + 1,
@@ -223,7 +461,8 @@ async function dispatchMenuIntent(opts: {
           practiceClinicUrl(practice.slug),
           lang,
         ),
-      };
+        providers,
+      );
     }
     case "help": {
       const patient = await PatientService.findByPhone(patientPhone);
@@ -268,6 +507,22 @@ async function dispatchMenuIntent(opts: {
 }
 
 /** Providers linked to this clinic only (PracticeMember rows for practiceId). */
+function specialtyFromDescription(description?: string | null): string | undefined {
+  if (!description?.trim()) return undefined;
+  const raw = description.trim();
+  // Prefer text before an em/en dash: "Endocrinology — clinic staff doctor."
+  const beforeDash = raw.split(/\s*[—–]\s*/)[0]?.trim();
+  if (beforeDash && beforeDash.length > 0 && beforeDash.length <= 72) {
+    return beforeDash;
+  }
+  return raw.length > 72 ? `${raw.slice(0, 69)}…` : raw;
+}
+
+/**
+ * Bookable doctors for WhatsApp: active DOCTOR members (and practicing
+ * PRACTICE_OWNER with a doctor profile + weekly schedule). Detail line is
+ * specialization so patients can choose on clinic numbers.
+ */
 async function loadProviders(practiceId: string) {
   const members = await prisma.practiceMember.findMany({
     where: {
@@ -284,22 +539,51 @@ async function loadProviders(practiceId: string) {
         },
       },
     },
-    orderBy: { role: "asc" },
+    orderBy: [{ role: "asc" }, { createdAt: "asc" }],
   });
-  const doctors = members.filter((m) => m.role === "DOCTOR");
-  const doctorMembers = doctors.length ? doctors : members;
-  const withProfile = doctorMembers.filter((m) => m.user?.doctor);
-  const list = withProfile.length ? withProfile : doctorMembers;
-  return list.map((m) => {
+
+  const scheduleRows = await prisma.providerSchedule.findMany({
+    where: { practiceId, isActive: true },
+    select: { providerId: true },
+    distinct: ["providerId"],
+  });
+  const scheduledIds = new Set(scheduleRows.map((r) => r.providerId));
+
+  const doctors = members.filter((m) => m.role === "DOCTOR" && m.user?.doctor);
+  const practicingOwners = members.filter(
+    (m) =>
+      m.role === "PRACTICE_OWNER" &&
+      m.user?.doctor &&
+      scheduledIds.has(m.userId),
+  );
+  // Prefer roster doctors; include practicing owners so clinic WA can list them.
+  let list = [...doctors, ...practicingOwners];
+  if (!list.length) {
+    list = members.filter((m) => m.user?.doctor);
+  }
+  // Prefer providers who already have hours configured.
+  const bookable = list.filter((m) => scheduledIds.has(m.userId));
+  if (bookable.length) list = bookable;
+
+  // Dedupe by userId (owner may also appear if roles overlap)
+  const seen = new Set<string>();
+  const unique = list.filter((m) => {
+    if (seen.has(m.userId)) return false;
+    seen.add(m.userId);
+    return true;
+  });
+
+  return unique.map((m) => {
     const name = m.user?.name?.trim() || "Doctor";
-    const desc = m.user?.doctor?.description?.trim();
+    const specialty = specialtyFromDescription(m.user?.doctor?.description);
     const years = m.user?.doctor?.experience;
     const detailParts: string[] = [];
-    if (desc) detailParts.push(desc.length > 80 ? `${desc.slice(0, 77)}…` : desc);
+    if (specialty) detailParts.push(`Specialization: ${specialty}`);
     if (years != null && years > 0) detailParts.push(`${years} yrs experience`);
     return {
       id: m.userId,
       name,
+      specialty,
       detail: detailParts.length ? detailParts.join(" · ") : undefined,
     };
   });
@@ -315,21 +599,44 @@ function practiceClinicUrl(slug: string): string | null {
 }
 
 function pickProvider(
-  choices: Array<{ id: string; name: string }>,
+  choices: Array<{ id: string; name: string; detail?: string; specialty?: string }>,
   slots: NluSlots,
   text: string,
 ): { id: string; name: string } | null {
+  const raw = text.trim();
+  // Interactive list tap: provider:1 or provider:<uuid>
+  const listMatch = /^provider:(\d+)$/i.exec(raw);
+  if (listMatch) {
+    const hit = choices[Number(listMatch[1]) - 1];
+    if (hit) return hit;
+  }
+  const uuidMatch = /^provider:([0-9a-f-]{36})$/i.exec(raw);
+  if (uuidMatch) {
+    const hit = choices.find((c) => c.id === uuidMatch[1]);
+    if (hit) return hit;
+  }
+
   if (slots.providerIndex != null) {
     const hit = choices[slots.providerIndex - 1];
     if (hit) return hit;
   }
   if (slots.providerName) {
     const q = slots.providerName.toLowerCase();
-    const hit = choices.find((c) => c.name.toLowerCase().includes(q));
+    const hit = choices.find(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.specialty ?? "").toLowerCase().includes(q) ||
+        (c.detail ?? "").toLowerCase().includes(q),
+    );
     if (hit) return hit;
   }
-  const q = text.trim().toLowerCase();
-  const byName = choices.find((c) => c.name.toLowerCase().includes(q));
+  const q = raw.toLowerCase();
+  const byName = choices.find(
+    (c) =>
+      c.name.toLowerCase().includes(q) ||
+      (c.specialty ?? "").toLowerCase().includes(q) ||
+      (c.detail ?? "").toLowerCase().includes(q),
+  );
   if (byName) return byName;
   const n = Number(q);
   if (Number.isFinite(n) && n >= 1 && n <= choices.length) return choices[n - 1]!;
@@ -373,7 +680,7 @@ async function reaskDateNoSlots(
   convId: string,
   practice: PracticeCtx,
   state: ConversationState,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   const next: ConversationState = {
     ...state,
@@ -395,7 +702,7 @@ async function reaskDateNoSlots(
     );
   }
   await saveState(convId, next);
-  return { reply: BotPrompts.noSlots(lang, suggested) };
+  return withDateButtons(BotPrompts.noSlots(lang, suggested), suggested);
 }
 
 async function handleAwaitingDate(
@@ -404,7 +711,7 @@ async function handleAwaitingDate(
   state: ConversationState,
   patientPhone: string,
   text: string,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   const trimmed = text.trim();
 
@@ -418,15 +725,31 @@ async function handleAwaitingDate(
     return { reply: BotPrompts.bookingFlowCanceled(lang) };
   }
 
-  const parsed = parsePatientDate(text);
+  // Number from the 7-day picker (or typed 1–7)
+  let dateInput = text;
+  const pickNum = Number(trimmed);
+  if (Number.isFinite(pickNum) && pickNum >= 1 && pickNum <= 7 && !/[\/\-.]/.test(trimmed)) {
+    const isos = nextWorkingDayIsos(7);
+    const picked = isos[pickNum - 1];
+    if (picked) dateInput = picked;
+  }
+
+  const parsed = parsePatientDate(normalizeDateInput(dateInput));
   if (!parsed.ok) {
     await saveState(convId, { ...state, step: "awaiting_date", failedTurns: 0 });
-    if (parsed.reason === "past") return { reply: BotPrompts.datePast(lang) };
-    if (parsed.reason === "far") return { reply: BotPrompts.dateTooFar(lang) };
-    return { reply: BotPrompts.dateInvalid(lang) };
+    if (parsed.reason === "past") {
+      return withDateButtons(BotPrompts.datePast(lang));
+    }
+    if (parsed.reason === "far") {
+      return withDateButtons(BotPrompts.dateTooFar(lang));
+    }
+    return withDateButtons(BotPrompts.dateInvalid(lang));
   }
 
   const date = parsed.date;
+
+  // Same utterance may include a time ("tomorrow at 10 am") — keep it for slot match
+  state = applyTimePreferenceFromSlots(state, parseSlotsRegex(text), text);
 
   if (state.rescheduleBookingId) {
     const booking = await prisma.practiceBooking.findUnique({
@@ -452,12 +775,11 @@ async function handleAwaitingDate(
           step: "awaiting_date",
           failedTurns: 0,
         });
-        return {
-          reply:
-            (err instanceof Error ? err.message : "Could not reschedule.") +
+        return withDateButtons(
+          (err instanceof Error ? err.message : "Could not reschedule.") +
             "\n" +
             BotPrompts.askDate(lang),
-        };
+        );
       }
     }
 
@@ -476,6 +798,36 @@ async function handleAwaitingDate(
       });
     }
 
+    const preferredIdx = matchPreferredSlotIndex(open, {
+      preferredHour: state.preferredHour,
+      preferredMinute: state.preferredMinute,
+      preferredPeriod: state.preferredPeriod,
+      timeText: state.preferredTimeText,
+    });
+    if (preferredIdx != null) {
+      try {
+        const picked = open[preferredIdx]!;
+        const updated = await BookingService.reschedule(booking.id, {
+          slotStart: picked.start.toISOString(),
+          phone: patientPhone,
+          skipPatientNotification: true,
+        });
+        await saveState(convId, idleState(state));
+        return { reply: BotPrompts.rescheduled(bookingWhenLabel(updated), lang) };
+      } catch (err) {
+        await saveState(convId, {
+          ...state,
+          step: "awaiting_date",
+          failedTurns: 0,
+        });
+        return withDateButtons(
+          (err instanceof Error ? err.message : "Could not reschedule.") +
+            "\n" +
+            BotPrompts.askDate(lang),
+        );
+      }
+    }
+
     if (open.length === 1) {
       try {
         const updated = await BookingService.reschedule(booking.id, {
@@ -491,12 +843,11 @@ async function handleAwaitingDate(
           step: "awaiting_date",
           failedTurns: 0,
         });
-        return {
-          reply:
-            (err instanceof Error ? err.message : "Could not reschedule.") +
+        return withDateButtons(
+          (err instanceof Error ? err.message : "Could not reschedule.") +
             "\n" +
             BotPrompts.askDate(lang),
-        };
+        );
       }
     }
 
@@ -517,12 +868,13 @@ async function handleAwaitingDate(
       mode: booking.mode,
       failedTurns: 0,
     });
-    return {
-      reply: BotPrompts.askSlot(
+    return withSlotPicker(
+      BotPrompts.askSlot(
         slotChoices.map((s, i) => ({ index: i + 1, label: s.label })),
         lang,
       ),
-    };
+      slotChoices,
+    );
   }
 
   state.date = date;
@@ -549,8 +901,8 @@ async function advanceAfterDate(
 
   state.step = "awaiting_provider";
   await saveState(convId, state);
-  return {
-    reply: BotPrompts.askProvider(
+  return withDoctorList(
+    BotPrompts.askProvider(
       providers.map((p, i) => ({
         index: i + 1,
         name: p.name,
@@ -558,7 +910,8 @@ async function advanceAfterDate(
       })),
       lang,
     ),
-  };
+    providers,
+  );
 }
 
 async function startBookFlow(
@@ -580,6 +933,7 @@ async function startBookFlow(
     locationId: location.id,
     providerChoices: providers,
   };
+  state = applyTimePreferenceFromSlots(state, slots);
 
   // Auto-pick sole doctor early
   if (providers.length === 1) {
@@ -591,6 +945,24 @@ async function startBookFlow(
 
   if (slots.date) {
     state.date = slots.date;
+  }
+
+  // Clinic with multiple doctors: show list + specialization first so the
+  // patient selects a doctor before date/slots.
+  if (!state.providerId && providers.length > 1) {
+    state.step = "awaiting_provider";
+    await saveState(convId, state);
+    return withDoctorList(
+      BotPrompts.askProvider(
+        providers.map((p, i) => ({
+          index: i + 1,
+          name: p.name,
+          detail: p.detail,
+        })),
+        lang,
+      ),
+      providers,
+    );
   }
 
   // If we have date + provider, jump to mode/slots
@@ -614,20 +986,20 @@ async function startBookFlow(
       location.id,
     );
     await saveState(convId, state);
-    return {
-      reply:
-        (lang === "hi"
-          ? `*${providers[0]!.name}* के साथ बुकिंग।\n`
-          : `Booking with *${providers[0]!.name}*.\n`) +
+    return withDateButtons(
+      (lang === "hi"
+        ? `*${providers[0]!.name}* के साथ बुकिंग।\n`
+        : `Booking with *${providers[0]!.name}*.\n`) +
         `${BotPrompts.askDate(lang)}\n` +
         (lang === "hi"
-          ? `(अगला खाली दिन: *${suggested}* — वह तारीख, TODAY, या TOMORROW लिखें।)`
-          : `(Next open day: *${suggested}* — reply that date, TODAY, or TOMORROW.)`),
-    };
+          ? `(अगला खाली दिन: *${suggested}* — *Dates* दबाएँ।)`
+          : `(Next open day: *${suggested}* — tap *Dates*.)`),
+      suggested,
+    );
   }
 
   await saveState(convId, state);
-  return { reply: BotPrompts.askDate(lang) };
+  return withDateButtons(BotPrompts.askDate(lang));
 }
 
 async function askModeForDay(
@@ -668,7 +1040,11 @@ async function askModeForDay(
 
   state.step = "awaiting_mode";
   await saveState(convId, state);
-  return { reply: BotPrompts.askMode(hasToken, hasTime, lang) };
+  return withModeButtons(
+    BotPrompts.askMode(hasToken, hasTime, lang),
+    hasToken,
+    hasTime,
+  );
 }
 
 async function continueAfterMode(
@@ -703,20 +1079,52 @@ async function continueAfterMode(
       pendingSummary,
       mode: ScheduleMode.TOKEN_BASED,
     });
-    return {
-      reply: BotPrompts.askTokenConfirm(
+    return withYesNo(
+      BotPrompts.askTokenConfirm(
         session.nextToken,
         session.sessionStart,
         session.sessionEnd,
         date,
         lang,
       ),
-    };
+    );
   }
 
   const open = availability.timeSlots.filter((s) => s.available).slice(0, 12);
   if (!open.length) {
     return reaskDateNoSlots(convId, practice, state);
+  }
+
+  // Voice / free-form: patient already said a time ("tomorrow at 10am") → pick closest slot
+  const preferredIdx = matchPreferredSlotIndex(open, {
+    preferredHour: state.preferredHour,
+    preferredMinute: state.preferredMinute,
+    preferredPeriod: state.preferredPeriod,
+    timeText: state.preferredTimeText,
+  });
+  if (preferredIdx != null) {
+    const picked = open[preferredIdx]!;
+    const label = picked.start.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    await saveState(convId, {
+      ...state,
+      step: "awaiting_confirm",
+      mode: ScheduleMode.TIME_BASED,
+      slotStart: picked.start.toISOString(),
+      pendingSummary: `${label} on ${date} at ${practice.name}`,
+      slotChoices: open.map((s) => ({
+        start: s.start.toISOString(),
+        label: s.start.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      })),
+    });
+    return withYesNo(
+      BotPrompts.askConfirm(`${label} on ${date} at ${practice.name}`, lang),
+    );
   }
 
   // Auto-confirm if only one slot remains
@@ -736,9 +1144,9 @@ async function continueAfterMode(
         { start: only.start.toISOString(), label },
       ],
     });
-    return {
-      reply: BotPrompts.askConfirm(`${label} on ${date} at ${practice.name}`, lang),
-    };
+    return withYesNo(
+      BotPrompts.askConfirm(`${label} on ${date} at ${practice.name}`, lang),
+    );
   }
 
   const slotChoices = open.map((s) => ({
@@ -753,10 +1161,13 @@ async function continueAfterMode(
     slotChoices,
   });
 
-  return {
-    reply: BotPrompts.askSlot(
-      slotChoices.map((s, i) => ({ index: i + 1, label: s.label })), lang),
-  };
+  return withSlotPicker(
+    BotPrompts.askSlot(
+      slotChoices.map((s, i) => ({ index: i + 1, label: s.label })),
+      lang,
+    ),
+    slotChoices,
+  );
 }
 
 async function confirmBooking(
@@ -814,10 +1225,56 @@ function registerSummary(state: ConversationState, phone: string): string {
 
 function parseRegisterEmail(text: string): string | null {
   const raw = text.trim().toLowerCase();
-  if (!raw || /^(skip|no|none|n\/a|na)$/i.test(raw)) return null;
+  if (!raw) return null;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return null;
   if (raw.endsWith("@patients.glucoguide.local")) return null;
   return raw;
+}
+
+function isAffirmative(text: string): boolean {
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/^[*`~]+|[*`~]+$/g, "");
+  return /^(yes|y|haan|ha|हाँ|हां|ok|okay|sure|reg_email_yes|email_yes)$/i.test(
+    t,
+  );
+}
+
+function isNegative(text: string): boolean {
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/^[*`~]+|[*`~]+$/g, "");
+  return /^(no|n|nah|nope|nahi|नहीं|नही|skip|reg_email_no|email_no)$/i.test(
+    t,
+  );
+}
+
+function emailOptPrompt(lang: ReturnType<typeof resolveLang>): OrchestratorResult {
+  return {
+    reply: BotPrompts.askRegisterEmailOpt(lang),
+    replyButtons: [
+      { id: "reg_email_yes", title: "Yes" },
+      { id: "reg_email_no", title: "No" },
+    ],
+  };
+}
+
+function goToRegisterConfirm(
+  state: ConversationState,
+  patientPhone: string,
+  lang: ReturnType<typeof resolveLang>,
+): OrchestratorResult {
+  state.step = "awaiting_register_confirm";
+  state.pendingSummary = registerSummary(state, patientPhone);
+  return withYesNo(
+    BotPrompts.askRegisterConfirm(
+      state.pendingSummary,
+      state.afterRegister === "book",
+      lang,
+    ),
+  );
 }
 
 async function applyIdScanToRegister(
@@ -825,7 +1282,7 @@ async function applyIdScanToRegister(
   patientPhone: string,
   state: ConversationState,
   scan: IdScanFields,
-): Promise<{ reply: string }> {
+): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   const existing = await PatientService.findByPhone(patientPhone);
   if (existing) {
@@ -853,22 +1310,21 @@ async function applyIdScanToRegister(
   const gender = scan.gender;
   if (gender) {
     state.regGender = gender;
-    state.step = "awaiting_register_email";
+    state.step = "awaiting_register_email_opt";
     await saveState(convId, state);
+    const opt = emailOptPrompt(lang);
     return {
       reply:
-        BotPrompts.idOcrGotName(name, lang) +
-        "\n\n" +
-        BotPrompts.askRegisterEmail(lang),
+        BotPrompts.idOcrGotName(name, lang) + "\n\n" + opt.reply,
+      replyButtons: opt.replyButtons,
     };
   }
 
   state.step = "awaiting_register_gender";
   await saveState(convId, state);
-  return {
-    reply:
-      BotPrompts.idOcrGotName(name, lang) + "\n\n" + BotPrompts.askRegisterGender(lang),
-  };
+  return withGenderButtons(
+    BotPrompts.idOcrGotName(name, lang) + "\n\n" + BotPrompts.askRegisterGender(lang),
+  );
 }
 
 async function startRegisterFlow(
@@ -920,7 +1376,7 @@ async function confirmRegister(
   if (!state.regGender) {
     state.step = "awaiting_register_gender";
     await saveState(convId, state);
-    return { reply: BotPrompts.askRegisterGender(lang) };
+    return withGenderButtons(BotPrompts.askRegisterGender(lang));
   }
   try {
     const result = await PatientService.registerViaWhatsApp({
@@ -928,7 +1384,7 @@ async function confirmRegister(
       name: state.regName!,
       gender: state.regGender,
       dateOfBirth: state.regDob ?? null,
-      email: state.regEmail!,
+      email: state.regEmail?.trim() || null,
       address: state.regAddress ?? null,
     });
     const continueToBook = state.afterRegister === "book";
@@ -984,7 +1440,8 @@ export async function runOrchestrator(input: {
   state: ConversationState;
   text: string;
   idScan?: IdScanFields;
-}): Promise<{ reply: string }> {
+  fromVoice?: boolean;
+}): Promise<OrchestratorResult> {
   const result = await runOrchestratorCore(input);
   const latest = await prisma.whatsAppConversation.findUnique({
     where: { id: input.convId },
@@ -992,6 +1449,11 @@ export async function runOrchestrator(input: {
   const st = (latest?.state as ConversationState) ?? input.state ?? {};
   return {
     reply: guardOutbound(result.reply, resolveLang(st.preferredLanguage)),
+    doctorList: result.doctorList,
+    replyButtons: result.replyButtons,
+    dateList: result.dateList,
+    slotList: result.slotList,
+    bookingList: result.bookingList,
   };
 }
 
@@ -1002,8 +1464,9 @@ async function runOrchestratorCore(input: {
   state: ConversationState;
   text: string;
   idScan?: IdScanFields;
-}): Promise<{ reply: string }> {
-  const { practice, patientPhone, convId, text, idScan } = input;
+  fromVoice?: boolean;
+}): Promise<OrchestratorResult> {
+  const { practice, patientPhone, convId, text, idScan, fromVoice } = input;
   let state = { ...(input.state ?? {}) };
 
   // Meta opt-out / opt-in (STOP / START) — honour before other intents
@@ -1018,29 +1481,51 @@ async function runOrchestratorCore(input: {
     return { reply: optInAck(resolveLang(state.preferredLanguage)) };
   }
 
-  // Preferred language — ask once before any booking/register flow.
+  // Preferred language — ask once, but skip the gate for demo-speed actions
+  // (BOOK / DOCTORS / hi) so the client demo reaches doctor pick in one turn.
   if (!state.preferredLanguage || state.step === "awaiting_language") {
     const chosen = parseLanguageChoice(text);
-    if (!chosen) {
+    if (chosen) {
+      state = {
+        ...state,
+        preferredLanguage: chosen,
+        step: "idle",
+        aiDisclosed: true,
+      };
+      await saveState(convId, state);
+      const patientAfterLang = await PatientService.findByPhone(patientPhone);
+      return {
+        reply:
+          aiDisclosure(practice.name, chosen) +
+          languageSetAck(chosen) +
+          "\n\n" +
+          BotPrompts.welcome(practice.name, patientAfterLang?.name, chosen),
+      };
+    }
+
+    const trimmed = text.trim();
+    const actionFastPath =
+      !state.preferredLanguage &&
+      state.step !== "awaiting_language" &&
+      (Boolean(exactMenuIntent(trimmed)) ||
+        Boolean(menuNumberShortcut(trimmed)) ||
+        /^(hi|hello|hey|start|book|doctors?|status)\b/i.test(trimmed));
+
+    if (actionFastPath) {
+      const inferred: WaLang = /[\u0900-\u097F]/.test(trimmed) ? "hi" : "en";
+      state = {
+        ...state,
+        preferredLanguage: inferred,
+        step: "idle",
+        aiDisclosed: true,
+      };
+      await saveState(convId, state);
+      // Fall through — process BOOK/DOCTORS immediately for demos
+    } else {
       state = { ...state, step: "awaiting_language" };
       await saveState(convId, state);
       return { reply: askPreferredLanguage() };
     }
-    state = {
-      ...state,
-      preferredLanguage: chosen,
-      step: "idle",
-      aiDisclosed: true,
-    };
-    await saveState(convId, state);
-    const patientAfterLang = await PatientService.findByPhone(patientPhone);
-    return {
-      reply:
-        aiDisclosure(practice.name, chosen) +
-        languageSetAck(chosen) +
-        "\n\n" +
-        BotPrompts.welcome(practice.name, patientAfterLang?.name, chosen),
-    };
   }
 
   if (wantsLanguageChange(text)) {
@@ -1095,6 +1580,7 @@ async function runOrchestratorCore(input: {
       state.step === "idle" ||
       state.step === "awaiting_register_name" ||
       state.step === "awaiting_register_gender" ||
+      state.step === "awaiting_register_email_opt" ||
       state.step === "awaiting_register_email" ||
       state.step === "awaiting_register_confirm";
     if (!inRegister) {
@@ -1110,7 +1596,16 @@ async function runOrchestratorCore(input: {
   }
 
   // Global menu commands (typed or WhatsApp button) — always win over mid-flow steps
-  const menuIntent = exactMenuIntent(text);
+  // Number shortcuts (1–9) only when idle so doctor/slot picks still use digits.
+  const isIdleMenu = !state.step || state.step === "idle";
+  const numberShortcut = isIdleMenu ? menuNumberShortcut(text) : null;
+  if (numberShortcut === "language") {
+    state = { ...state, step: "awaiting_language" };
+    await saveState(convId, state);
+    return { reply: askPreferredLanguage() };
+  }
+  const menuIntent =
+    (numberShortcut as BotIntent | null) ?? exactMenuIntent(text);
   if (menuIntent) {
     state = { ...idleState(state), failedTurns: 0 };
     await saveState(convId, state);
@@ -1128,27 +1623,53 @@ async function runOrchestratorCore(input: {
   // Fast path: registration gender/name/email/confirm — no NLU/LLM
   if (state.step === "awaiting_register_gender") {
     const gender = parseGender(text, parseSlotsRegex(text));
-    if (!gender) return { reply: BotPrompts.askRegisterGender(lang) };
+    if (!gender) {
+      return withGenderButtons(BotPrompts.askRegisterGender(lang));
+    }
     state.regGender = gender;
-    state.step = "awaiting_register_email";
+    state.step = "awaiting_register_email_opt";
     await saveState(convId, state);
-    return { reply: BotPrompts.askRegisterEmail(lang) };
+    return emailOptPrompt(lang);
+  }
+
+  if (state.step === "awaiting_register_email_opt") {
+    if (isAffirmative(text)) {
+      delete state.regEmail;
+      state.step = "awaiting_register_email";
+      await saveState(convId, state);
+      return { reply: BotPrompts.askRegisterEmail(lang) };
+    }
+    if (isNegative(text)) {
+      delete state.regEmail;
+      const next = goToRegisterConfirm(state, patientPhone, lang);
+      await saveState(convId, state);
+      return next;
+    }
+    // Typed a real email instead of Yes/No — accept and continue
+    const typedEmail = parseRegisterEmail(text);
+    if (typedEmail) {
+      state.regEmail = typedEmail;
+      const next = goToRegisterConfirm(state, patientPhone, lang);
+      await saveState(convId, state);
+      return next;
+    }
+    const again = emailOptPrompt(lang);
+    return again;
   }
 
   if (state.step === "awaiting_register_email") {
+    if (isNegative(text)) {
+      delete state.regEmail;
+      const next = goToRegisterConfirm(state, patientPhone, lang);
+      await saveState(convId, state);
+      return next;
+    }
     const email = parseRegisterEmail(text);
     if (!email) return { reply: BotPrompts.askRegisterEmail(lang) };
     state.regEmail = email;
-    state.step = "awaiting_register_confirm";
-    state.pendingSummary = registerSummary(state, patientPhone);
+    const next = goToRegisterConfirm(state, patientPhone, lang);
     await saveState(convId, state);
-    return {
-      reply: BotPrompts.askRegisterConfirm(
-        state.pendingSummary,
-        state.afterRegister === "book",
-        lang,
-      ),
-    };
+    return next;
   }
 
   if (state.step === "awaiting_register_name") {
@@ -1159,15 +1680,10 @@ async function runOrchestratorCore(input: {
     state.regName = name;
     state.step = "awaiting_register_gender";
     await saveState(convId, state);
-    return { reply: BotPrompts.askRegisterGender(lang) };
+    return withGenderButtons(BotPrompts.askRegisterGender(lang));
   }
 
   if (state.step === "awaiting_register_confirm") {
-    if (!state.regEmail) {
-      state.step = "awaiting_register_email";
-      await saveState(convId, state);
-      return { reply: BotPrompts.askRegisterEmail(lang) };
-    }
     if (/^(yes|y|confirm|ok|okay|sure)$/i.test(text.trim())) {
       return confirmRegister(convId, practice, state, patientPhone);
     }
@@ -1175,24 +1691,53 @@ async function runOrchestratorCore(input: {
       await saveState(convId, idleState(state));
       return { reply: BotPrompts.registrationCanceled(lang) };
     }
-    return {
-      reply: BotPrompts.askRegisterConfirm(
+    return withYesNo(
+      BotPrompts.askRegisterConfirm(
         state.pendingSummary || registerSummary(state, patientPhone),
         state.afterRegister === "book",
         lang,
       ),
-    };
+    );
   }
 
   // Fast path: booking/reschedule date — stay in step; never fall through to HELP/escalate
+  // Voice notes may be free-form; if regex can't find a date, fall through to NLU.
   if (state.step === "awaiting_date") {
-    return handleAwaitingDate(convId, practice, state, patientPhone, text);
+    if (fromVoice) {
+      const quick = parsePatientDate(normalizeDateInput(text));
+      if (quick.ok) {
+        return handleAwaitingDate(convId, practice, state, patientPhone, text);
+      }
+    } else {
+      return handleAwaitingDate(convId, practice, state, patientPhone, text);
+    }
   }
 
-  const contextHint = `step=${state.step ?? "idle"}; practice=${practice.name}; today=${formatLocalDate(new Date())}`;
+  const contextHint = `step=${state.step ?? "idle"}; practice=${practice.name}; today=${formatLocalDate(new Date())}${fromVoice ? "; source=voice_note" : ""}`;
   const nlu = await parseUtterance(text, contextHint, {
-    useLlm: stepUsesLlm(state.step),
+    useLlm: shouldUseLlmForMessage(state.step, text, fromVoice),
   });
+  if (fromVoice) {
+    state = applyTimePreferenceFromSlots(state, nlu.slots, text);
+  }
+
+  // Voice fell through awaiting_date fast-path — resume once NLU has a date
+  if (state.step === "awaiting_date") {
+    const dateText = nlu.slots.date || text;
+    const parsed = parsePatientDate(normalizeDateInput(dateText));
+    if (parsed.ok) {
+      return handleAwaitingDate(
+        convId,
+        practice,
+        state,
+        patientPhone,
+        nlu.slots.date || text,
+      );
+    }
+    return withDateButtons(
+      fromVoice ? BotPrompts.voiceDateUnclear(lang) : BotPrompts.dateInvalid(lang),
+    );
+  }
 
   const escalate = async () => {
     state = { ...state, handedOff: true, step: "idle", failedTurns: 0 };
@@ -1241,16 +1786,19 @@ async function runOrchestratorCore(input: {
   // Doctors list (available anytime — does not clear in-progress booking)
   if (nlu.intent === "doctors") {
     const providers = await loadProviders(practice.id);
-    return {
-      reply: BotPrompts.doctorsList(
+    return withDoctorList(
+      BotPrompts.doctorsList(
         practice.name,
         providers.map((p, i) => ({
           index: i + 1,
           name: p.name,
           detail: p.detail,
         })),
-        practiceClinicUrl(practice.slug), lang),
-    };
+        practiceClinicUrl(practice.slug),
+        lang,
+      ),
+      providers,
+    );
   }
 
   // Confirm / deny
@@ -1262,6 +1810,9 @@ async function runOrchestratorCore(input: {
       await saveState(convId, idleState(state));
       return { reply: BotPrompts.bookingFlowCanceled(lang) };
     }
+    return withYesNo(
+      BotPrompts.askConfirm(state.pendingSummary || "this appointment", lang),
+    );
   }
 
   if (state.step === "awaiting_cancel_confirm") {
@@ -1283,33 +1834,61 @@ async function runOrchestratorCore(input: {
       await saveState(convId, idleState(state));
       return { reply: BotPrompts.keptBooking(lang) };
     }
+    return withYesNo(
+      BotPrompts.askCancelConfirm(state.pendingSummary || "this booking", lang),
+    );
   }
 
   if (state.step === "awaiting_provider") {
     const providers = state.providerChoices ?? (await loadProviders(practice.id));
     const picked = pickProvider(providers, nlu.slots, text);
     if (!picked) {
-      return {
-        reply: BotPrompts.askProvider(
+      return withDoctorList(
+        BotPrompts.askProvider(
           providers.map((p, i) => ({
             index: i + 1,
             name: p.name,
             detail: p.detail,
-          })), lang),
-      };
+          })),
+          lang,
+        ),
+        providers,
+      );
     }
     state.providerId = picked.id;
     state.providerChoices = providers;
+
+    // Doctor chosen before date (clinic multi-doctor BOOK flow)
+    if (!state.date) {
+      const locationId = state.locationId ?? practice.locations[0]?.id;
+      state.step = "awaiting_date";
+      let suggested: string | null = null;
+      if (locationId) {
+        state.locationId = locationId;
+        suggested = await suggestDefaultDate(practice, picked.id, locationId);
+      }
+      await saveState(convId, state);
+      return {
+        reply: BotPrompts.doctorSelectedAskDate(picked.name, suggested, lang),
+      };
+    }
+
     return askModeForDay(convId, practice, state);
   }
 
   if (state.step === "awaiting_mode") {
     const t = text.toLowerCase();
     let mode: ScheduleMode | undefined = nlu.slots.mode;
+    if (!mode && /^mode:TOKEN_BASED$/i.test(text.trim())) {
+      mode = ScheduleMode.TOKEN_BASED;
+    }
+    if (!mode && /^mode:TIME_BASED$/i.test(text.trim())) {
+      mode = ScheduleMode.TIME_BASED;
+    }
     if (!mode && /token/.test(t)) mode = ScheduleMode.TOKEN_BASED;
     if (!mode && /time|slot/.test(t)) mode = ScheduleMode.TIME_BASED;
     if (!mode) {
-      return { reply: BotPrompts.askMode(true, true, lang) };
+      return withModeButtons(BotPrompts.askMode(true, true, lang), true, true);
     }
     state.mode = mode;
     return continueAfterMode(convId, practice, state);
@@ -1317,36 +1896,56 @@ async function runOrchestratorCore(input: {
 
   if (state.step === "awaiting_slot") {
     const choices = state.slotChoices ?? [];
-    const idx = nlu.slots.slotIndex ?? Number(text.trim());
+    let idx = parseSlotChoiceIndex(text, nlu.slots.slotIndex);
+    // Voice / free text: "10 am" or "morning" instead of tapping a list row
+    if (idx == null) {
+      state = applyTimePreferenceFromSlots(state, nlu.slots, text);
+      const open = choices
+        .map((c) => ({ start: new Date(c.start) }))
+        .filter((s) => !Number.isNaN(s.start.getTime()));
+      const preferredIdx = matchPreferredSlotIndex(open, {
+        preferredHour: state.preferredHour,
+        preferredMinute: state.preferredMinute,
+        preferredPeriod: state.preferredPeriod,
+        timeText: state.preferredTimeText,
+      });
+      if (preferredIdx != null) idx = preferredIdx + 1;
+    }
     const choice =
-      Number.isFinite(idx) && idx >= 1 && idx <= choices.length
+      idx !== null && idx >= 1 && idx <= choices.length
         ? choices[idx - 1]
         : null;
     if (!choice) {
-      return {
-        reply: BotPrompts.askSlot(
-          choices.map((s, i) => ({ index: i + 1, label: s.label })), lang),
-      };
+      return withSlotPicker(
+        BotPrompts.askSlot(
+          choices.map((s, i) => ({ index: i + 1, label: s.label })),
+          lang,
+        ),
+        choices,
+      );
     }
     state.slotStart = choice.start;
     state.pendingSummary = `${choice.label} on ${state.date} at ${practice.name}`;
     state.step = "awaiting_confirm";
     await saveState(convId, state);
-    return { reply: BotPrompts.askConfirm(state.pendingSummary, lang) };
+    return withYesNo(BotPrompts.askConfirm(state.pendingSummary, lang));
   }
 
   if (state.step === "awaiting_reschedule_booking") {
     const choices = state.bookingChoices ?? [];
-    const idx = Number(text.trim());
+    const idx = parseSlotChoiceIndex(text);
     const choice =
-      Number.isFinite(idx) && idx >= 1 && idx <= choices.length
+      idx !== null && idx >= 1 && idx <= choices.length
         ? choices[idx - 1]
         : null;
     if (!choice) {
-      return {
-        reply: BotPrompts.askReschedulePick(
-          choices.map((c, i) => ({ index: i + 1, label: c.label })), lang),
-      };
+      return withBookingPicker(
+        BotPrompts.askReschedulePick(
+          choices.map((c, i) => ({ index: i + 1, label: c.label })),
+          lang,
+        ),
+        choices,
+      );
     }
     const booking = await prisma.practiceBooking.findUnique({
       where: { id: choice.id },
@@ -1361,21 +1960,39 @@ async function runOrchestratorCore(input: {
     state.mode = booking.mode;
     state.step = "awaiting_date";
     await saveState(convId, state);
-    return { reply: `Rescheduling ${bookingWhenLabel(booking)}.\n${BotPrompts.askDate(lang)}` };
+    return withDateButtons(
+      `Rescheduling ${bookingWhenLabel(booking)}.\n${BotPrompts.askDate(lang)}`,
+    );
   }
 
   if (state.step === "awaiting_reschedule_slot") {
     const choices = state.slotChoices ?? [];
-    const idx = nlu.slots.slotIndex ?? Number(text.trim());
+    let idx = parseSlotChoiceIndex(text, nlu.slots.slotIndex);
+    if (idx == null) {
+      state = applyTimePreferenceFromSlots(state, nlu.slots, text);
+      const open = choices
+        .map((c) => ({ start: new Date(c.start) }))
+        .filter((s) => !Number.isNaN(s.start.getTime()));
+      const preferredIdx = matchPreferredSlotIndex(open, {
+        preferredHour: state.preferredHour,
+        preferredMinute: state.preferredMinute,
+        preferredPeriod: state.preferredPeriod,
+        timeText: state.preferredTimeText,
+      });
+      if (preferredIdx != null) idx = preferredIdx + 1;
+    }
     const choice =
-      Number.isFinite(idx) && idx >= 1 && idx <= choices.length
+      idx !== null && idx >= 1 && idx <= choices.length
         ? choices[idx - 1]
         : null;
     if (!choice || !state.rescheduleBookingId) {
-      return {
-        reply: BotPrompts.askSlot(
-          choices.map((s, i) => ({ index: i + 1, label: s.label })), lang),
-      };
+      return withSlotPicker(
+        BotPrompts.askSlot(
+          choices.map((s, i) => ({ index: i + 1, label: s.label })),
+          lang,
+        ),
+        choices,
+      );
     }
     try {
       const updated = await BookingService.reschedule(state.rescheduleBookingId, {
@@ -1400,6 +2017,28 @@ async function runOrchestratorCore(input: {
 
   if (nlu.intent === "book") {
     return ensureRegisteredThenBook(convId, practice, patientPhone, nlu.slots, state);
+  }
+
+  // Free speech / voice: date and/or time without an explicit "BOOK" word
+  {
+    const spoken = parseSpokenTime(text);
+    if (
+      (!state.step || state.step === "idle") &&
+      nlu.intent === "unknown" &&
+      (nlu.slots.date ||
+        nlu.slots.preferredHour != null ||
+        nlu.slots.preferredPeriod ||
+        spoken.preferredHour != null ||
+        spoken.preferredPeriod)
+    ) {
+      return ensureRegisteredThenBook(
+        convId,
+        practice,
+        patientPhone,
+        nlu.slots,
+        applyTimePreferenceFromSlots(state, nlu.slots, text),
+      );
+    }
   }
 
   if (nlu.intent === "status") {
@@ -1447,7 +2086,9 @@ async function runOrchestratorCore(input: {
       step: "awaiting_cancel_confirm",
       cancelBookingId: upcoming.id,
     });
-    return { reply: BotPrompts.askCancelConfirm(bookingWhenLabel(upcoming), lang) };
+    return withYesNo(
+      BotPrompts.askCancelConfirm(bookingWhenLabel(upcoming), lang),
+    );
   }
 
   if (nlu.intent === "reschedule") {
@@ -1477,7 +2118,9 @@ async function runOrchestratorCore(input: {
         locationId: b.locationId,
         mode: b.mode,
       });
-      return { reply: `Rescheduling ${bookingWhenLabel(b)}.\n${BotPrompts.askDate(lang)}` };
+      return withDateButtons(
+        `Rescheduling ${bookingWhenLabel(b)}.\n${BotPrompts.askDate(lang)}`,
+      );
     }
 
     const bookingChoices = upcoming.map((b) => ({
@@ -1488,10 +2131,13 @@ async function runOrchestratorCore(input: {
       step: "awaiting_reschedule_booking",
       bookingChoices,
     });
-    return {
-      reply: BotPrompts.askReschedulePick(
-        bookingChoices.map((c, i) => ({ index: i + 1, label: c.label })), lang),
-    };
+    return withBookingPicker(
+      BotPrompts.askReschedulePick(
+        bookingChoices.map((c, i) => ({ index: i + 1, label: c.label })),
+        lang,
+      ),
+      bookingChoices,
+    );
   }
 
   if (nlu.intent === "help") {

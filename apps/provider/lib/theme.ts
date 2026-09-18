@@ -11,10 +11,10 @@ export const colors = {
   sky50: "#F8FAFC",
   sky100: "#EEF1F6",
   accent: "#0F766E",
-  paper: "#ECEEF2",
+  paper: "#F0F2F5",
   paperRaised: "#FFFFFF",
   line: "rgba(9, 14, 23, 0.06)",
-  lineStrong: "#E2E5EB",
+  lineStrong: "rgba(9, 14, 23, 0.08)",
   danger: "#DC2626",
   success: "#047857",
   ok: "#047857",
@@ -25,15 +25,75 @@ export const colors = {
   white: "#FFFFFF",
   navy: "#111827",
   navySoft: "#1F2937",
-  shadow: "rgba(9, 14, 23, 0.05)",
-  shadowDeep: "rgba(9, 14, 23, 0.12)",
+  shadow: "rgba(15, 23, 42, 0.06)",
+  shadowDeep: "rgba(15, 23, 42, 0.10)",
 } as const;
 
+/**
+ * Soft tinted surfaces for dashboard metrics, queue chips, and quick links.
+ * Healthcare palette: blue / teal / amber / emerald / sky / coral — not purple.
+ */
+export const dash = {
+  blue: {
+    bg: "#EFF6FF",
+    border: "#BFDBFE",
+    ink: "#1D4ED8",
+    soft: "#DBEAFE",
+    solid: "#2563EB",
+  },
+  teal: {
+    bg: "#F0FDFA",
+    border: "#99F6E4",
+    ink: "#0F766E",
+    soft: "#CCFBF1",
+    solid: "#0D9488",
+  },
+  amber: {
+    bg: "#FFFBEB",
+    border: "#FDE68A",
+    ink: "#B45309",
+    soft: "#FEF3C7",
+    solid: "#D97706",
+  },
+  emerald: {
+    bg: "#ECFDF5",
+    border: "#A7F3D0",
+    ink: "#047857",
+    soft: "#D1FAE5",
+    solid: "#059669",
+  },
+  sky: {
+    bg: "#F0F9FF",
+    border: "#BAE6FD",
+    ink: "#0369A1",
+    soft: "#E0F2FE",
+    solid: "#0284C7",
+  },
+  coral: {
+    bg: "#FFF1F2",
+    border: "#FECDD3",
+    ink: "#BE123C",
+    soft: "#FFE4E6",
+    solid: "#E11D48",
+  },
+} as const;
+
+export type DashTone = keyof typeof dash;
+
+export const dashOrder: DashTone[] = [
+  "blue",
+  "teal",
+  "amber",
+  "emerald",
+  "sky",
+  "coral",
+];
+
 export const radii = {
-  sm: 12,
-  md: 16,
-  lg: 20,
-  xl: 24,
+  sm: 14,
+  md: 18,
+  lg: 22,
+  xl: 26,
   xxl: 32,
   pill: 999,
   full: 999,
@@ -92,24 +152,24 @@ export const type = {
 
 export const shadows = {
   card: {
-    shadowColor: colors.shadowDeep,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 1,
-    shadowRadius: 28,
-    elevation: 4,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 3,
   },
   soft: {
-    shadowColor: colors.shadow,
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
+    shadowOpacity: 0.06,
     shadowRadius: 14,
     elevation: 2,
   },
   float: {
-    shadowColor: colors.shadowDeep,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 1,
-    shadowRadius: 32,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
     elevation: 8,
   },
   dock: {

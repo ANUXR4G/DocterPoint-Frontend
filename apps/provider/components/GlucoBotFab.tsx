@@ -34,7 +34,7 @@ export function GlucoBotFab() {
           styles.fab,
           shadows.soft,
           {
-            bottom: dockClearance + 8,
+            bottom: dockClearance + Math.max(insets.bottom, 0) + 8,
             right: Math.max(insets.right, 16),
           },
         ]}
@@ -61,6 +61,7 @@ export function GlucoBotFab() {
             style={[
               styles.sheet,
               {
+                paddingTop: Math.max(insets.top, space.md),
                 paddingBottom: Math.max(insets.bottom, space.md),
               },
             ]}

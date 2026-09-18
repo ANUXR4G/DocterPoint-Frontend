@@ -12,7 +12,7 @@ import {
 import { LinearGradientStub } from "@/components/ui/GradientStub";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { AnimatedView, PressableScale } from "@/lib/motion";
-import { colors, radii, space, type } from "@/lib/theme";
+import { colors, radii, shadows, space, type } from "@/lib/theme";
 
 export function Screen({
   children,
@@ -262,11 +262,31 @@ export function StatusBadge({ status }: { status: string }) {
         ? colors.danger
         : s === "IN_PROGRESS"
           ? colors.accent
-          : s === "ACCEPTED" || s === "CONFIRMED"
+          : s === "ACCEPTED" ||
+              s === "CONFIRMED" ||
+              s === "SCHEDULED" ||
+              s === "REQUESTED" ||
+              s === "BOOKED"
             ? colors.brandDeep
             : s === "WAITING" || s === "CHECKED_IN"
               ? colors.brand
               : colors.inkSoft;
+  const bg =
+    s === "COMPLETED"
+      ? colors.emeraldLight
+      : s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW"
+        ? colors.roseLight
+      : s === "IN_PROGRESS"
+        ? "rgba(15, 118, 110, 0.10)"
+        : s === "WAITING" || s === "CHECKED_IN"
+          ? colors.brandLight
+          : s === "ACCEPTED" ||
+              s === "CONFIRMED" ||
+              s === "SCHEDULED" ||
+              s === "REQUESTED" ||
+              s === "BOOKED"
+            ? colors.sky100
+            : colors.sky50;
   const label =
     s === "WAITING" || s === "CHECKED_IN"
       ? "In waiting"
@@ -274,22 +294,42 @@ export function StatusBadge({ status }: { status: string }) {
         ? "Appointment started"
         : s === "COMPLETED"
           ? "Appointment finished"
-          : s === "ACCEPTED" || s === "CONFIRMED"
+          : s === "ACCEPTED" ||
+              s === "CONFIRMED" ||
+              s === "SCHEDULED" ||
+              s === "REQUESTED" ||
+              s === "BOOKED"
             ? "Accepted"
-            : s === "SCHEDULED" ||
-                s === "REQUESTED" ||
-                s === "BOOKED"
-              ? "Requested"
               : s === "NO_SHOW"
                 ? "No-show"
                 : s === "CANCELED" || s === "CANCELLED"
                   ? "Canceled"
                   : status.replace(/_/g, " ");
   return (
-    <Text style={[styles.badge, { color: tone, borderColor: tone }]}>
-      {label}
-    </Text>
+    <View style={[styles.badgeWrap, { backgroundColor: bg }]}>
+      <Text style={[styles.badge, { color: tone }]}>{label}</Text>
+    </View>
   );
+}
+
+/** Shared elevated list / booking card — round corners + soft shadow. */
+export function SurfaceCard({
+  children,
+  style,
+  onPress,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  onPress?: () => void;
+}) {
+  if (onPress) {
+    return (
+      <PressableScale onPress={onPress} style={[styles.surfaceCard, style]}>
+        {children}
+      </PressableScale>
+    );
+  }
+  return <View style={[styles.surfaceCard, style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -342,6 +382,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paperRaised,
     padding: space.lg,
     borderRadius: radii.xl,
+    ...shadows.soft,
   },
   label: {
     ...type.label,
@@ -352,8 +393,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
     backgroundColor: colors.paperRaised,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
     fontSize: 15,
     color: colors.ink,
     borderRadius: radii.md,
@@ -364,7 +405,7 @@ const styles = StyleSheet.create({
   },
   btn: {
     paddingVertical: 15,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     alignItems: "center",
     justifyContent: "center",
     minHeight: 52,
@@ -385,7 +426,7 @@ const styles = StyleSheet.create({
   btnSecondary: {
     paddingVertical: 13,
     paddingHorizontal: 16,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
     backgroundColor: colors.paperRaised,
@@ -401,18 +442,18 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
-    borderRadius: radii.sm,
+    borderRadius: radii.pill,
     marginRight: 8,
     marginBottom: 8,
     backgroundColor: colors.white,
   },
   chipActive: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
   },
   chipText: {
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
     color: colors.inkSoft,
   },
   chipTextActive: {
@@ -426,16 +467,17 @@ const styles = StyleSheet.create({
     padding: 4,
     gap: 4,
     marginBottom: space.lg,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
   },
   segmentItem: {
     flex: 1,
     paddingVertical: 10,
     alignItems: "center",
-    borderRadius: radii.sm,
+    borderRadius: radii.md,
   },
   segmentItemActive: {
     backgroundColor: colors.white,
+    ...shadows.soft,
   },
   segmentText: {
     fontSize: 13,
@@ -454,11 +496,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     backgroundColor: colors.white,
     gap: space.sm,
+    ...shadows.soft,
   },
   emptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.brandLight,
     alignItems: "center",
     justifyContent: "center",
@@ -507,13 +550,24 @@ const styles = StyleSheet.create({
     bottom: 100,
     left: -60,
   },
+  surfaceCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    padding: space.lg,
+    marginBottom: space.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
+    ...shadows.card,
+  },
+  badgeWrap: {
+    borderRadius: radii.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignSelf: "flex-start",
+  },
   badge: {
     fontSize: 11,
     fontWeight: "700",
-    borderWidth: 1,
-    borderRadius: radii.full,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    overflow: "hidden",
+    letterSpacing: 0.1,
   },
 });

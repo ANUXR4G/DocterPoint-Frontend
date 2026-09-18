@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { endOfMonth, format, startOfMonth, startOfToday } from "date-fns"
 import { InsightStatCard } from "@/components/dashboard/InsightStatCard"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
@@ -26,11 +26,18 @@ const AnalyticsChartsStrip = dynamic(
 
 /** Metric cards + chart strip from live Procto practice bookings. */
 export default function Analytics() {
-  const { bookings: allBookings, patients, ready } = usePracticeDashboard()
+  const { bookings: allBookings, patients, ready } =
+    usePracticeDashboard()
   const [queueCount, setQueueCount] = useState(0)
   const [livePatients, setLivePatients] = useState(0)
   const [liveAppointments, setLiveAppointments] = useState(0)
   const router = useRouter()
+  const pathname = usePathname() || ""
+  const isClinic = pathname.startsWith("/clinic")
+  const appointmentsHref = isClinic
+    ? "/clinic/appointments"
+    : "/doctor/appointments"
+  const queueHref = isClinic ? "/clinic/queue" : "/doctor/queue"
 
   const today = startOfToday()
   const currentMonthName = format(today, "MMMM")
@@ -51,8 +58,10 @@ export default function Analytics() {
     yearSeries?.[currentMonthName]?.appointments,
   )
 
-  const patientsValue = planLocked ? livePatients : monthPatients
-  const appointmentsValue = planLocked ? liveAppointments : monthAppointments
+  // Prefer live Procto roster/bookings so cards never show 0 while the queue
+  // has visits (analytics series can lag or zero-fill before charts load).
+  const patientsValue = Math.max(livePatients, monthPatients)
+  const appointmentsValue = Math.max(liveAppointments, monthAppointments)
 
   useEffect(() => {
     if (!practiceId || !ready) {
@@ -122,7 +131,7 @@ export default function Analytics() {
               ? "Bookings this month"
               : `${appointmentAnalysis >= 0 ? "Increase" : "Decrease"} of ${Math.abs(appointmentAnalysis)}% vs last month · view completed`
           }
-          href="/doctor/appointments"
+          href={appointmentsHref}
           icon="calendar"
           tone="blue"
           onNavigate={handleNavigation}
@@ -131,7 +140,7 @@ export default function Analytics() {
           title="On queue today"
           value={queueCount}
           subtitle="Open today's clinic queue"
-          href="/doctor/queue"
+          href={queueHref}
           icon="inbox"
           tone="amber"
           onNavigate={handleNavigation}

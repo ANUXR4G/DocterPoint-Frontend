@@ -1,7 +1,7 @@
 "use client"
 
 import { format, startOfToday } from "date-fns"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { CoolKid } from "@/components"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
@@ -138,10 +138,28 @@ export default function DoctorQueue({
     refresh,
     patchBooking,
     bookings: allBookings,
+    isClinicAdmin,
+    actorUserId,
   } = usePracticeDashboard()
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [providerFilter, setProviderFilter] = useState(initialProviderId)
+  const [providerFilter, setProviderFilter] = useState(() => {
+    if (initialProviderId) return initialProviderId
+    return ""
+  })
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
+
+  // Clinic-staff doctors default to (and stay on) their own queue.
+  // Clinic admins honor ?doctor= deep links, then can switch to all.
+  useEffect(() => {
+    if (!ready) return
+    if (!isClinicAdmin && actorUserId) {
+      setProviderFilter(actorUserId)
+      return
+    }
+    if (isClinicAdmin && initialProviderId) {
+      setProviderFilter(initialProviderId)
+    }
+  }, [ready, isClinicAdmin, actorUserId, initialProviderId])
 
   const bookings = useMemo(
     () =>
@@ -303,7 +321,7 @@ export default function DoctorQueue({
       </div>
 
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:flex-wrap sm:items-center">
-        {showFilters || doctors.length > 1 ? (
+        {isClinicAdmin && (showFilters || doctors.length > 1) ? (
           <label className="text-sm">
             <span className="sr-only">Doctor</span>
             <select
@@ -319,6 +337,11 @@ export default function DoctorQueue({
               ))}
             </select>
           </label>
+        ) : null}
+        {!isClinicAdmin && actorUserId ? (
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Showing your appointments (clinic can view the full roster)
+          </p>
         ) : null}
         <BookingStatusFilterBar
           value={statusFilter}

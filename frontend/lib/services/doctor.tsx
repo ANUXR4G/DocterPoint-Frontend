@@ -57,7 +57,16 @@ async function getDoctorProfile(token: string) {
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to retrieve doctor profile information`)
+    const body = await response.json().catch(() => ({}))
+    const message =
+      typeof body?.message === "string" && body.message.trim()
+        ? body.message
+        : response.status === 401
+          ? "Session is invalid or expired. Please sign in again."
+          : "Failed to retrieve doctor profile information"
+    const err = new Error(message) as Error & { status?: number }
+    err.status = response.status
+    throw err
   }
 
   return response.json()

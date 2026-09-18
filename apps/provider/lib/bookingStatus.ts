@@ -15,9 +15,15 @@ export function matchesQueueStatusFilter(
   const s = String(status || "").toUpperCase();
   switch (filter) {
     case "booked":
-      return ["SCHEDULED", "REQUESTED", "BOOKED"].includes(s);
+      return false;
     case "accepted":
-      return s === "ACCEPTED" || s === "CONFIRMED";
+      return [
+        "SCHEDULED",
+        "REQUESTED",
+        "BOOKED",
+        "ACCEPTED",
+        "CONFIRMED",
+      ].includes(s);
     case "waiting":
       return s === "WAITING" || s === "CHECKED_IN";
     case "in_appointment":
@@ -71,7 +77,6 @@ export function countQueueStatusFilters(
 
 export const QUEUE_FILTER_KEYS: QueueStatusFilter[] = [
   "all",
-  "booked",
   "accepted",
   "waiting",
   "in_appointment",

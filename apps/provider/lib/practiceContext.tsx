@@ -31,6 +31,19 @@ export function usePractice() {
   return ctx;
 }
 
+export function isClinicAdminRole(role?: string | null) {
+  return role === "PRACTICE_OWNER" || role === "PRACTICE_ADMIN";
+}
+
+/** Clinic-wide lists: omit for staff doctors so API + UI stay on own roster. */
+export function selfProviderScope(
+  membership: PracticeMembership | null,
+): string | undefined {
+  if (!membership) return undefined;
+  if (isClinicAdminRole(membership.role)) return undefined;
+  return membership.userId;
+}
+
 export function pickProviderId(m: PracticeMembership | null): string | null {
   if (!m) return null;
   const docs = m.practice.members.filter(

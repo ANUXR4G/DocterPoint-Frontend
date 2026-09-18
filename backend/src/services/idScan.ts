@@ -41,9 +41,57 @@ const ALLOWED_MIME = new Set([
   "image/jpg",
   "image/png",
   "image/webp",
+  "application/pdf",
 ]);
 
-function prepareImage(input: { imageBase64: string; mimeType?: string }) {
+function isPdfMime(mimeType: string): boolean {
+  const m = mimeType.toLowerCase();
+  return m === "application/pdf" || m.includes("pdf");
+}
+
+/**
+ * Rasterize page 1 of a PDF to PNG for the vision OCR stack
+ * (OpenAI / HF chat completions only accept images).
+ */
+async function pdfFirstPageToPng(pdfBytes: Buffer): Promise<Buffer> {
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { createCanvas } = await import("@napi-rs/canvas");
+
+  const loadingTask = getDocument({
+    data: new Uint8Array(pdfBytes),
+    useSystemFonts: true,
+    // Node has no web worker; keep parsing on this thread.
+    disableWorker: true,
+  } as Parameters<typeof getDocument>[0]);
+  const pdf = await loadingTask.promise;
+  if (pdf.numPages < 1) {
+    throw new AppError(422, "PDF has no pages to read.");
+  }
+
+  const page = await pdf.getPage(1);
+  // Cap long edge so vision payloads stay small; IDs are usually one page.
+  const base = page.getViewport({ scale: 1 });
+  const scale = Math.min(2.5, 1600 / Math.max(base.width, base.height, 1));
+  const viewport = page.getViewport({ scale });
+  const canvas = createCanvas(
+    Math.max(1, Math.ceil(viewport.width)),
+    Math.max(1, Math.ceil(viewport.height)),
+  );
+  const ctx = canvas.getContext("2d");
+  await page
+    .render({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      canvasContext: ctx as unknown as CanvasRenderingContext2D,
+      viewport,
+    })
+    .promise;
+  return canvas.toBuffer("image/png");
+}
+
+async function prepareDocument(input: {
+  imageBase64: string;
+  mimeType?: string;
+}): Promise<{ mimeType: string; raw: string }> {
   let raw = input.imageBase64.trim();
   let mimeType = (input.mimeType || "image/jpeg").toLowerCase();
 
@@ -53,14 +101,31 @@ function prepareImage(input: { imageBase64: string; mimeType?: string }) {
     raw = dataUrl[2]!;
   }
 
-  if (!ALLOWED_MIME.has(mimeType)) {
+  if (!ALLOWED_MIME.has(mimeType) && !isPdfMime(mimeType)) {
     throw new AppError(
       400,
-      "Unsupported file type. Upload a JPG, PNG, or WEBP image.",
+      "Unsupported file type. Upload a JPG, PNG, WEBP, or PDF.",
     );
   }
-  if (raw.length > 8_000_000) {
-    throw new AppError(400, "Image is too large. Keep under ~6 MB.");
+  if (raw.length > 12_000_000) {
+    throw new AppError(400, "File is too large. Keep under ~9 MB.");
+  }
+
+  if (isPdfMime(mimeType)) {
+    try {
+      const png = await pdfFirstPageToPng(Buffer.from(raw, "base64"));
+      return { mimeType: "image/png", raw: png.toString("base64") };
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.warn(
+        "[idScan] PDF rasterize failed:",
+        err instanceof Error ? err.message : err,
+      );
+      throw new AppError(
+        422,
+        "Could not read that PDF. Send a clearer JPG/PNG/PDF of the ID, or type your full name.",
+      );
+    }
   }
 
   return { mimeType, raw };
@@ -304,7 +369,7 @@ export const IdScanService = {
     imageBase64: string;
     mimeType?: string;
   }): Promise<IdScanFields> {
-    const { mimeType, raw } = prepareImage(input);
+    const { mimeType, raw } = await prepareDocument(input);
     const text = await callVisionModel(mimeType, raw, ID_PROMPT);
     const fields = toIdFields(parseJsonFromModel(text));
 
@@ -318,7 +383,7 @@ export const IdScanService = {
     ) {
       throw new AppError(
         422,
-        "Could not read identity details. Use a clear, well-lit photo of the ID.",
+        "Could not read identity details. Use a clear JPG/PNG/PDF of the ID.",
       );
     }
 
@@ -329,7 +394,7 @@ export const IdScanService = {
     imageBase64: string;
     mimeType?: string;
   }): Promise<ProfessionalScanFields> {
-    const { mimeType, raw } = prepareImage(input);
+    const { mimeType, raw } = await prepareDocument(input);
     const text = await callVisionModel(mimeType, raw, PRO_PROMPT);
     const fields = toProfessionalFields(parseJsonFromModel(text));
 
@@ -344,7 +409,7 @@ export const IdScanService = {
     ) {
       throw new AppError(
         422,
-        "Could not read details. Use a clear photo of the document.",
+        "Could not read details. Use a clear JPG/PNG/PDF of the document.",
       );
     }
 

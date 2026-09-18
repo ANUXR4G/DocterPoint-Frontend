@@ -8,7 +8,6 @@ import {
 
 const FILTER_KEYS: QueueStatusFilter[] = [
   "all",
-  "booked",
   "accepted",
   "waiting",
   "in_appointment",

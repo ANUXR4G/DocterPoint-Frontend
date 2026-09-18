@@ -4,6 +4,7 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useQueryClient } from "react-query"
+import { useSearchParams } from "next/navigation"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import { TypeAnalyticsParam } from "@/types"
 import { useAnalytics } from "@/hooks/useAnalysis"
@@ -38,11 +39,26 @@ const PERIOD_SUBTITLE: Record<TypeAnalyticsParam, string> = {
   yoy: "This year vs last year",
 }
 
-export default function DoctorAnalyticsPage() {
+type Props = {
+  /** Clinic portal: emphasize all-doctors overview + one-by-one drill-down. */
+  portal?: "doctor" | "clinic"
+  subscriptionHref?: string
+}
+
+export default function DoctorAnalyticsPage({
+  portal = "doctor",
+  subscriptionHref = "/doctor/subscription",
+}: Props) {
   const queryClient = useQueryClient()
-  const { bookings } = usePracticeDashboard()
+  const searchParams = useSearchParams()
+  const doctorFromUrl = searchParams.get("doctor") || ""
+  const { bookings, memberships, isClinicAdmin } = usePracticeDashboard()
   const [type, setType] = useState<TypeAnalyticsParam>("week")
-  const [providerId, setProviderId] = useState<string>("")
+  const [providerId, setProviderId] = useState<string>(doctorFromUrl)
+
+  useEffect(() => {
+    setProviderId(doctorFromUrl)
+  }, [doctorFromUrl])
 
   const {
     patientMetrics,
@@ -56,10 +72,36 @@ export default function DoctorAnalyticsPage() {
     practiceId,
   } = useAnalytics(type, providerId || null)
 
-  const [doctorOptions, setDoctorOptions] = useState(byDoctor)
+  const rosterDoctors = useMemo(() => {
+    const members = memberships[0]?.practice?.members ?? []
+    const map = new Map<string, string>()
+    for (const m of members) {
+      if (
+        m.isActive === false ||
+        (m.role !== "DOCTOR" &&
+          m.role !== "PRACTICE_OWNER" &&
+          m.role !== "PRACTICE_ADMIN")
+      ) {
+        continue
+      }
+      if (!m.userId) continue
+      map.set(
+        m.userId,
+        m.user?.name || m.user?.email || "Doctor",
+      )
+    }
+    for (const d of byDoctor) {
+      if (!map.has(d.providerId)) map.set(d.providerId, d.name)
+    }
+    return [...map.entries()]
+      .map(([providerId, name]) => ({ providerId, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [memberships, byDoctor])
+
+  const [doctorOptions, setDoctorOptions] = useState(rosterDoctors)
   useEffect(() => {
-    if (!providerId && byDoctor.length) setDoctorOptions(byDoctor)
-  }, [providerId, byDoctor])
+    if (rosterDoctors.length) setDoctorOptions(rosterDoctors)
+  }, [rosterDoctors])
 
   function softRefreshAnalytics() {
     if (!practiceId) return
@@ -102,6 +144,24 @@ export default function DoctorAnalyticsPage() {
     0,
   )
 
+  const selectedDoctorName =
+    doctorOptions.find((d) => d.providerId === providerId)?.name ||
+    byDoctor.find((d) => d.providerId === providerId)?.name ||
+    null
+
+  const analyticsBase =
+    portal === "clinic" ? "/clinic/analytics" : "/doctor/analytics"
+  const queueHref = (id: string) =>
+    portal === "clinic"
+      ? `/clinic/queue?doctor=${encodeURIComponent(id)}`
+      : `/doctor/queue?doctor=${encodeURIComponent(id)}`
+
+  const showDoctorPicker =
+    portal === "clinic" ||
+    isClinicAdmin ||
+    doctorOptions.length > 1 ||
+    Boolean(providerId)
+
   return (
     <div className="space-y-6">
       {planLocked ? (
@@ -114,7 +174,7 @@ export default function DoctorAnalyticsPage() {
               "Charts need an active Starter, Growth, or Clinic subscription."}
           </p>
           <Link
-            href="/doctor/subscription"
+            href={subscriptionHref}
             className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-[#0099ff] px-4 text-sm font-semibold text-white"
           >
             View plans & subscribe
@@ -123,16 +183,20 @@ export default function DoctorAnalyticsPage() {
       ) : null}
 
       {!planLocked ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-neutral-300 bg-neutral-100 p-5 dark:border-neutral-700 dark:bg-neutral-800">
             <p className="text-sm font-semibold text-blue-600 dark:text-cyan-400">
-              Total patients (this period)
+              {providerId
+                ? "Patients (this doctor)"
+                : "Total patients (this period)"}
             </p>
             <p className="mt-2 text-3xl font-bold">{totalPatients}</p>
           </div>
           <div className="rounded-2xl border border-neutral-300 bg-neutral-100 p-5 dark:border-neutral-700 dark:bg-neutral-800">
             <p className="text-sm font-semibold text-blue-600 dark:text-cyan-400">
-              Total bookings (this period)
+              {providerId
+                ? "Bookings (this doctor)"
+                : "Total bookings (this period)"}
             </p>
             <p className="mt-2 text-3xl font-bold">{totalAppointments}</p>
           </div>
@@ -141,11 +205,17 @@ export default function DoctorAnalyticsPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h2 className="text-xl font-bold">Practice analytics</h2>
+          <h2 className="text-xl font-bold">
+            {portal === "clinic"
+              ? providerId
+                ? `Doctor analytics — ${selectedDoctorName || "Selected"}`
+                : "Clinic analytics — all doctors"
+              : "Practice analytics"}
+          </h2>
           <p className="text-sm opacity-70">{PERIOD_SUBTITLE[type]}</p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {doctorOptions.length > 1 || providerId ? (
+          {showDoctorPicker ? (
             <label className="flex items-center gap-2 text-sm">
               <span className="sr-only">Doctor filter</span>
               <select
@@ -173,6 +243,28 @@ export default function DoctorAnalyticsPage() {
         </div>
       </div>
 
+      {providerId && portal === "clinic" ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm dark:border-sky-900/40 dark:bg-sky-950/30">
+          <span>
+            Viewing one doctor. Switch the filter to compare others, or return
+            to the full clinic overview.
+          </span>
+          <button
+            type="button"
+            onClick={() => setProviderId("")}
+            className="font-semibold text-blue-700 underline dark:text-sky-300"
+          >
+            Show all doctors
+          </button>
+          <Link
+            href={queueHref(providerId)}
+            className="font-semibold text-blue-700 underline dark:text-sky-300"
+          >
+            Open their queue
+          </Link>
+        </div>
+      ) : null}
+
       {planLocked ? null : isLoading ? (
         <p className="text-sm text-neutral-500">Loading charts…</p>
       ) : (
@@ -195,10 +287,14 @@ export default function DoctorAnalyticsPage() {
         <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-700">
           <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-800/60">
             <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
-              By doctor
+              {portal === "clinic"
+                ? "All doctors overview"
+                : "By doctor"}
             </h3>
             <p className="text-xs text-neutral-500">
-              Bookings in the selected period
+              {portal === "clinic"
+                ? "Click a doctor to analyze their charts one by one"
+                : "Bookings in the selected period"}
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -212,20 +308,58 @@ export default function DoctorAnalyticsPage() {
                   <th className="px-4 py-2 font-semibold">Completed</th>
                   <th className="px-4 py-2 font-semibold">Canceled</th>
                   <th className="px-4 py-2 font-semibold">No-show</th>
+                  {portal === "clinic" ? (
+                    <th className="px-4 py-2 font-semibold">Actions</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {byDoctor.map((d) => (
-                  <tr key={d.providerId}>
-                    <td className="px-4 py-2.5 font-medium">{d.name}</td>
-                    <td className="px-4 py-2.5">{d.bookings}</td>
-                    <td className="px-4 py-2.5">{d.waiting}</td>
-                    <td className="px-4 py-2.5">{d.inProgress}</td>
-                    <td className="px-4 py-2.5">{d.completed}</td>
-                    <td className="px-4 py-2.5">{d.canceled}</td>
-                    <td className="px-4 py-2.5">{d.noShow}</td>
-                  </tr>
-                ))}
+                {byDoctor.map((d) => {
+                  const active = providerId === d.providerId
+                  return (
+                    <tr
+                      key={d.providerId}
+                      className={
+                        active
+                          ? "bg-sky-50 dark:bg-sky-950/30"
+                          : undefined
+                      }
+                    >
+                      <td className="px-4 py-2.5 font-medium">{d.name}</td>
+                      <td className="px-4 py-2.5">{d.bookings}</td>
+                      <td className="px-4 py-2.5">{d.waiting}</td>
+                      <td className="px-4 py-2.5">{d.inProgress}</td>
+                      <td className="px-4 py-2.5">{d.completed}</td>
+                      <td className="px-4 py-2.5">{d.canceled}</td>
+                      <td className="px-4 py-2.5">{d.noShow}</td>
+                      {portal === "clinic" ? (
+                        <td className="px-4 py-2.5">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setProviderId(d.providerId)}
+                              className="text-xs font-semibold text-blue-600 hover:underline dark:text-sky-400"
+                            >
+                              {active ? "Viewing" : "Analyze"}
+                            </button>
+                            <Link
+                              href={`${analyticsBase}?doctor=${encodeURIComponent(d.providerId)}`}
+                              className="text-xs font-semibold text-neutral-600 hover:underline dark:text-neutral-300"
+                            >
+                              Open
+                            </Link>
+                            <Link
+                              href={queueHref(d.providerId)}
+                              className="text-xs font-semibold text-neutral-600 hover:underline dark:text-neutral-300"
+                            >
+                              Queue
+                            </Link>
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

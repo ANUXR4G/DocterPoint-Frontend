@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,10 +15,15 @@ import {
   ErrorText,
   PageTitle,
   StatusBadge,
+  SurfaceCard,
 } from "@/components/ui";
-import { PremiumAtmosphere, PremiumCard } from "@/components/mobile/PremiumChrome";
+import { PremiumAtmosphere, DashMetric } from "@/components/mobile/PremiumChrome";
 import { resolveMediaUrl } from "@/lib/media";
-import { usePractice } from "@/lib/practiceContext";
+import {
+  isClinicAdminRole,
+  selfProviderScope,
+  usePractice,
+} from "@/lib/practiceContext";
 import { fetchPracticeBookings, updateBookingStatus } from "@/lib/procto";
 import {
   nextActions,
@@ -27,7 +31,7 @@ import {
   type BookingRow,
   ymd,
 } from "@/lib/types";
-import { colors, radii, space } from "@/lib/theme";
+import { colors, space } from "@/lib/theme";
 import { dockClearance } from "@/lib/dockLayout";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
 import { applyLiveBookingEvent } from "@/lib/liveBooking";
@@ -43,7 +47,14 @@ export default function QueueScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { practiceId, membership } = usePractice();
+  const isClinicAdmin = isClinicAdminRole(membership?.role);
+  const selfProviderId = selfProviderScope(membership);
   const [today] = useState(() => ymd(new Date()));
+  const rangeTo = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return ymd(d);
+  }, []);
   const [rows, setRows] = useState<BookingRow[]>([]);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -53,16 +64,28 @@ export default function QueueScreen() {
   const softRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const doctors = useMemo(() => {
+    if (!isClinicAdmin) return [];
     const members = membership?.practice.members ?? [];
     return members.filter(
       (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
     );
-  }, [membership]);
+  }, [membership, isClinicAdmin]);
+
+  useEffect(() => {
+    if (!isClinicAdmin && membership?.userId) {
+      setProviderFilter(membership.userId);
+    }
+  }, [isClinicAdmin, membership?.userId]);
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!practiceId) return;
-      const res = await fetchPracticeBookings(practiceId, { date: today });
+      // Today + next 7 days so upcoming demo bookings are visible on this board.
+      const res = await fetchPracticeBookings(practiceId, {
+        from: today,
+        to: rangeTo,
+        providerId: selfProviderId,
+      });
       if (res.status === "successful") {
         setRows((res.data as BookingRow[]) ?? []);
         if (!opts?.silent) setError("");
@@ -70,7 +93,7 @@ export default function QueueScreen() {
         setError(res.message || "Could not load appointments");
       }
     },
-    [practiceId, today],
+    [practiceId, today, rangeTo, selfProviderId],
   );
 
   function scheduleSoftRefresh() {
@@ -110,7 +133,12 @@ export default function QueueScreen() {
           incoming,
         );
         if (needsRefresh) scheduleSoftRefresh();
-        return next;
+        if (!selfProviderId) return next;
+        return next.filter(
+          (b) =>
+            b.provider?.id === selfProviderId ||
+            (b as { providerId?: string }).providerId === selfProviderId,
+        );
       });
     },
     () => scheduleSoftRefresh(),
@@ -159,7 +187,10 @@ export default function QueueScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + space.lg, paddingBottom: dockClearance + 24 },
+          {
+            paddingTop: space.lg,
+            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+          },
         ]}
         refreshControl={
           <RefreshControl
@@ -176,29 +207,41 @@ export default function QueueScreen() {
         <PageTitle
           eyebrow={membership?.practice.name}
           title="Today's queue"
-          subtitle={`${today} · clinic-wide board`}
+          subtitle={
+            isClinicAdmin
+              ? `${today} → ${rangeTo} · clinic-wide board`
+              : `${today} → ${rangeTo} · your appointments`
+          }
         />
 
         <View style={styles.metrics}>
-          <PremiumCard style={styles.metricCard}>
-            <Text style={styles.metricValue}>{waiting}</Text>
-            <Text style={styles.metricLabel}>Waiting</Text>
-          </PremiumCard>
-          <PremiumCard style={styles.metricCard}>
-            <Text style={styles.metricValue}>{inProgress}</Text>
-            <Text style={styles.metricLabel}>In progress</Text>
-          </PremiumCard>
-          <PremiumCard style={styles.metricCard}>
-            <Text style={styles.metricValue}>{booked}</Text>
-            <Text style={styles.metricLabel}>Upcoming</Text>
-          </PremiumCard>
-          <PremiumCard style={styles.metricCard}>
-            <Text style={styles.metricValue}>{done}</Text>
-            <Text style={styles.metricLabel}>Finished</Text>
-          </PremiumCard>
+          <DashMetric
+            label="Waiting"
+            value={waiting}
+            tone="amber"
+            style={styles.metricCard}
+          />
+          <DashMetric
+            label="In progress"
+            value={inProgress}
+            tone="teal"
+            style={styles.metricCard}
+          />
+          <DashMetric
+            label="Upcoming"
+            value={booked}
+            tone="blue"
+            style={styles.metricCard}
+          />
+          <DashMetric
+            label="Finished"
+            value={done}
+            tone="emerald"
+            style={styles.metricCard}
+          />
         </View>
 
-        {doctors.length > 1 ? (
+        {isClinicAdmin && doctors.length > 1 ? (
           <View style={styles.chips}>
             <Chip
               label="All doctors"
@@ -230,13 +273,12 @@ export default function QueueScreen() {
         <ErrorText text={error} />
 
         {filtered.length === 0 ? (
-          <EmptyState text="No bookings in this filter for today." />
+          <EmptyState text="No bookings in this filter for the next 7 days." />
         ) : (
           filtered.map((b) => (
-            <Pressable
+            <SurfaceCard
               key={b.id}
               onPress={() => router.push(`/(app)/visit/${b.id}`)}
-              style={styles.card}
             >
               <View style={styles.row}>
                 <View style={styles.nameRow}>
@@ -288,7 +330,7 @@ export default function QueueScreen() {
                   onPress={() => router.push(`/(app)/visit/${b.id}`)}
                 />
               </View>
-            </Pressable>
+            </SurfaceCard>
           ))
         )}
       </ScrollView>
@@ -309,31 +351,9 @@ const styles = StyleSheet.create({
   metricCard: {
     flexGrow: 1,
     flexBasis: "45%",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: radii.lg,
-  },
-  metricValue: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: colors.ink,
-    letterSpacing: -0.5,
-  },
-  metricLabel: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "500",
-    color: colors.inkSoft,
+    minHeight: 100,
   },
   chips: { flexDirection: "row", flexWrap: "wrap", marginBottom: space.md },
-  card: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    padding: space.lg,
-    marginBottom: space.md,
-  },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -348,19 +368,19 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: colors.line,
   },
   avatarFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brandLight,
   },
-  avatarInitial: { fontSize: 14, fontWeight: "700", color: "#fff" },
+  avatarInitial: { fontSize: 15, fontWeight: "700", color: colors.brand },
   name: { fontSize: 16, fontWeight: "600", color: colors.ink, flex: 1 },
-  meta: { marginTop: 6, fontSize: 13, color: colors.inkSoft },
+  meta: { marginTop: 8, fontSize: 13, color: colors.inkSoft, lineHeight: 18 },
   notes: { marginTop: 6, fontSize: 13, color: colors.inkFaint },
   actions: { flexDirection: "row", flexWrap: "wrap", marginTop: space.md },
 });

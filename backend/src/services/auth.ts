@@ -51,6 +51,8 @@ export class AuthService {
       phone?: string
       gender?: string
       appointmentValidityDays?: number
+      /** clinic register → clinic_owner_signup; otherwise self_attempted */
+      portal?: string
     },
     res: Response,
   ) {
@@ -70,6 +72,10 @@ export class AuthService {
       90,
       Math.max(1, Number(credentials.appointmentValidityDays) || 7),
     );
+    const createdBy =
+      role === "doctor" && credentials.portal === "clinic"
+        ? "clinic_owner_signup"
+        : "self_attempted";
 
     let user;
     if (role === "doctor") {
@@ -81,10 +87,13 @@ export class AuthService {
           role: "doctor",
           name: credentials.name?.trim() || null,
           phone,
-          createdBy: "self_attempted",
+          createdBy,
           doctor: {
             create: {
-              description: "Newly registered doctor — complete your practice profile.",
+              description:
+                createdBy === "clinic_owner_signup"
+                  ? "Clinic owner — practice and trial are set up at registration; add doctors from the clinic dashboard."
+                  : "Newly registered doctor — complete your practice profile.",
               hospitalId: hospital.id,
               availableTimes: "Mon–Fri 09:00–17:00",
               experience: 0,
@@ -126,8 +135,76 @@ export class AuthService {
     return res.status(201).json(tokenResult.responseBody);
   }
 
+  /**
+   * Clinic vs doctor portals share User.role=doctor but require different
+   * practice memberships:
+   * - Clinic Login → PRACTICE_OWNER / PRACTICE_ADMIN of a CLINIC / MEDICAL_CENTER
+   * - Doctor Login → practicing doctors (DOCTOR / SOLO) and clinic owners who
+   *   also hold a doctor profile (they can run their own queue too)
+   * Staff created by a clinic use Doctor Login only (not Clinic Login).
+   */
+  static async assertProviderPortalAccess(
+    userId: string,
+    portal?: string | null,
+  ) {
+    const normalized =
+      portal === "clinic" || portal === "doctor" ? portal : null;
+    if (!normalized) return;
+
+    const memberships = await prisma.practiceMember.findMany({
+      where: { userId, isActive: true },
+      include: { practice: { select: { type: true } } },
+    });
+
+    const isClinicAdmin = memberships.some(
+      (m) =>
+        (m.role === "PRACTICE_OWNER" || m.role === "PRACTICE_ADMIN") &&
+        (m.practice.type === "CLINIC" || m.practice.type === "MEDICAL_CENTER"),
+    );
+    const isPracticingDoctor = memberships.some(
+      (m) => m.role === "DOCTOR" || m.practice.type === "SOLO",
+    );
+
+    if (normalized === "clinic") {
+      if (!isClinicAdmin) {
+        throw new AppError(
+          403,
+          "Clinic Login is for clinic owners and admins only. Doctors added by a clinic should use Doctor Login.",
+        );
+      }
+      return;
+    }
+
+    // portal === "doctor"
+    // Allow: solo / staff doctors, and clinic owners who practice.
+    if (isPracticingDoctor || isClinicAdmin) return;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { createdBy: true, doctor: { select: { id: true } } },
+    });
+    if (user?.createdBy === "clinic_owner_signup" && !memberships.length) {
+      throw new AppError(
+        403,
+        "Finish clinic registration, then use Clinic Login.",
+      );
+    }
+    // Brand-new independent doctor mid-signup may have no membership yet.
+    if (user?.doctor) return;
+
+    throw new AppError(
+      403,
+      "No practice linked to this doctor account. Complete registration or ask your clinic to add you from their dashboard.",
+    );
+  }
+
   static async login(
-    credentials: { email: string; password: string; role?: string },
+    credentials: {
+      email: string
+      password: string
+      role?: string
+      portal?: string
+    },
     res: Response,
   ) {
     const expectedRole = credentials.role ? normalizeAuthRole(credentials.role) : null;
@@ -153,11 +230,18 @@ export class AuthService {
           : expectedRole === "admin"
             ? "This account is not an admin account. Use the correct portal."
             : user!.role === "doctor"
-              ? "This account is a doctor account. Use Doctor Login instead."
+              ? "This account is a doctor account. Use Doctor Login or Clinic Login."
               : user!.role === "admin"
                 ? "This account is an admin account. Use Admin Login instead."
                 : "This account is a patient account. Use Patient Login instead.";
       throw new AppError(403, hint);
+    }
+
+    if (user!.role === "doctor") {
+      await AuthService.assertProviderPortalAccess(
+        user!.id,
+        credentials.portal,
+      );
     }
 
     const tokenResult = getUserToken(user!);
@@ -315,6 +399,9 @@ export class AuthService {
       patientsPerSlot: number;
       appointmentValidityDays?: number;
       phone?: string;
+      address?: string;
+      city?: string;
+      consultationFee?: number;
     },
     res: Response,
   ) {
@@ -362,6 +449,11 @@ export class AuthService {
     );
     const mode = input.bookingType === "TOKEN" ? "TOKEN_BASED" : "TIME_BASED";
     const phone = input.phone?.trim() || null;
+    const address = input.address?.trim() || "To be updated";
+    const city = input.city?.trim() || "India";
+    const feeRaw = Number(input.consultationFee);
+    const consultationFee =
+      Number.isFinite(feeRaw) && feeRaw > 0 ? feeRaw : 500;
 
     const hospital = await AuthService.ensureIndependentHospital();
     const availableTimes = `${workingDays.join(",")}|${input.startTime}-${input.endTime}`;
@@ -407,14 +499,23 @@ export class AuthService {
         slug,
         type: "SOLO",
         specialty: "General",
+        consultationFee,
         phone,
         email,
         registrationNo: licenseNo,
+        isDirectoryListed: false,
+        faqKb: {
+          address: `${address}, ${city}`,
+          fee: `₹${consultationFee}`,
+          timings: `${workingDays.join(",")}|${input.startTime}-${input.endTime}`,
+          parking: "Ask the clinic for parking details.",
+          documents: "Bring a valid ID and any prior reports if you have them.",
+        },
         locations: {
           create: {
             name: "Main Clinic",
-            address: "To be updated",
-            city: "India",
+            address,
+            city,
           },
         },
         members: {
@@ -459,6 +560,50 @@ export class AuthService {
       })),
     });
 
+    // Independent doctors start a free trial so the dashboard is ready immediately.
+    try {
+      const plan = await prisma.docLinePlan.findFirst({
+        where: { isActive: true },
+        orderBy: { priceMonthlyInr: "asc" },
+      });
+      if (plan) {
+        const { BillingService } = await import("./procto/billing.service.js");
+        await BillingService.selectPlan(practice.id, plan.id, user.id, "trial");
+      }
+    } catch {
+      // Practice + schedules already exist; subscription can be finished later.
+    }
+
+    // Auto-add registration Tel to Meta WABA phone list (+ GlucoGuide number pool).
+    if (phone) {
+      void import("./procto/metaWhatsApp.service.js")
+        .then(({ MetaWhatsAppService }) =>
+          MetaWhatsAppService.ensurePhoneListedAtRegistration({
+            practiceId: practice.id,
+            phoneNumber: phone,
+            displayName: practice.name,
+          }),
+        )
+        .then((r) => {
+          if (r.ok) {
+            console.log(
+              `[Meta] doctor registration phone ${phone} → ${r.mode}` +
+                (r.phoneNumberId ? ` id=${r.phoneNumberId}` : ""),
+            );
+          } else {
+            console.warn(
+              `[Meta] doctor registration phone ${phone} deferred: ${r.message}`,
+            );
+          }
+        })
+        .catch((err) =>
+          console.warn(
+            "[Meta] doctor registration phone provision failed:",
+            err instanceof Error ? err.message : err,
+          ),
+        );
+    }
+
     const sessionUser = {
       id: user.id,
       email: user.email,
@@ -472,6 +617,7 @@ export class AuthService {
       ...tokenResult.responseBody,
       practiceId: practice.id,
       practiceSlug: practice.slug,
+      practiceType: "SOLO",
     });
   }
 }

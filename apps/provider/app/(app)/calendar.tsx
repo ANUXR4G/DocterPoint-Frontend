@@ -15,9 +15,10 @@ import {
   ErrorText,
   PageTitle,
   StatusBadge,
+  SurfaceCard,
 } from "@/components/ui";
-import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
-import { usePractice } from "@/lib/practiceContext";
+import { PremiumAtmosphere, PremiumCard } from "@/components/mobile/PremiumChrome";
+import { selfProviderScope, usePractice } from "@/lib/practiceContext";
 import { fetchPracticeBookings } from "@/lib/procto";
 import { whenLabel, type BookingRow } from "@/lib/types";
 import {
@@ -37,16 +38,16 @@ import { applyLiveBookingEvent } from "@/lib/liveBooking";
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function bookingDayKey(b: BookingRow) {
-  return (
-    b.sessionDate?.slice(0, 10) ||
-    (b.slotStart ? ymd(new Date(b.slotStart)) : "")
-  );
+  if (b.sessionDate) return b.sessionDate.slice(0, 10);
+  if (b.slotStart) return ymd(new Date(b.slotStart));
+  return "";
 }
 
 export default function CalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { practiceId, membership } = usePractice();
+  const selfProviderId = selfProviderScope(membership);
   const [anchor, setAnchor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => ymd(new Date()));
   const [rows, setRows] = useState<BookingRow[]>([]);
@@ -61,7 +62,11 @@ export default function CalendarScreen() {
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!practiceId) return;
-      const res = await fetchPracticeBookings(practiceId, { from, to });
+      const res = await fetchPracticeBookings(practiceId, {
+        from,
+        to,
+        providerId: selfProviderId,
+      });
       if (res.status === "successful") {
         setRows((res.data as BookingRow[]) ?? []);
         if (!opts?.silent) setError("");
@@ -69,7 +74,7 @@ export default function CalendarScreen() {
         setError(res.message || "Could not load calendar");
       }
     },
-    [practiceId, from, to],
+    [practiceId, from, to, selfProviderId],
   );
 
   function scheduleSoftRefresh() {
@@ -107,7 +112,12 @@ export default function CalendarScreen() {
           incoming,
         );
         if (needsRefresh) scheduleSoftRefresh();
-        return next;
+        if (!selfProviderId) return next;
+        return next.filter(
+          (b) =>
+            b.provider?.id === selfProviderId ||
+            (b as { providerId?: string }).providerId === selfProviderId,
+        );
       });
     },
     () => scheduleSoftRefresh(),
@@ -123,6 +133,15 @@ export default function CalendarScreen() {
     return map;
   }, [rows]);
 
+  // If today is empty, jump to the nearest day that has bookings.
+  useEffect(() => {
+    if (rows.length === 0) return;
+    if ((counts.get(selected) || 0) > 0) return;
+    const keys = [...counts.keys()].sort();
+    const next = keys.find((k) => k >= selected) || keys[0];
+    if (next && next !== selected) setSelected(next);
+  }, [rows, counts, selected]);
+
   const dayRows = rows.filter((b) => bookingDayKey(b) === selected);
   const selectedDate = useMemo(() => {
     const [y, m, d] = selected.split("-").map(Number);
@@ -137,8 +156,8 @@ export default function CalendarScreen() {
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + space.lg,
-            paddingBottom: dockClearance + 24,
+            paddingTop: space.lg,
+            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
           },
         ]}
         refreshControl={
@@ -180,57 +199,59 @@ export default function CalendarScreen() {
 
         <Text style={styles.monthTitle}>{formatMonthTitle(anchor)}</Text>
 
-        <View style={styles.weekHead}>
-          {WEEKDAY_LABELS.map((d) => (
-            <Text key={d} style={styles.weekHeadText}>
-              {d}
-            </Text>
-          ))}
-        </View>
+        <PremiumCard style={styles.monthCard}>
+          <View style={styles.weekHead}>
+            {WEEKDAY_LABELS.map((d) => (
+              <Text key={d} style={styles.weekHeadText}>
+                {d}
+              </Text>
+            ))}
+          </View>
 
-        <View style={styles.grid}>
-          {Array.from({ length: Math.ceil(grid.length / 7) }, (_, week) => (
-            <View key={week} style={styles.gridRow}>
-              {grid.slice(week * 7, week * 7 + 7).map((day) => {
-                const key = ymd(day);
-                const inMonth = isSameMonth(day, anchor);
-                const active = key === selected;
-                const isToday = isSameDay(day, new Date());
-                const n = counts.get(key) || 0;
-                return (
-                  <Pressable
-                    key={key}
-                    onPress={() => setSelected(key)}
-                    style={[
-                      styles.cell,
-                      !inMonth && styles.cellMuted,
-                      active && styles.cellActive,
-                      isToday && !active && styles.cellToday,
-                    ]}
-                  >
-                    <Text
+          <View style={styles.grid}>
+            {Array.from({ length: Math.ceil(grid.length / 7) }, (_, week) => (
+              <View key={week} style={styles.gridRow}>
+                {grid.slice(week * 7, week * 7 + 7).map((day) => {
+                  const key = ymd(day);
+                  const inMonth = isSameMonth(day, anchor);
+                  const active = key === selected;
+                  const isToday = isSameDay(day, new Date());
+                  const n = counts.get(key) || 0;
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => setSelected(key)}
                       style={[
-                        styles.cellNum,
-                        !inMonth && styles.cellNumMuted,
-                        active && styles.cellNumActive,
+                        styles.cell,
+                        !inMonth && styles.cellMuted,
+                        active && styles.cellActive,
+                        isToday && !active && styles.cellToday,
                       ]}
                     >
-                      {day.getDate()}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.cellCount,
-                        active && styles.cellNumActive,
-                      ]}
-                    >
-                      {n ? `${n}` : "·"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </View>
+                      <Text
+                        style={[
+                          styles.cellNum,
+                          !inMonth && styles.cellNumMuted,
+                          active && styles.cellNumActive,
+                        ]}
+                      >
+                        {day.getDate()}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.cellCount,
+                          active && styles.cellNumActive,
+                        ]}
+                      >
+                        {n ? `${n}` : "·"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </PremiumCard>
 
         <ErrorText text={error} />
 
@@ -239,10 +260,9 @@ export default function CalendarScreen() {
           <EmptyState text="No appointments this day." />
         ) : (
           dayRows.map((b) => (
-            <Pressable
+            <SurfaceCard
               key={b.id}
               onPress={() => router.push(`/(app)/visit/${b.id}`)}
-              style={styles.card}
             >
               <View style={styles.row}>
                 <Text style={styles.name}>
@@ -254,7 +274,7 @@ export default function CalendarScreen() {
                 {whenLabel(b)}
                 {b.provider?.name ? ` · ${b.provider.name}` : ""}
               </Text>
-            </Pressable>
+            </SurfaceCard>
           ))
         )}
       </ScrollView>
@@ -274,6 +294,11 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
     letterSpacing: -0.3,
   },
+  monthCard: {
+    marginBottom: space.lg,
+    paddingVertical: space.md,
+    paddingHorizontal: space.sm,
+  },
   weekHead: {
     flexDirection: "row",
     marginBottom: 6,
@@ -286,7 +311,6 @@ const styles = StyleSheet.create({
     color: colors.inkFaint,
   },
   grid: {
-    marginBottom: space.lg,
     gap: 4,
   },
   gridRow: {
@@ -295,16 +319,17 @@ const styles = StyleSheet.create({
   },
   cell: {
     flex: 1,
-    aspectRatio: 0.9,
+    aspectRatio: 0.95,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radii.sm,
+    borderRadius: radii.md,
   },
-  cellMuted: { opacity: 0.45 },
+  cellMuted: { opacity: 0.4 },
   cellActive: { backgroundColor: colors.navy },
   cellToday: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.brand,
+    backgroundColor: colors.brandLight,
   },
   cellNum: {
     fontSize: 14,
@@ -325,14 +350,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: colors.inkSoft,
     marginBottom: space.sm,
-  },
-  card: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    padding: space.lg,
-    marginBottom: space.md,
+    marginTop: space.sm,
   },
   row: {
     flexDirection: "row",
@@ -341,5 +359,5 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   name: { fontSize: 16, fontWeight: "600", color: colors.ink, flex: 1 },
-  meta: { marginTop: 6, fontSize: 13, color: colors.inkSoft },
+  meta: { marginTop: 8, fontSize: 13, color: colors.inkSoft, lineHeight: 18 },
 });

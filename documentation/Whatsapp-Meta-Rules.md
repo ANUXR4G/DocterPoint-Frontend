@@ -72,6 +72,7 @@ All are **UTILITY**, language `en`, named parameters. Create in WhatsApp Manager
 | `CLINIC_QUEUE_ALERT` | `docline_clinic_queue_alert` | Staff alert |
 | `CLINIC_CARE_MESSAGE` | `docline_clinic_care_message` | Doctor/clinic care-chat → patient (outside 24h window) |
 | `VISIT_SUMMARY` | `docline_visit_summary` | After visit complete: remarks, medicines, document count → patient WhatsApp |
+| `PRESCRIPTION_UPDATE` | `docline_prescription` | When doctor saves/updates medicines mid-visit → patient WhatsApp |
 
 Bodies live in `whatsapp.metaTemplates.ts`. Sync into DB:
 

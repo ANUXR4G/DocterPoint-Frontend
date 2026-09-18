@@ -47,3 +47,19 @@ export function providerDashboardFromContext(
 
   return providerDashboard(portal)
 }
+
+/** Sidebar / mobile menu subtitle under GlucoGuide. */
+export function dashboardBrandLabel(navRole: string | null | undefined): string {
+  switch (navRole) {
+    case "user":
+      return "Patient dashboard"
+    case "doctor":
+      return "Doctor dashboard"
+    case "clinic":
+      return "Clinic dashboard"
+    case "admin":
+      return "Admin dashboard"
+    default:
+      return "Dashboard"
+  }
+}

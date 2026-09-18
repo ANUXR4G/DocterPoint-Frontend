@@ -31,15 +31,26 @@ export function useUser<T = TPatient | TDoctor>(
           return fetchUserProfile(token)
         case "admin":
           return fetchAccount(token)
-        case "doctor":
-          return doctorServices.getDoctorProfile(token)
+        case "doctor": {
+          try {
+            return await doctorServices.getDoctorProfile(token)
+          } catch (error) {
+            const status = (error as { status?: number })?.status
+            if (status === 401) {
+              await userService.logout().catch(() => null)
+              return undefined
+            }
+            throw error
+          }
+        }
         default:
           return undefined
       }
     },
     {
       enabled: role === "user" || role === "doctor" || role === "admin",
-      select: (data) => firey.convertKeysToCamelCase(data) as T,
+      select: (data) =>
+        data ? (firey.convertKeysToCamelCase(data) as T) : undefined,
     }
   )
 

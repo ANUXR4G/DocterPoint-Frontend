@@ -68,8 +68,8 @@ function AuthPortalHeader({
         </h1>
         {subtitle(
           isRegister
-            ? "Upload a visiting card or clinic document to autofill details, then finish registration."
-            : "Manage schedules, directory listing, and the live queue.",
+            ? "Create the clinic owner account. Add doctors later from the clinic dashboard — independent doctor registrations cannot join."
+            : "Owners and admins only. Clinic-staff doctors sign in at Doctor Login.",
         )}
       </div>
     )
@@ -84,8 +84,8 @@ function AuthPortalHeader({
         </h1>
         {subtitle(
           isRegister
-            ? "Upload a visiting card or licence to autofill details, then set your schedule."
-            : "Queue, calendar, and patient bookings — separate from clinic registration.",
+            ? "Independent solo practice — clinics cannot add this account later. Clinic staff are created from the clinic dashboard."
+            : "For independent doctors and clinic-added staff. Clinic owners managing the practice use Clinic Login.",
         )}
       </div>
     )
@@ -126,14 +126,24 @@ const DEMO_CREDENTIALS: Record<
     {
       email: "dr.demo@glucoguide.com",
       password: "Demo@12345",
-      note: "Dr. Ananya Sharma Clinic",
+      note: "Clinic owner",
     },
   ],
   doctor: [
     {
+      email: "dr.solo@glucoguide.com",
+      password: "Demo@12345",
+      note: "Independent solo doctor",
+    },
+    {
+      email: "dr.staff@glucoguide.com",
+      password: "Demo@12345",
+      note: "Clinic-added staff doctor",
+    },
+    {
       email: "dr.demo@glucoguide.com",
       password: "Demo@12345",
-      note: "Dr. Ananya Sharma",
+      note: "Clinic owner (also practices)",
     },
   ],
   patient: [

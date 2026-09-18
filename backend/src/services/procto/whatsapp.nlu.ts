@@ -24,6 +24,12 @@ export type NluSlots = {
   mode?: "TIME_BASED" | "TOKEN_BASED";
   slotIndex?: number;
   rawDateText?: string;
+  /** Spoken / typed clock time, e.g. "10:30 am", "3 pm" */
+  timeText?: string;
+  preferredHour?: number; // 0-23
+  preferredMinute?: number; // 0-59
+  /** Coarse period when no clock time was given */
+  preferredPeriod?: "morning" | "afternoon" | "evening" | "night";
   name?: string;
   gender?: string;
   email?: string;
@@ -92,21 +98,19 @@ export function parsePatientDate(
   const today = startOfLocalDay(now);
   let candidate: string | undefined;
 
-  if (
-    /^(today|todays|aaj|आज)$/i.test(t) ||
-    t === "आज"
-  ) {
+  // Relative words may appear inside free speech / voice notes
+  if (/\b(today|todays|aaj)\b/i.test(t) || /आज/.test(raw)) {
     candidate = formatLocalDate(today);
   } else if (
-    /^(tomorrow|tomm?orrow|tmrw|kal|कल)$/i.test(t) ||
-    t === "कल"
+    /\b(tomorrow|tomm?orrow|tmrw|kal)\b/i.test(t) ||
+    /कल/.test(raw)
   ) {
     const d = new Date(today);
     d.setDate(d.getDate() + 1);
     candidate = formatLocalDate(d);
   } else if (
-    /^(day after( tomorrow)?|parso|परसों)$/i.test(t) ||
-    t === "परसों"
+    /\b(day after(?: tomorrow)?|parso)\b/i.test(t) ||
+    /परसों/.test(raw)
   ) {
     const d = new Date(today);
     d.setDate(d.getDate() + 2);
@@ -147,6 +151,168 @@ export function parsePatientDate(
 function normalizeDateText(text: string): string | undefined {
   const parsed = parsePatientDate(text);
   return parsed.ok ? parsed.date : undefined;
+}
+
+/**
+ * Pull clock time or day-part from free speech / voice transcripts.
+ * Examples: "10 am", "10:30pm", "at 3", "morning", "shaam", "subah".
+ */
+export function parseSpokenTime(text: string): {
+  timeText?: string;
+  preferredHour?: number;
+  preferredMinute?: number;
+  preferredPeriod?: "morning" | "afternoon" | "evening" | "night";
+} {
+  const raw = text.trim();
+  if (!raw) return {};
+  const t = raw.toLowerCase().replace(/\s+/g, " ");
+
+  // Clock before day-part so "morning at 10 am" keeps the clock time
+  const clockPatterns = [
+    // Prefer explicit am/pm
+    /\b(?:at\s+)?(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm)\b/i,
+    // "at 3" / "at 15"
+    /\bat\s+(\d{1,2})(?:[:.](\d{2}))?\b/i,
+    // "10:30" with minutes (avoid bare day numbers from dates)
+    /\b(\d{1,2})[:.](\d{2})\b/,
+  ];
+
+  for (const re of clockPatterns) {
+    const clock = re.exec(t);
+    if (!clock) continue;
+    // Skip digits that are part of a calendar date (17-03-2026 / 17/03/2026)
+    const after = t.slice(clock.index! + clock[0]!.length);
+    if (/^[\/\-.](\d{1,2})([\/\-.]|$)/.test(after)) continue;
+    const before = t.slice(0, clock.index!);
+    if (/(\d{1,2}|20\d{2})[\/\-.]\s*$/.test(before)) continue;
+
+    let hour = Number(clock[1]);
+    const minute = clock[2] ? Number(clock[2]) : 0;
+    const mer = (clock[3] || "").replace(/\./g, "").replace(/\s/g, "").toLowerCase();
+    if (!Number.isFinite(hour) || hour < 0 || hour > 23) continue;
+    if (!Number.isFinite(minute) || minute < 0 || minute > 59) continue;
+    if (mer === "pm" && hour < 12) hour += 12;
+    if (mer === "am" && hour === 12) hour = 0;
+    // Bare "at 3" in clinic speech usually means 3 PM
+    if (!mer && hour >= 1 && hour <= 6) hour += 12;
+    if (hour > 23) continue;
+    return {
+      preferredHour: hour,
+      preferredMinute: minute,
+      timeText: clock[0]!.trim(),
+    };
+  }
+
+  if (
+    /\b(morning|subah|subah\s*ko|सुबह)\b/i.test(t) ||
+    t === "सुबह"
+  ) {
+    return { preferredPeriod: "morning", timeText: "morning" };
+  }
+  if (
+    /\b(afternoon|dopahar|dophar|दोपहर)\b/i.test(t) ||
+    t === "दोपहर"
+  ) {
+    return { preferredPeriod: "afternoon", timeText: "afternoon" };
+  }
+  if (
+    /\b(evening|shaam|sham|शाम)\b/i.test(t) ||
+    t === "शाम"
+  ) {
+    return { preferredPeriod: "evening", timeText: "evening" };
+  }
+  if (/\b(night|raat|रात)\b/i.test(t) || t === "रात") {
+    return { preferredPeriod: "night", timeText: "night" };
+  }
+
+  return {};
+}
+
+/** Merge spoken time fields into slots (regex or LLM). */
+export function applySpokenTimeSlots(
+  slots: NluSlots,
+  text: string,
+): NluSlots {
+  const spoken = parseSpokenTime(text);
+  return {
+    ...slots,
+    ...(spoken.timeText && !slots.timeText
+      ? { timeText: spoken.timeText }
+      : {}),
+    ...(spoken.preferredHour != null && slots.preferredHour == null
+      ? {
+          preferredHour: spoken.preferredHour,
+          preferredMinute: spoken.preferredMinute ?? 0,
+        }
+      : {}),
+    ...(spoken.preferredPeriod && !slots.preferredPeriod
+      ? { preferredPeriod: spoken.preferredPeriod }
+      : {}),
+  };
+}
+
+/**
+ * True when STT produced noise / near-empty text — ask the patient to repeat.
+ */
+export function isUnclearVoiceTranscript(text: string): boolean {
+  const t = text
+    .trim()
+    .replace(/[.…,!?]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return true;
+  if (t.length < 2) return true;
+  // Whisper sometimes returns punctuation-only or filler
+  if (/^(uh+|um+|ah+|hmm+|mm+|haan+|ha+|ok+|okay+)$/i.test(t)) return true;
+  const letters = (t.match(/[\p{L}\p{N}]/gu) || []).length;
+  if (letters < 2) return true;
+  return false;
+}
+
+/**
+ * Pick the best open slot for a preferred clock time or day-part.
+ * Returns 0-based index into `open`, or null.
+ */
+export function matchPreferredSlotIndex(
+  open: Array<{ start: Date }>,
+  slots: Pick<
+    NluSlots,
+    "preferredHour" | "preferredMinute" | "preferredPeriod" | "timeText"
+  >,
+): number | null {
+  if (!open.length) return null;
+
+  if (slots.preferredHour != null) {
+    const targetMin =
+      slots.preferredHour * 60 + (slots.preferredMinute ?? 0);
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    open.forEach((s, i) => {
+      const mins = s.start.getHours() * 60 + s.start.getMinutes();
+      const dist = Math.abs(mins - targetMin);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    });
+    // Accept within ~75 minutes of the spoken time
+    return bestDist <= 75 ? bestIdx : null;
+  }
+
+  const period = slots.preferredPeriod;
+  if (!period) return null;
+  const ranges: Record<string, [number, number]> = {
+    morning: [6, 11],
+    afternoon: [12, 16],
+    evening: [17, 20],
+    night: [21, 23],
+  };
+  const [lo, hi] = ranges[period] ?? [0, 23];
+  const inRange = open
+    .map((s, i) => ({ i, h: s.start.getHours() }))
+    .filter((x) => x.h >= lo && x.h <= hi);
+  if (!inRange.length) return null;
+  return inRange[0]!.i;
 }
 
 function levenshtein(a: string, b: string): number {
@@ -283,6 +449,38 @@ export function exactMenuIntent(text: string): BotIntent | null {
     documents: "my_docs",
   };
   return aliases[t] ?? aliases[raw.replace(/\s+/g, "_")] ?? null;
+}
+
+/**
+ * Number shortcuts from the HELP / welcome menu (idle only).
+ * Do NOT use during doctor/slot/date pick — those use the same digits.
+ * 8 = language change (handled by caller, not a BotIntent).
+ */
+export type MenuShortcut = BotIntent | "language";
+
+export function menuNumberShortcut(text: string): MenuShortcut | null {
+  const raw = text
+    .trim()
+    .replace(/^[*`~_]+|[*`~_]+$/g, "")
+    .replace(/[\uFE0F\u20E3]/g, ""); // emoji variation / keycap
+  if (!raw) return null;
+
+  // "1", "1.", "1)", "1️⃣", "option 1"
+  const m = raw.match(/^(?:option\s*)?([1-9])(?:\s*[.)]?)?$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const map: Record<number, MenuShortcut> = {
+    1: "book",
+    2: "doctors",
+    3: "status",
+    4: "register",
+    5: "faq",
+    6: "cancel",
+    7: "reschedule",
+    8: "language",
+    9: "report",
+  };
+  return map[n] ?? null;
 }
 
 /**
@@ -436,7 +634,7 @@ export function parseSlotsRegex(text: string): NluSlots {
     slots.slotIndex = n;
   }
 
-  return slots;
+  return applySpokenTimeSlots(slots, text);
 }
 
 function coerceNlu(raw: unknown): NluResult | null {
@@ -456,6 +654,21 @@ function coerceNlu(raw: unknown): NluResult | null {
   if (typeof slotsIn.name === "string") slots.name = slotsIn.name;
   if (typeof slotsIn.gender === "string") slots.gender = slotsIn.gender;
   if (typeof slotsIn.email === "string") slots.email = slotsIn.email;
+  if (typeof slotsIn.timeText === "string") slots.timeText = slotsIn.timeText;
+  if (typeof slotsIn.preferredHour === "number") {
+    slots.preferredHour = slotsIn.preferredHour;
+  }
+  if (typeof slotsIn.preferredMinute === "number") {
+    slots.preferredMinute = slotsIn.preferredMinute;
+  }
+  if (
+    slotsIn.preferredPeriod === "morning" ||
+    slotsIn.preferredPeriod === "afternoon" ||
+    slotsIn.preferredPeriod === "evening" ||
+    slotsIn.preferredPeriod === "night"
+  ) {
+    slots.preferredPeriod = slotsIn.preferredPeriod;
+  }
   if (typeof slotsIn.rawDateText === "string") {
     slots.rawDateText = slotsIn.rawDateText;
     if (!slots.date) slots.date = normalizeDateText(slotsIn.rawDateText);
@@ -464,14 +677,18 @@ function coerceNlu(raw: unknown): NluResult | null {
 }
 
 const NLU_SYSTEM = `You are an NLU parser for a clinic WhatsApp booking bot in India.
-Patients may write in English or Hindi (Devanagari or Hinglish).
+Patients may speak or type in English or Hindi (Devanagari or Hinglish) — including messy voice transcripts.
+There is NO required message format. Extract EVERY useful slot from a single utterance.
+Examples: "book me tomorrow at 10 am with Kabir", "kal shaam wali appointment", "I need status", "mera naam Ravi hai".
 Return ONLY compact JSON: {"intent":"...","slots":{...}}
 intent must be one of: book,status,cancel,reschedule,register,doctors,help,faq,human,report,my_docs,confirm_yes,confirm_no,unknown
-slots may include: date (YYYY-MM-DD), providerName, providerIndex (1-based), mode (TIME_BASED|TOKEN_BASED), slotIndex (1-based), rawDateText, name, gender (male|female|others), email
+slots may include: date (YYYY-MM-DD), providerName, providerIndex (1-based), mode (TIME_BASED|TOKEN_BASED), slotIndex (1-based), rawDateText, timeText, preferredHour (0-23), preferredMinute (0-59), preferredPeriod (morning|afternoon|evening|night), name, gender (male|female|others), email
 Today's date context may be given. Map TODAY/TOMORROW / आज / कल to ISO dates.
+If the patient says a clock time ("10 am", "3:30 pm"), set preferredHour/preferredMinute and timeText.
+If they only say morning/afternoon/evening/night (or सुबह/दोपहर/शाम/रात), set preferredPeriod.
 REGISTER means create a patient account (sign up / new patient / रजिस्टर / पंजीकरण).
 DOCTORS means list doctors/providers at the clinic (doctor list / डॉक्टर). Accept misspellings like DOCTERS, DOKORS, DOCATORS.
-BOOK means book an appointment (बुक / अपॉइंटमेंट). Accept common typos (BOK, BOOOK, APPOINTMNET).
+BOOK means book an appointment (बुक / अपॉइंटमेंट). Accept common typos (BOK, BOOOK, APPOINTMNET). Prefer book when they mention a date/time for a visit.
 Prefer a command intent over unknown when the message is clearly a mistyped menu word.`;
 
 /** Keep WhatsApp snappy — abort slow HF/OpenAI NLU and fall back to regex. */
@@ -595,12 +812,18 @@ export async function parseUtterance(
     );
     return {
       ...llm,
-      slots: { ...regexResult.slots, ...llm.slots },
+      slots: applySpokenTimeSlots(
+        { ...regexResult.slots, ...llm.slots },
+        text,
+      ),
     };
   }
 
   console.log(`[WhatsApp NLU] llm miss → regex unknown in ${Date.now() - started}ms`);
-  return regexResult;
+  return {
+    ...regexResult,
+    slots: applySpokenTimeSlots(regexResult.slots, text),
+  };
 }
 
 /** Steps where the reply is a pick-list / yes-no / raw name-date — skip LLM. */
@@ -616,11 +839,42 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_reschedule_slot",
     "awaiting_register_name",
     "awaiting_register_gender",
+    "awaiting_register_email_opt",
     "awaiting_register_email",
     "awaiting_register_confirm",
     "awaiting_date",
   ]);
   return !structured.has(step);
+}
+
+/**
+ * Voice transcripts are free-form — use LLM unless the step is a simple YES/NO
+ * or short chip reply. Always merge regex date/time slots.
+ */
+export function shouldUseLlmForMessage(
+  step: string | undefined,
+  text: string,
+  fromVoice?: boolean,
+): boolean {
+  if (!fromVoice) return stepUsesLlm(step);
+  const confirmish = new Set([
+    "awaiting_confirm",
+    "awaiting_cancel_confirm",
+    "awaiting_register_confirm",
+    "awaiting_register_gender",
+    "awaiting_register_email_opt",
+  ]);
+  if (step && confirmish.has(step)) return false;
+  const t = text.trim();
+  if (/^(yes|y|no|n|male|female|others?|today|tomorrow)$/i.test(t)) {
+    return false;
+  }
+  if (/^(date:|slot:|provider:|reg_email_)/i.test(t)) return false;
+  // Multi-word speech → LLM; also short but content-rich ("kal 10am")
+  if (t.split(/\s+/).length >= 2) return true;
+  if (parseSpokenTime(t).preferredHour != null) return true;
+  if (parseSpokenTime(t).preferredPeriod) return true;
+  return stepUsesLlm(step);
 }
 
 export function parseDateOnly(text: string): string | undefined {

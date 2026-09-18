@@ -1,6 +1,7 @@
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { getToken } from "@/lib/api";
 import { colors } from "@/lib/theme";
 
@@ -17,11 +18,19 @@ export default function Index() {
 
   if (!ready) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+      <SafeAreaView
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.paper,
+        }}
+        edges={["top", "left", "right", "bottom"]}
+      >
         <ActivityIndicator color={colors.brand} />
-      </View>
+      </SafeAreaView>
     );
   }
 
-  return <Redirect href={authed ? "/(app)/queue" : "/(auth)/login"} />;
+  return <Redirect href={authed ? "/(app)/dashboard" : "/(auth)/login"} />;
 }

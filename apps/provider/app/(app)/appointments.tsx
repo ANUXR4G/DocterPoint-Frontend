@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -8,14 +7,17 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Chip,
   EmptyState,
   ErrorText,
   PageTitle,
   StatusBadge,
+  SurfaceCard,
 } from "@/components/ui";
-import { usePractice } from "@/lib/practiceContext";
+import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
+import { selfProviderScope, usePractice } from "@/lib/practiceContext";
 import { fetchPracticeBookings, updateBookingStatus } from "@/lib/procto";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
 import { applyLiveBookingEvent } from "@/lib/liveBooking";
@@ -27,6 +29,7 @@ import {
   ymd,
 } from "@/lib/types";
 import { colors, space } from "@/lib/theme";
+import { dockClearance } from "@/lib/dockLayout";
 
 type Scope = "all" | "upcoming" | "past" | "active" | "done";
 
@@ -71,7 +74,9 @@ function isActive(b: BookingRow) {
 
 export default function AppointmentsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { practiceId, membership } = usePractice();
+  const selfProviderId = selfProviderScope(membership);
   const [rows, setRows] = useState<BookingRow[]>([]);
   const [error, setError] = useState("");
   const [scope, setScope] = useState<Scope>("all");
@@ -90,10 +95,11 @@ export default function AppointmentsScreen() {
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!practiceId) return;
-      // Match web DoctorAppointmentsList: practice-wide ±90 days, no providerId.
+      // Clinic admins: practice-wide ±90 days. Staff doctors: own roster only.
       const res = await fetchPracticeBookings(practiceId, {
         from: range.from,
         to: range.to,
+        providerId: selfProviderId,
       });
       setRefreshing(false);
       if (res.status === "successful") {
@@ -103,7 +109,7 @@ export default function AppointmentsScreen() {
         setError(res.message || "Could not load appointments");
       }
     },
-    [practiceId, range.from, range.to],
+    [practiceId, range.from, range.to, selfProviderId],
   );
 
   function scheduleSoft() {
@@ -141,7 +147,12 @@ export default function AppointmentsScreen() {
           incoming,
         );
         if (needsRefresh) scheduleSoft();
-        return next;
+        if (!selfProviderId) return next;
+        return next.filter(
+          (b) =>
+            b.provider?.id === selfProviderId ||
+            (b as { providerId?: string }).providerId === selfProviderId,
+        );
       });
     },
     () => scheduleSoft(),
@@ -171,25 +182,37 @@ export default function AppointmentsScreen() {
   });
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            void load();
-          }}
-          tintColor={colors.brand}
+    <View style={styles.root}>
+      <PremiumAtmosphere />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: space.lg,
+            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+          },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load();
+            }}
+            tintColor={colors.brand}
+          />
+        }
+      >
+        <PageTitle
+          eyebrow={membership?.practice.name}
+          title="Appointments"
+          subtitle={
+            selfProviderId
+              ? `±90 days · your appointments only`
+              : `±90 days · clinic-wide list`
+          }
         />
-      }
-    >
-      <PageTitle
-        eyebrow={membership?.practice.name}
-        title="Appointments"
-        subtitle={`±90 days · same list as the web dashboard`}
-      />
 
       <View style={styles.chips}>
         {(
@@ -219,9 +242,8 @@ export default function AppointmentsScreen() {
           const name =
             b.patientName || b.patient?.name || b.patientPhone || "Patient";
           return (
-            <Pressable
+            <SurfaceCard
               key={b.id}
-              style={styles.card}
               onPress={() => router.push(`/(app)/visit/${b.id}`)}
             >
               <View style={styles.cardTop}>
@@ -249,37 +271,32 @@ export default function AppointmentsScreen() {
                   onPress={() => router.push(`/(app)/visit/${b.id}`)}
                 />
               </View>
-            </Pressable>
+            </SurfaceCard>
           );
         })
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: space.xl, paddingBottom: 48 },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: space.xl },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: space.md,
-  },
-  card: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    padding: space.lg,
-    marginBottom: space.md,
+    marginTop: space.sm,
+    marginBottom: 0,
   },
   cardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   name: { flex: 1, fontSize: 16, fontWeight: "600", color: colors.ink },
-  meta: { fontSize: 13, color: colors.inkSoft, marginBottom: 2 },
+  meta: { fontSize: 13, color: colors.inkSoft, marginBottom: 2, lineHeight: 18 },
 });

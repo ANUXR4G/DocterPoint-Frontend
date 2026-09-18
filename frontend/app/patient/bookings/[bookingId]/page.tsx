@@ -213,6 +213,10 @@ export default function PatientVisitPage() {
   }, [fromShared, ready])
 
   useEffect(() => {
+    setDetailLoaded(false)
+  }, [bookingId])
+
+  useEffect(() => {
     if (!bookingId) return
     if (fromShared && ready) {
       setLoading(false)
@@ -276,6 +280,11 @@ export default function PatientVisitPage() {
 
   const medicines = Array.isArray(booking.medicines) ? booking.medicines : []
   const documents = Array.isArray(booking.documents) ? booking.documents : []
+  const doctorRemarks = (
+    booking.doctorRemarks ||
+    (booking as { doctor_remarks?: string | null }).doctor_remarks ||
+    ""
+  ).trim()
   const doctor = booking.provider
   const contacts = Array.isArray(doctor?.contactNumbers)
     ? (doctor.contactNumbers as string[]).filter(Boolean)
@@ -320,7 +329,7 @@ export default function PatientVisitPage() {
       ? dash(booking.disease)
       : dash(booking.consultationType)
 
-  const isCompleted = booking.status === "COMPLETED"
+  const isCompleted = (booking.status || "").toUpperCase() === "COMPLETED"
   const practiceId =
     booking.practiceId ?? booking.practice?.id ?? null
   const canReview =
@@ -480,11 +489,11 @@ export default function PatientVisitPage() {
           </SectionCard>
 
           <SectionCard title="Doctor remarks" icon={IconNotes}>
-            {booking.status === "COMPLETED" && booking.doctorRemarks?.trim() ? (
+            {doctorRemarks ? (
               <p className="whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm leading-relaxed text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                {booking.doctorRemarks}
+                {doctorRemarks}
               </p>
-            ) : booking.status === "COMPLETED" ? (
+            ) : isCompleted ? (
               <EmptyNote>No remarks from the doctor yet.</EmptyNote>
             ) : (
               <EmptyNote>

@@ -2,6 +2,8 @@ import { prisma } from "../../db/prisma.js";
 import {
   downloadWhatsAppMedia,
   isSttConfigured,
+  sendWhatsAppInteractiveButtons,
+  sendWhatsAppInteractiveList,
   sendWhatsAppText,
   transcribeAudio,
 } from "./whatsapp.client.js";
@@ -22,13 +24,15 @@ function isIdOcrConfigured(): boolean {
   return Boolean(settings.openaiApiKey || settings.hfToken);
 }
 
-function isOcrableImageMime(mime: string): boolean {
+/** ID registration OCR — photos or PDF (first page rasterized in IdScanService). */
+function isOcrableIdMime(mime: string): boolean {
   const m = mime.toLowerCase();
   return (
     m.includes("jpeg") ||
     m.includes("jpg") ||
     m.includes("png") ||
-    m.includes("webp")
+    m.includes("webp") ||
+    m.includes("pdf")
   );
 }
 
@@ -57,6 +61,20 @@ type MetaMessage = {
   };
 };
 
+/** Prefer structured interactive ids over display titles. */
+function preferInteractiveId(id?: string, title?: string): string {
+  const trimmedId = id?.trim() || "";
+  if (
+    trimmedId.startsWith("provider:") ||
+    trimmedId.startsWith("reg_email_") ||
+    trimmedId.startsWith("date:") ||
+    trimmedId.startsWith("slot:")
+  ) {
+    return trimmedId;
+  }
+  return (title || id || "").trim();
+}
+
 /** Normalize inbound WhatsApp text from plain text, buttons, or list picks. */
 function extractInboundText(message: MetaMessage): string {
   if (message.type === "text" && message.text?.body) {
@@ -64,32 +82,36 @@ function extractInboundText(message: MetaMessage): string {
   }
   if (message.type === "button") {
     return (
-      message.button?.text?.trim() ||
       message.button?.payload?.trim() ||
+      message.button?.text?.trim() ||
       ""
     );
   }
   if (message.type === "interactive") {
     const btn = message.interactive?.button_reply;
     if (btn?.title?.trim() || btn?.id?.trim()) {
-      return (btn.title || btn.id || "").trim();
+      return preferInteractiveId(btn.id, btn.title);
     }
     const list = message.interactive?.list_reply;
     if (list?.title?.trim() || list?.id?.trim()) {
-      return (list.title || list.id || "").trim();
+      return preferInteractiveId(list.id, list.title);
     }
   }
   // Some payloads omit type but still include button/interactive
   if (message.button?.text || message.button?.payload) {
-    return (message.button.text || message.button.payload || "").trim();
+    return (
+      message.button.payload?.trim() ||
+      message.button.text?.trim() ||
+      ""
+    );
   }
   if (message.interactive?.button_reply) {
     const btn = message.interactive.button_reply;
-    return (btn.title || btn.id || "").trim();
+    return preferInteractiveId(btn.id, btn.title);
   }
   if (message.interactive?.list_reply) {
     const list = message.interactive.list_reply;
-    return (list.title || list.id || "").trim();
+    return preferInteractiveId(list.id, list.title);
   }
   return "";
 }
@@ -315,6 +337,25 @@ export const WhatsAppService = {
             `[WhatsApp STT] from=${item.from} → "${transcribedText.slice(0, 120)}"`,
           );
         }
+
+        if (!isSttConfigured()) {
+          await sendWhatsAppText(
+            item.from,
+            BotPrompts.voiceSttNotConfigured(),
+            item.phoneNumberId,
+          );
+          continue;
+        }
+
+        const { isUnclearVoiceTranscript } = await import("./whatsapp.nlu.js");
+        if (!transcribedText || isUnclearVoiceTranscript(transcribedText)) {
+          await sendWhatsAppText(
+            item.from,
+            BotPrompts.voiceUnclear(),
+            item.phoneNumberId,
+          );
+          continue;
+        }
       } else if (
         item.message.type === "image" ||
         item.message.type === "document"
@@ -449,10 +490,9 @@ export const WhatsAppService = {
             continue;
           }
 
-          // Idle + OCR-able photo + no open booking → try registration ID scan.
+          // Idle + OCR-able ID image/PDF + no open booking → try registration ID scan.
           const canFallThroughOcr =
-            !media.mimeType.toLowerCase().includes("pdf") &&
-            isOcrableImageMime(media.mimeType) &&
+            isOcrableIdMime(media.mimeType) &&
             (!earlyState.step || earlyState.step === "idle") &&
             isIdOcrConfigured();
           if (!canFallThroughOcr) {
@@ -478,7 +518,7 @@ export const WhatsAppService = {
           continue;
         }
 
-        // ID OCR (registration autofill)
+        // ID OCR (registration autofill) — JPG/PNG/WEBP/PDF
         if (!isIdOcrConfigured()) {
           await sendWhatsAppText(
             item.from,
@@ -488,7 +528,7 @@ export const WhatsAppService = {
           continue;
         }
 
-        if (!isOcrableImageMime(media.mimeType)) {
+        if (!isOcrableIdMime(media.mimeType)) {
           await sendWhatsAppText(
             item.from,
             BotPrompts.visitDocBadType(langEarly),
@@ -542,6 +582,122 @@ export const WhatsAppService = {
         idScan,
       });
 
+      // Clinic doctor pick: prefer tappable WhatsApp list (falls back to text).
+      if (result.doctorList && result.doctorList.length > 1) {
+        const listSent = await sendWhatsAppInteractiveList(
+          item.from,
+          {
+            header: "Choose a doctor",
+            body:
+              result.reply.split("\n").slice(0, 3).join("\n").slice(0, 400) ||
+              "Select your doctor (with specialization):",
+            buttonLabel: "Doctors",
+            sectionTitle: "Available doctors",
+            rows: result.doctorList.map((d, i) => ({
+              id: `provider:${i + 1}`,
+              title: d.name.replace(/^Dr\.?\s*/i, "Dr ").slice(0, 24),
+              description: (
+                d.specialty ||
+                d.detail?.replace(/^Specialization:\s*/i, "") ||
+                "General"
+              ).slice(0, 72),
+            })),
+          },
+          item.phoneNumberId,
+        );
+        if (listSent.ok && !listSent.simulated) {
+          continue;
+        }
+        // Simulated / Graph failure → send full text list so demos still work
+      }
+
+      // Next 7 working days — interactive list (reply buttons only allow 3).
+      if (result.dateList && result.dateList.length > 0) {
+        const listSent = await sendWhatsAppInteractiveList(
+          item.from,
+          {
+            header: "Choose a date",
+            body:
+              result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
+              "Pick a working day:",
+            buttonLabel: "Dates",
+            sectionTitle: "Next 7 working days",
+            rows: result.dateList.map((d) => ({
+              id: `date:${d.iso}`,
+              title: d.label.slice(0, 24),
+              description: d.iso,
+            })),
+          },
+          item.phoneNumberId,
+        );
+        if (listSent.ok && !listSent.simulated) {
+          continue;
+        }
+      }
+
+      // Time slots (4+): interactive list. ≤3 slots use replyButtons below.
+      if (result.slotList && result.slotList.length > 0) {
+        const listSent = await sendWhatsAppInteractiveList(
+          item.from,
+          {
+            header: "Choose a time",
+            body:
+              result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
+              "Pick an available slot:",
+            buttonLabel: "Slots",
+            sectionTitle: "Open times",
+            rows: result.slotList.map((s) => ({
+              id: `slot:${s.index}`,
+              title: s.label.slice(0, 24),
+              description: `Option ${s.index}`,
+            })),
+          },
+          item.phoneNumberId,
+        );
+        if (listSent.ok && !listSent.simulated) {
+          continue;
+        }
+      }
+
+      // Reschedule: pick which booking (4+)
+      if (result.bookingList && result.bookingList.length > 0) {
+        const listSent = await sendWhatsAppInteractiveList(
+          item.from,
+          {
+            header: "Choose a booking",
+            body:
+              result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
+              "Which visit should we move?",
+            buttonLabel: "Bookings",
+            sectionTitle: "Your bookings",
+            rows: result.bookingList.map((b) => ({
+              id: `booking:${b.index}`,
+              title: b.label.slice(0, 24),
+              description: `Booking ${b.index}`,
+            })),
+          },
+          item.phoneNumberId,
+        );
+        if (listSent.ok && !listSent.simulated) {
+          continue;
+        }
+      }
+
+      if (result.replyButtons && result.replyButtons.length > 0) {
+        const btnSent = await sendWhatsAppInteractiveButtons(
+          item.from,
+          {
+            body: result.reply.slice(0, 1024),
+            buttons: result.replyButtons,
+          },
+          item.phoneNumberId,
+        );
+        if (btnSent.ok && !btnSent.simulated) {
+          continue;
+        }
+        // Simulated / Graph failure → plain text with Yes/No instructions
+      }
+
       const sent = await sendWhatsAppText(item.from, result.reply, item.phoneNumberId);
       if (!sent.ok) {
         console.error(
@@ -568,7 +724,19 @@ export const WhatsAppService = {
     messageType?: "text" | "audio" | "image";
     transcribedText?: string;
     idScan?: IdScanFields;
-  }): Promise<{ reply: string }> {
+  }): Promise<{
+    reply: string;
+    doctorList?: Array<{
+      id: string;
+      name: string;
+      specialty?: string;
+      detail?: string;
+    }>;
+    replyButtons?: Array<{ id: string; title: string }>;
+    dateList?: Array<{ iso: string; label: string }>;
+    slotList?: Array<{ index: number; label: string }>;
+    bookingList?: Array<{ index: number; label: string }>;
+  }> {
     const practice = await this.resolvePracticeByNumber(
       payload.to,
       payload.phoneNumberId,
@@ -672,6 +840,7 @@ export const WhatsAppService = {
       state,
       text,
       idScan: payload.idScan,
+      fromVoice: payload.messageType === "audio",
     });
   },
 

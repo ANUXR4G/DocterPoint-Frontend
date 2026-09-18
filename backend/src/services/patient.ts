@@ -330,14 +330,15 @@ export class PatientService {
 
   /**
    * Create a patient account from WhatsApp chat.
-   * Requires a real email for the profile; patients sign in with phone OTP (not email).
+   * Email is optional — when omitted, a phone-local placeholder is stored
+   * (same pattern as OTP signup). Patients sign in with phone OTP.
    */
   static async registerViaWhatsApp(data: {
     phone: string;
     name: string;
     gender?: string;
     dateOfBirth?: string | null;
-    email: string;
+    email?: string | null;
     address?: string | null;
   }) {
     const phone = data.phone.replace(/\D/g, "").slice(-10);
@@ -387,23 +388,38 @@ export class PatientService {
       throw new AppError(400, "Please provide your full name.");
     }
 
-    const email = data.email.trim().toLowerCase();
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-      email.endsWith("@patients.glucoguide.local")
-    ) {
-      throw new AppError(
-        400,
-        "Please send your real email address (e.g. you@gmail.com).",
-      );
+    const provided = (data.email || "").trim().toLowerCase();
+    let email: string;
+    if (!provided) {
+      email = `wa${phone}@patients.glucoguide.local`;
+    } else {
+      if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(provided) ||
+        provided.endsWith("@patients.glucoguide.local")
+      ) {
+        throw new AppError(
+          400,
+          "Please send your real email address (e.g. you@gmail.com).",
+        );
+      }
+      const emailTaken = await prisma.user.findUnique({
+        where: { email: provided },
+      });
+      if (emailTaken) {
+        throw new AppError(
+          409,
+          "That email is already registered. Reply with a different email address.",
+        );
+      }
+      email = provided;
     }
 
-    const emailTaken = await prisma.user.findUnique({ where: { email } });
-    if (emailTaken) {
-      throw new AppError(
-        409,
-        "That email is already registered. Reply with a different email address.",
-      );
+    // Placeholder email is unique per phone; if somehow taken, bump once.
+    if (email.endsWith("@patients.glucoguide.local")) {
+      const taken = await prisma.user.findUnique({ where: { email } });
+      if (taken) {
+        email = `wa${phone}.${Date.now()}@patients.glucoguide.local`;
+      }
     }
 
     const gender = requireGender(data.gender);

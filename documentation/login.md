@@ -1,7 +1,16 @@
 # Demo logins (GlucoGuide)
 
-Minimal seed: **1 clinic · 1 doctor · 1 patient** (+ platform admin).  
 Password for all accounts below: **`Demo@12345`**
+
+There are **two kinds of doctors**:
+
+| Type | How they exist | Login |
+|------|----------------|-------|
+| **Independent doctor** | Self-register at `/login/doctor` → own **SOLO** practice | Doctor Login |
+| **Clinic doctor** | Created by clinic from dashboard (name/email/password) | Doctor Login |
+| **Clinic owner** | Register at `/login/clinic` | Clinic Login (Doctor Login also OK if they practice) |
+
+Independently registered doctors **cannot** be added to a clinic roster. Clinics create staff logins only from the dashboard.
 
 ## Admin — `/login` → `/admin/dashboard`
 
@@ -11,52 +20,74 @@ Password for all accounts below: **`Demo@12345`**
 
 ## Clinic portal — `/login/clinic`
 
-Same account as the doctor (SOLO practice owner):
-
-| Email | Password | Clinic |
-|-------|----------|--------|
-| `dr.demo@glucoguide.com` | `Demo@12345` | Dr. Ananya Sharma Clinic |
+| Email | Password | Role |
+|-------|----------|------|
+| `dr.demo@glucoguide.com` | `Demo@12345` | Clinic owner — Dr. Ananya Sharma Clinic |
 
 ## Doctor portal — `/login/doctor`
 
-| Email | Password | Practice |
-|-------|----------|----------|
-| `dr.demo@glucoguide.com` | `Demo@12345` | Dr. Ananya Sharma Clinic |
+| Email | Password | Role |
+|-------|----------|------|
+| `dr.solo@glucoguide.com` | `Demo@12345` | Independent solo doctor · WA **+91 99900 52082** |
+| `dr.staff@glucoguide.com` | `Demo@12345` | Clinic-added staff doctor |
+| `dr.demo@glucoguide.com` | `Demo@12345` | Clinic owner (also practices) |
+
+## Provider Expo — `apps/provider`
+
+Same credentials as web. On the login screen choose **Doctor** or **Clinic**, then sign in (or register an independent doctor / new clinic in-app). After login you land on **Home** (today metrics + quick actions), with Queue, Calendar, Patients, Analytics, and More in the dock.
 
 ## Patient — web `/login/patient` or Expo `apps/mobile`
 
-Patient login **and** Expo signup are **mobile number + WhatsApp OTP** only (from GlucoGuide `+91 99900 52082`).
+Patient login **and** Expo signup are **mobile number + WhatsApp OTP** only.
 
 | Mobile (demo) | Notes |
 |---------------|-------|
-| `9999973601` | Seeded patient `patient1@example.com` / Ravi Kumar — request OTP on login |
-
-Email/password is **not** used on patient login or mobile create-account screens. Doctor/clinic/admin still use email + `Demo@12345`.
-
-**Expo / mobile:** set `EXPO_PUBLIC_API_URL` to a reachable API (Railway or LAN IP). Restart Expo after env changes.
+| `9999973601` | Seeded patient `patient1@example.com` / Ravi Kumar |
 
 ## Browse
 
 - Find Care: `/practices`
 - Clinic profile: `/practices/dr-ananya-sharma-clinic`
-- Practice billing: `/doctor/practice?tab=billing`
+- Solo profile: `/practices/dr-priya-nair-clinic`
 
-Re-seed: `cd backend && yarn seed`
+## Re-seed
 
-## QA demo accounts (from `npx tsx scripts/qa-seed.ts`)
+```bash
+cd backend && yarn seed
+```
 
-Password for all: **`Demo@12345`**
+After re-seeding, **sign out and sign in again** (old session cookies point at wiped user IDs and show “No practice linked”).
 
-| Role | Email | Notes |
-|------|-------|-------|
-| Admin | `admin@glucoguide.com` | Platform ops |
-| Doctor A | `qa.doctor.a@glucoguide.com` | Owner of `qa-clinic-a` |
-| Doctor B | `qa.doctor.b@glucoguide.com` | Member of `qa-clinic-a` |
-| Patient A | `qa.patient.a@glucoguide.com` | Multi-status bookings + review |
-| Patient B | `qa.patient.b@glucoguide.com` | Isolation peer |
-| Patient C | `qa.patient.c@glucoguide.com` | Isolation peer |
+## Client demo — clinic WhatsApp booking (multi-doctor)
 
-Clinic profile: `/practices/qa-clinic-a`
+Clinic line (seed): patient WhatsApp → practice number ending **9876543210** (LIVE demo line).
 
-QA seed is non-destructive (upsert). Re-run: `cd backend && npx tsx scripts/qa-seed.ts`  
-Cross-role API suite: `cd backend && npx tsx scripts/qa-e2e-flow.ts`
+Use a **patient** phone (not staff). Seeded patient: `9999973601` (Ravi Kumar — already registered).
+
+**Script (≈ 60 seconds):**
+
+1. Patient: `BOOK`  
+   → Bot lists doctors with specialization (tappable *Doctors* list when Meta is connected):  
+   - Dr. Kabir Mehta — Diabetology  
+   - Dr. Ananya Sharma — Endocrinology  
+2. Patient: `1` (or tap Kabir / type `Kabir`)  
+3. Patient: `TOMORROW`  
+4. Patient: pick a slot number (or confirm token if prompted)  
+5. Patient: `YES`  
+6. Optional: `STATUS` to show the booking; open Clinic Login → Queue to show live update
+
+**Tips**
+
+- First `BOOK` skips the language gate (defaults to English) for a faster demo.  
+- `DOCTORS` shows the same specialized list anytime.  
+- After re-seed, clear any old WhatsApp conversation state or use a fresh patient number if the bot seems stuck mid-flow.  
+- Clinic portal: `dr.demo@glucoguide.com` / Doctor staff: `dr.staff@glucoguide.com` — password `Demo@12345`.
+
+## Registration Tel → Meta phone list
+
+When a clinic or independent doctor registers with a **Tel** number:
+
+1. GlucoGuide calls Meta `POST /{WHATSAPP_WABA_ID}/phone_numbers` (requires `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_WABA_ID`).
+2. The number appears on the Meta WhatsApp account phone list and as a `WhatsAppNumber` row in Admin → WhatsApp.
+3. Newly added numbers stay **VERIFYING** until SMS/voice OTP is completed in WhatsApp Manager (or Billing → Connect). Numbers already on the WABA connect as **LIVE**.
+4. Without Meta credentials (local demo), the Tel is linked as a **MOCK LIVE** line so the admin list and bot routing still work.

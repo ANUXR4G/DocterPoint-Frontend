@@ -1,8 +1,12 @@
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { GlucoBotFab } from "@/components/GlucoBotFab";
-import { FloatingDock, type FloatingDockProps } from "@/components/mobile/FloatingDock";
+import {
+  FloatingDock,
+  type FloatingDockProps,
+} from "@/components/mobile/FloatingDock";
 import { Loading } from "@/components/ui";
 import { clearSession } from "@/lib/api";
 import {
@@ -12,7 +16,6 @@ import {
 import { fetchMyPractices } from "@/lib/procto";
 import type { PracticeMembership } from "@/lib/types";
 import { colors } from "@/lib/theme";
-import { useRouter } from "expo-router";
 
 export default function AppLayout() {
   const router = useRouter();
@@ -58,17 +61,27 @@ export default function AppLayout() {
     router.replace("/(auth)/login");
   }
 
-  if (!ready) return <Loading />;
+  if (!ready) {
+    return (
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: colors.paper }}
+        edges={["top", "left", "right"]}
+      >
+        <Loading />
+      </SafeAreaView>
+    );
+  }
 
   if (!membership) {
     return (
-      <View
+      <SafeAreaView
         style={{
           flex: 1,
           justifyContent: "center",
           padding: 24,
           backgroundColor: colors.paper,
         }}
+        edges={["top", "left", "right", "bottom"]}
       >
         <Text
           style={{
@@ -96,13 +109,16 @@ export default function AppLayout() {
         >
           <Text style={{ color: "#fff", fontWeight: "700" }}>Sign out</Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <PracticeProvider value={value}>
-      <View style={{ flex: 1, backgroundColor: colors.paper }}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: colors.paper }}
+        edges={["top", "left", "right"]}
+      >
         <Tabs
           tabBar={(props) => (
             <FloatingDock {...(props as FloatingDockProps)} />
@@ -120,6 +136,8 @@ export default function AppLayout() {
               letterSpacing: -0.35,
             },
             headerTintColor: colors.navy,
+            // Root SafeAreaView already clears the status bar
+            headerStatusBarHeight: 0,
             tabBarActiveTintColor: colors.navy,
             tabBarInactiveTintColor: colors.inkSoft,
             tabBarStyle: {
@@ -133,15 +151,16 @@ export default function AppLayout() {
             },
           }}
         >
+          <Tabs.Screen name="dashboard" options={{ title: "Home" }} />
           <Tabs.Screen name="queue" options={{ title: "Today" }} />
+          <Tabs.Screen name="appointments" options={{ title: "Appts" }} />
           <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
           <Tabs.Screen name="patients" options={{ title: "Patients" }} />
-          <Tabs.Screen name="analytics" options={{ title: "Analytics" }} />
-          <Tabs.Screen name="profile" options={{ title: "More" }} />
           <Tabs.Screen
-            name="appointments"
-            options={{ href: null, title: "Appointments", headerShown: true }}
+            name="analytics"
+            options={{ href: null, title: "Analytics", headerShown: true }}
           />
+          <Tabs.Screen name="profile" options={{ title: "More" }} />
           <Tabs.Screen
             name="subscriptions"
             options={{ href: null, title: "Plans", headerShown: true }}
@@ -168,7 +187,7 @@ export default function AppLayout() {
           />
         </Tabs>
         <GlucoBotFab />
-      </View>
+      </SafeAreaView>
     </PracticeProvider>
   );
 }

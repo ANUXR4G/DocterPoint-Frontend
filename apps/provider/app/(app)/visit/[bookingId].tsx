@@ -19,7 +19,6 @@ import {
   Chip,
   ErrorText,
   Loading,
-  PageTitle,
   PrimaryButton,
   StatusBadge,
 } from "@/components/ui";
@@ -40,7 +39,7 @@ import {
   type BookingRow,
   type VisitDocument,
 } from "@/lib/types";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
 
 const TIMES = ["morning", "afternoon", "evening", "night"] as const;
 
@@ -304,70 +303,87 @@ export default function VisitScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <PageTitle
-          eyebrow={whenLabel(booking)}
-          title={patientName}
-          subtitle={booking.patientPhone}
-        />
-
-        <View style={styles.statusRow}>
-          <StatusBadge status={booking.status} />
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.patientHeader}>
-            {resolveMediaUrl(p?.imgSrc) ? (
-              <Image
-                source={{ uri: resolveMediaUrl(p?.imgSrc)! }}
-                style={styles.avatar}
-              />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarInitial}>
-                  {(patientName || "?").charAt(0).toUpperCase()}
+        <View style={styles.banner}>
+          <View style={styles.bannerHero}>
+            <View style={styles.patientHeader}>
+              {resolveMediaUrl(p?.imgSrc) ? (
+                <Image
+                  source={{ uri: resolveMediaUrl(p?.imgSrc)! }}
+                  style={styles.avatar}
+                />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Text style={styles.avatarInitial}>
+                    {(patientName || "?").charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bannerEyebrow}>
+                  {whenLabel(booking)}
+                </Text>
+                <Text style={styles.bannerName}>{patientName}</Text>
+                <Text style={styles.bannerSub}>
+                  {dash(p?.contactNumber || p?.phone || booking.patientPhone)}
+                  {" · "}
+                  Age {ageFromDob(p?.dateOfBirth)}
+                  {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
                 </Text>
               </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={styles.snapshotTitle}>Patient</Text>
-              <Text style={styles.patientName}>{patientName}</Text>
+            </View>
+            <View style={styles.statusRow}>
+              <StatusBadge status={booking.status} />
             </View>
           </View>
-          <Text style={styles.rowLabel}>Age: {ageFromDob(p?.dateOfBirth)}</Text>
-          <Text style={styles.rowLabel}>Gender: {dash(p?.gender)}</Text>
-          <Text style={styles.rowLabel}>Email: {dash(p?.email)}</Text>
-          <Text style={styles.rowLabel}>
-            Phone: {dash(p?.contactNumber || p?.phone || booking.patientPhone)}
-          </Text>
-          <Text style={styles.rowLabel}>Profession: {dash(p?.profession)}</Text>
-          <Text style={styles.rowLabel}>Address: {dash(p?.address)}</Text>
-          <View style={styles.divider} />
-          <Text style={styles.rowLabel}>
-            Problem: {booking.disease || booking.consultationType || "—"}
-          </Text>
-          <Text style={styles.rowLabel}>
-            Mode: {booking.mode?.replace(/_/g, " ") || "—"}
-          </Text>
-          <Text style={styles.rowLabel}>
-            Channel: {booking.channel?.replace(/_/g, " ") || "—"}
-          </Text>
-          {booking.tokenNumber != null ? (
-            <Text style={styles.rowLabel}>Token: #{booking.tokenNumber}</Text>
-          ) : null}
-          {booking.location ? (
+
+          <View style={styles.bannerFacts}>
             <Text style={styles.rowLabel}>
-              Location:{" "}
-              {[booking.location.name, booking.location.city]
-                .filter(Boolean)
-                .join(", ") || "—"}
+              Date of birth: {dash(p?.dateOfBirth)}
             </Text>
-          ) : null}
-          {booking.notes ? (
-            <Text style={styles.notes}>
-              Patient problem & AI brief:{"\n"}
-              {booking.notes}
+            <Text style={styles.rowLabel}>
+              Age: {ageFromDob(p?.dateOfBirth)}
             </Text>
-          ) : null}
+            <Text style={styles.rowLabel}>Gender: {dash(p?.gender)}</Text>
+            <Text style={styles.rowLabel}>Email: {dash(p?.email)}</Text>
+            <Text style={styles.rowLabel}>
+              Phone:{" "}
+              {dash(p?.contactNumber || p?.phone || booking.patientPhone)}
+            </Text>
+            <Text style={styles.rowLabel}>
+              Profession: {dash(p?.profession)}
+            </Text>
+            <Text style={styles.rowLabel}>Address: {dash(p?.address)}</Text>
+            <View style={styles.divider} />
+            <Text style={styles.rowLabel}>
+              Problem: {booking.disease || booking.consultationType || "—"}
+            </Text>
+            <Text style={styles.rowLabel}>
+              Doctor: {dash(booking.provider?.name)}
+            </Text>
+            <Text style={styles.rowLabel}>
+              Mode: {booking.mode?.replace(/_/g, " ") || "—"}
+            </Text>
+            <Text style={styles.rowLabel}>
+              Channel: {booking.channel?.replace(/_/g, " ") || "—"}
+            </Text>
+            {booking.tokenNumber != null ? (
+              <Text style={styles.rowLabel}>Token: #{booking.tokenNumber}</Text>
+            ) : null}
+            {booking.location ? (
+              <Text style={styles.rowLabel}>
+                Location:{" "}
+                {[booking.location.name, booking.location.city]
+                  .filter(Boolean)
+                  .join(", ") || "—"}
+              </Text>
+            ) : null}
+            {booking.notes ? (
+              <Text style={styles.notes}>
+                Patient problem & AI brief:{"\n"}
+                {booking.notes}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.actions}>
@@ -554,48 +570,69 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
   rootPad: { flex: 1, padding: space.xl, backgroundColor: colors.paper },
   content: { padding: space.xl, paddingBottom: 48 },
-  statusRow: { marginBottom: space.md },
-  card: {
+  banner: {
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.paperRaised,
+    marginBottom: space.md,
+    overflow: "hidden",
+  },
+  bannerHero: {
+    backgroundColor: colors.brandLight,
+    padding: space.lg,
+  },
+  bannerEyebrow: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.brand,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  bannerName: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: colors.ink,
+    letterSpacing: -0.4,
+  },
+  bannerSub: {
+    marginTop: 6,
+    fontSize: 14,
+    color: colors.inkSoft,
+    lineHeight: 20,
+  },
+  bannerFacts: {
+    padding: space.lg,
+  },
+  statusRow: { marginTop: space.sm },
+  card: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.paperRaised,
     padding: space.lg,
     marginBottom: space.md,
+    borderRadius: radii.xl,
   },
   patientHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 10,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     backgroundColor: colors.line,
   },
   avatarFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brandLight,
   },
   avatarInitial: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "700",
-    color: "#fff",
-  },
-  patientName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.ink,
-  },
-  snapshotTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.inkSoft,
-    marginBottom: 4,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    color: colors.brand,
   },
   divider: {
     height: 1,

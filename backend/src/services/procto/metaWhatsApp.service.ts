@@ -1,5 +1,6 @@
 import { settings } from "../../config/index.js";
 import { AppError } from "../../core/response.js";
+import { prisma } from "../../db/prisma.js";
 import { NumberPoolService } from "./numberPool.service.js";
 
 function digitsOnly(phone: string): string {
@@ -27,10 +28,40 @@ async function graphGet<T>(path: string, token: string): Promise<T> {
   return data;
 }
 
+async function graphPost<T>(
+  path: string,
+  token: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const res = await fetch(graphUrl(path), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json()) as T & GraphError;
+  if (!res.ok) {
+    throw new AppError(
+      502,
+      data.error?.message ?? `Meta Graph API error (${res.status})`,
+    );
+  }
+  return data;
+}
+
 type WabaPhoneRow = {
   id: string;
   display_phone_number?: string;
   verified_name?: string;
+};
+
+export type RegistrationPhoneProvisionResult = {
+  ok: boolean;
+  mode: "meta_added" | "meta_existing" | "mock" | "skipped" | "error";
+  phoneNumberId?: string | null;
+  message?: string;
 };
 
 export const MetaWhatsAppService = {
@@ -58,6 +89,189 @@ export const MetaWhatsAppService = {
       coexistenceFlow:
         settings.metaEmbeddedSignupFeature === "whatsapp_business_app_onboarding",
     };
+  },
+
+  /**
+   * Add a clinic/doctor registration Tel to the platform Meta WABA phone list
+   * (Graph POST /{waba-id}/phone_numbers). If the number is already on the WABA,
+   * resolves its Phone Number ID instead.
+   */
+  async addPhoneNumberToWaba(opts: {
+    phoneNumber: string;
+    verifiedName: string;
+    countryCode?: string;
+    wabaId?: string;
+    accessToken?: string;
+  }): Promise<{ phoneNumberId: string; created: boolean }> {
+    const token = opts.accessToken ?? settings.whatsappAccessToken;
+    const wabaId = opts.wabaId ?? settings.whatsappWabaId;
+    if (!token?.trim() || !wabaId?.trim()) {
+      throw new AppError(
+        503,
+        "WHATSAPP_ACCESS_TOKEN and WHATSAPP_WABA_ID are required to add numbers to Meta.",
+      );
+    }
+
+    const phone = digitsOnly(opts.phoneNumber);
+    if (phone.length < 10) {
+      throw new AppError(400, "phoneNumber must be a valid 10-digit mobile");
+    }
+
+    // Already on the account? Reuse — do not POST a duplicate.
+    try {
+      const existing = await this.resolvePhoneNumberId(phone, {
+        wabaId,
+        accessToken: token,
+      });
+      return { phoneNumberId: existing.phoneNumberId, created: false };
+    } catch {
+      // Not found (or lookup failed) — try creating on the WABA.
+    }
+
+    const cc = (opts.countryCode || "91").replace(/\D/g, "") || "91";
+    const verifiedName = opts.verifiedName.trim().slice(0, 100) || "Clinic";
+
+    try {
+      const created = await graphPost<{ id?: string }>(
+        `${wabaId}/phone_numbers`,
+        token,
+        {
+          cc,
+          phone_number: phone,
+          verified_name: verifiedName,
+        },
+      );
+      if (!created.id) {
+        throw new AppError(502, "Meta did not return a Phone Number ID.");
+      }
+      return { phoneNumberId: created.id, created: true };
+    } catch (err) {
+      // Race / already exists — resolve again
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/already|exist|duplicate|200000/i.test(msg)) {
+        const existing = await this.resolvePhoneNumberId(phone, {
+          wabaId,
+          accessToken: token,
+        });
+        return { phoneNumberId: existing.phoneNumberId, created: false };
+      }
+      throw err;
+    }
+  },
+
+  /**
+   * Registration hook: put the Tel on Meta's phone number list and link it in
+   * GlucoGuide. Never throws — signup must succeed even if Meta is unavailable.
+   *
+   * - Meta configured → POST (or resolve) on platform WABA, then link row
+   * - No Meta credentials → MOCK LIVE line so local demos still work
+   */
+  async ensurePhoneListedAtRegistration(opts: {
+    practiceId: string;
+    phoneNumber: string;
+    displayName: string;
+  }): Promise<RegistrationPhoneProvisionResult> {
+    const phone = digitsOnly(opts.phoneNumber);
+    if (phone.length < 10) {
+      return { ok: false, mode: "skipped", message: "Invalid phone" };
+    }
+
+    try {
+      const already = await prisma.whatsAppNumber.findUnique({
+        where: { practiceId: opts.practiceId },
+      });
+      if (already) {
+        return {
+          ok: true,
+          mode: "skipped",
+          phoneNumberId: already.wabaPhoneNumberId,
+          message: "Practice already has a WhatsApp line",
+        };
+      }
+
+      const { NumberPoolService } = await import("./numberPool.service.js");
+
+      if (!this.isAutoResolveConfigured()) {
+        // Local / demo: claim MOCK LIVE so the number appears in admin list + bot routing.
+        await NumberPoolService.linkRegistrationNumber(opts.practiceId, {
+          phoneNumber: phone,
+          displayName: opts.displayName,
+          status: "LIVE",
+          provider: "MOCK",
+          notes:
+            "Auto-linked at registration (MOCK — set WHATSAPP_ACCESS_TOKEN + WHATSAPP_WABA_ID to add to Meta).",
+        });
+        return {
+          ok: true,
+          mode: "mock",
+          message: "Linked as MOCK WhatsApp line (Meta credentials not configured).",
+        };
+      }
+
+      const { phoneNumberId, created } = await this.addPhoneNumberToWaba({
+        phoneNumber: phone,
+        verifiedName: opts.displayName,
+      });
+
+      // Newly added numbers still need OTP verification in Meta before Cloud API LIVE.
+      // Existing numbers on the WABA can go LIVE immediately via connect.
+      if (created) {
+        await NumberPoolService.linkRegistrationNumber(opts.practiceId, {
+          phoneNumber: phone,
+          displayName: opts.displayName,
+          wabaPhoneNumberId: phoneNumberId,
+          wabaId: settings.whatsappWabaId || undefined,
+          status: "VERIFYING",
+          provider: "META_CLOUD_API",
+          notes:
+            "Added to Meta WABA phone list at registration. Complete SMS/voice verification in WhatsApp Manager (or Billing → Connect) to go LIVE.",
+        });
+        return {
+          ok: true,
+          mode: "meta_added",
+          phoneNumberId,
+          message:
+            "Number added to Meta account phone list. Complete verification to go LIVE.",
+        };
+      }
+
+      await NumberPoolService.connectOwnNumber(opts.practiceId, {
+        phoneNumber: phone,
+        wabaPhoneNumberId: phoneNumberId,
+        wabaId: settings.whatsappWabaId || undefined,
+      });
+      return {
+        ok: true,
+        mode: "meta_existing",
+        phoneNumberId,
+        message: "Number already on Meta — connected to this practice.",
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[Meta] ensurePhoneListedAtRegistration practice=${opts.practiceId}:`,
+        message,
+      );
+      // Soft fallback: still show the number in our admin list for ops follow-up.
+      try {
+        const { NumberPoolService } = await import("./numberPool.service.js");
+        await NumberPoolService.linkRegistrationNumber(opts.practiceId, {
+          phoneNumber: phone,
+          displayName: opts.displayName,
+          status: "VERIFYING",
+          provider: this.isAutoResolveConfigured()
+            ? "META_CLOUD_API"
+            : "MOCK",
+          notes: `Registration queued Meta add (pending): ${message}`,
+        });
+      } catch (inner) {
+        console.warn(
+          "[Meta] linkRegistrationNumber fallback failed:",
+          inner instanceof Error ? inner.message : inner,
+        );
+      }
+      return { ok: false, mode: "error", message };
+    }
   },
 
   /** Look up Meta Phone Number ID from a clinic mobile on the platform WABA. */

@@ -139,6 +139,171 @@ export async function sendWhatsAppTemplate(
   }
 }
 
+/** Interactive list (tap-to-pick) — ideal for clinic doctor selection demos. */
+export async function sendWhatsAppInteractiveList(
+  to: string,
+  opts: {
+    body: string;
+    buttonLabel: string;
+    header?: string;
+    sectionTitle: string;
+    rows: Array<{ id: string; title: string; description?: string }>;
+  },
+  phoneNumberId?: string,
+): Promise<WhatsAppSendResult> {
+  const token = settings.whatsappAccessToken;
+  const phoneId = phoneNumberId ?? settings.whatsappPhoneNumberId;
+  const rows = opts.rows.slice(0, 10).map((r) => ({
+    id: r.id.slice(0, 200),
+    title: r.title.slice(0, 24),
+    ...(r.description
+      ? { description: r.description.slice(0, 72) }
+      : {}),
+  }));
+
+  if (!rows.length) {
+    return { ok: false, error: "no list rows" };
+  }
+
+  if (!token || !phoneId) {
+    console.log(
+      `[WhatsApp interactive list simulated] → ${to}: ${opts.body.slice(0, 120)} | rows=${rows.length}`,
+    );
+    return { ok: true, simulated: true };
+  }
+
+  const url = `https://graph.facebook.com/${settings.whatsappApiVersion}/${phoneId}/messages`;
+  const interactive: Record<string, unknown> = {
+    type: "list",
+    body: { text: opts.body.slice(0, 1024) },
+    action: {
+      button: opts.buttonLabel.slice(0, 20),
+      sections: [
+        {
+          title: opts.sectionTitle.slice(0, 24),
+          rows,
+        },
+      ],
+    },
+  };
+  if (opts.header?.trim()) {
+    interactive.header = {
+      type: "text",
+      text: opts.header.trim().slice(0, 60),
+    };
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: formatE164(to),
+        type: "interactive",
+        interactive,
+      }),
+    });
+
+    const data = (await res.json()) as {
+      messages?: { id: string }[];
+      error?: { message: string };
+    };
+
+    if (!res.ok) {
+      return { ok: false, error: data.error?.message ?? res.statusText };
+    }
+
+    return { ok: true, messageId: data.messages?.[0]?.id };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "interactive list send failed",
+    };
+  }
+}
+
+/** Interactive reply buttons (Yes/No etc.) — max 3. */
+export async function sendWhatsAppInteractiveButtons(
+  to: string,
+  opts: {
+    body: string;
+    header?: string;
+    buttons: Array<{ id: string; title: string }>;
+  },
+  phoneNumberId?: string,
+): Promise<WhatsAppSendResult> {
+  const token = settings.whatsappAccessToken;
+  const phoneId = phoneNumberId ?? settings.whatsappPhoneNumberId;
+  const buttons = opts.buttons.slice(0, 3).map((b) => ({
+    type: "reply" as const,
+    reply: {
+      id: b.id.slice(0, 256),
+      title: b.title.slice(0, 20),
+    },
+  }));
+
+  if (!buttons.length) {
+    return { ok: false, error: "no buttons" };
+  }
+
+  if (!token || !phoneId) {
+    console.log(
+      `[WhatsApp interactive buttons simulated] → ${to}: ${opts.body.slice(0, 120)} | buttons=${buttons.map((b) => b.reply.title).join(",")}`,
+    );
+    return { ok: true, simulated: true };
+  }
+
+  const url = `https://graph.facebook.com/${settings.whatsappApiVersion}/${phoneId}/messages`;
+  const interactive: Record<string, unknown> = {
+    type: "button",
+    body: { text: opts.body.slice(0, 1024) },
+    action: { buttons },
+  };
+  if (opts.header?.trim()) {
+    interactive.header = {
+      type: "text",
+      text: opts.header.trim().slice(0, 60),
+    };
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: formatE164(to),
+        type: "interactive",
+        interactive,
+      }),
+    });
+
+    const data = (await res.json()) as {
+      messages?: { id: string }[];
+      error?: { message: string };
+    };
+
+    if (!res.ok) {
+      return { ok: false, error: data.error?.message ?? res.statusText };
+    }
+
+    return { ok: true, messageId: data.messages?.[0]?.id };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error ? err.message : "interactive buttons send failed",
+    };
+  }
+}
+
 /**
  * Prefer Meta template for proactive utility alerts; fall back to free-form
  * only when simulated / template not approved yet (dev) or send fails.
