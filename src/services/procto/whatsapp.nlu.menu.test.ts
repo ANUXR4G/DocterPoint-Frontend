@@ -30,6 +30,14 @@ describe("menuNumberShortcut", () => {
     assert.equal(menuNumberShortcut("book"), null);
     assert.equal(menuNumberShortcut(""), null);
   });
+
+  it("maps interactive menu list row ids", () => {
+    assert.equal(menuNumberShortcut("menu:book"), "book");
+    assert.equal(menuNumberShortcut("menu:doctors"), "doctors");
+    assert.equal(menuNumberShortcut("menu:language"), "language");
+    assert.equal(menuNumberShortcut("menu:report"), "report");
+    assert.equal(menuNumberShortcut("menu:help"), "help");
+  });
 });
 
 describe("exactMenuIntent", () => {

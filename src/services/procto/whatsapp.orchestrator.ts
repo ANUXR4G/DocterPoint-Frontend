@@ -129,6 +129,8 @@ export type OrchestratorResult = {
   slotList?: Array<{ index: number; label: string }>;
   /** Reschedule booking pick as a tappable list (when more than 3). */
   bookingList?: Array<{ index: number; label: string }>;
+  /** Welcome / HELP menu as a tappable list (menu:book, …). */
+  menuList?: Array<{ id: string; title: string; description?: string }>;
 };
 
 function withDoctorList(
@@ -214,6 +216,71 @@ function withYesNo(reply: string): OrchestratorResult {
     replyButtons: [
       { id: "yes", title: "Yes" },
       { id: "no", title: "No" },
+    ],
+  };
+}
+
+/** English / हिंदी reply buttons on the language gate. */
+function withLanguageButtons(reply: string): OrchestratorResult {
+  return {
+    reply,
+    replyButtons: [
+      { id: "lang:en", title: "English" },
+      { id: "lang:hi", title: "हिंदी" },
+    ],
+  };
+}
+
+/** Welcome / HELP — interactive list (Meta allows ≤10 rows). */
+function withMainMenu(reply: string): OrchestratorResult {
+  return {
+    reply,
+    menuList: [
+      {
+        id: "menu:book",
+        title: "1 · Book",
+        description: "Doctor → date → slot",
+      },
+      {
+        id: "menu:doctors",
+        title: "2 · Doctors",
+        description: "See doctor list",
+      },
+      {
+        id: "menu:status",
+        title: "3 · Status",
+        description: "Upcoming visits",
+      },
+      {
+        id: "menu:register",
+        title: "4 · Register",
+        description: "Create patient profile",
+      },
+      {
+        id: "menu:faq",
+        title: "5 · FAQ",
+        description: "Clinic info & fees",
+      },
+      {
+        id: "menu:cancel",
+        title: "6 · Cancel",
+        description: "Cancel a visit",
+      },
+      {
+        id: "menu:reschedule",
+        title: "7 · Reschedule",
+        description: "Change date/time",
+      },
+      {
+        id: "menu:language",
+        title: "8 · Language",
+        description: "English / हिंदी",
+      },
+      {
+        id: "menu:report",
+        title: "9 · Report",
+        description: "Attach a document",
+      },
     ],
   };
 }
@@ -466,7 +533,7 @@ async function dispatchMenuIntent(opts: {
     }
     case "help": {
       const patient = await PatientService.findByPhone(patientPhone);
-      return { reply: BotPrompts.help(practice.name, patient?.name, lang) };
+      return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
     case "report":
       return { reply: BotPrompts.visitDocHowTo(lang) };
@@ -718,7 +785,7 @@ async function handleAwaitingDate(
   // Escape hatches so users aren't trapped if they change their mind
   if (/^(help|menu|\?)$/i.test(trimmed)) {
     const patient = await PatientService.findByPhone(patientPhone);
-    return { reply: BotPrompts.help(practice.name, patient?.name, lang) };
+    return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
   if (/^(cancel|stop|nevermind|never mind|abort)$/i.test(trimmed)) {
     await saveState(convId, idleState(state));
@@ -1454,6 +1521,7 @@ export async function runOrchestrator(input: {
     dateList: result.dateList,
     slotList: result.slotList,
     bookingList: result.bookingList,
+    menuList: result.menuList,
   };
 }
 
@@ -1494,13 +1562,12 @@ async function runOrchestratorCore(input: {
       };
       await saveState(convId, state);
       const patientAfterLang = await PatientService.findByPhone(patientPhone);
-      return {
-        reply:
-          aiDisclosure(practice.name, chosen) +
+      return withMainMenu(
+        aiDisclosure(practice.name, chosen) +
           languageSetAck(chosen) +
           "\n\n" +
           BotPrompts.welcome(practice.name, patientAfterLang?.name, chosen),
-      };
+      );
     }
 
     const trimmed = text.trim();
@@ -1524,14 +1591,14 @@ async function runOrchestratorCore(input: {
     } else {
       state = { ...state, step: "awaiting_language" };
       await saveState(convId, state);
-      return { reply: askPreferredLanguage() };
+      return withLanguageButtons(askPreferredLanguage());
     }
   }
 
   if (wantsLanguageChange(text)) {
     state = { ...state, step: "awaiting_language" };
     await saveState(convId, state);
-    return { reply: askPreferredLanguage() };
+    return withLanguageButtons(askPreferredLanguage());
   }
 
   const lang: WaLang = resolveLang(state.preferredLanguage);
@@ -1559,7 +1626,7 @@ async function runOrchestratorCore(input: {
 
     if (resumeMenuOnly) {
       const patient = await PatientService.findByPhone(patientPhone);
-      return { reply: BotPrompts.help(practice.name, patient?.name, lang) };
+      return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
     // Fall through — process BOOK / STATUS / etc. normally
   }
@@ -1596,13 +1663,18 @@ async function runOrchestratorCore(input: {
   }
 
   // Global menu commands (typed or WhatsApp button) — always win over mid-flow steps
-  // Number shortcuts (1–9) only when idle so doctor/slot picks still use digits.
+  // Digit shortcuts (1–9) only when idle so doctor/slot picks still use digits.
+  // Interactive menu:* list picks always apply (same as typing BOOK).
   const isIdleMenu = !state.step || state.step === "idle";
-  const numberShortcut = isIdleMenu ? menuNumberShortcut(text) : null;
+  const listMenuPick = /^menu:/i.test(text.trim())
+    ? menuNumberShortcut(text)
+    : null;
+  const numberShortcut =
+    listMenuPick ?? (isIdleMenu ? menuNumberShortcut(text) : null);
   if (numberShortcut === "language") {
     state = { ...state, step: "awaiting_language" };
     await saveState(convId, state);
-    return { reply: askPreferredLanguage() };
+    return withLanguageButtons(askPreferredLanguage());
   }
   const menuIntent =
     (numberShortcut as BotIntent | null) ?? exactMenuIntent(text);
@@ -1780,7 +1852,7 @@ async function runOrchestratorCore(input: {
   // Personalized help / greeting
   if (nlu.intent === "help" && (!state.step || state.step === "idle")) {
     const patient = await PatientService.findByPhone(patientPhone);
-    return { reply: BotPrompts.help(practice.name, patient?.name, lang) };
+    return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
 
   // Doctors list (available anytime — does not clear in-progress booking)
@@ -2142,7 +2214,7 @@ async function runOrchestratorCore(input: {
 
   if (nlu.intent === "help") {
     const patient = await PatientService.findByPhone(patientPhone);
-    return { reply: BotPrompts.help(practice.name, patient?.name, lang) };
+    return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
 
   const fails = (state.failedTurns ?? 0) + 1;

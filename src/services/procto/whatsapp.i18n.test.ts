@@ -33,7 +33,12 @@ describe("whatsapp language choice", () => {
     const prompt = askPreferredLanguage();
     assert.match(prompt, /preferred language/i);
     assert.match(prompt, /भाषा/);
-    assert.match(prompt, /1\. English/);
-    assert.match(prompt, /2\./);
+    assert.match(prompt, /English/);
+    assert.match(prompt, /हिंदी/);
+  });
+
+  it("accepts interactive language button ids", () => {
+    assert.equal(parseLanguageChoice("lang:en"), "en");
+    assert.equal(parseLanguageChoice("lang:hi"), "hi");
   });
 });

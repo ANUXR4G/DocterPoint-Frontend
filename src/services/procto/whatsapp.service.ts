@@ -68,7 +68,11 @@ function preferInteractiveId(id?: string, title?: string): string {
     trimmedId.startsWith("provider:") ||
     trimmedId.startsWith("reg_email_") ||
     trimmedId.startsWith("date:") ||
-    trimmedId.startsWith("slot:")
+    trimmedId.startsWith("slot:") ||
+    trimmedId.startsWith("booking:") ||
+    trimmedId.startsWith("mode:") ||
+    trimmedId.startsWith("menu:") ||
+    trimmedId.startsWith("lang:")
   ) {
     return trimmedId;
   }
@@ -608,7 +612,41 @@ export const WhatsAppService = {
         if (listSent.ok && !listSent.simulated) {
           continue;
         }
+        if (!listSent.ok) {
+          console.warn(
+            `[WhatsApp] doctor list interactive failed: ${listSent.error}`,
+          );
+        }
         // Simulated / Graph failure → send full text list so demos still work
+      }
+
+      // Welcome / HELP — tappable Menu list
+      if (result.menuList && result.menuList.length > 0) {
+        const listSent = await sendWhatsAppInteractiveList(
+          item.from,
+          {
+            header: "Main menu",
+            body:
+              result.reply.split("\n").slice(0, 6).join("\n").slice(0, 400) ||
+              "How can I help you?",
+            buttonLabel: "Menu",
+            sectionTitle: "Options",
+            rows: result.menuList.map((row) => ({
+              id: row.id,
+              title: row.title.slice(0, 24),
+              description: row.description?.slice(0, 72),
+            })),
+          },
+          item.phoneNumberId,
+        );
+        if (listSent.ok && !listSent.simulated) {
+          continue;
+        }
+        if (!listSent.ok) {
+          console.warn(
+            `[WhatsApp] menu list interactive failed: ${listSent.error}`,
+          );
+        }
       }
 
       // Next 7 working days — interactive list (reply buttons only allow 3).
@@ -632,6 +670,11 @@ export const WhatsAppService = {
         );
         if (listSent.ok && !listSent.simulated) {
           continue;
+        }
+        if (!listSent.ok) {
+          console.warn(
+            `[WhatsApp] date list interactive failed: ${listSent.error}`,
+          );
         }
       }
 
@@ -657,6 +700,11 @@ export const WhatsAppService = {
         if (listSent.ok && !listSent.simulated) {
           continue;
         }
+        if (!listSent.ok) {
+          console.warn(
+            `[WhatsApp] slot list interactive failed: ${listSent.error}`,
+          );
+        }
       }
 
       // Reschedule: pick which booking (4+)
@@ -681,6 +729,11 @@ export const WhatsAppService = {
         if (listSent.ok && !listSent.simulated) {
           continue;
         }
+        if (!listSent.ok) {
+          console.warn(
+            `[WhatsApp] booking list interactive failed: ${listSent.error}`,
+          );
+        }
       }
 
       if (result.replyButtons && result.replyButtons.length > 0) {
@@ -694,6 +747,11 @@ export const WhatsAppService = {
         );
         if (btnSent.ok && !btnSent.simulated) {
           continue;
+        }
+        if (!btnSent.ok) {
+          console.warn(
+            `[WhatsApp] reply buttons interactive failed: ${btnSent.error}`,
+          );
         }
         // Simulated / Graph failure → plain text with Yes/No instructions
       }
@@ -736,6 +794,7 @@ export const WhatsAppService = {
     dateList?: Array<{ iso: string; label: string }>;
     slotList?: Array<{ index: number; label: string }>;
     bookingList?: Array<{ index: number; label: string }>;
+    menuList?: Array<{ id: string; title: string; description?: string }>;
   }> {
     const practice = await this.resolvePracticeByNumber(
       payload.to,

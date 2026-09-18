@@ -16,9 +16,7 @@ export function resolveLang(value: unknown): WaLang {
 export function askPreferredLanguage(): string {
   return (
     "Please choose your preferred language / कृपया अपनी भाषा चुनें:\n\n" +
-    "1. English\n" +
-    "2. हिंदी (Hindi)\n\n" +
-    "Reply with *1* or *2* (or English / Hindi)."
+    "Tap *English* or *हिंदी* below (or reply *1* / *2*)."
   );
 }
 
@@ -39,6 +37,8 @@ export function parseLanguageChoice(text: string): WaLang | null {
   if (!raw) return null;
   const t = raw.toLowerCase();
 
+  if (/^lang:en$/i.test(t)) return "en";
+  if (/^lang:hi$/i.test(t)) return "hi";
   if (/^(1|one|en|eng|english)$/i.test(t)) return "en";
   if (
     /^(2|two|hin|hindi|हिंदी|हिन्दी|हिं)$/i.test(t) ||

@@ -52,7 +52,7 @@ export const BotPrompts = {
       L(
         lang,
         `${hello} Welcome to *${practiceName}*.\n\n` +
-          `How can I help you? Reply with a *number* or keyword:\n\n` +
+          `How can I help you? Tap *Menu* below (or reply with a number / keyword):\n\n` +
           `*1* · *BOOK* — pick a doctor → date → slot\n` +
           `*2* · *DOCTORS* — see the doctor list\n` +
           `*3* · *STATUS* — your upcoming visits\n` +
@@ -63,7 +63,7 @@ export const BotPrompts = {
           `*8* · *LANGUAGE* — English / हिंदी\n` +
           `*9* · *REPORT* — attach a report or document`,
         `${hello} *${practiceName}* में आपका स्वागत है।\n\n` +
-          `मैं कैसे मदद करूँ? *नंबर* या कीवर्ड से जवाब दें:\n\n` +
+          `मैं कैसे मदद करूँ? नीचे *Menu* दबाएँ (या नंबर / कीवर्ड लिखें):\n\n` +
           `*1* · *BOOK* — डॉक्टर चुनें → तारीख → स्लॉट\n` +
           `*2* · *DOCTORS* — डॉक्टर सूची\n` +
           `*3* · *STATUS* — आने वाली विज़िट\n` +
