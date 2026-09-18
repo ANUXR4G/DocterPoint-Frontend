@@ -52,27 +52,9 @@ export const BotPrompts = {
       L(
         lang,
         `${hello} Welcome to *${practiceName}*.\n\n` +
-          `How can I help you? Tap *Menu* below (or reply with a number / keyword):\n\n` +
-          `*1* · *BOOK* — pick a doctor → date → slot\n` +
-          `*2* · *DOCTORS* — see the doctor list\n` +
-          `*3* · *STATUS* — your upcoming visits\n` +
-          `*4* · *REGISTER* — create your patient profile\n` +
-          `*5* · *FAQ* — clinic info & fees\n` +
-          `*6* · *CANCEL* — cancel a visit\n` +
-          `*7* · *RESCHEDULE* — change date/time\n` +
-          `*8* · *LANGUAGE* — English / हिंदी\n` +
-          `*9* · *REPORT* — attach a report or document`,
+          `How can I help you? Tap *Menu* below to choose an option.`,
         `${hello} *${practiceName}* में आपका स्वागत है।\n\n` +
-          `मैं कैसे मदद करूँ? नीचे *Menu* दबाएँ (या नंबर / कीवर्ड लिखें):\n\n` +
-          `*1* · *BOOK* — डॉक्टर चुनें → तारीख → स्लॉट\n` +
-          `*2* · *DOCTORS* — डॉक्टर सूची\n` +
-          `*3* · *STATUS* — आने वाली विज़िट\n` +
-          `*4* · *REGISTER* — मरीज़ प्रोफ़ाइल बनाएँ\n` +
-          `*5* · *FAQ* — क्लिनिक जानकारी और फीस\n` +
-          `*6* · *CANCEL* — विज़िट रद्द करें\n` +
-          `*7* · *RESCHEDULE* — तारीख/समय बदलें\n` +
-          `*8* · *LANGUAGE* — English / हिंदी\n` +
-          `*9* · *REPORT* — रिपोर्ट या दस्तावेज़ भेजें`,
+          `मैं कैसे मदद करूँ? विकल्प चुनने के लिए नीचे *Menu* दबाएँ।`,
       )
     );
   },
@@ -102,11 +84,7 @@ export const BotPrompts = {
   },
 
   askRegisterGender(lang?: WaLang): string {
-    return L(
-      lang,
-      "What is your gender? Tap *Male*, *Female*, or *Others*.",
-      "आपका लिंग क्या है? *Male*, *Female*, या *Others* दबाएँ।",
-    );
+    return L(lang, "What is your gender?", "आपका लिंग क्या है?");
   },
 
   askRegisterEmail(lang?: WaLang): string {
@@ -121,9 +99,9 @@ export const BotPrompts = {
     return L(
       lang,
       "Would you like to add an *email* to your profile?\n" +
-        "Tap *Yes* or *No* (you always sign in with your mobile number).",
+        "(You always sign in with your mobile number.)",
       "क्या आप प्रोफ़ाइल में *ईमेल* जोड़ना चाहते हैं?\n" +
-        "*Yes* या *No* दबाएँ (लॉगिन हमेशा मोबाइल नंबर से होगा)।",
+        "(लॉगिन हमेशा मोबाइल नंबर से होगा।)",
     );
   },
 
@@ -133,10 +111,8 @@ export const BotPrompts = {
       : "";
     return L(
       lang,
-      `Confirm registration:${next}\n${summary}\n\n` +
-        `Tap *Yes* to create your account or *No* to cancel.`,
-      `रजिस्ट्रेशन कन्फ़र्म करें:${next}\n${summary}\n\n` +
-        `अकाउंट बनाने के लिए *Yes*, रद्द करने के लिए *No* दबाएँ।`,
+      `Confirm registration:${next}\n${summary}`,
+      `रजिस्ट्रेशन कन्फ़र्म करें:${next}\n${summary}`,
     );
   },
 
@@ -191,9 +167,9 @@ export const BotPrompts = {
     return L(
       lang,
       `Read from your ID — confirm registration:${next}\n${summary}\n\n` +
-        `Tap *Yes* to create your account, *No* to cancel, or send another ID photo.`,
+        `Or send another ID photo to try again.`,
       `ID से पढ़ा — रजिस्ट्रेशन कन्फ़र्म करें:${next}\n${summary}\n\n` +
-        `*Yes* से अकाउंट बनाएँ, *No* से रद्द करें, या दूसरी ID फ़ोटो भेजें।`,
+        `फिर से कोशिश के लिए दूसरी ID फ़ोटो भेज सकते हैं।`,
     );
   },
 
@@ -343,8 +319,8 @@ export const BotPrompts = {
       ? L(lang, `\n\nContinuing to book your appointment…`, `\n\nअपॉइंटमेंट बुकिंग जारी…`)
       : L(
           lang,
-          `\n\nReply *BOOK* to schedule a visit, or *HELP* for options.`,
-          `\n\nविज़िट बुक करने के लिए *BOOK*, या विकल्पों के लिए *HELP* लिखें।`,
+          `\n\nTap *Menu* below for options.`,
+          `\n\nविकल्पों के लिए नीचे *Menu* दबाएँ।`,
         );
     return (
       L(
@@ -359,17 +335,17 @@ export const BotPrompts = {
     return L(
       lang,
       `You're already registered${name ? ` as *${name}*` : ""}.\n` +
-        `Reply *BOOK* to book, *STATUS* for visits, or *HELP* for the menu.`,
+        `Tap *Menu* below for options.`,
       `आप पहले से रजिस्टर्ड हैं${name ? ` (*${name}*)` : ""}।\n` +
-        `बुक करने के लिए *BOOK*, विज़िट के लिए *STATUS*, या मेनू के लिए *HELP* लिखें।`,
+        `विकल्पों के लिए नीचे *Menu* दबाएँ।`,
     );
   },
 
   askDate(lang?: WaLang): string {
     return L(
       lang,
-      "Which date?\nTap *Dates* and pick one of the next *7 working days*, or type *DD-MM-YYYY* (e.g. *16-09-2026*).",
-      "कौन सी तारीख?\n*Dates* दबाकर अगले *7 काम के दिनों* में से चुनें, या *DD-MM-YYYY* लिखें (जैसे *16-09-2026*)।",
+      "Which date?\nTap *Dates* below to choose.",
+      "कौन सी तारीख?\nचुनने के लिए नीचे *Dates* दबाएँ।",
     );
   },
 
@@ -386,8 +362,8 @@ export const BotPrompts = {
     const hint = suggested
       ? L(
           lang,
-          `\n\n💡 Next open day on the list: *${suggested}*.`,
-          `\n\n💡 सूची में अगला खाली दिन: *${suggested}*।`,
+          `\n\n💡 Next open day: *${suggested}*.`,
+          `\n\n💡 अगला खाली दिन: *${suggested}*।`,
         )
       : "";
     return head + BotPrompts.askDate(lang) + hint;
@@ -396,8 +372,8 @@ export const BotPrompts = {
   dateInvalid(lang?: WaLang): string {
     return L(
       lang,
-      "That date isn't clear. Pick a day from the *Dates* list, or type *DD-MM-YYYY* (e.g. *15-09-2026*).",
-      "तारीख समझ नहीं आई। *Dates* सूची से चुनें, या *DD-MM-YYYY* लिखें (जैसे *15-09-2026*)।",
+      "That date isn't clear. Tap *Dates* below to choose again.",
+      "तारीख समझ नहीं आई। फिर से चुनने के लिए नीचे *Dates* दबाएँ।",
     );
   },
 
@@ -405,25 +381,25 @@ export const BotPrompts = {
     return L(
       lang,
       "I couldn't catch a clear date in your voice note.\n" +
-        "Please say something like *tomorrow at 10 am*, or pick a day from the *Dates* list.",
+        "Tap *Dates* below to choose.",
       "वॉइस नोट में तारीख साफ़ नहीं मिली।\n" +
-        "कृपया *कल सुबह 10 बजे* जैसा बोलें, या *Dates* सूची से दिन चुनें।",
+        "चुनने के लिए नीचे *Dates* दबाएँ।",
     );
   },
 
   datePast(lang?: WaLang): string {
     return L(
       lang,
-      "That date is in the past. Pick a day from the *Dates* list, or type a future *DD-MM-YYYY*.",
-      "वह तारीख बीत चुकी है। *Dates* सूची से चुनें, या आने वाली तारीख (*DD-MM-YYYY*) लिखें।",
+      "That date is in the past. Tap *Dates* below to choose a future day.",
+      "वह तारीख बीत चुकी है। आने वाला दिन चुनने के लिए नीचे *Dates* दबाएँ।",
     );
   },
 
   dateTooFar(lang?: WaLang): string {
     return L(
       lang,
-      "Please pick a date within the next 6 months — use the *Dates* list or *DD-MM-YYYY*.",
-      "कृपया अगले 6 महीनों की तारीख चुनें — *Dates* सूची या *DD-MM-YYYY*।",
+      "Please pick a date within the next 6 months — tap *Dates* below.",
+      "कृपया अगले 6 महीनों की तारीख चुनें — नीचे *Dates* दबाएँ।",
     );
   },
 
@@ -431,13 +407,13 @@ export const BotPrompts = {
     const hint = suggested
       ? L(
           lang,
-          `\nNext open day: *${suggested}* — pick it from *Dates*, or type that date.`,
-          `\nअगला खाली दिन: *${suggested}* — *Dates* से चुनें, या वह तारीख लिखें।`,
+          `\nNext open day: *${suggested}* — tap *Dates* below.`,
+          `\nअगला खाली दिन: *${suggested}* — नीचे *Dates* दबाएँ।`,
         )
       : L(
           lang,
-          "\nTry another day from the *Dates* list, or type *DD-MM-YYYY*.",
-          "\n*Dates* सूची से दूसरा दिन चुनें, या *DD-MM-YYYY* लिखें।",
+          "\nTap *Dates* below to try another day.",
+          "\nदूसरा दिन आज़माने के लिए नीचे *Dates* दबाएँ।",
         );
     return (
       L(
@@ -459,22 +435,10 @@ export const BotPrompts = {
         "इस क्लिनिक में अभी कोई डॉक्टर उपलब्ध नहीं है।",
       );
     }
-    const lines = options.map((o) => {
-      const specialty =
-        o.detail
-          ?.replace(/^Specialization:\s*/i, "")
-          .split("·")[0]
-          ?.trim() || "";
-      return specialty
-        ? `• *${o.name}* — ${specialty}`
-        : `• *${o.name}*`;
-    });
     return L(
       lang,
-      `*Choose your doctor*\n${lines.join("\n")}\n\n` +
-        `Tap *Doctors* to pick one (or type the doctor’s name).`,
-      `*अपना डॉक्टर चुनें*\n${lines.join("\n")}\n\n` +
-        `*Doctors* दबाकर चुनें (या डॉक्टर का नाम लिखें)।`,
+      "Choose your doctor — tap *Doctors* below.",
+      "अपना डॉक्टर चुनें — नीचे *Doctors* दबाएँ।",
     );
   },
 
@@ -487,45 +451,22 @@ export const BotPrompts = {
     if (!options.length) {
       return L(
         lang,
-        `No doctors are listed for *${practiceName}* right now. Reply *HELP* for options.`,
-        `*${practiceName}* के लिए अभी कोई डॉक्टर सूचीबद्ध नहीं है। विकल्पों के लिए *HELP* लिखें।`,
+        `No doctors are listed for *${practiceName}* right now. Tap *Menu* for options.`,
+        `*${practiceName}* के लिए अभी कोई डॉक्टर सूचीबद्ध नहीं है। विकल्पों के लिए *Menu* दबाएँ।`,
       );
     }
-    const lines = options.map((o) => {
-      const specialty =
-        o.detail
-          ?.replace(/^Specialization:\s*/i, "")
-          .split("·")[0]
-          ?.trim() || "";
-      return specialty
-        ? `${o.index}. *${o.name}* — ${specialty}`
-        : `${o.index}. *${o.name}*`;
-    });
     const link = clinicUrl?.trim()
       ? L(lang, `\nClinic page: ${clinicUrl.trim()}`, `\nक्लिनिक पेज: ${clinicUrl.trim()}`)
       : "";
     return L(
       lang,
-      `Doctors at *${practiceName}*:\n${lines.join("\n")}${link}\n\n` +
-        `Reply *BOOK* to schedule — you’ll pick a doctor next.`,
-      `*${practiceName}* के डॉक्टर:\n${lines.join("\n")}${link}\n\n` +
-        `बुक करने के लिए *BOOK* — अगले कदम पर डॉक्टर चुनें।`,
+      `Doctors at *${practiceName}* — tap *Doctors* below to view or pick one.${link}`,
+      `*${practiceName}* के डॉक्टर — देखने या चुनने के लिए नीचे *Doctors* दबाएँ।${link}`,
     );
   },
 
   askMode(hasToken: boolean, hasTime: boolean, lang?: WaLang): string {
-    const opts: string[] = [];
-    if (hasTime) {
-      opts.push(
-        L(lang, "• *Time slot* — pick a clock time", "• *Time slot* — समय चुनें"),
-      );
-    }
-    if (hasToken) {
-      opts.push(
-        L(lang, "• *Token* — take a queue number", "• *Token* — कतार का नंबर लें"),
-      );
-    }
-    if (!opts.length) {
+    if (!hasToken && !hasTime) {
       return L(
         lang,
         "No booking modes are configured for that day.",
@@ -534,8 +475,8 @@ export const BotPrompts = {
     }
     return L(
       lang,
-      `How would you like to book?\n${opts.join("\n")}\n\nTap a button below.`,
-      `आप कैसे बुक करना चाहेंगे?\n${opts.join("\n")}\n\nनीचे बटन दबाएँ।`,
+      "How would you like to book?",
+      "आप कैसे बुक करना चाहेंगे?",
     );
   },
 
@@ -550,11 +491,10 @@ export const BotPrompts = {
         "उस दिन कोई खाली स्लॉट नहीं। दूसरी तारीख आज़माएँ।",
       );
     }
-    const lines = slots.map((s) => `• ${s.label}`);
     return L(
       lang,
-      `Available times:\n${lines.join("\n")}\n\nTap a time button (or open *Slots*).`,
-      `उपलब्ध समय:\n${lines.join("\n")}\n\nसमय बटन दबाएँ (या *Slots* खोलें)।`,
+      "Pick a time below.",
+      "नीचे समय चुनें।",
     );
   },
 
@@ -567,26 +507,20 @@ export const BotPrompts = {
   ): string {
     return L(
       lang,
-      `Next token on ${date}: *#${token}* (${sessionStart}–${sessionEnd}).\n` +
-        `Tap *Yes* to confirm or *No* to cancel.`,
-      `${date} का अगला टोकन: *#${token}* (${sessionStart}–${sessionEnd})।\n` +
-        `कन्फ़र्म के लिए *Yes*, रद्द करने के लिए *No* दबाएँ।`,
+      `Next token on ${date}: *#${token}* (${sessionStart}–${sessionEnd}).`,
+      `${date} का अगला टोकन: *#${token}* (${sessionStart}–${sessionEnd})।`,
     );
   },
 
   askConfirm(summary: string, lang?: WaLang): string {
-    return L(
-      lang,
-      `${summary}\n\nTap *Yes* to confirm or *No* to cancel.`,
-      `${summary}\n\nकन्फ़र्म के लिए *Yes*, रद्द करने के लिए *No* दबाएँ।`,
-    );
+    return L(lang, summary, summary);
   },
 
   askCancelConfirm(summary: string, lang?: WaLang): string {
     return L(
       lang,
-      `Cancel this booking?\n${summary}\n\nTap *Yes* to cancel or *No* to keep it.`,
-      `यह बुकिंग रद्द करें?\n${summary}\n\nरद्द करने के लिए *Yes*, रखने के लिए *No* दबाएँ।`,
+      `Cancel this booking?\n${summary}`,
+      `यह बुकिंग रद्द करें?\n${summary}`,
     );
   },
 
@@ -601,19 +535,18 @@ export const BotPrompts = {
         "रीशेड्यूल करने के लिए कोई सक्रिय बुकिंग नहीं है।",
       );
     }
-    const lines = options.map((o) => `• ${o.label}`);
     return L(
       lang,
-      `Which booking should we reschedule?\n${lines.join("\n")}\n\nTap a button (or open *Bookings*).`,
-      `किस बुकिंग का समय बदलें?\n${lines.join("\n")}\n\nबटन दबाएँ (या *Bookings* खोलें)।`,
+      "Which booking should we reschedule? Choose below.",
+      "किस बुकिंग का समय बदलें? नीचे चुनें।",
     );
   },
 
   fallback(lang?: WaLang): string {
     return L(
       lang,
-      "Sorry, I didn't catch that. Reply *HELP* for options, or try REGISTER / DOCTORS / BOOK / STATUS / CANCEL / RESCHEDULE.",
-      "समझ नहीं पाया/पाई। विकल्पों के लिए *HELP* लिखें, या REGISTER / DOCTORS / BOOK / STATUS / CANCEL / RESCHEDULE आज़माएँ।",
+      "Sorry, I didn't catch that. Tap *Menu* below for options.",
+      "समझ नहीं पाया/पाई। विकल्पों के लिए नीचे *Menu* दबाएँ।",
     );
   },
 
@@ -629,17 +562,9 @@ export const BotPrompts = {
     return L(
       lang,
       "Your voice note wasn't clear enough for me to understand.\n" +
-        "Please send another voice note a bit slower, or type freely — for example:\n" +
-        "• *Book tomorrow at 10 am*\n" +
-        "• *Status*\n" +
-        "• *Register* + your name\n" +
-        "No special format needed.",
+        "Please send another voice note a bit slower, or tap *Menu* below.",
       "आपका वॉइस नोट साफ़ समझ नहीं आया।\n" +
-        "कृपया थोड़ा धीरे दूसरा वॉइस नोट भेजें, या सीधे लिखें — जैसे:\n" +
-        "• *कल सुबह 10 बजे बुक करो*\n" +
-        "• *Status*\n" +
-        "• *Register* + अपना नाम\n" +
-        "किसी खास फ़ॉर्मैट की ज़रूरत नहीं।",
+        "कृपया थोड़ा धीरे दूसरा वॉइस नोट भेजें, या नीचे *Menu* दबाएँ।",
     );
   },
 
@@ -676,8 +601,8 @@ export const BotPrompts = {
   idleReset(lang?: WaLang): string {
     return L(
       lang,
-      "Your previous chat timed out. Reply *HELP* to start again.",
-      "पिछली चैट का समय खत्म हो गया। फिर से शुरू करने के लिए *HELP* लिखें।",
+      "Your previous chat timed out. Tap *Menu* below to start again.",
+      "पिछली चैट का समय खत्म हो गया। फिर से शुरू करने के लिए नीचे *Menu* दबाएँ।",
     );
   },
 
@@ -685,16 +610,16 @@ export const BotPrompts = {
   bookingConfirmed(practiceName: string, detail: string, lang?: WaLang): string {
     return L(
       lang,
-      `✅ Booked at *${practiceName}*.\n${detail}\n\n*STATUS* · *CANCEL* · *RESCHEDULE*`,
-      `✅ *${practiceName}* पर बुकिंग हो गई।\n${detail}\n\n*STATUS* · *CANCEL* · *RESCHEDULE*`,
+      `✅ Booked at *${practiceName}*.\n${detail}\n\nTap *Menu* for more options.`,
+      `✅ *${practiceName}* पर बुकिंग हो गई।\n${detail}\n\nऔर विकल्पों के लिए *Menu* दबाएँ।`,
     );
   },
 
   canceled(lang?: WaLang): string {
     return L(
       lang,
-      "✅ Cancelled. Reply *BOOK* for a new visit.",
-      "✅ रद्द हो गई। नई विज़िट के लिए *BOOK* लिखें।",
+      "✅ Cancelled. Tap *Menu* below for options.",
+      "✅ रद्द हो गई। विकल्पों के लिए नीचे *Menu* दबाएँ।",
     );
   },
 
@@ -729,8 +654,8 @@ export const BotPrompts = {
   registrationCanceled(lang?: WaLang): string {
     return L(
       lang,
-      "Registration canceled. Reply *REGISTER* or *BOOK* when ready.",
-      "रजिस्ट्रेशन रद्द। तैयार होने पर *REGISTER* या *BOOK* लिखें।",
+      "Registration canceled. Tap *Menu* below when you're ready.",
+      "रजिस्ट्रेशन रद्द। तैयार होने पर नीचे *Menu* दबाएँ।",
     );
   },
 

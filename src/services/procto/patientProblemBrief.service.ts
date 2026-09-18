@@ -80,11 +80,10 @@ export async function buildDoctorVisitBrief(
     return { brief: fallbackBrief(raw), source: "fallback" };
   }
 
-  // Prefer HF/DeepSeek first when OpenAI is out of credits (common locally).
-  // OpenAI stays as a fallback if other providers miss.
+  // Prefer OpenAI first (billing restored); HF / DeepSeek remain as fallbacks.
   const providers = llmChatProviders().slice().sort((a, b) => {
     const rank = (p: { label: string }) =>
-      /openai/i.test(p.label) ? 2 : /huggingface/i.test(p.label) ? 0 : 1;
+      /openai/i.test(p.label) ? 0 : /deepseek/i.test(p.label) ? 1 : 2;
     return rank(a) - rank(b);
   });
   console.info(
@@ -93,8 +92,7 @@ export async function buildDoctorVisitBrief(
 
   for (const provider of providers) {
     const controller = new AbortController();
-    // OpenAI credit failures are fast; keep HF cold-starts under ~20s.
-    const timeoutMs = /openai/i.test(provider.label) ? 10_000 : 20_000;
+    const timeoutMs = /openai/i.test(provider.label) ? 20_000 : 25_000;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const isHuggingFace = /huggingface/i.test(provider.label);

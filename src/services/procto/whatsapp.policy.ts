@@ -30,7 +30,7 @@ function looksLikeBotMenu(reply: string): boolean {
     /\*(REGISTER|BOOK|DOCTORS|STATUS|FAQ|RESCHEDULE|CANCEL|REPORT|MY DOCS|LANGUAGE)\*/i.test(
       reply,
     ) ||
-    /\bWelcome to\b|\bमें आपका स्वागत है\b|\bHow can I help you\b|\bमैं कैसे मदद करूँ\b/i.test(
+    /\bWelcome to\b|\bमें आपका स्वागत है\b|\bHow can I help you\b|\bमैं कैसे मदद करूँ\b|\bTap \*Menu\*|नीचे \*Menu\*/i.test(
       reply,
     )
   );
