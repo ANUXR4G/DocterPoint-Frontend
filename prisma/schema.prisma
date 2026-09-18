@@ -517,6 +517,8 @@ model WhatsAppNumber {
   displayNameStatus  String?              @map("display_name_status")
   templatesStatus    String?              @map("templates_status")
   activatedAt        DateTime?            @map("activated_at") @db.Timestamptz(6)
+  /// 6-digit Meta Cloud API two-step PIN used at /register after OTP verify.
+  twoStepPin         String?              @map("two_step_pin") @db.VarChar(6)
   notes              String?
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

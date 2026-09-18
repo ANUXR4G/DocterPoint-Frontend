@@ -55,7 +55,14 @@ type WabaPhoneRow = {
   id: string;
   display_phone_number?: string;
   verified_name?: string;
+  code_verification_status?: string;
 };
+
+function generateTwoStepPin(): string {
+  const fromEnv = settings.whatsappTwoStepPin;
+  if (fromEnv.length === 6) return fromEnv;
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
 
 export type RegistrationPhoneProvisionResult = {
   ok: boolean;
@@ -164,6 +171,7 @@ export const MetaWhatsAppService = {
    * GlucoGuide. Never throws — signup must succeed even if Meta is unavailable.
    *
    * - Meta configured → POST (or resolve) on platform WABA, then link row
+   * - New numbers → VERIFYING + auto SMS OTP (complete in-app)
    * - No Meta credentials → MOCK LIVE line so local demos still work
    */
   async ensurePhoneListedAtRegistration(opts: {
@@ -192,7 +200,6 @@ export const MetaWhatsAppService = {
       const { NumberPoolService } = await import("./numberPool.service.js");
 
       if (!this.isAutoResolveConfigured()) {
-        // Local / demo: claim MOCK LIVE so the number appears in admin list + bot routing.
         await NumberPoolService.linkRegistrationNumber(opts.practiceId, {
           phoneNumber: phone,
           displayName: opts.displayName,
@@ -213,9 +220,8 @@ export const MetaWhatsAppService = {
         verifiedName: opts.displayName,
       });
 
-      // Newly added numbers still need OTP verification in Meta before Cloud API LIVE.
-      // Existing numbers on the WABA can go LIVE immediately via connect.
       if (created) {
+        const pin = generateTwoStepPin();
         await NumberPoolService.linkRegistrationNumber(opts.practiceId, {
           phoneNumber: phone,
           displayName: opts.displayName,
@@ -223,36 +229,64 @@ export const MetaWhatsAppService = {
           wabaId: settings.whatsappWabaId || undefined,
           status: "VERIFYING",
           provider: "META_CLOUD_API",
+          twoStepPin: pin,
           notes:
-            "Added to Meta WABA phone list at registration. Complete SMS/voice verification in WhatsApp Manager (or Billing → Connect) to go LIVE.",
+            "Added to Meta WABA at registration. Complete in-app SMS/voice OTP to go LIVE.",
         });
+
+        // Best-effort: send OTP immediately so the clinic can verify without WhatsApp Manager.
+        try {
+          await this.requestPhoneVerificationCode(phoneNumberId, {
+            method: "SMS",
+          });
+        } catch (otpErr) {
+          console.warn(
+            `[Meta] auto request_code failed for ${phoneNumberId}:`,
+            otpErr instanceof Error ? otpErr.message : otpErr,
+          );
+        }
+
         return {
           ok: true,
           mode: "meta_added",
           phoneNumberId,
           message:
-            "Number added to Meta account phone list. Complete verification to go LIVE.",
+            "Number added to Meta. Enter the SMS OTP in Billing → WhatsApp to go LIVE.",
         };
       }
 
-      await NumberPoolService.connectOwnNumber(opts.practiceId, {
-        phoneNumber: phone,
-        wabaPhoneNumberId: phoneNumberId,
-        wabaId: settings.whatsappWabaId || undefined,
-      });
-      return {
-        ok: true,
-        mode: "meta_existing",
-        phoneNumberId,
-        message: "Number already on Meta — connected to this practice.",
-      };
+      // Already on WABA — try register + LIVE (may already be verified).
+      try {
+        await this.finishVerifiedNumberGoLive(opts.practiceId, {
+          phoneNumber: phone,
+          phoneNumberId,
+          displayName: opts.displayName,
+        });
+        return {
+          ok: true,
+          mode: "meta_existing",
+          phoneNumberId,
+          message: "Number already on Meta — connected and LIVE.",
+        };
+      } catch {
+        await NumberPoolService.connectOwnNumber(opts.practiceId, {
+          phoneNumber: phone,
+          wabaPhoneNumberId: phoneNumberId,
+          wabaId: settings.whatsappWabaId || undefined,
+        });
+        return {
+          ok: true,
+          mode: "meta_existing",
+          phoneNumberId,
+          message: "Number already on Meta — connected to this practice.",
+        };
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(
         `[Meta] ensurePhoneListedAtRegistration practice=${opts.practiceId}:`,
         message,
       );
-      // Soft fallback: still show the number in our admin list for ops follow-up.
       try {
         const { NumberPoolService } = await import("./numberPool.service.js");
         await NumberPoolService.linkRegistrationNumber(opts.practiceId, {
@@ -272,6 +306,248 @@ export const MetaWhatsAppService = {
       }
       return { ok: false, mode: "error", message };
     }
+  },
+
+  /** Request SMS/VOICE OTP for a Meta Phone Number ID. */
+  async requestPhoneVerificationCode(
+    phoneNumberId: string,
+    opts?: { method?: "SMS" | "VOICE"; language?: string; accessToken?: string },
+  ): Promise<{ ok: true }> {
+    const token = opts?.accessToken ?? settings.whatsappAccessToken;
+    if (!token?.trim()) {
+      throw new AppError(503, "WHATSAPP_ACCESS_TOKEN is not set.");
+    }
+    const method = opts?.method === "VOICE" ? "VOICE" : "SMS";
+    const language = opts?.language || "en_US";
+    const id = phoneNumberId.trim();
+    if (!id) throw new AppError(400, "phoneNumberId is required");
+
+    await graphPost<{ success?: boolean }>(
+      `${id}/request_code?code_method=${method}&language=${encodeURIComponent(language)}`,
+      token,
+      {},
+    );
+    return { ok: true };
+  },
+
+  /** Submit OTP from request_code. */
+  async verifyPhoneCode(
+    phoneNumberId: string,
+    code: string,
+    accessToken?: string,
+  ): Promise<{ ok: true }> {
+    const token = accessToken ?? settings.whatsappAccessToken;
+    if (!token?.trim()) {
+      throw new AppError(503, "WHATSAPP_ACCESS_TOKEN is not set.");
+    }
+    const id = phoneNumberId.trim();
+    const cleaned = code.replace(/\D/g, "");
+    if (!id) throw new AppError(400, "phoneNumberId is required");
+    if (cleaned.length < 4) throw new AppError(400, "Invalid verification code");
+
+    await graphPost<{ success?: boolean }>(
+      `${id}/verify_code?code=${encodeURIComponent(cleaned)}`,
+      token,
+      {},
+    );
+    return { ok: true };
+  },
+
+  /** Register verified number for Cloud API messaging. */
+  async registerPhoneForCloudApi(
+    phoneNumberId: string,
+    pin: string,
+    accessToken?: string,
+  ): Promise<{ ok: true }> {
+    const token = accessToken ?? settings.whatsappAccessToken;
+    if (!token?.trim()) {
+      throw new AppError(503, "WHATSAPP_ACCESS_TOKEN is not set.");
+    }
+    const id = phoneNumberId.trim();
+    const pinDigits = pin.replace(/\D/g, "").slice(0, 6);
+    if (!id) throw new AppError(400, "phoneNumberId is required");
+    if (pinDigits.length !== 6) {
+      throw new AppError(400, "Two-step PIN must be 6 digits");
+    }
+
+    await graphPost<{ success?: boolean }>(`${id}/register`, token, {
+      messaging_product: "whatsapp",
+      pin: pinDigits,
+    });
+    return { ok: true };
+  },
+
+  /**
+   * Practice-owner: re-send Meta OTP for a VERIFYING line.
+   */
+  async requestOtpForPractice(
+    practiceId: string,
+    opts?: { method?: "SMS" | "VOICE" },
+  ) {
+    const row = await prisma.whatsAppNumber.findUnique({
+      where: { practiceId },
+    });
+    if (!row) throw new AppError(404, "No WhatsApp line for this practice");
+    if (row.status !== "VERIFYING") {
+      throw new AppError(
+        400,
+        `Line status is ${row.status} — OTP is only for VERIFYING numbers.`,
+      );
+    }
+    if (!row.wabaPhoneNumberId) {
+      throw new AppError(
+        400,
+        "Meta Phone Number ID missing. Re-run registration connect or contact support.",
+      );
+    }
+
+    await this.requestPhoneVerificationCode(row.wabaPhoneNumberId, {
+      method: opts?.method === "VOICE" ? "VOICE" : "SMS",
+    });
+
+    return {
+      ok: true as const,
+      phoneNumber: row.phoneNumber,
+      method: opts?.method === "VOICE" ? "VOICE" : "SMS",
+      message: `Verification code sent via ${opts?.method === "VOICE" ? "voice" : "SMS"} to +91 ${row.phoneNumber}.`,
+    };
+  },
+
+  /**
+   * Practice-owner: confirm Meta OTP → register Cloud API → LIVE.
+   */
+  async confirmOtpForPractice(practiceId: string, code: string) {
+    const row = await prisma.whatsAppNumber.findUnique({
+      where: { practiceId },
+    });
+    if (!row) throw new AppError(404, "No WhatsApp line for this practice");
+    if (row.status !== "VERIFYING") {
+      throw new AppError(
+        400,
+        `Line status is ${row.status} — OTP confirm is only for VERIFYING numbers.`,
+      );
+    }
+    if (!row.wabaPhoneNumberId) {
+      throw new AppError(400, "Meta Phone Number ID missing.");
+    }
+
+    const pin =
+      (row.twoStepPin && row.twoStepPin.length === 6
+        ? row.twoStepPin
+        : null) ||
+      (settings.whatsappTwoStepPin.length === 6
+        ? settings.whatsappTwoStepPin
+        : null) ||
+      generateTwoStepPin();
+
+    try {
+      await this.verifyPhoneCode(row.wabaPhoneNumberId, code);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Already verified on Meta — continue to register.
+      if (!/136024|already.?verif/i.test(msg)) {
+        throw err;
+      }
+    }
+
+    try {
+      await this.registerPhoneForCloudApi(row.wabaPhoneNumberId, pin);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Already registered is fine.
+      if (!/already.?regist|133016|133015/i.test(msg)) {
+        // PIN mismatch — try once with freshly generated pin only if env/default unused
+        if (/133005|pin/i.test(msg) && pin !== settings.whatsappTwoStepPin) {
+          const retryPin = generateTwoStepPin();
+          await this.registerPhoneForCloudApi(row.wabaPhoneNumberId, retryPin);
+          await prisma.whatsAppNumber.update({
+            where: { id: row.id },
+            data: { twoStepPin: retryPin },
+          });
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const { NumberPoolService } = await import("./numberPool.service.js");
+    const { WhatsAppNumberStatus } = await import("@prisma/client");
+    const updated = await NumberPoolService.advanceStatus(
+      row.id,
+      WhatsAppNumberStatus.LIVE,
+      {
+        verificationStatus: "verified",
+        displayNameStatus: "approved",
+        templatesStatus: "approved",
+        wabaPhoneNumberId: row.wabaPhoneNumberId,
+        notes: "Verified via in-app Meta OTP; registered for Cloud API.",
+      },
+    );
+
+    // Ensure PIN persisted if we generated one during confirm.
+    if (!row.twoStepPin || row.twoStepPin.length !== 6) {
+      await prisma.whatsAppNumber.update({
+        where: { id: row.id },
+        data: { twoStepPin: pin },
+      });
+    }
+
+    try {
+      const { MetaWhatsAppProvisionService } = await import(
+        "./metaWhatsApp.provision.js"
+      );
+      if (row.wabaId || settings.whatsappWabaId) {
+        await MetaWhatsAppProvisionService.syncPracticeTemplates(
+          practiceId,
+          row.wabaId || settings.whatsappWabaId,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[Meta] post-OTP template sync:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+
+    return {
+      ok: true as const,
+      status: updated.status,
+      phoneNumber: updated.phoneNumber,
+      wabaPhoneNumberId: updated.wabaPhoneNumberId,
+      message: "WhatsApp line is LIVE. Patients can message this number.",
+    };
+  },
+
+  /** Existing WABA number: register + connect LIVE without OTP UI. */
+  async finishVerifiedNumberGoLive(
+    practiceId: string,
+    opts: {
+      phoneNumber: string;
+      phoneNumberId: string;
+      displayName: string;
+    },
+  ) {
+    const pin = generateTwoStepPin();
+    try {
+      await this.registerPhoneForCloudApi(opts.phoneNumberId, pin);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/already.?regist|133016|133015/i.test(msg)) {
+        throw err;
+      }
+    }
+
+    const { NumberPoolService } = await import("./numberPool.service.js");
+    await NumberPoolService.connectOwnNumber(practiceId, {
+      phoneNumber: opts.phoneNumber,
+      wabaPhoneNumberId: opts.phoneNumberId,
+      wabaId: settings.whatsappWabaId || undefined,
+    });
+
+    await prisma.whatsAppNumber.updateMany({
+      where: { practiceId },
+      data: { twoStepPin: pin },
+    });
   },
 
   /** Look up Meta Phone Number ID from a clinic mobile on the platform WABA. */
@@ -300,7 +576,7 @@ export const MetaWhatsAppService = {
     }
 
     const payload = await graphGet<{ data: WabaPhoneRow[] }>(
-      `${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name`,
+      `${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,code_verification_status`,
       token,
     );
 

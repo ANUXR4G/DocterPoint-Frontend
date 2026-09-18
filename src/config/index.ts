@@ -89,6 +89,11 @@ export const settings = {
   whatsappAppSecret: env("WHATSAPP_APP_SECRET"),
   whatsappApiVersion: env("WHATSAPP_API_VERSION", "v21.0"),
   /**
+   * Optional default 6-digit PIN for Meta Cloud API /register when a row has no
+   * twoStepPin. Prefer per-number PIN generated at registration.
+   */
+  whatsappTwoStepPin: env("WHATSAPP_TWO_STEP_PIN", "").replace(/\D/g, "").slice(0, 6),
+  /**
    * GlucoGuide platform WhatsApp line — OTP / login only (not clinic bot lines).
    * Default: +91 99900 52082 / Meta phone number id 1378039178715653.
    */

@@ -227,13 +227,29 @@ export const MetaWhatsAppProvisionService = {
   }> {
     const total = META_UTILITY_TEMPLATES.length;
 
+    const row = await prisma.whatsAppNumber.findUnique({
+      where: { practiceId },
+      select: { status: true },
+    });
+    // Never promote VERIFYING → LIVE here; in-app Meta OTP owns that step.
+    if (row?.status === WhatsAppNumberStatus.VERIFYING) {
+      return {
+        approved: 0,
+        total,
+        templatesStatus: "pending",
+      };
+    }
+
     await prisma.messageTemplate.updateMany({
       where: { practiceId },
       data: { status: MessageTemplateStatus.APPROVED },
     });
 
     await prisma.whatsAppNumber.updateMany({
-      where: { practiceId },
+      where: {
+        practiceId,
+        status: { not: WhatsAppNumberStatus.VERIFYING },
+      },
       data: {
         templatesStatus: "approved",
         displayNameStatus: "approved",
@@ -400,21 +416,35 @@ export const MetaWhatsAppProvisionService = {
     });
     if (!row) return null;
 
-    // Always keep connected lines LIVE + templates approved (no Meta wait gate).
-    const templateCounts = await this.markTemplatesApprovedAndLive(practiceId).catch(
-      () => ({
-        approved: META_UTILITY_TEMPLATES.length,
-        total: META_UTILITY_TEMPLATES.length,
-        templatesStatus: "approved",
-      }),
-    );
+    const needsOtp =
+      row.status === WhatsAppNumberStatus.VERIFYING &&
+      Boolean(row.wabaPhoneNumberId);
+
+    // Never force VERIFYING → LIVE here; OTP confirm owns that transition.
+    let templateCounts = {
+      approved: 0,
+      total: META_UTILITY_TEMPLATES.length,
+      templatesStatus: row.templatesStatus ?? "pending",
+    };
+    if (!needsOtp && row.status !== WhatsAppNumberStatus.VERIFYING) {
+      templateCounts = await this.markTemplatesApprovedAndLive(practiceId).catch(
+        () => ({
+          approved: META_UTILITY_TEMPLATES.length,
+          total: META_UTILITY_TEMPLATES.length,
+          templatesStatus: "approved",
+        }),
+      );
+    }
 
     const latest = await prisma.whatsAppNumber.findUnique({
       where: { practiceId },
     });
 
+    const status = latest?.status ?? row.status;
+    const isLive = status === WhatsAppNumberStatus.LIVE;
+
     return {
-      status: latest?.status ?? row.status,
+      status,
       phoneNumber: row.phoneNumber,
       wabaId: row.wabaId,
       wabaPhoneNumberId: row.wabaPhoneNumberId,
@@ -424,8 +454,9 @@ export const MetaWhatsAppProvisionService = {
       templatesApproved: templateCounts.approved,
       templatesTotal: templateCounts.total,
       activatedAt: latest?.activatedAt ?? row.activatedAt,
-      botReady: true,
-      proactiveAlertsReady: true,
+      needsOtp: status === WhatsAppNumberStatus.VERIFYING,
+      botReady: isLive,
+      proactiveAlertsReady: isLive,
       metaConfigured: Boolean(platformToken()),
       embeddedSignupConfigured: Boolean(
         settings.metaAppId?.trim() &&
