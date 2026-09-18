@@ -648,6 +648,61 @@ router.get(
   },
 );
 
+/** Re-send Meta SMS/VOICE OTP for a VERIFYING registration number. */
+router.post(
+  "/:practiceId/whatsapp/verify/request",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const practiceId = param(req.params.practiceId);
+      await PracticeService.assertAdmin(practiceId, req.sessionUser!.id);
+      const method =
+        String(req.body?.method ?? "SMS").toUpperCase() === "VOICE"
+          ? "VOICE"
+          : "SMS";
+      const { MetaWhatsAppService } = await import(
+        "../../services/procto/metaWhatsApp.service.js"
+      );
+      const data = await MetaWhatsAppService.requestOtpForPractice(practiceId, {
+        method,
+      });
+      return ResponseHandler.createSuccessful(
+        res,
+        data.message,
+        data,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/** Confirm Meta OTP → Cloud API register → LIVE. */
+router.post(
+  "/:practiceId/whatsapp/verify/confirm",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const practiceId = param(req.params.practiceId);
+      await PracticeService.assertAdmin(practiceId, req.sessionUser!.id);
+      const code = String(req.body?.code ?? "").trim();
+      if (!code) {
+        return ResponseHandler.unsuccessful(res, 400, "code is required");
+      }
+      const { MetaWhatsAppService } = await import(
+        "../../services/procto/metaWhatsApp.service.js"
+      );
+      const data = await MetaWhatsAppService.confirmOtpForPractice(
+        practiceId,
+        code,
+      );
+      return ResponseHandler.createSuccessful(res, data.message, data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.post(
   "/:practiceId/whatsapp/provision/refresh",
   requireAuth("practice:write"),

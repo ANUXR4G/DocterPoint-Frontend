@@ -448,7 +448,15 @@ export class AuthService {
       Math.max(1, Number(input.appointmentValidityDays) || 7),
     );
     const mode = input.bookingType === "TOKEN" ? "TOKEN_BASED" : "TIME_BASED";
-    const phone = input.phone?.trim() || null;
+    const phoneRaw = input.phone?.trim() || "";
+    const phoneDigits = phoneRaw.replace(/\D/g, "").slice(-10);
+    if (phoneDigits.length !== 10) {
+      throw new AppError(
+        400,
+        "A valid 10-digit mobile number is required — this becomes your WhatsApp bot line.",
+      );
+    }
+    const phone = phoneDigits;
     const address = input.address?.trim() || "To be updated";
     const city = input.city?.trim() || "India";
     const feeRaw = Number(input.consultationFee);
@@ -473,7 +481,7 @@ export class AuthService {
             availableTimes,
             experience: 0,
             emails: [email],
-            contactNumbers: phone ? [phone] : [],
+            contactNumbers: [phone],
             appointmentValidityDays: validity,
             licenseNo,
           },
@@ -575,34 +583,32 @@ export class AuthService {
     }
 
     // Auto-add registration Tel to Meta WABA phone list (+ GlucoGuide number pool).
-    if (phone) {
-      void import("./procto/metaWhatsApp.service.js")
-        .then(({ MetaWhatsAppService }) =>
-          MetaWhatsAppService.ensurePhoneListedAtRegistration({
-            practiceId: practice.id,
-            phoneNumber: phone,
-            displayName: practice.name,
-          }),
-        )
-        .then((r) => {
-          if (r.ok) {
-            console.log(
-              `[Meta] doctor registration phone ${phone} → ${r.mode}` +
-                (r.phoneNumberId ? ` id=${r.phoneNumberId}` : ""),
-            );
-          } else {
-            console.warn(
-              `[Meta] doctor registration phone ${phone} deferred: ${r.message}`,
-            );
-          }
-        })
-        .catch((err) =>
+    void import("./procto/metaWhatsApp.service.js")
+      .then(({ MetaWhatsAppService }) =>
+        MetaWhatsAppService.ensurePhoneListedAtRegistration({
+          practiceId: practice.id,
+          phoneNumber: phone,
+          displayName: practice.name,
+        }),
+      )
+      .then((r) => {
+        if (r.ok) {
+          console.log(
+            `[Meta] doctor registration phone ${phone} → ${r.mode}` +
+              (r.phoneNumberId ? ` id=${r.phoneNumberId}` : ""),
+          );
+        } else {
           console.warn(
-            "[Meta] doctor registration phone provision failed:",
-            err instanceof Error ? err.message : err,
-          ),
-        );
-    }
+            `[Meta] doctor registration phone ${phone} deferred: ${r.message}`,
+          );
+        }
+      })
+      .catch((err) =>
+        console.warn(
+          "[Meta] doctor registration phone provision failed:",
+          err instanceof Error ? err.message : err,
+        ),
+      );
 
     const sessionUser = {
       id: user.id,

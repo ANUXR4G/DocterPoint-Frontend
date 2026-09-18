@@ -107,6 +107,7 @@ export const NumberPoolService = {
       status: "LIVE" | "VERIFYING" | "ASSIGNED";
       provider: "MOCK" | "META_CLOUD_API";
       notes?: string;
+      twoStepPin?: string;
     },
   ) {
     const practice = await prisma.practice.findUnique({
@@ -181,6 +182,9 @@ export const NumberPoolService = {
           status === WhatsAppNumberStatus.LIVE ? "approved" : "pending",
         activatedAt: status === WhatsAppNumberStatus.LIVE ? new Date() : null,
         notes: data.notes ?? "Linked at registration",
+        ...(data.twoStepPin
+          ? { twoStepPin: data.twoStepPin.replace(/\D/g, "").slice(0, 6) }
+          : {}),
       };
 
       const row = phoneTaken

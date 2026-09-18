@@ -32,8 +32,19 @@ The doctor does **not** turn on the bot by scanning a QR. Patients message a **c
 |------|------|-----|
 | **A. Pool (pilot ≤ ~20)** | First 3–5 clinics | Platform-owned numbers on a WABA; admin assigns |
 | **B. Embedded Signup (scale)** | N clinics (DoubleTick-style) | Clinic taps **Connect with Meta** → own WABA + Phone Number ID |
+| **C. Registration Tel (platform WABA)** | Clinic / solo doctor signup | Tel POSTed to platform `WHATSAPP_WABA_ID` → VERIFYING → in-app Meta OTP (`request_code` / `verify_code` / `register`) → LIVE |
 
-Complete **Phases 3–5 once**, then use A and/or B per clinic.
+### Path C — in-app OTP (no WhatsApp Manager)
+
+1. Signup collects a **required** 10-digit mobile (clinic Tel / doctor mobile).
+2. Backend `ensurePhoneListedAtRegistration` adds the number to the platform WABA and stores `WhatsAppNumber` as **VERIFYING** (with a 6-digit two-step PIN).
+3. Backend auto-calls Meta `POST /{phone-number-id}/request_code` (SMS).
+4. Owner opens **Subscription → WhatsApp booking line**, enters the code.
+5. Backend `verify_code` → `register` → status **LIVE**; bot replies on that number.
+
+Env: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_WABA_ID`, optional `WHATSAPP_TWO_STEP_PIN`.
+
+APIs: `POST /procto/practices/:id/whatsapp/verify/request`, `.../verify/confirm`.
 
 ---
 

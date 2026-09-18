@@ -15,5 +15,6 @@ Score: **Impact** (1–5) × **Likelihood** (1–5). Treat ≥12 as needing acti
 | R08 | Payment webhook spoof | 4 | 2 | 8 | Signature verify; simulate only in admin | Eng | Open |
 | R09 | Redis down breaks local booking | 2 | 4 | 8 | Queues optional / soft-fail; booking not hard-dependent | Eng | Mitigated |
 | R10 | Unapproved templates sent in prod | 4 | 3 | 12 | Template-first send; DRAFT≠LIVE gate | Ops | Open |
+| R11 | Shared platform WABA OTP rate limits / wrong-number claim | 4 | 3 | 12 | In-app OTP only for VERIFYING own Tel; Meta request_code rate limits; practice membership gate | Eng + Ops | Open |
 
-**Last reviewed:** 2026-09-17
+**Last reviewed:** 2026-09-18

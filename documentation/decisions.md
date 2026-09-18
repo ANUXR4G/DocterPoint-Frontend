@@ -89,6 +89,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | WABA model | **Meta Cloud API + Embedded Signup** (one WABA per clinic at scale; pool for pilot ≤20) | DIY Meta only — no BSP (AiSensy/Gupshup/etc.); route by Phone Number ID |
 | Provisioning | **MOCK** (local) or **META_CLOUD_API** via Embedded Signup | Self-serve Connect with Meta; templates auto-submitted; 24–72h Meta approval |
 | Number pool | `whatsapp_numbers` table + `/api/v1/procto/admin/*` | Ops assigns AVAILABLE → LIVE; syncs **both** `practice.whatsappBusinessNumber` and `practice.phone` (Settings Tel = public WhatsApp bot number). Profile Tel is locked while a line is connected. |
+| Registration Tel → bot | Platform WABA add + **in-app Meta OTP** (`request_code` / `verify_code` / `register`) | Clinic + solo doctor Tel required; VERIFYING until OTP; no WhatsApp Manager for go-live |
 | Subscriptions | `docline_plans` table (legacy DB name) + `practice_subscriptions` + Razorpay + Billing tab | Keep table name for migrations; UI says GlucoGuide plans |
 | Bot policy | AI disclosure, FAQ from `faq_kb`, clinical guardrails, *HUMAN* handoff | Meta policy |
 | Directory visibility | `practice.isDirectoryListed` | Suspended / unpaid practices hidden from public find-care |

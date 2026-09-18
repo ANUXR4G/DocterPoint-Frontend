@@ -149,7 +149,7 @@ export default function ClinicRegisterForm({
 
       if (onboard?.status === "successful") {
         proctoService.invalidateMyPracticesCache()
-        router.push("/clinic/dashboard?onboarded=1")
+        router.push("/clinic/subscription?waVerify=1")
         return
       }
 

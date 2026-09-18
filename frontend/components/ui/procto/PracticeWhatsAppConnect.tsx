@@ -62,11 +62,14 @@ export default function PracticeWhatsAppConnect({
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [otpCode, setOtpCode] = useState("")
+  const [otpBusy, setOtpBusy] = useState(false)
   const [provision, setProvision] = useState<{
     templatesApproved?: number
     templatesTotal?: number
     templatesStatus?: string
     proactiveAlertsReady?: boolean
+    needsOtp?: boolean
     wabaId?: string | null
   } | null>(null)
   const { launchEmbeddedSignup } = useMetaEmbeddedSignup()
@@ -75,6 +78,8 @@ export default function PracticeWhatsAppConnect({
   const embeddedSignupEnabled = Boolean(whatsappSetup?.embeddedSignupEnabled)
   const autoResolveEnabled = Boolean(whatsappSetup?.autoResolveEnabled)
   const isLive = whatsappNumber?.status === "LIVE"
+  const needsOtp =
+    whatsappNumber?.status === "VERIFYING" || Boolean(provision?.needsOtp)
   const isConnected = Boolean(
     whatsappNumber &&
       ["LIVE", "TEMPLATES_PENDING", "DISPLAY_NAME_PENDING", "VERIFYING"].includes(
@@ -208,6 +213,57 @@ export default function PracticeWhatsAppConnect({
     }
   }
 
+  async function requestOtp(method: "SMS" | "VOICE" = "SMS") {
+    if (!canManage) {
+      setError("Only clinic owners/admins can verify WhatsApp.")
+      return
+    }
+    setOtpBusy(true)
+    setError("")
+    setSuccess("")
+    const res = await proctoService.requestWhatsAppVerifyOtp(practiceId, {
+      method,
+    })
+    setOtpBusy(false)
+    if (res?.status === "successful" || res?.status === "created") {
+      setSuccess(
+        (res.data as { message?: string })?.message ||
+          `Verification code sent via ${method}.`,
+      )
+      return
+    }
+    setError(res?.message || "Could not send verification code.")
+  }
+
+  async function confirmOtp(e: React.FormEvent) {
+    e.preventDefault()
+    if (!canManage) {
+      setError("Only clinic owners/admins can verify WhatsApp.")
+      return
+    }
+    const code = otpCode.replace(/\D/g, "")
+    if (code.length < 4) {
+      setError("Enter the verification code from SMS or voice call.")
+      return
+    }
+    setOtpBusy(true)
+    setError("")
+    setSuccess("")
+    const res = await proctoService.confirmWhatsAppVerifyOtp(practiceId, code)
+    setOtpBusy(false)
+    if (res?.status === "successful" || res?.status === "created") {
+      setSuccess(
+        (res.data as { message?: string })?.message ||
+          "WhatsApp line is LIVE.",
+      )
+      setOtpCode("")
+      onConnected()
+      void loadProvisionStatus()
+      return
+    }
+    setError(res?.message || "Invalid or expired code. Try again.")
+  }
+
   async function copyLink() {
     if (!waMeLink) return
     try {
@@ -237,7 +293,7 @@ export default function PracticeWhatsAppConnect({
           </span>
         ) : isConnected ? (
           <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-            Provisioning
+            {needsOtp ? "Verify OTP" : "Provisioning"}
           </span>
         ) : null}
       </div>
@@ -282,7 +338,64 @@ export default function PracticeWhatsAppConnect({
             ) : null}
           </dl>
 
-          {provision?.proactiveAlertsReady ? (
+          {needsOtp ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/30">
+              <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+                Verify this number with Meta OTP
+              </p>
+              <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-200/90">
+                We added {formatPhoneDisplay(whatsappNumber.phoneNumber)} to
+                your Meta account. Enter the SMS (or voice) code to make the
+                booking bot LIVE — no WhatsApp Manager needed.
+              </p>
+              <form
+                onSubmit={(e) => void confirmOtp(e)}
+                className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end"
+              >
+                <label className="block flex-1 text-sm">
+                  <span className="font-medium text-amber-950 dark:text-amber-100">
+                    Verification code
+                  </span>
+                  <input
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="6-digit code"
+                    className="form-input mt-1 min-h-11 w-full rounded-lg px-3 py-2 text-sm"
+                    disabled={!canManage || otpBusy}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={!canManage || otpBusy}
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg bg-amber-700 px-4 text-sm font-semibold text-white disabled:opacity-50 dark:bg-amber-600"
+                >
+                  {otpBusy ? "Verifying…" : "Confirm & go LIVE"}
+                </button>
+              </form>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                <button
+                  type="button"
+                  disabled={!canManage || otpBusy}
+                  onClick={() => void requestOtp("SMS")}
+                  className="font-semibold text-amber-900 underline disabled:opacity-50 dark:text-amber-100"
+                >
+                  Resend SMS
+                </button>
+                <button
+                  type="button"
+                  disabled={!canManage || otpBusy}
+                  onClick={() => void requestOtp("VOICE")}
+                  className="font-semibold text-amber-900 underline disabled:opacity-50 dark:text-amber-100"
+                >
+                  Call me instead
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {provision?.proactiveAlertsReady && isLive ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/40 dark:bg-emerald-950/30">
               <p className="text-sm font-semibold text-emerald-950 dark:text-emerald-100">
                 Templates approved · proactive alerts ready

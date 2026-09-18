@@ -435,6 +435,21 @@ export const proctoService = {
       body: JSON.stringify({}),
     }),
 
+  requestWhatsAppVerifyOtp: (
+    practiceId: string,
+    body?: { method?: "SMS" | "VOICE" },
+  ) =>
+    proctoFetch(`/procto/practices/${practiceId}/whatsapp/verify/request`, {
+      method: "POST",
+      body: JSON.stringify(body ?? { method: "SMS" }),
+    }),
+
+  confirmWhatsAppVerifyOtp: (practiceId: string, code: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/whatsapp/verify/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+
   adminListTemplates: (practiceId?: string) => {
     const qs = practiceId
       ? `?practiceId=${encodeURIComponent(practiceId)}`
