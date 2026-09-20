@@ -5,7 +5,7 @@ import { socketManager } from "../core/socket.js";
 function looksLikeBotCommand(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
-  if (/^(?:menu|post|booking|slot|date|mode):/i.test(t)) return true;
+  if (/^(?:menu|post|booking|slot|date|mode|patient):/i.test(t)) return true;
   if (
     /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info|message|msg|new\s+book)\b/.test(
       t,

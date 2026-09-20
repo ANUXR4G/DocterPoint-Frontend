@@ -939,6 +939,8 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_cancel_confirm",
     "awaiting_reschedule_booking",
     "awaiting_reschedule_slot",
+    "awaiting_message_doctor_booking",
+    "awaiting_book_patient",
     "awaiting_register_name",
     "awaiting_register_gender",
     "awaiting_register_email_opt",

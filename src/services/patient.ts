@@ -332,6 +332,69 @@ export class PatientService {
   }
 
   /**
+   * All patient profiles reachable from this WhatsApp chat:
+   * - primary account (user.phone = WA number)
+   * - family members registered from this chat (patient.contactNumber = WA number)
+   * Sorted: yourself first, then family by name.
+   */
+  static async listLinkedToWhatsApp(whatsappPhone: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      phone: string;
+      isSelf: boolean;
+    }>
+  > {
+    const digits = whatsappPhone.replace(/\D/g, "");
+    if (digits.length < 10) return [];
+    const last10 = digits.slice(-10);
+
+    const users = await prisma.user.findMany({
+      where: {
+        role: "user",
+        OR: [
+          { phone: digits },
+          { phone: { endsWith: last10 } },
+          { patient: { contactNumber: digits } },
+          { patient: { contactNumber: { endsWith: last10 } } },
+        ],
+      },
+      include: { patient: true },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    });
+
+    const seen = new Set<string>();
+    const rows: Array<{
+      id: string;
+      name: string;
+      phone: string;
+      isSelf: boolean;
+    }> = [];
+
+    for (const u of users) {
+      if (seen.has(u.id)) continue;
+      seen.add(u.id);
+      const phoneDigits = String(u.phone || "").replace(/\D/g, "");
+      const isSelf =
+        phoneDigits === digits ||
+        (phoneDigits.length >= 10 && phoneDigits.slice(-10) === last10);
+      rows.push({
+        id: u.id,
+        name: (u.name || "").trim() || (isSelf ? "You" : "Family member"),
+        phone: phoneDigits || digits,
+        isSelf,
+      });
+    }
+
+    rows.sort((a, b) => {
+      if (a.isSelf !== b.isSelf) return a.isSelf ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return rows;
+  }
+
+  /**
    * Create a patient account from WhatsApp chat.
    * Email is optional — when omitted, a phone-local placeholder is stored
    * (same pattern as OTP signup). Patients sign in with phone OTP.

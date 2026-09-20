@@ -63,6 +63,7 @@ export type ConversationStep =
   | "awaiting_reschedule_booking"
   | "awaiting_reschedule_slot"
   | "awaiting_message_doctor_booking"
+  | "awaiting_book_patient"
   | "awaiting_register_name"
   | "awaiting_register_gender"
   | "awaiting_register_email_opt"
@@ -92,6 +93,11 @@ export type ConversationState = {
     specialty?: string;
   }>;
   bookingChoices?: Array<{ id: string; label: string }>;
+  /** Profiles on this WhatsApp (self + family) for booking-for picker. */
+  patientChoices?: Array<{ id: string; label: string; isSelf?: boolean }>;
+  /** Selected patient profile for the in-progress booking. */
+  bookPatientId?: string;
+  bookPatientName?: string;
   regName?: string;
   regGender?: string;
   regEmail?: string;
@@ -148,6 +154,8 @@ export type OrchestratorResult = {
   slotList?: Array<{ index: number; label: string }>;
   /** Reschedule / message-doctor booking pick as a tappable list. */
   bookingList?: Array<{ index: number; label: string; description?: string }>;
+  /** Who-to-book-for (self / family) as a tappable list. */
+  patientList?: Array<{ index: number; label: string; description?: string }>;
   /** Welcome / HELP menu as a tappable list (menu:book, …). */
   menuList?: Array<{ id: string; title: string; description?: string }>;
 };
@@ -584,6 +592,31 @@ function withBookingPicker(
   };
 }
 
+/** Who-to-book-for (yourself / family) — buttons if ≤3, else list. */
+function withPatientPicker(
+  reply: string,
+  choices: Array<{ label: string; description?: string }>,
+): OrchestratorResult {
+  if (!choices.length) return { reply };
+  if (choices.length <= 3) {
+    return {
+      reply,
+      replyButtons: choices.map((c, i) => ({
+        id: `patient:${i + 1}`,
+        title: c.label.slice(0, 20),
+      })),
+    };
+  }
+  return {
+    reply,
+    patientList: choices.map((c, i) => ({
+      index: i + 1,
+      label: c.label.slice(0, 24),
+      description: c.description?.slice(0, 72),
+    })),
+  };
+}
+
 /** Map date button ids to text parsePatientDate understands. */
 function normalizeDateInput(text: string): string {
   const raw = text.trim();
@@ -595,9 +628,9 @@ function normalizeDateInput(text: string): string {
   return kind;
 }
 
-/** Map slot:N / booking:N tap (or plain number) to 1-based index. */
+/** Map slot:N / booking:N / patient:N tap (or plain number) to 1-based index. */
 function parseSlotChoiceIndex(text: string, fallback?: number): number | null {
-  const tap = /^(?:slot|booking):(\d+)$/i.exec(text.trim());
+  const tap = /^(?:slot|booking|patient):(\d+)$/i.exec(text.trim());
   if (tap) {
     const n = Number(tap[1]);
     return Number.isFinite(n) ? n : null;
@@ -656,6 +689,8 @@ function keepPrefs(state: ConversationState): Pick<
   | "lastBookingId"
   | "careBookingId"
   | "careProviderId"
+  | "bookPatientId"
+  | "bookPatientName"
 > {
   return {
     preferredLanguage: state.preferredLanguage,
@@ -664,6 +699,8 @@ function keepPrefs(state: ConversationState): Pick<
     handedOff: state.handedOff,
     postBookingCare: state.postBookingCare,
     lastBookingId: state.lastBookingId,
+    bookPatientId: state.bookPatientId,
+    bookPatientName: state.bookPatientName,
     // Keep selected doctor only while in Message-doctor care mode.
     ...(state.postBookingCare
       ? {
@@ -1401,7 +1438,7 @@ async function continueAfterMode(
     if (!session) {
       return reaskDateNoSlots(convId, practice, state);
     }
-    const pendingSummary = `Token #${session.nextToken} on ${date} (${session.sessionStart}–${session.sessionEnd}) at ${practice.name}`;
+    const pendingSummary = `Token #${session.nextToken} on ${date} (${session.sessionStart}–${session.sessionEnd}) at ${practice.name}${bookingForSuffix(state)}`;
     await saveState(convId, {
       ...state,
       step: "awaiting_confirm",
@@ -1444,7 +1481,7 @@ async function continueAfterMode(
       step: "awaiting_confirm",
       mode: ScheduleMode.TIME_BASED,
       slotStart: picked.start.toISOString(),
-      pendingSummary: `${label} on ${date} at ${practice.name}`,
+      pendingSummary: `${label} on ${date} at ${practice.name}${bookingForSuffix(state)}`,
       slotChoices: open.map((s) => ({
         start: s.start.toISOString(),
         label: s.start.toLocaleTimeString([], {
@@ -1470,7 +1507,7 @@ async function continueAfterMode(
       step: "awaiting_confirm",
       mode: ScheduleMode.TIME_BASED,
       slotStart: only.start.toISOString(),
-      pendingSummary: `${label} on ${date} at ${practice.name}`,
+      pendingSummary: `${label} on ${date} at ${practice.name}${bookingForSuffix(state)}`,
       slotChoices: [
         { start: only.start.toISOString(), label },
       ],
@@ -1499,6 +1536,12 @@ async function continueAfterMode(
     ),
     slotChoices,
   );
+}
+
+function bookingForSuffix(state: ConversationState): string {
+  const name = state.bookPatientName?.trim();
+  if (!name) return "";
+  return ` for ${name}`;
 }
 
 async function confirmBooking(
@@ -1543,7 +1586,12 @@ async function confirmBooking(
   }
 
   try {
-    const existing = await PatientService.findByPhone(phone);
+    const existing = state.bookPatientId
+      ? await prisma.user.findUnique({
+          where: { id: state.bookPatientId },
+          include: { patient: true },
+        })
+      : await PatientService.findByPhone(phone);
     if (!existing?.id) {
       // Keep confirm context only if they somehow skipped register mid-flow.
       await saveState(convId, {
@@ -1561,6 +1609,7 @@ async function confirmBooking(
       patientPhone: phone,
       patientId: existing.id,
       patientName:
+        state.bookPatientName?.trim() ||
         existing.name?.trim() ||
         state.regName?.trim() ||
         "WhatsApp patient",
@@ -1817,17 +1866,59 @@ async function ensureRegisteredThenBook(
   prev: ConversationState = {},
 ): Promise<OrchestratorResult> {
   const lang = resolveLang(prev.preferredLanguage);
-  const existing = await PatientService.findByPhone(patientPhone);
-  if (existing) {
-    return startBookFlow(convId, practice, slots, prev);
+  const profiles = await PatientService.listLinkedToWhatsApp(patientPhone);
+  if (!profiles.length) {
+    await saveState(convId, {
+      ...keepPrefs(prev),
+      step: "awaiting_register_name",
+      afterRegister: "book",
+      pendingBookSlots: slots,
+      bookPatientId: undefined,
+      bookPatientName: undefined,
+    });
+    return { reply: BotPrompts.needRegisterThenBook(lang) };
   }
+
+  if (profiles.length === 1) {
+    const only = profiles[0]!;
+    return startBookFlow(convId, practice, slots, {
+      ...prev,
+      bookPatientId: only.id,
+      bookPatientName: only.name,
+    });
+  }
+
+  // 2+ profiles on this WhatsApp — ask who the booking is for.
+  const patientChoices = profiles.map((p) => ({
+    id: p.id,
+    label: p.isSelf ? `You · ${p.name}` : p.name,
+    isSelf: p.isSelf,
+  }));
   await saveState(convId, {
-    ...keepPrefs(prev),
-    step: "awaiting_register_name",
-    afterRegister: "book",
+    ...keepPrefs({
+      ...prev,
+      bookPatientId: undefined,
+      bookPatientName: undefined,
+    }),
+    step: "awaiting_book_patient",
+    patientChoices,
     pendingBookSlots: slots,
+    bookPatientId: undefined,
+    bookPatientName: undefined,
+    failedTurns: 0,
+    handedOff: false,
+    postBookingCare: false,
   });
-  return { reply: BotPrompts.needRegisterThenBook(lang) };
+  return withPatientPicker(
+    BotPrompts.askBookPatientPick(
+      patientChoices.map((c, i) => ({ index: i + 1, label: c.label })),
+      lang,
+    ),
+    patientChoices.map((c) => ({
+      label: c.label,
+      description: c.isSelf ? "Yourself" : "Family member",
+    })),
+  );
 }
 
 async function confirmRegister(
@@ -1858,12 +1949,17 @@ async function confirmRegister(
     const wasFamily = Boolean(state.registeringFamily);
 
     if (continueToBook) {
-      await saveState(convId, idleState(state));
+      const withPatient: ConversationState = {
+        ...idleState(state),
+        bookPatientId: result.id,
+        bookPatientName: result.name || state.regName!,
+      };
+      await saveState(convId, withPatient);
       const bookReply = await startBookFlow(
         convId,
         practice,
         pendingSlots,
-        state,
+        withPatient,
       );
       return {
         reply:
@@ -1886,6 +1982,7 @@ async function confirmRegister(
         dateList: bookReply.dateList,
         slotList: bookReply.slotList,
         bookingList: bookReply.bookingList,
+        patientList: bookReply.patientList,
         menuList: bookReply.menuList,
       };
     }
@@ -1937,6 +2034,7 @@ export async function runOrchestrator(input: {
     dateList: result.dateList,
     slotList: result.slotList,
     bookingList: result.bookingList,
+    patientList: result.patientList,
     menuList: result.menuList,
   };
 }
@@ -2365,6 +2463,78 @@ async function runOrchestratorCore(input: {
     );
   }
 
+  if (state.step === "awaiting_book_patient") {
+    const choices = state.patientChoices ?? [];
+    let choice =
+      (() => {
+        const idx = parseSlotChoiceIndex(text);
+        return idx !== null && idx >= 1 && idx <= choices.length
+          ? choices[idx - 1]
+          : null;
+      })() ?? null;
+    // Allow typing the profile name ("Priya" / "you")
+    if (!choice) {
+      const raw = text.trim().toLowerCase().replace(/^you\s*[·.\-:]+\s*/i, "");
+      if (/^(you|myself|me|self|अपने|खुद)$/i.test(text.trim())) {
+        choice = choices.find((c) => c.isSelf) ?? null;
+      } else if (raw.length >= 2) {
+        choice =
+          choices.find((c) => c.label.toLowerCase().includes(raw)) ??
+          choices.find((c) =>
+            c.label
+              .toLowerCase()
+              .replace(/^you\s*[·.\-:]+\s*/i, "")
+              .includes(raw),
+          ) ??
+          null;
+      }
+    }
+    if (!choice) {
+      return withPatientPicker(
+        BotPrompts.askBookPatientPick(
+          choices.map((c, i) => ({ index: i + 1, label: c.label })),
+          lang,
+        ),
+        choices.map((c) => ({
+          label: c.label,
+          description: c.isSelf ? "Yourself" : "Family member",
+        })),
+      );
+    }
+    const picked = await prisma.user.findUnique({
+      where: { id: choice.id },
+      select: { id: true, name: true },
+    });
+    if (!picked) {
+      await saveState(convId, idleState(state));
+      return { reply: BotPrompts.askBookPatientPick([], lang) };
+    }
+    const name = (picked.name || choice.label).trim();
+    const isSelf = Boolean(choice.isSelf);
+    const nextSlots = state.pendingBookSlots ?? {};
+    const bookReply = await startBookFlow(convId, practice, nextSlots, {
+      ...state,
+      bookPatientId: picked.id,
+      bookPatientName: name,
+      patientChoices: undefined,
+      pendingBookSlots: undefined,
+      step: "idle",
+    });
+    return {
+      reply:
+        BotPrompts.bookPatientSelected(name, isSelf, lang) +
+        "\n\n" +
+        bookReply.reply,
+      doctorList: bookReply.doctorList,
+      replyButtons: bookReply.replyButtons,
+      dateList: bookReply.dateList,
+      slotList: bookReply.slotList,
+      bookingList: bookReply.bookingList,
+      patientList: bookReply.patientList,
+      menuList: bookReply.menuList,
+    };
+  }
+
   // Fast path: booking/reschedule date — stay in step; never fall through to HELP/escalate
   // Voice notes may be free-form; if regex can't find a date, fall through to NLU.
   if (state.step === "awaiting_date") {
@@ -2652,7 +2822,7 @@ async function runOrchestratorCore(input: {
       );
     }
     state.slotStart = choice.start;
-    state.pendingSummary = `${choice.label} on ${state.date} at ${practice.name}`;
+    state.pendingSummary = `${choice.label} on ${state.date} at ${practice.name}${bookingForSuffix(state)}`;
     state.step = "awaiting_confirm";
     await saveState(convId, state);
     return withYesNo(BotPrompts.askConfirm(state.pendingSummary, lang));

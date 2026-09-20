@@ -609,6 +609,39 @@ export const BotPrompts = {
     );
   },
 
+  askBookPatientPick(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    if (!options.length) {
+      return L(
+        lang,
+        "No patient profiles found on this number. Reply *REGISTER* to add one.",
+        "इस नंबर पर कोई मरीज़ प्रोफ़ाइल नहीं मिली। जोड़ने के लिए *REGISTER* लिखें।",
+      );
+    }
+    return L(
+      lang,
+      "Who is this booking for?\nChoose *yourself* or a *family member* below.",
+      "यह बुकिंग किसके लिए है?\nनीचे *अपने लिए* या *परिवार के सदस्य* को चुनें।",
+    );
+  },
+
+  bookPatientSelected(name: string, isSelf: boolean, lang?: WaLang): string {
+    if (isSelf) {
+      return L(
+        lang,
+        `Booking for *you* (${name}).`,
+        `बुकिंग *आपके* लिए (${name})।`,
+      );
+    }
+    return L(
+      lang,
+      `Booking for family member *${name}*.`,
+      `बुकिंग परिवार के सदस्य *${name}* के लिए।`,
+    );
+  },
+
   noBookingForMessageDoctor(lang?: WaLang): string {
     return L(
       lang,
