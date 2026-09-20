@@ -14,6 +14,7 @@ import { BotPrompts } from "./whatsapp.templates.js";
 import {
   askPreferredLanguage,
   languageSetAck,
+  L,
   parseLanguageChoice,
   resolveLang,
   wantsLanguageChange,
@@ -65,6 +66,8 @@ export type ConversationStep =
   | "awaiting_register_gender"
   | "awaiting_register_email_opt"
   | "awaiting_register_email"
+  | "awaiting_register_family_opt"
+  | "awaiting_register_family_phone"
   | "awaiting_register_confirm";
 
 export type ConversationState = {
@@ -91,6 +94,10 @@ export type ConversationState = {
   regName?: string;
   regGender?: string;
   regEmail?: string;
+  /** Family-member mobile when registering someone else on this WhatsApp. */
+  regPhone?: string;
+  /** True when primary account already exists and this signup is for family. */
+  registeringFamily?: boolean;
   regDob?: string | null;
   regAddress?: string | null;
   /** Preferred visit time from free speech / voice (clock or day-part). */
@@ -1470,10 +1477,29 @@ function registerSummary(state: ConversationState, phone: string): string {
     `• Gender: ${state.regGender}`,
     `• Phone: ${formatRegPhoneDisplay(phone)}`,
   ];
+  if (state.registeringFamily) lines.unshift("• Type: Family member");
   if (state.regEmail) lines.push(`• Email: ${state.regEmail}`);
   if (state.regDob) lines.push(`• DOB: ${state.regDob}`);
   if (state.regAddress) lines.push(`• Address: ${state.regAddress}`);
   return lines.join("\n");
+}
+
+function parseRegisterMobile(text: string): string | null {
+  const digits = String(text || "").replace(/\D/g, "");
+  if (digits.length >= 11 && digits.length <= 15) return digits;
+  const last10 = digits.slice(-10);
+  if (last10.length === 10) return last10;
+  return null;
+}
+
+function resolveRegisterPhone(
+  state: ConversationState,
+  whatsappFrom: string,
+): string {
+  if (state.registeringFamily && state.regPhone) {
+    return normalizePhone(state.regPhone);
+  }
+  return normalizePhone(whatsappFrom);
 }
 
 function parseRegisterEmail(text: string): string | null {
@@ -1519,8 +1545,9 @@ function goToRegisterConfirm(
   patientPhone: string,
   lang: ReturnType<typeof resolveLang>,
 ): OrchestratorResult {
+  const phone = resolveRegisterPhone(state, patientPhone);
   state.step = "awaiting_register_confirm";
-  state.pendingSummary = registerSummary(state, patientPhone);
+  state.pendingSummary = registerSummary(state, phone);
   return withYesNo(
     BotPrompts.askRegisterConfirm(
       state.pendingSummary,
@@ -1528,6 +1555,18 @@ function goToRegisterConfirm(
       lang,
     ),
   );
+}
+
+function goToFamilyPhoneOrConfirm(
+  state: ConversationState,
+  patientPhone: string,
+  lang: ReturnType<typeof resolveLang>,
+): OrchestratorResult {
+  if (state.registeringFamily && !state.regPhone) {
+    state.step = "awaiting_register_family_phone";
+    return { reply: BotPrompts.askRegisterFamilyPhone(lang) };
+  }
+  return goToRegisterConfirm(state, patientPhone, lang);
 }
 
 async function applyIdScanToRegister(
@@ -1538,12 +1577,25 @@ async function applyIdScanToRegister(
 ): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
   const existing = await PatientService.findByPhone(patientPhone);
-  if (existing) {
-    await saveState(convId, { ...state, step: "idle" });
-    return withMainMenu(
-      BotPrompts.idOcrAlreadyRegistered(existing.name || "", lang) +
+  // Primary already registered — offer family signup unless already in that flow.
+  if (existing && !state.registeringFamily) {
+    if (scan.name) state.regName = scan.name.trim();
+    if (scan.dateOfBirth) state.regDob = scan.dateOfBirth;
+    if (scan.address) state.regAddress = scan.address;
+    if (scan.gender) state.regGender = scan.gender;
+    await saveState(convId, {
+      ...keepPrefs(state),
+      step: "awaiting_register_family_opt",
+      registeringFamily: false,
+      regName: state.regName,
+      regGender: state.regGender,
+      regDob: state.regDob ?? null,
+      regAddress: state.regAddress ?? null,
+    });
+    return withYesNo(
+      BotPrompts.askRegisterFamilyOpt(existing.name || "", lang) +
         (scan.name
-          ? `\n\n(Read from ID: *${scan.name}* — profile not changed.)`
+          ? `\n\n(Read from ID: *${scan.name}* — tap *Yes* to register them as a family member.)`
           : ""),
     );
   }
@@ -1588,12 +1640,25 @@ async function startRegisterFlow(
   const lang = resolveLang(prev.preferredLanguage);
   const existing = await PatientService.findByPhone(patientPhone);
   if (existing) {
-    await saveState(convId, idleState(prev));
-    return withMainMenu(BotPrompts.alreadyRegistered(existing.name || "", lang));
+    await saveState(convId, {
+      ...keepPrefs(prev),
+      step: "awaiting_register_family_opt",
+      registeringFamily: false,
+      regName: undefined,
+      regGender: undefined,
+      regEmail: undefined,
+      regPhone: undefined,
+      regDob: null,
+      regAddress: null,
+    });
+    return withYesNo(
+      BotPrompts.askRegisterFamilyOpt(existing.name || "", lang),
+    );
   }
   await saveState(convId, {
     ...keepPrefs(prev),
     step: "awaiting_register_name",
+    registeringFamily: false,
   });
   return { reply: BotPrompts.askRegisterName(lang) };
 }
@@ -1632,8 +1697,9 @@ async function confirmRegister(
     return withGenderButtons(BotPrompts.askRegisterGender(lang));
   }
   try {
+    const registerPhone = resolveRegisterPhone(state, patientPhone);
     const result = await PatientService.registerViaWhatsApp({
-      phone: normalizePhone(patientPhone),
+      phone: registerPhone,
       whatsappFrom: normalizePhone(patientPhone),
       name: state.regName!,
       gender: state.regGender,
@@ -1643,6 +1709,7 @@ async function confirmRegister(
     });
     const continueToBook = state.afterRegister === "book";
     const pendingSlots = state.pendingBookSlots ?? {};
+    const wasFamily = Boolean(state.registeringFamily);
 
     if (continueToBook) {
       await saveState(convId, idleState(state));
@@ -1654,13 +1721,18 @@ async function confirmRegister(
       );
       return {
         reply:
-          BotPrompts.registered(
-            {
-              name: result.name || state.regName!,
-              continueToBook: true,
-            },
-            resolveLang(state.preferredLanguage),
-          ) +
+          (wasFamily
+            ? BotPrompts.familyRegistered(
+                result.name || state.regName!,
+                resolveLang(state.preferredLanguage),
+              )
+            : BotPrompts.registered(
+                {
+                  name: result.name || state.regName!,
+                  continueToBook: true,
+                },
+                resolveLang(state.preferredLanguage),
+              )) +
           "\n\n" +
           bookReply.reply,
         doctorList: bookReply.doctorList,
@@ -1674,12 +1746,17 @@ async function confirmRegister(
 
     await saveState(convId, idleState(state));
     return withMainMenu(
-      BotPrompts.registered(
-        {
-          name: result.name || state.regName!,
-        },
-        resolveLang(state.preferredLanguage),
-      ),
+      wasFamily
+        ? BotPrompts.familyRegistered(
+            result.name || state.regName!,
+            resolveLang(state.preferredLanguage),
+          )
+        : BotPrompts.registered(
+            {
+              name: result.name || state.regName!,
+            },
+            resolveLang(state.preferredLanguage),
+          ),
     );
   } catch (err) {
     await saveState(convId, idleState(state));
@@ -1863,6 +1940,8 @@ async function runOrchestratorCore(input: {
       state.step === "awaiting_register_gender" ||
       state.step === "awaiting_register_email_opt" ||
       state.step === "awaiting_register_email" ||
+      state.step === "awaiting_register_family_opt" ||
+      state.step === "awaiting_register_family_phone" ||
       state.step === "awaiting_register_confirm";
     if (!inRegister) {
       return { reply: BotPrompts.idPhotoWrongStep(lang) };
@@ -1976,11 +2055,81 @@ async function runOrchestratorCore(input: {
     );
   }
 
-  // Fast path: registration gender/name/email/confirm — no NLU/LLM
+  // Fast path: registration gender/name/email/family/confirm — no NLU/LLM
+  if (state.step === "awaiting_register_family_opt") {
+    if (isAffirmative(text)) {
+      state.registeringFamily = true;
+      delete state.regPhone;
+      // Keep any ID-prefilled name/gender/dob; otherwise start at name.
+      if (state.regName && state.regName.trim().length >= 2) {
+        if (state.regGender) {
+          state.step = "awaiting_register_email_opt";
+          await saveState(convId, state);
+          return emailOptPrompt(lang);
+        }
+        state.step = "awaiting_register_gender";
+        await saveState(convId, state);
+        return withGenderButtons(BotPrompts.askRegisterFamilyGender(lang));
+      }
+      delete state.regName;
+      delete state.regGender;
+      delete state.regEmail;
+      state.regDob = null;
+      state.regAddress = null;
+      state.step = "awaiting_register_name";
+      await saveState(convId, state);
+      return { reply: BotPrompts.askRegisterFamilyName(lang) };
+    }
+    if (isNegative(text)) {
+      await saveState(convId, idleState(state));
+      return withMainMenu(BotPrompts.alreadyRegistered("", lang));
+    }
+    return withYesNo(BotPrompts.askRegisterFamilyOpt("", lang));
+  }
+
+  if (state.step === "awaiting_register_family_phone") {
+    const typed = parseRegisterMobile(text);
+    if (!typed) {
+      return { reply: BotPrompts.askRegisterFamilyPhone(lang) };
+    }
+    const existingFamily = await PatientService.findByPhone(typed);
+    if (existingFamily) {
+      return {
+        reply:
+          L(
+            lang,
+            `That number is already registered as *${existingFamily.name || "a patient"}*.\n` +
+              `Send a different mobile number for your family member.`,
+            `वह नंबर पहले से *${existingFamily.name || "मरीज़"}* के नाम से रजिस्टर्ड है।\n` +
+              `परिवार के सदस्य के लिए दूसरा मोबाइल नंबर भेजें।`,
+          ),
+      };
+    }
+    // Don't reuse the WhatsApp sender as the family login phone.
+    if (normalizePhone(typed) === normalizePhone(patientPhone)) {
+      return {
+        reply:
+          L(
+            lang,
+            "That is *your* WhatsApp number. Send your *family member's* mobile number.",
+            "यह *आपका* WhatsApp नंबर है। *परिवार के सदस्य* का मोबाइल नंबर भेजें।",
+          ),
+      };
+    }
+    state.regPhone = typed;
+    const next = goToRegisterConfirm(state, patientPhone, lang);
+    await saveState(convId, state);
+    return next;
+  }
+
   if (state.step === "awaiting_register_gender") {
     const gender = parseGender(text, parseSlotsRegex(text));
     if (!gender) {
-      return withGenderButtons(BotPrompts.askRegisterGender(lang));
+      return withGenderButtons(
+        state.registeringFamily
+          ? BotPrompts.askRegisterFamilyGender(lang)
+          : BotPrompts.askRegisterGender(lang),
+      );
     }
     state.regGender = gender;
     state.step = "awaiting_register_email_opt";
@@ -1997,7 +2146,7 @@ async function runOrchestratorCore(input: {
     }
     if (isNegative(text)) {
       delete state.regEmail;
-      const next = goToRegisterConfirm(state, patientPhone, lang);
+      const next = goToFamilyPhoneOrConfirm(state, patientPhone, lang);
       await saveState(convId, state);
       return next;
     }
@@ -2005,7 +2154,7 @@ async function runOrchestratorCore(input: {
     const typedEmail = parseRegisterEmail(text);
     if (typedEmail) {
       state.regEmail = typedEmail;
-      const next = goToRegisterConfirm(state, patientPhone, lang);
+      const next = goToFamilyPhoneOrConfirm(state, patientPhone, lang);
       await saveState(convId, state);
       return next;
     }
@@ -2016,14 +2165,14 @@ async function runOrchestratorCore(input: {
   if (state.step === "awaiting_register_email") {
     if (isNegative(text)) {
       delete state.regEmail;
-      const next = goToRegisterConfirm(state, patientPhone, lang);
+      const next = goToFamilyPhoneOrConfirm(state, patientPhone, lang);
       await saveState(convId, state);
       return next;
     }
     const email = parseRegisterEmail(text);
     if (!email) return { reply: BotPrompts.askRegisterEmail(lang) };
     state.regEmail = email;
-    const next = goToRegisterConfirm(state, patientPhone, lang);
+    const next = goToFamilyPhoneOrConfirm(state, patientPhone, lang);
     await saveState(convId, state);
     return next;
   }
@@ -2031,12 +2180,20 @@ async function runOrchestratorCore(input: {
   if (state.step === "awaiting_register_name") {
     const name = text.trim();
     if (name.length < 2 || /^(yes|no|help|book|register|male|female|others?)$/i.test(name)) {
-      return { reply: BotPrompts.askRegisterName(lang) };
+      return {
+        reply: state.registeringFamily
+          ? BotPrompts.askRegisterFamilyName(lang)
+          : BotPrompts.askRegisterName(lang),
+      };
     }
     state.regName = name;
     state.step = "awaiting_register_gender";
     await saveState(convId, state);
-    return withGenderButtons(BotPrompts.askRegisterGender(lang));
+    return withGenderButtons(
+      state.registeringFamily
+        ? BotPrompts.askRegisterFamilyGender(lang)
+        : BotPrompts.askRegisterGender(lang),
+    );
   }
 
   if (state.step === "awaiting_register_confirm") {
@@ -2049,7 +2206,8 @@ async function runOrchestratorCore(input: {
     }
     return withYesNo(
       BotPrompts.askRegisterConfirm(
-        state.pendingSummary || registerSummary(state, patientPhone),
+        state.pendingSummary ||
+          registerSummary(state, resolveRegisterPhone(state, patientPhone)),
         state.afterRegister === "book",
         lang,
       ),
