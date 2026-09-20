@@ -6,6 +6,46 @@ const prisma = new PrismaClient();
 /** Shared demo password for doctor + patient (+ admin). */
 const DEMO_PASSWORD = "Demo@12345";
 
+/** Clinic demo Tel — MOCK only; never receives WHATSAPP_PHONE_NUMBER_ID. */
+const DEMO_CLINIC_PHONE = "9876543210";
+
+/**
+ * Real Meta Cloud display phone for this project's WABA line.
+ * Must match Meta `display_phone_number` for WHATSAPP_PHONE_NUMBER_ID.
+ */
+const DEMO_META_DISPLAY_PHONE = (
+  process.env.GLUCOGUIDE_OTP_PHONE || "9990052082"
+).replace(/\D/g, "").slice(-10);
+
+function assertSafeToSeed() {
+  const url = process.env.DATABASE_URL ?? "";
+  const host = (() => {
+    try {
+      return new URL(url.replace(/^postgresql:/i, "http:").replace(/^postgres:/i, "http:")).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  const isLocal =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "" ||
+    host.endsWith(".local");
+  const allowProd = process.env.ALLOW_PROD_SEED === "1";
+  if (!isLocal && !allowProd) {
+    throw new Error(
+      `Refusing to wipe/seed non-local database (${host || "unknown"}).\n` +
+        `Seed deletes all practices/users/WhatsApp lines and breaks live Meta routing.\n` +
+        `Use a local Postgres, or set ALLOW_PROD_SEED=1 only if you really mean it.`,
+    );
+  }
+  if (!isLocal && allowProd) {
+    console.warn(
+      `[seed] ALLOW_PROD_SEED=1 — wiping ${host}. Meta id will only attach to ${DEMO_META_DISPLAY_PHONE}.`,
+    );
+  }
+}
+
 /**
  * Demo: clinic owner + clinic staff doctor + independent solo doctor + patient.
  * Independent doctors are not linkable into clinics — clinic staff are created
@@ -16,11 +56,12 @@ async function main() {
     "Seeding GlucoGuide demo (clinic owner + staff + independent doctor · 1 patient)…",
   );
 
+  assertSafeToSeed();
+
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
-  // Wipe prior demo data so the DB stays minimal
+  // Wipe prior demo data so the DB stays minimal (local only unless ALLOW_PROD_SEED=1)
   await wipeAllAppData();
-
   const hospital = await prisma.hospital.create({
     data: {
       name: "City Diabetes Center",
@@ -40,7 +81,7 @@ async function main() {
       password: passwordHash,
       role: "doctor",
       name: "Dr. Ananya Sharma",
-      phone: "9876543210",
+      phone: DEMO_CLINIC_PHONE,
       createdBy: "clinic_owner_signup",
       doctor: {
         create: {
@@ -50,7 +91,7 @@ async function main() {
           availableTimes: "Mon–Sat 9:00–17:00",
           experience: 12,
           emails: ["dr.demo@glucoguide.com"],
-          contactNumbers: ["+919876543210"],
+          contactNumbers: [`+91${DEMO_CLINIC_PHONE}`],
           appointmentValidityDays: 7,
         },
       },
@@ -88,9 +129,9 @@ async function main() {
       type: "CLINIC",
       specialty: "Endocrinology & Diabetes",
       consultationFee: 800,
-      phone: "9876543210",
+      phone: DEMO_CLINIC_PHONE,
       email: "dr.demo@glucoguide.com",
-      whatsappBusinessNumber: "+919876543210",
+      whatsappBusinessNumber: `+91${DEMO_CLINIC_PHONE}`,
       whatsappWebhookSecret: "demo-webhook-secret",
       isActive: true,
       isDirectoryListed: true,
@@ -130,14 +171,14 @@ async function main() {
   const location = practice.locations[0]!;
   const doctorUser = staffDoctor;
 
-  // Independent individual doctor (own SOLO practice — WhatsApp line 9990052082)
+  // Independent individual doctor (own SOLO practice — Meta WhatsApp display phone)
   const soloDoctor = await prisma.user.create({
     data: {
       email: "dr.solo@glucoguide.com",
       password: passwordHash,
       role: "doctor",
       name: "Dr. Priya Nair",
-      phone: "9990052082",
+      phone: DEMO_META_DISPLAY_PHONE,
       createdBy: "self_attempted",
       doctor: {
         create: {
@@ -146,7 +187,7 @@ async function main() {
           availableTimes: "Mon–Fri 10:00–18:00",
           experience: 8,
           emails: ["dr.solo@glucoguide.com"],
-          contactNumbers: ["+919990052082"],
+          contactNumbers: [`+91${DEMO_META_DISPLAY_PHONE}`],
           appointmentValidityDays: 7,
           licenseNo: "IND-SOLO-1001",
         },
@@ -162,8 +203,8 @@ async function main() {
       type: "SOLO",
       specialty: "Endocrinology",
       consultationFee: 700,
-      phone: "9990052082",
-      whatsappBusinessNumber: "9990052082",
+      phone: DEMO_META_DISPLAY_PHONE,
+      whatsappBusinessNumber: DEMO_META_DISPLAY_PHONE,
       email: "dr.solo@glucoguide.com",
       registrationNo: "IND-SOLO-1001",
       isActive: true,
@@ -289,7 +330,7 @@ async function main() {
       email: "patient1@example.com",
       password: passwordHash,
       role: "user",
-      name: "Ravi Kumar",
+      name: "Anurag Nanda",
       phone: "9999973601",
       gender: "male",
       address: "Koramangala, Bangalore",
@@ -326,7 +367,7 @@ async function main() {
       providerId: doctorUser.id,
       patientId: patientUser.patient!.id,
       patientPhone: "9999973601",
-      patientName: "Ravi Kumar",
+      patientName: "Anurag Nanda",
       mode: ScheduleMode.TIME_BASED,
       status: "WAITING",
       channel: "WEB_PORTAL",
@@ -343,7 +384,7 @@ async function main() {
       providerId: clinicOwner.id,
       patientId: patientUser.patient!.id,
       patientPhone: "9999973601",
-      patientName: "Ravi Kumar",
+      patientName: "Anurag Nanda",
       mode: ScheduleMode.TIME_BASED,
       status: "ACCEPTED",
       channel: "WEB_PORTAL",
@@ -360,7 +401,7 @@ async function main() {
       providerId: clinicOwner.id,
       patientId: patientUser.patient!.id,
       patientPhone: "9999973601",
-      patientName: "Ravi Kumar",
+      patientName: "Anurag Nanda",
       mode: ScheduleMode.TIME_BASED,
       status: "ACCEPTED",
       channel: "WEB_PORTAL",
@@ -377,7 +418,7 @@ async function main() {
       providerId: soloDoctor.id,
       patientId: patientUser.patient!.id,
       patientPhone: "9999973601",
-      patientName: "Ravi Kumar",
+      patientName: "Anurag Nanda",
       mode: ScheduleMode.TIME_BASED,
       status: "ACCEPTED",
       channel: "WEB_PORTAL",
@@ -423,63 +464,64 @@ async function main() {
       status: "ACTIVE",
       currentPeriodStart: new Date(),
       currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60_000),
-      notes: "Demo independent doctor — Starter plan + WhatsApp 9990052082",
+      notes: `Demo independent doctor — Starter plan + WhatsApp ${DEMO_META_DISPLAY_PHONE}`,
     },
   });
 
+  // Clinic demo line is MOCK only — never share WHATSAPP_PHONE_NUMBER_ID with it.
   await prisma.whatsAppNumber.create({
     data: {
-      phoneNumber: "9876543210",
+      phoneNumber: DEMO_CLINIC_PHONE,
       displayName: practice.name,
       status: "LIVE",
-      provider: process.env.WHATSAPP_PHONE_NUMBER_ID ? "META_CLOUD_API" : "MOCK",
+      provider: "MOCK",
       practiceId: practice.id,
-      wabaPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || null,
-      wabaId: process.env.WHATSAPP_WABA_ID || null,
+      wabaPhoneNumberId: null,
+      wabaId: null,
       verificationStatus: "verified",
       displayNameStatus: "approved",
       templatesStatus: "approved",
       activatedAt: new Date(),
-      notes: "Minimal demo WhatsApp line (clinic)",
+      notes: `MOCK clinic demo line — Meta Cloud id belongs on ${DEMO_META_DISPLAY_PHONE} only`,
     },
   });
 
   await prisma.practice.update({
     where: { id: practice.id },
-    data: { whatsappBusinessNumber: "9876543210" },
+    data: { whatsappBusinessNumber: DEMO_CLINIC_PHONE },
   });
 
-  // Independent doctor WhatsApp line — +91 99900 52082
-  const soloMetaPhoneId =
+  // Solo line owns the project's Meta Cloud phone (display must match Meta).
+  const soloMetaPhoneId = (
     process.env.GLUCOGUIDE_OTP_PHONE_NUMBER_ID ||
     process.env.WHATSAPP_PHONE_NUMBER_ID ||
-    null;
+    ""
+  ).trim() || null;
   await prisma.whatsAppNumber.create({
     data: {
-      phoneNumber: "9990052082",
+      phoneNumber: DEMO_META_DISPLAY_PHONE,
       displayName: soloPractice.name,
       status: "LIVE",
       provider: soloMetaPhoneId ? "META_CLOUD_API" : "MOCK",
       practiceId: soloPractice.id,
       wabaPhoneNumberId: soloMetaPhoneId,
-      wabaId: process.env.WHATSAPP_WABA_ID || null,
+      wabaId: soloMetaPhoneId ? process.env.WHATSAPP_WABA_ID || null : null,
       verificationStatus: "verified",
       displayNameStatus: "approved",
       templatesStatus: "approved",
       activatedAt: new Date(),
-      notes: "Independent doctor demo line (+91 99900 52082)",
+      notes: `Meta Cloud display +91 ${DEMO_META_DISPLAY_PHONE} — sole owner of WHATSAPP_PHONE_NUMBER_ID`,
     },
   });
-
   await NumberPoolService.syncMetaUtilityTemplates();
 
   console.log("\n✅ Minimal seed complete\n");
   console.log("  Clinic:   Dr. Ananya Sharma Clinic  (/practices/dr-ananya-sharma-clinic)");
-  console.log("  Clinic WA:           +91 98765 43210");
+  console.log("  Clinic WA:           +91 " + DEMO_CLINIC_PHONE + " (MOCK)");
   console.log("  Clinic Login:        dr.demo@glucoguide.com  (owner)");
   console.log("  Clinic staff Login:  dr.staff@glucoguide.com  (Doctor Login)");
   console.log("  Independent doctor:  dr.solo@glucoguide.com  (own SOLO practice)");
-  console.log("  Independent WA:      +91 99900 52082");
+  console.log("  Independent WA:      +91 " + DEMO_META_DISPLAY_PHONE + " (Meta Cloud)");
   console.log("  Patient:  patient1@example.com");
   console.log("  Admin:    admin@glucoguide.com");
   console.log(`  Password: ${DEMO_PASSWORD}  (all of the above)\n`);

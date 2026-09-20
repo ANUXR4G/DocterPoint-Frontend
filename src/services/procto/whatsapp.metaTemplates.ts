@@ -52,7 +52,7 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
       practice_name: "City Care Clinic",
       when_label: "26 Aug 2026, 10:30 AM",
       provider_name: "Dr Anjali Mehta",
-      location: "Main Clinic, Indiranagar",
+      location: "Road 11, Gulshan-2, Gulshan",
     },
     paramNames: ["practice_name", "when_label", "provider_name", "location"],
     requiresTemplateOutsideWindow: true,
@@ -164,7 +164,7 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
       "Channel: {{channel}}",
     examples: {
       practice_name: "City Care Clinic",
-      patient_name: "Ravi Kumar",
+      patient_name: "Anurag Nanda",
       when_label: "26 Aug 2026, 10:30 AM",
       provider_name: "Dr Anjali Mehta",
       channel: "WHATSAPP_AI",
@@ -190,7 +190,7 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
       "Was: {{when_label}}",
     examples: {
       practice_name: "City Care Clinic",
-      patient_name: "Ravi Kumar",
+      patient_name: "Anurag Nanda",
       when_label: "26 Aug 2026, 10:30 AM",
     },
     paramNames: ["practice_name", "patient_name", "when_label"],
@@ -209,7 +209,7 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
       "New: {{when_label}}",
     examples: {
       practice_name: "City Care Clinic",
-      patient_name: "Ravi Kumar",
+      patient_name: "Anurag Nanda",
       old_when: "26 Aug 2026, 10:30 AM",
       when_label: "27 Aug 2026, 11:00 AM",
     },
@@ -225,7 +225,7 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
     body:
       "Patient {{patient_name}} is now in progress at {{practice_name}} ({{when_label}}).",
     examples: {
-      patient_name: "Ravi Kumar",
+      patient_name: "Anurag Nanda",
       practice_name: "City Care Clinic",
       when_label: "Token #12",
     },

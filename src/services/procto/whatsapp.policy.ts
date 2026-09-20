@@ -157,8 +157,8 @@ export function faqReply(
     if (v) {
       return L(
         lang,
-        `Appointment / consultation fee at *${practiceName}*:\n*${v}*\n\nReply *FAQ* for full clinic details, or *BOOK* to schedule.`,
-        `*${practiceName}* पर अपॉइंटमेंट / कंसल्टेशन फीस:\n*${v}*\n\nपूरी जानकारी के लिए *FAQ*, या बुक करने के लिए *BOOK* लिखें।`,
+        `Appointment / consultation fee at *${practiceName}*:\n*${v}*`,
+        `*${practiceName}* पर अपॉइंटमेंट / कंसल्टेशन फीस:\n*${v}*`,
       );
     }
   }
@@ -194,8 +194,8 @@ export function faqReply(
     if (!body) return null;
     return L(
       lang,
-      `Clinic details for *${practiceName}*:\n${body}\n\nReply *BOOK* to book an appointment.`,
-      `*${practiceName}* की क्लिनिक जानकारी:\n${body}\n\nअपॉइंटमेंट बुक करने के लिए *BOOK* लिखें।`,
+      `Clinic details for *${practiceName}*:\n${body}`,
+      `*${practiceName}* की क्लिनिक जानकारी:\n${body}`,
     );
   }
   return null;
