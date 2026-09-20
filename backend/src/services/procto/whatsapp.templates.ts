@@ -105,6 +105,28 @@ export const BotPrompts = {
     );
   },
 
+  askRegisterPhoneOpt(displayPhone: string, lang?: WaLang): string {
+    return L(
+      lang,
+      `Do you want to store *${displayPhone}* as your registered mobile number?\n` +
+        `(This is the WhatsApp number you are messaging from — not from any ID document.)\n` +
+        `Tap *Yes* to use it, or *No* to type a different number.`,
+      `क्या आप *${displayPhone}* को अपना रजिस्टर्ड मोबाइल नंबर रखना चाहते हैं?\n` +
+        `(यह वही WhatsApp नंबर है जिससे आप मैसेज कर रहे हैं — किसी ID दस्तावेज़ से नहीं।)\n` +
+        `*Yes* दबाएँ इस्तेमाल करने के लिए, या *No* दबाकर दूसरा नंबर लिखें।`,
+    );
+  },
+
+  askRegisterPhoneManual(lang?: WaLang): string {
+    return L(
+      lang,
+      "Type your *10-digit mobile number* to register (e.g. 9876543210).\n" +
+        "This number is for login OTP — it is *not* taken from an ID document.",
+      "रजिस्टर करने के लिए अपना *10 अंकों का मोबाइल नंबर* लिखें (जैसे 9876543210)।\n" +
+        "यह नंबर लॉगिन OTP के लिए है — ID दस्तावेज़ से नहीं लिया जाता।",
+    );
+  },
+
   askRegisterConfirm(summary: string, thenBook?: boolean, lang?: WaLang): string {
     const next = thenBook
       ? L(lang, "\nAfter this we'll continue to *booking*.", "\nइसके बाद *बुकिंग* जारी रखेंगे।")

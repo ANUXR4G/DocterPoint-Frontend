@@ -335,6 +335,8 @@ export class PatientService {
    */
   static async registerViaWhatsApp(data: {
     phone: string;
+    /** WhatsApp sender (chat identity). Kept on contactNumber when different from login phone. */
+    whatsappFrom?: string | null;
     name: string;
     gender?: string;
     dateOfBirth?: string | null;
@@ -345,6 +347,10 @@ export class PatientService {
     if (phone.length < 10) {
       throw new AppError(400, "A valid 10-digit phone is required.");
     }
+    const waFrom = (data.whatsappFrom || phone).replace(/\D/g, "").slice(-10);
+    // Chat lookup uses contactNumber when login phone differs from WhatsApp sender.
+    const contactNumber =
+      waFrom.length === 10 && waFrom !== phone ? waFrom : phone;
 
     // WhatsApp registration is patient-only
     const staffPhone = await prisma.user.findFirst({
@@ -441,7 +447,7 @@ export class PatientService {
         createdBy: "whatsapp_bot",
         patient: {
           create: {
-            contactNumber: phone,
+            contactNumber,
             dateOfBirth: data.dateOfBirth?.trim() || null,
           },
         },

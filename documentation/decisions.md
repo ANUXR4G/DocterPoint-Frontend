@@ -69,7 +69,8 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | DB | Postgres `gluco_guide` | Canonical GlucoGuide database |
 | Cache / queues | Redis on `:6379` | Required for cache + notification workers |
 | API proxy | Next `app/api/v1/[...path]` → `BACKEND_URL` | Browser talks only to `:3000` |
-| Seed | `cd backend && yarn seed` | Demo doctor, patient, admin, and clinic plans |
+| Seed | `cd backend && yarn seed` — **blocked on Supabase/non-local** unless `ALLOW_PROD_SEED=1` | Wipe destroys live Meta routing; demo seed is for local Postgres only |
+| Platform Meta phone id | `WHATSAPP_PHONE_NUMBER_ID` pinned on boot to `GLUCOGUIDE_OTP_PHONE` (default `9990052082`) only | Seed must never put that Meta id on the clinic MOCK Tel (`9876543210`) |
 
 ## Explicit non-goals (current pass)
 
@@ -91,7 +92,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Number pool | `whatsapp_numbers` table + `/api/v1/procto/admin/*` | Ops assigns AVAILABLE → LIVE; syncs **both** `practice.whatsappBusinessNumber` and `practice.phone` (Settings Tel = public WhatsApp bot number). Profile Tel is locked while a line is connected. |
 | Registration Tel → bot | Platform WABA add + **in-app Meta OTP** (`request_code` / `verify_code` / `register`) | Clinic + solo doctor Tel required; VERIFYING until OTP; no WhatsApp Manager for go-live |
 | Subscriptions | `docline_plans` table (legacy DB name) + `practice_subscriptions` + Razorpay + Billing tab | Keep table name for migrations; UI says GlucoGuide plans |
-| Bot policy | AI disclosure, FAQ from `faq_kb`, clinical guardrails, *HUMAN* handoff | Meta policy |
+| WhatsApp booking persist | `createBooking` writes `practice_bookings` **before** AI visit brief; confirm only after row verified | LLM / network must not block or fake a confirmation |
 | Directory visibility | `practice.isDirectoryListed` | Suspended / unpaid practices hidden from public find-care |
 | Reviews | `practice_reviews` after completed visit; shown on profile + find-clinic | Starter+ plans (`features.reviews`); require published + entitlement |
 | Conversation takeover | `whatsapp_conversations.status` + doctor Practice → WhatsApp inbox | Bot silences on `handed_off` |
@@ -135,4 +136,5 @@ Deferred Phase 2+: interactive WA buttons, hard review gate on completed visits,
 - [Whatsapp-Meta-Rules.md](./Whatsapp-Meta-Rules.md) — Meta WhatsApp compliance
 - [flow.md](./flow.md) — user and system flows
 - [login.md](./login.md) — demo credentials
+- [playwright-e2e-report.md](./playwright-e2e-report.md) — Playwright E2E (OTP, book→queue, Expo API)
 - [frontend/DESIGN.md](../frontend/DESIGN.md) — public visual system

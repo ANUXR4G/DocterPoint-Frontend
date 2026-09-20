@@ -7,6 +7,36 @@ export type NotifyOpts = {
   skipPatientTemplate?: boolean;
 };
 
+/** Human-facing place line for WhatsApp / confirmations (prefer street address over branch label). */
+export function formatBookingLocation(loc: {
+  name?: string | null;
+  address?: string | null;
+  city?: string | null;
+}): string {
+  const name = String(loc.name || "").trim();
+  const address = String(loc.address || "").trim();
+  const city = String(loc.city || "").trim();
+
+  const placeParts: string[] = [];
+  if (address) placeParts.push(address);
+  if (city && !address.toLowerCase().includes(city.toLowerCase())) {
+    placeParts.push(city);
+  }
+  const place = placeParts.join(", ");
+
+  const genericName =
+    !name ||
+    /^(main\s*clinic|primary|default|head\s*office|branch\s*1)$/i.test(name);
+
+  if (place) {
+    if (!genericName && !place.toLowerCase().includes(name.toLowerCase())) {
+      return `${name} — ${place}`;
+    }
+    return place;
+  }
+  return name || "clinic";
+}
+
 async function loadBooking(bookingId: string) {
   const booking = await prisma.practiceBooking.findUnique({
     where: { id: bookingId },
@@ -120,7 +150,7 @@ export const NotificationService = {
 
     const base = {
       practiceName: booking.practice.name,
-      location: booking.location.name,
+      location: formatBookingLocation(booking.location),
       providerName: booking.provider?.name ?? "",
       patientName: booking.patientName ?? "Patient",
       patientPhone: booking.patientPhone,
@@ -226,7 +256,7 @@ export const NotificationService = {
         recipientRole: "patient",
         practiceName: booking.practice.name,
         providerName: booking.provider?.name ?? "",
-        location: booking.location.name,
+        location: formatBookingLocation(booking.location),
         ...whenFields(booking),
       },
     });

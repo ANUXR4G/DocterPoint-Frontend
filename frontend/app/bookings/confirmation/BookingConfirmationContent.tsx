@@ -24,6 +24,29 @@ function formatWhen(booking: ProctoBooking) {
   return "—"
 }
 
+/** Prefer street address over generic branch labels like "Main Clinic". */
+function formatLocationLine(loc: {
+  name?: string | null
+  address?: string | null
+  city?: string | null
+}): string {
+  const name = String(loc.name || "").trim()
+  const address = String(loc.address || "").trim()
+  const city = String(loc.city || "").trim()
+  const place = [address, city && !address.toLowerCase().includes(city.toLowerCase()) ? city : ""]
+    .filter(Boolean)
+    .join(", ")
+  const generic =
+    !name || /^(main\s*clinic|primary|default|head\s*office)$/i.test(name)
+  if (place) {
+    if (!generic && !place.toLowerCase().includes(name.toLowerCase())) {
+      return `${name} — ${place}`
+    }
+    return place
+  }
+  return name || "—"
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-3 rounded-xl border border-slate-100 bg-sky-50/40 px-3.5 py-3 dark:border-white/10 dark:bg-white/5">
@@ -119,7 +142,7 @@ export default function BookingConfirmationContent() {
                 label="Location"
                 value={
                   booking.location
-                    ? `${booking.location.name}, ${booking.location.city}`
+                    ? formatLocationLine(booking.location)
                     : "—"
                 }
               />

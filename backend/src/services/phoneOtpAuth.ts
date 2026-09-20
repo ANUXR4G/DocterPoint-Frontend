@@ -12,7 +12,8 @@ import { getRedis } from "../db/redis.js";
 import { sendWhatsAppText } from "./procto/whatsapp.client.js";
 
 const OTP_TTL_SEC = 5 * 60;
-const RESEND_COOLDOWN_SEC = 45;
+/** Production resend gate; QA_EXPOSE_OTP shortens for Playwright / local E2E. */
+const RESEND_COOLDOWN_SEC = settings.qaExposeOtp ? 2 : 45;
 const MAX_ATTEMPTS = 5;
 const OTP_LEN = 6;
 

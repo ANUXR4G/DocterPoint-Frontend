@@ -101,7 +101,7 @@ POST /api/v1/procto/admin/templates/sync-meta
           { "param_name": "practice_name", "example": "City Care Clinic" },
           { "param_name": "when_label", "example": "26 Aug 2026, 10:30 AM" },
           { "param_name": "provider_name", "example": "Dr Anjali Mehta" },
-          { "param_name": "location", "example": "Main Clinic, Indiranagar" }
+          { "param_name": "location", "example": "Road 11, Gulshan-2, Gulshan" }
         ]
       }
     }

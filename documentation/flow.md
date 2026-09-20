@@ -252,12 +252,12 @@ Or send `audioBase64` + `mimeType` to exercise live STT.
 
 **Automated patient path**
 1. *HELP* / welcome menu is numbered — reply `1`–`9` (or the keyword) when idle: 1 BOOK · 2 DOCTORS · 3 STATUS · 4 REGISTER · 5 FAQ · 6 CANCEL · 7 RESCHEDULE · 8 LANGUAGE · 9 REPORT. Digits during doctor/slot pick still choose that option, not the menu.
-2. *BOOK* without an account → quick register (name → gender → optional email Yes/No → confirm) → continues into booking. Email is optional (Yes asks for address; No skips). Sign-in remains mobile OTP.
+2. *BOOK* without an account → quick register (name → gender → optional email Yes/No → **store WhatsApp sender as registered mobile Yes/No** → confirm) → continues into booking. Email is optional (Yes asks for address; No skips). Mobile is the WhatsApp *from* number (not from ID OCR); No lets the patient type a different 10-digit number. Sign-in remains mobile OTP.
 3. Sole doctor / sole mode / sole slot are auto-selected
 4. Suggests next open day when booking with a single doctor
 5. Confirmations + clinic alerts + 30‑min / token-morning reminders run via workers
 
-**Register flow (standalone):** `REGISTER` → name → gender → email Yes/No → (email if Yes) → YES  
+**Register flow (standalone):** `REGISTER` → name → gender → email Yes/No → (email if Yes) → **phone Yes/No** (`+91 …` WhatsApp sender) → (type mobile if No) → YES
 **Doctors list:** `DOCTORS` (or “list doctors” / “who are the doctors”)  
 **Book flow (registered):** `BOOK` → date (**Dates** list = next 7 working days) → (doctor if needed) → (mode buttons if needed) → slot (**time buttons** or *Slots* list) → **Yes/No** buttons
 

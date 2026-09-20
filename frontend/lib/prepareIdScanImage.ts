@@ -1,8 +1,9 @@
-/** Resize ID photos before OCR so uploads stay fast and reliable. */
+/** Resize ID photos before OCR so uploads stay fast and readable. */
 export async function prepareIdScanImage(
   file: File,
 ): Promise<{ base64: string; mimeType: string }> {
-  const maxDim = 1280
+  // Keep enough resolution for Aadhaar small print (was 1280 @ 0.85 — too soft).
+  const maxDim = 1800
   const mimeType = "image/jpeg"
 
   if (typeof createImageBitmap === "function" && file.type.startsWith("image/")) {
@@ -16,10 +17,12 @@ export async function prepareIdScanImage(
       canvas.height = height
       const ctx = canvas.getContext("2d")
       if (ctx) {
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = "high"
         ctx.drawImage(bitmap, 0, 0, width, height)
         bitmap.close()
         const blob = await new Promise<Blob | null>((resolve) => {
-          canvas.toBlob(resolve, mimeType, 0.85)
+          canvas.toBlob(resolve, mimeType, 0.92)
         })
         if (blob) return blobToPayload(blob, mimeType)
       } else {

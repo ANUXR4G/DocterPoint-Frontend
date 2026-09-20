@@ -42,7 +42,7 @@ Patient login **and** Expo signup are **mobile number + WhatsApp OTP** only.
 
 | Mobile (demo) | Notes |
 |---------------|-------|
-| `9999973601` | Seeded patient `patient1@example.com` / Ravi Kumar |
+| `9999973601` | Seeded patient `patient1@example.com` / Anurag Nanda |
 
 ## Browse
 
@@ -62,7 +62,7 @@ After re-seeding, **sign out and sign in again** (old session cookies point at w
 
 Clinic line (seed): patient WhatsApp → practice number ending **9876543210** (LIVE demo line).
 
-Use a **patient** phone (not staff). Seeded patient: `9999973601` (Ravi Kumar — already registered).
+Use a **patient** phone (not staff). Seeded patient: `9999973601` (Anurag Nanda — already registered).
 
 **Script (≈ 60 seconds):**
 

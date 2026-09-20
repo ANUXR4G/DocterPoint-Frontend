@@ -116,6 +116,13 @@ export const BookingService = {
       BookingChannel.WEB_PORTAL,
     );
 
+    // Always store last-10 Indian mobile digits for queue / WhatsApp match.
+    const patientPhone = data.patientPhone.replace(/\D/g, "").slice(-10);
+    if (patientPhone.length < 10) {
+      throw new AppError(400, "patientPhone must be a valid 10-digit mobile.");
+    }
+    data = { ...data, patientPhone };
+
     const { assertBookingQuota } = await import("./planEntitlements.js");
     await assertBookingQuota(data.practiceId);
 
@@ -256,29 +263,14 @@ export const BookingService = {
     }
 
     const diseaseText = data.disease?.trim().slice(0, 500) || "";
-    let notesText = data.notes?.trim() || null;
-    let remarksSeed: string | null = null;
-
-    // AI visit brief → notes + seed doctorRemarks so the problem shows in Remarks.
-    if (diseaseText && !notesText) {
-      try {
-        const { brief } = await buildDoctorVisitBrief(diseaseText);
-        if (brief) {
-          notesText = formatPatientProblemNotes(diseaseText, brief);
-          remarksSeed = brief;
-        }
-      } catch (err) {
-        console.warn(
-          "[createBooking] patient problem brief failed (non-fatal):",
-          err instanceof Error ? err.message : err,
-        );
-        notesText = formatPatientProblemNotes(diseaseText, "");
-        remarksSeed = `Patient problem:\n${diseaseText}`;
-      }
-    } else if (diseaseText && !remarksSeed) {
-      // Client supplied notes — still seed remarks from disease if empty.
-      remarksSeed = `Patient problem:\n${diseaseText}`;
-    }
+    // Persist first with plain notes — never block DB write on OpenAI / brief LLM.
+    // Enrich doctorRemarks asynchronously after the row exists.
+    let notesText =
+      data.notes?.trim() ||
+      (diseaseText ? formatPatientProblemNotes(diseaseText, "") : null);
+    let remarksSeed: string | null = diseaseText
+      ? `Patient problem:\n${diseaseText}`
+      : null;
 
     // Serialize capacity check + create to reduce double-booking races
     const booking = await prisma.$transaction(async (tx) => {
@@ -392,6 +384,28 @@ export const BookingService = {
       ]);
     }
 
+    // AI visit brief after commit — dashboard still has the booking if LLM fails.
+    if (diseaseText && !data.notes?.trim()) {
+      void (async () => {
+        try {
+          const { brief } = await buildDoctorVisitBrief(diseaseText);
+          if (!brief) return;
+          await prisma.practiceBooking.update({
+            where: { id: booking.id },
+            data: {
+              notes: formatPatientProblemNotes(diseaseText, brief),
+              doctorRemarks: brief,
+            },
+          });
+        } catch (err) {
+          console.warn(
+            "[createBooking] patient problem brief failed (non-fatal):",
+            err instanceof Error ? err.message : err,
+          );
+        }
+      })();
+    }
+
     void NotificationService.enqueueConfirmation(booking.id, {
       skipPatientTemplate: Boolean(data.skipPatientNotification),
     }).catch((err) => {
@@ -411,6 +425,10 @@ export const BookingService = {
       .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
       .catch(() => undefined);
 
+    console.log(
+      `[createBooking] stored id=${booking.id} practice=${booking.practiceId} ` +
+        `provider=${booking.providerId} phone=${booking.patientPhone} channel=${booking.channel}`,
+    );
     return booking;
   },
 

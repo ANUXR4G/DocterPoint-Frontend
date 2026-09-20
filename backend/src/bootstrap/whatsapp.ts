@@ -4,8 +4,66 @@
  *
  * IMPORTANT: Do NOT stamp WHATSAPP_PHONE_NUMBER_ID onto every LIVE row.
  * That collapses multi-clinic routing onto one Meta line.
+ *
+ * Platform Meta line (GLUCOGUIDE_OTP_PHONE + WHATSAPP_PHONE_NUMBER_ID) is pinned
+ * to the matching display phone on every boot so seed/order bugs cannot stick.
  */
 import { prisma } from "../db/prisma.js";
+import { settings } from "../config/index.js";
+
+function digits10(phone: string): string {
+  return phone.replace(/\D/g, "").slice(-10);
+}
+
+/**
+ * Ensure env Meta phone_number_id lives only on the display phone that owns it.
+ * Prefer GLUCOGUIDE_OTP_PHONE (default 9990052082) over "oldest row wins".
+ */
+async function pinPlatformMetaPhoneId(): Promise<void> {
+  const metaId = (settings.glucoguideOtpPhoneNumberId || "").trim();
+  const displayPhone = digits10(settings.glucoguideOtpPhone || "");
+  if (!metaId || displayPhone.length < 10) return;
+
+  const holders = await prisma.whatsAppNumber.findMany({
+    where: {
+      AND: [
+        { wabaPhoneNumberId: metaId },
+        { NOT: { phoneNumber: { endsWith: displayPhone } } },
+      ],
+    },
+    select: { id: true, phoneNumber: true },
+  });
+  for (const row of holders) {
+    await prisma.whatsAppNumber.update({
+      where: { id: row.id },
+      data: { wabaPhoneNumberId: null },
+    });
+    console.warn(
+      `[whatsapp] moved Meta phone id off ${row.phoneNumber} → belongs on ${displayPhone}`,
+    );
+  }
+
+  const owner = await prisma.whatsAppNumber.findFirst({
+    where: { phoneNumber: { endsWith: displayPhone } },
+    select: { id: true, wabaPhoneNumberId: true, provider: true },
+  });
+  if (!owner) return;
+  if (owner.wabaPhoneNumberId === metaId) return;
+
+  await prisma.whatsAppNumber.update({
+    where: { id: owner.id },
+    data: {
+      wabaPhoneNumberId: metaId,
+      provider: "META_CLOUD_API",
+      ...(settings.whatsappWabaId
+        ? { wabaId: settings.whatsappWabaId }
+        : {}),
+    },
+  });
+  console.log(
+    `[whatsapp] pinned Meta phone id ${metaId} → ${displayPhone}`,
+  );
+}
 
 export async function ensureWhatsAppInfrastructure(): Promise<void> {
   try {
@@ -28,8 +86,15 @@ export async function ensureWhatsAppInfrastructure(): Promise<void> {
       );
     }
 
+    // Pin platform Meta id to its display phone first (fixes seed/order mistakes).
+    await pinPlatformMetaPhoneId();
+
     // Repair: shared Meta Phone Number IDs make every clinic look like one line.
-    // Keep the oldest row; clear duplicates so webhook routing can use phoneNumber.
+    // Prefer the row whose phone matches GLUCOGUIDE_OTP_PHONE when it holds this Meta id;
+    // otherwise keep the oldest row.
+    const platformMetaId = (settings.glucoguideOtpPhoneNumberId || "").trim();
+    const platformPhone = digits10(settings.glucoguideOtpPhone || "");
+
     const withMeta = await prisma.whatsAppNumber.findMany({
       where: {
         AND: [
@@ -56,8 +121,13 @@ export async function ensureWhatsAppInfrastructure(): Promise<void> {
     }
     for (const [metaId, list] of byMeta) {
       if (list.length < 2) continue;
-      const keep = list[0]!;
-      for (const dupe of list.slice(1)) {
+      const preferred =
+        metaId === platformMetaId && platformPhone
+          ? list.find((r) => digits10(r.phoneNumber) === platformPhone)
+          : undefined;
+      const keep = preferred ?? list[0]!;
+      for (const dupe of list) {
+        if (dupe.id === keep.id) continue;
         await prisma.whatsAppNumber.update({
           where: { id: dupe.id },
           data: { wabaPhoneNumberId: null },
@@ -69,7 +139,6 @@ export async function ensureWhatsAppInfrastructure(): Promise<void> {
         );
       }
     }
-
     // Keep practice.whatsappBusinessNumber + practice.phone in sync with LIVE lines.
     const linked = await prisma.whatsAppNumber.findMany({
       where: {
