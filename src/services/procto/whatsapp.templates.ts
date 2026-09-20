@@ -610,8 +610,46 @@ export const BotPrompts = {
   bookingConfirmed(practiceName: string, detail: string, lang?: WaLang): string {
     return L(
       lang,
-      `✅ Booked at *${practiceName}*.\n${detail}\n\nTap *Menu* for more options.`,
-      `✅ *${practiceName}* पर बुकिंग हो गई।\n${detail}\n\nऔर विकल्पों के लिए *Menu* दबाएँ।`,
+      `✅ Booked at *${practiceName}*.\n${detail}\n\n` +
+        `What would you like to do next? Choose below.`,
+      `✅ *${practiceName}* पर बुकिंग हो गई।\n${detail}\n\n` +
+        `अब क्या करना है? नीचे से चुनें।`,
+    );
+  },
+
+  /** After an active booking — reschedule / cancel / new book / message doctor. */
+  postBookingAsk(
+    practiceName: string,
+    whenDetail?: string | null,
+    lang?: WaLang,
+  ): string {
+    const when = whenDetail?.trim()
+      ? L(lang, `\nYour visit: *${whenDetail.trim()}*`, `\nआपकी विज़िट: *${whenDetail.trim()}*`)
+      : "";
+    return L(
+      lang,
+      `Hi — you already have a booking at *${practiceName}*.${when}\n\n` +
+        `What do you want to do?\n` +
+        `1️⃣ Reschedule\n` +
+        `2️⃣ Cancel\n` +
+        `3️⃣ New booking\n` +
+        `4️⃣ Message your doctor`,
+      `नमस्ते — *${practiceName}* पर आपकी बुकिंग पहले से है।${when}\n\n` +
+        `आप क्या करना चाहते हैं?\n` +
+        `1️⃣ रीशेड्यूल\n` +
+        `2️⃣ रद्द करें\n` +
+        `3️⃣ नई बुकिंग\n` +
+        `4️⃣ डॉक्टर को संदेश`,
+    );
+  },
+
+  messageDoctorHandoff(lang?: WaLang): string {
+    return L(
+      lang,
+      "Okay — write your message for your doctor here.\n" +
+        "The clinic will see it in GlucoGuide. Reply *BOT* anytime for booking help.",
+      "ठीक है — डॉक्टर के लिए अपना संदेश यहाँ लिखें।\n" +
+        "क्लिनिक इसे GlucoGuide में देखेगा। बुकिंग मदद के लिए कभी भी *BOT* लिखें।",
     );
   },
 

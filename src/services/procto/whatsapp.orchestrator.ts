@@ -27,6 +27,7 @@ import {
   parseSlotsRegex,
   parseSpokenTime,
   parseUtterance,
+  postBookingNumberShortcut,
   shouldUseLlmForMessage,
   type BotIntent,
   type NluSlots,
@@ -301,6 +302,62 @@ function withMainMenu(reply: string): OrchestratorResult {
   };
 }
 
+/** After booking — reschedule / cancel / new book / message doctor. */
+function withPostBookingMenu(reply: string): OrchestratorResult {
+  return {
+    reply,
+    menuList: [
+      {
+        id: "post:reschedule",
+        title: "1 · Reschedule",
+        description: "Change date or time",
+      },
+      {
+        id: "post:cancel",
+        title: "2 · Cancel",
+        description: "Cancel this visit",
+      },
+      {
+        id: "post:book",
+        title: "3 · New booking",
+        description: "Book another visit",
+      },
+      {
+        id: "post:message_doctor",
+        title: "4 · Message doctor",
+        description: "Chat with your doctor",
+      },
+    ],
+  };
+}
+
+const UPCOMING_STATUSES = [
+  BookingStatus.SCHEDULED,
+  BookingStatus.REQUESTED,
+  BookingStatus.ACCEPTED,
+] as const;
+
+async function findUpcomingBooking(practiceId: string, patientPhone: string) {
+  const bookings = await BookingService.listForPatient({ phone: patientPhone });
+  return (
+    bookings.find(
+      (b) =>
+        b.practiceId === practiceId &&
+        UPCOMING_STATUSES.includes(
+          b.status as (typeof UPCOMING_STATUSES)[number],
+        ),
+    ) ?? null
+  );
+}
+
+function isLooseIdleMessage(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return true;
+  return /^(hi|hello|hey|hii|hlo|yo|sup|namaste|नमस्ते|start|menu|help|मदद|मेनू|ok|okay|thanks|thank you|धन्यवाद|🙏)$/i.test(
+    t,
+  );
+}
+
 function withGenderButtons(reply: string): OrchestratorResult {
   return {
     reply,
@@ -557,6 +614,16 @@ async function dispatchMenuIntent(opts: {
       );
     }
     case "help": {
+      const upcoming = await findUpcomingBooking(practice.id, patientPhone);
+      if (upcoming) {
+        return withPostBookingMenu(
+          BotPrompts.postBookingAsk(
+            practice.name,
+            bookingWhenLabel(upcoming),
+            lang,
+          ),
+        );
+      }
       const patient = await PatientService.findByPhone(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
@@ -1358,7 +1425,7 @@ async function confirmBooking(
       lastBookingId: verified.id,
     });
     const detail = bookingWhenLabel(booking);
-    return withMainMenu(
+    return withPostBookingMenu(
       BotPrompts.bookingConfirmed(practice.name, detail, lang),
     );
   } catch (err) {
@@ -1715,10 +1782,11 @@ async function runOrchestratorCore(input: {
     const resumeMenuOnly = /^(bot|resume|menu)$/i.test(t);
     // Match care-chat escape: booking commands must reclaim the bot (copy promised BOOK works).
     const resumeAndRun =
-      /^(book|cancel|reschedule|status|help|hi|hello|hey|start|register|doctors?|faq|info|report|reports|my\s*docs?)\b/i.test(
+      /^(book|cancel|reschedule|status|help|hi|hello|hey|start|register|doctors?|faq|info|report|reports|my\s*docs?|message)\b/i.test(
         t,
       ) ||
-      (/\b(book|cancel|reschedule)\b/i.test(t) && t.length < 80);
+      (/\b(book|cancel|reschedule|message)\b/i.test(t) && t.length < 80) ||
+      /^(?:menu|post):/i.test(t);
 
     if (!resumeMenuOnly && !resumeAndRun) {
       return { reply: BotPrompts.handedOffWait(lang) };
@@ -1771,13 +1839,21 @@ async function runOrchestratorCore(input: {
 
   // Global menu commands (typed or WhatsApp button) — always win over mid-flow steps
   // Digit shortcuts (1–9) only when idle so doctor/slot picks still use digits.
-  // Interactive menu:* list picks always apply (same as typing BOOK).
+  // Interactive menu:* / post:* list picks always apply (same as typing BOOK).
   const isIdleMenu = !state.step || state.step === "idle";
-  const listMenuPick = /^menu:/i.test(text.trim())
-    ? menuNumberShortcut(text)
+  const upcomingIdle = isIdleMenu
+    ? await findUpcomingBooking(practice.id, patientPhone)
+    : null;
+  const listMenuPick = /^(?:menu|post):/i.test(text.trim())
+    ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
     : null;
   const numberShortcut =
-    listMenuPick ?? (isIdleMenu ? menuNumberShortcut(text) : null);
+    listMenuPick ??
+    (isIdleMenu
+      ? upcomingIdle
+        ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
+        : menuNumberShortcut(text)
+      : null);
   if (numberShortcut === "language") {
     state = { ...state, step: "awaiting_language" };
     await saveState(convId, state);
@@ -1785,6 +1861,22 @@ async function runOrchestratorCore(input: {
   }
   const menuIntent =
     (numberShortcut as BotIntent | null) ?? exactMenuIntent(text);
+
+  if (menuIntent === "message_doctor" || menuIntent === "human") {
+    state = { ...idleState(state), handedOff: true, failedTurns: 0 };
+    await saveState(convId, state);
+    await prisma.whatsAppConversation.update({
+      where: { id: convId },
+      data: { status: "handed_off" },
+    });
+    return {
+      reply:
+        menuIntent === "message_doctor"
+          ? BotPrompts.messageDoctorHandoff(lang)
+          : escalateReply(lang),
+    };
+  }
+
   if (menuIntent) {
     state = { ...idleState(state), failedTurns: 0 };
     await saveState(convId, state);
@@ -1797,6 +1889,19 @@ async function runOrchestratorCore(input: {
       lang,
     });
     if (dispatched) return dispatched;
+  }
+
+  // Idle + active booking: any loose message → post-booking choices
+  if (isIdleMenu && upcomingIdle && isLooseIdleMessage(text) && !menuIntent) {
+    state = { ...idleState(state), failedTurns: 0 };
+    await saveState(convId, state);
+    return withPostBookingMenu(
+      BotPrompts.postBookingAsk(
+        practice.name,
+        bookingWhenLabel(upcomingIdle),
+        lang,
+      ),
+    );
   }
 
   // Fast path: registration gender/name/email/confirm — no NLU/LLM
@@ -1932,6 +2037,47 @@ async function runOrchestratorCore(input: {
     return escalate();
   }
 
+  if (nlu.intent === "message_doctor") {
+    state = { ...state, handedOff: true, step: "idle", failedTurns: 0 };
+    await saveState(convId, state);
+    await prisma.whatsAppConversation.update({
+      where: { id: convId },
+      data: { status: "handed_off" },
+    });
+    return { reply: BotPrompts.messageDoctorHandoff(lang) };
+  }
+
+  // Active booking + idle free text → offer reschedule / cancel / new / message doctor
+  if (
+    (!state.step || state.step === "idle") &&
+    nlu.intent !== "faq" &&
+    nlu.intent !== "book" &&
+    nlu.intent !== "cancel" &&
+    nlu.intent !== "reschedule" &&
+    nlu.intent !== "status" &&
+    nlu.intent !== "doctors" &&
+    nlu.intent !== "register" &&
+    nlu.intent !== "report" &&
+    nlu.intent !== "my_docs" &&
+    !(
+      nlu.slots.date ||
+      nlu.slots.preferredHour != null ||
+      nlu.slots.preferredPeriod
+    )
+  ) {
+    const upcoming = await findUpcomingBooking(practice.id, patientPhone);
+    if (upcoming) {
+      await saveState(convId, { ...state, failedTurns: 0 });
+      return withPostBookingMenu(
+        BotPrompts.postBookingAsk(
+          practice.name,
+          bookingWhenLabel(upcoming),
+          lang,
+        ),
+      );
+    }
+  }
+
   if (nlu.intent === "faq" || (!state.step || state.step === "idle")) {
     const loc = practice.locations?.[0];
     const faqExtras = {
@@ -1958,6 +2104,16 @@ async function runOrchestratorCore(input: {
 
   // Personalized help / greeting
   if (nlu.intent === "help" && (!state.step || state.step === "idle")) {
+    const upcoming = await findUpcomingBooking(practice.id, patientPhone);
+    if (upcoming) {
+      return withPostBookingMenu(
+        BotPrompts.postBookingAsk(
+          practice.name,
+          bookingWhenLabel(upcoming),
+          lang,
+        ),
+      );
+    }
     const patient = await PatientService.findByPhone(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
@@ -2320,6 +2476,16 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "help") {
+    const upcoming = await findUpcomingBooking(practice.id, patientPhone);
+    if (upcoming) {
+      return withPostBookingMenu(
+        BotPrompts.postBookingAsk(
+          practice.name,
+          bookingWhenLabel(upcoming),
+          lang,
+        ),
+      );
+    }
     const patient = await PatientService.findByPhone(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
@@ -2335,6 +2501,18 @@ async function runOrchestratorCore(input: {
     return { reply: escalateReply(lang) };
   }
   await saveState(convId, { ...state, failedTurns: fails });
+  {
+    const upcoming = await findUpcomingBooking(practice.id, patientPhone);
+    if (upcoming && (!state.step || state.step === "idle")) {
+      return withPostBookingMenu(
+        BotPrompts.postBookingAsk(
+          practice.name,
+          bookingWhenLabel(upcoming),
+          lang,
+        ),
+      );
+    }
+  }
   return withMainMenu(BotPrompts.fallback(lang));
 }
 

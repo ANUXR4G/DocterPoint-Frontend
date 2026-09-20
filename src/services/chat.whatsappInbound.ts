@@ -2,15 +2,12 @@ import { prisma } from "../db/prisma.js";
 import { uuidToBase64 } from "../core/security.js";
 import { socketManager } from "../core/socket.js";
 
-function last10(phone: string): string {
-  return String(phone || "").replace(/\D/g, "").slice(-10);
-}
-
 function looksLikeBotCommand(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
+  if (/^(?:menu|post):/i.test(t)) return true;
   if (
-    /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info)\b/.test(
+    /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info|message|msg)\b/.test(
       t,
     )
   ) {
@@ -18,6 +15,9 @@ function looksLikeBotCommand(text: string): boolean {
   }
   // Explicit booking verbs mid-message still go to the bot.
   if (/\b(book|cancel|reschedule|status)\b/.test(t) && t.length < 80) return true;
+  if (/\b(message|msg|chat|text)\s+(my\s+)?(the\s+)?doctor\b/.test(t)) {
+    return true;
+  }
   return false;
 }
 
@@ -63,7 +63,8 @@ export async function ingestWhatsAppPatientReply(opts: {
     return { ingested: false, shouldDeferToHuman: false };
   }
 
-  const digits = last10(opts.patientPhone);
+  const digitsRaw = String(opts.patientPhone || "").replace(/\D/g, "");
+  const digits = digitsRaw.slice(-10);
   if (digits.length < 10) {
     return { ingested: false, shouldDeferToHuman: false };
   }
@@ -72,6 +73,9 @@ export async function ingestWhatsAppPatientReply(opts: {
     where: {
       role: "user",
       OR: [
+        ...(digitsRaw.length >= 11
+          ? [{ phone: digitsRaw }, { patient: { is: { contactNumber: digitsRaw } } }]
+          : []),
         { phone: { endsWith: digits } },
         { patient: { is: { contactNumber: { endsWith: digits } } } },
       ],
@@ -178,18 +182,27 @@ export async function markWhatsAppConversationHandedOff(opts: {
   practiceId: string;
   patientPhone: string;
 }): Promise<void> {
-  const phone = last10(opts.patientPhone);
-  if (phone.length < 10) return;
+  const digits = String(opts.patientPhone || "").replace(/\D/g, "");
+  const last10Phone = digits.slice(-10);
+  if (last10Phone.length < 10) return;
 
-  const existing = await prisma.whatsAppConversation.findUnique({
+  // Prefer the real Meta conversation row (full MSISDN); fall back to legacy last-10 key.
+  const existing = await prisma.whatsAppConversation.findFirst({
     where: {
-      practiceId_patientPhone: {
-        practiceId: opts.practiceId,
-        patientPhone: phone,
-      },
+      practiceId: opts.practiceId,
+      OR: [
+        ...(digits.length >= 11 ? [{ patientPhone: digits }] : []),
+        { patientPhone: last10Phone },
+        { patientPhone: { endsWith: last10Phone } },
+      ],
     },
-    select: { id: true, state: true },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, patientPhone: true, state: true },
   });
+
+  const phoneKey =
+    existing?.patientPhone ||
+    (digits.length >= 11 && digits.length <= 15 ? digits : last10Phone);
 
   const prev =
     existing?.state &&
@@ -202,12 +215,12 @@ export async function markWhatsAppConversationHandedOff(opts: {
     where: {
       practiceId_patientPhone: {
         practiceId: opts.practiceId,
-        patientPhone: phone,
+        patientPhone: phoneKey,
       },
     },
     create: {
       practiceId: opts.practiceId,
-      patientPhone: phone,
+      patientPhone: phoneKey,
       status: "handed_off",
       state: { ...prev, handedOff: true },
     },

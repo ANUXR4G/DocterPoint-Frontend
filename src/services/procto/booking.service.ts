@@ -116,10 +116,15 @@ export const BookingService = {
       BookingChannel.WEB_PORTAL,
     );
 
-    // Always store last-10 Indian mobile digits for queue / WhatsApp match.
-    const patientPhone = data.patientPhone.replace(/\D/g, "").slice(-10);
+    // Store full WhatsApp MSISDN when present (e.g. 9715… / 9198…);
+    // bare 10-digit Indian mobiles stay as last-10 for legacy web OTP.
+    const digits = data.patientPhone.replace(/\D/g, "");
+    const patientPhone =
+      digits.length >= 11 && digits.length <= 15
+        ? digits
+        : digits.slice(-10);
     if (patientPhone.length < 10) {
-      throw new AppError(400, "patientPhone must be a valid 10-digit mobile.");
+      throw new AppError(400, "patientPhone must be a valid mobile number.");
     }
     data = { ...data, patientPhone };
 
