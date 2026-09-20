@@ -341,6 +341,55 @@ export const BotPrompts = {
     );
   },
 
+  askRegisterFamilyOpt(name: string, lang?: WaLang): string {
+    const who = name ? ` (*${name}*)` : "";
+    return L(
+      lang,
+      `You're already registered${who}.\n` +
+        `Do you want to register a *family member*?\n` +
+        `Tap *Yes* to add them, or *No* to go back.`,
+      `आप पहले से रजिस्टर्ड हैं${who}।\n` +
+        `क्या आप किसी *परिवार के सदस्य* को रजिस्टर करना चाहते हैं?\n` +
+        `जोड़ने के लिए *Yes*, वापस जाने के लिए *No* दबाएँ।`,
+    );
+  },
+
+  askRegisterFamilyName(lang?: WaLang): string {
+    return L(
+      lang,
+      "Send a clear *photo or PDF* of their *Aadhaar / PAN / ID*, or type the *family member's full name*.",
+      "उनके *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* भेजें, या *परिवार के सदस्य का पूरा नाम* लिखें।",
+    );
+  },
+
+  askRegisterFamilyGender(lang?: WaLang): string {
+    return L(
+      lang,
+      "What is your family member's gender?",
+      "आपके परिवार के सदस्य का लिंग क्या है?",
+    );
+  },
+
+  askRegisterFamilyPhone(lang?: WaLang): string {
+    return L(
+      lang,
+      "Type your *family member's mobile number* (with country code if outside India, e.g. 9715xxxxxxx or 9876543210).\n" +
+        "They will use this number to sign in.",
+      "अपने *परिवार के सदस्य का मोबाइल नंबर* लिखें (भारत के बाहर हो तो कंट्री कोड सहित, जैसे 9715xxxxxxx या 9876543210)।\n" +
+        "लॉगिन इसी नंबर से होगा।",
+    );
+  },
+
+  familyRegistered(name: string, lang?: WaLang): string {
+    return L(
+      lang,
+      `✅ Family member *${name}* is registered.\n` +
+        `They can sign in with their mobile number. Tap *Menu* to book for them or yourself.`,
+      `✅ परिवार के सदस्य *${name}* रजिस्टर हो गए।\n` +
+        `वे अपने मोबाइल नंबर से साइन इन कर सकते हैं। बुकिंग के लिए *Menu* दबाएँ।`,
+    );
+  },
+
   askDate(lang?: WaLang): string {
     return L(
       lang,
