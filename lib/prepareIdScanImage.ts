@@ -1,10 +1,19 @@
-/** Resize ID photos before OCR so uploads stay fast and readable. */
+/** Prepare ID documents for OCR — images resized; PDFs passed through for server rasterize. */
 export async function prepareIdScanImage(
   file: File,
 ): Promise<{ base64: string; mimeType: string }> {
-  // Keep enough resolution for Aadhaar small print (was 1280 @ 0.85 — too soft).
   const maxDim = 1800
-  const mimeType = "image/jpeg"
+  const jpegMime = "image/jpeg"
+
+  const isPdf =
+    file.type === "application/pdf" ||
+    file.type === "application/x-pdf" ||
+    /\.pdf$/i.test(file.name)
+
+  // PDFs: send raw bytes — backend rasterizes with pdf.js (cmaps/fonts) + text extract.
+  if (isPdf) {
+    return fileToPayload(file, "application/pdf")
+  }
 
   if (typeof createImageBitmap === "function" && file.type.startsWith("image/")) {
     try {
@@ -22,9 +31,9 @@ export async function prepareIdScanImage(
         ctx.drawImage(bitmap, 0, 0, width, height)
         bitmap.close()
         const blob = await new Promise<Blob | null>((resolve) => {
-          canvas.toBlob(resolve, mimeType, 0.92)
+          canvas.toBlob(resolve, jpegMime, 0.92)
         })
-        if (blob) return blobToPayload(blob, mimeType)
+        if (blob) return blobToPayload(blob, jpegMime)
       } else {
         bitmap.close()
       }
@@ -36,7 +45,10 @@ export async function prepareIdScanImage(
   return fileToPayload(file)
 }
 
-function fileToPayload(file: File): Promise<{ base64: string; mimeType: string }> {
+function fileToPayload(
+  file: File,
+  forceMime?: string,
+): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -46,7 +58,10 @@ function fileToPayload(file: File): Promise<{ base64: string; mimeType: string }
         reject(new Error("Could not read file."))
         return
       }
-      resolve({ mimeType: match[1]!, base64: match[2]! })
+      resolve({
+        mimeType: forceMime || match[1]!,
+        base64: match[2]!,
+      })
     }
     reader.onerror = () => reject(new Error("Could not read file."))
     reader.readAsDataURL(file)

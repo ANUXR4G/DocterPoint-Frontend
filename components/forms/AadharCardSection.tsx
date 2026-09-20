@@ -154,12 +154,17 @@ export default function AadharCardSection({
 
     try {
       for (const file of files.slice(0, remaining)) {
-        if (!file.type.startsWith("image/")) {
-          setError("Each file must be JPG, PNG, or WEBP.")
+        if (
+          !file.type.startsWith("image/") &&
+          file.type !== "application/pdf" &&
+          file.type !== "application/x-pdf" &&
+          !/\.pdf$/i.test(file.name)
+        ) {
+          setError("Each file must be JPG, PNG, WEBP, or PDF.")
           continue
         }
-        if (file.size > 6 * 1024 * 1024) {
-          setError("Each image must be under 6 MB.")
+        if (file.size > 9 * 1024 * 1024) {
+          setError("Each file must be under 9 MB.")
           continue
         }
 
@@ -283,7 +288,7 @@ export default function AadharCardSection({
               <input
                 ref={inputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/jpg"
+                accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf,.pdf"
                 multiple
                 className="hidden"
                 onChange={handleIdFiles}
