@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.xl,
-    padding: 20,
+    padding: space.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
     ...shadows.soft,
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
-    marginBottom: 10,
+    marginBottom: space.sm,
     overflow: "hidden",
     ...shadows.soft,
   },
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   linkHint: {
-    marginTop: 3,
+    marginTop: space.xs,
     fontSize: 13,
     lineHeight: 18,
     color: colors.inkSoft,

@@ -14,7 +14,7 @@ import { usePractice, usePracticeLabel } from "@/lib/practiceContext";
 import { fetchConversations, setConversationStatus } from "@/lib/procto";
 import { doctorWebPath } from "@/lib/webPortal";
 import { colors, radii, shadows, space } from "@/lib/theme";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Conv = {
@@ -82,7 +82,7 @@ export default function ProfileScreen() {
           styles.content,
           {
             paddingTop: space.lg,
-            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+            paddingBottom: contentBottomPad(insets.bottom),
           },
         ]}
       >
@@ -234,7 +234,12 @@ const styles = StyleSheet.create({
     marginBottom: space.sm,
     marginTop: space.sm,
   },
-  chips: { flexDirection: "row", flexWrap: "wrap", marginBottom: space.md },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginBottom: space.md,
+  },
   card: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
@@ -244,7 +249,7 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
     ...shadows.card,
   },
-  row: { fontSize: 14, color: colors.ink, marginBottom: 6 },
+  row: { fontSize: 14, color: colors.ink, marginBottom: space.xs },
   hint: {
     marginBottom: space.md,
     fontSize: 13,
@@ -252,5 +257,10 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
   },
   phone: { fontSize: 16, fontWeight: "600", color: colors.ink },
-  meta: { marginTop: 4, fontSize: 12, color: colors.inkSoft, marginBottom: 8 },
+  meta: {
+    marginTop: space.xs,
+    fontSize: 12,
+    color: colors.inkSoft,
+    marginBottom: space.sm,
+  },
 });

@@ -16,7 +16,7 @@ import {
   sendCareMessage,
   type CareChatMessage,
 } from "@/lib/chat";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
 
 type Props = {
   selfUserId: string;
@@ -177,8 +177,9 @@ const styles = StyleSheet.create({
   wrap: {
     marginTop: space.lg,
     backgroundColor: colors.paperRaised,
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
+    borderRadius: radii.xl,
     overflow: "hidden",
   },
   header: {

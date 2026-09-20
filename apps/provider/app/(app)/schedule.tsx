@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Chip,
   EmptyState,
@@ -16,7 +17,8 @@ import {
   createOverride,
 } from "@/lib/procto";
 import { DAY_LABELS, type OverrideRow, type ScheduleRow } from "@/lib/types";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
 
 const TYPES = [
@@ -27,6 +29,7 @@ const TYPES = [
 ] as const;
 
 export default function ScheduleScreen() {
+  const insets = useSafeAreaInsets();
   const { practiceId, providerId, membership } = usePractice();
   const [pane, setPane] = useState<"hours" | "blocks">("hours");
   const [rows, setRows] = useState<ScheduleRow[]>([]);
@@ -154,7 +157,13 @@ export default function ScheduleScreen() {
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={[
+        styles.content,
+        { paddingBottom: contentBottomPad(insets.bottom, { fab: true }) },
+      ]}
+    >
       <PageTitle
         eyebrow={membership?.practice.name}
         title="Hours & blocks"
@@ -305,8 +314,13 @@ export default function ScheduleScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: space.xl, paddingBottom: 48 },
-  chips: { flexDirection: "row", flexWrap: "wrap", marginBottom: space.md },
+  content: { padding: space.xl },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginBottom: space.md,
+  },
   section: {
     marginTop: space.xl,
     marginBottom: space.md,
@@ -317,20 +331,26 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
   },
   card: {
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
     backgroundColor: colors.paperRaised,
     padding: space.lg,
     marginBottom: space.md,
+    borderRadius: radii.xl,
   },
   day: { fontSize: 16, fontWeight: "700", color: colors.ink },
   mode: {
-    marginTop: 4,
+    marginTop: space.xs,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase",
     color: colors.brand,
   },
-  meta: { marginTop: 8, fontSize: 14, color: colors.inkSoft, lineHeight: 20 },
+  meta: {
+    marginTop: space.sm,
+    fontSize: 14,
+    color: colors.inkSoft,
+    lineHeight: 20,
+  },
 });

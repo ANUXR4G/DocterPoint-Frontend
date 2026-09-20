@@ -29,7 +29,9 @@ import {
   type PracticeBilling,
   type RazorpaySubCheckout,
 } from "@/lib/procto";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
+import { contentBottomPad } from "@/lib/dockLayout";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function featureList(plan: ClinicPlan): string[] {
   const f = (plan.features ?? {}) as Record<string, unknown>;
@@ -61,6 +63,7 @@ function formatDate(value?: string | null) {
 }
 
 export default function SubscriptionsScreen() {
+  const insets = useSafeAreaInsets();
   const { practiceId, membership } = usePractice();
   const canManage =
     membership?.role === "PRACTICE_OWNER" ||
@@ -229,7 +232,10 @@ export default function SubscriptionsScreen() {
   return (
     <ScrollView
       style={styles.root}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        { paddingBottom: contentBottomPad(insets.bottom, { fab: true }) },
+      ]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -410,11 +416,12 @@ export default function SubscriptionsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: space.xl, paddingBottom: 48 },
+  content: { padding: space.xl },
   banner: {
     backgroundColor: colors.brandMist,
     padding: space.lg,
     marginBottom: space.md,
+    borderRadius: radii.xl,
   },
   bannerText: { fontSize: 13, lineHeight: 19, color: colors.brandDeep },
   message: {
@@ -424,11 +431,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   card: {
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
     backgroundColor: colors.paperRaised,
     padding: space.lg,
     marginBottom: space.md,
+    borderRadius: radii.xl,
   },
   cardCurrent: { borderColor: colors.brand },
   section: {
@@ -437,16 +445,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: "uppercase",
     color: colors.inkFaint,
-    marginBottom: 6,
+    marginBottom: space.xs,
   },
   planName: { fontSize: 20, fontWeight: "700", color: colors.ink },
   currentBadge: {
-    marginTop: 4,
+    marginTop: space.xs,
     fontSize: 12,
     fontWeight: "700",
     color: colors.brand,
   },
-  meta: { marginTop: 4, fontSize: 13, color: colors.inkSoft },
+  meta: { marginTop: space.xs, fontSize: 13, color: colors.inkSoft },
   hint: {
     marginBottom: space.md,
     fontSize: 13,
@@ -456,7 +464,7 @@ const styles = StyleSheet.create({
   cardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
+    gap: space.md,
     marginBottom: space.md,
   },
   priceBlock: { alignItems: "flex-end" },
@@ -465,16 +473,17 @@ const styles = StyleSheet.create({
   feature: {
     fontSize: 13,
     color: colors.inkSoft,
-    marginBottom: 6,
+    marginBottom: space.xs,
     lineHeight: 18,
   },
-  actions: { marginTop: space.md, gap: 10 },
+  actions: { marginTop: space.md, gap: space.md },
   payBtn: {
     backgroundColor: colors.brand,
     minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: space.lg,
+    borderRadius: radii.lg,
   },
   payText: { color: colors.white, fontWeight: "700", fontSize: 15 },
   footnote: {

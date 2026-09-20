@@ -15,7 +15,7 @@ import {
 } from "@/lib/practiceContext";
 import { fetchMyPractices } from "@/lib/procto";
 import type { PracticeMembership } from "@/lib/types";
-import { colors } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
 
 export default function AppLayout() {
   const router = useRouter();
@@ -78,7 +78,7 @@ export default function AppLayout() {
         style={{
           flex: 1,
           justifyContent: "center",
-          padding: 24,
+          padding: space.xl,
           backgroundColor: colors.paper,
         }}
         edges={["top", "left", "right", "bottom"]}
@@ -88,12 +88,18 @@ export default function AppLayout() {
             color: colors.ink,
             fontSize: 20,
             fontWeight: "700",
-            marginBottom: 8,
+            marginBottom: space.sm,
           }}
         >
           No clinic linked
         </Text>
-        <Text style={{ color: colors.inkSoft, marginBottom: 20, lineHeight: 20 }}>
+        <Text
+          style={{
+            color: colors.inkSoft,
+            marginBottom: space.xl,
+            lineHeight: 20,
+          }}
+        >
           {loadError ||
             "This doctor account has no practice membership yet. Finish onboarding on the web clinic portal, then sign in again."}
         </Text>
@@ -101,7 +107,7 @@ export default function AppLayout() {
           onPress={() => void handleLogout()}
           style={{
             backgroundColor: colors.brand,
-            borderRadius: 12,
+            borderRadius: radii.lg,
             minHeight: 48,
             alignItems: "center",
             justifyContent: "center",

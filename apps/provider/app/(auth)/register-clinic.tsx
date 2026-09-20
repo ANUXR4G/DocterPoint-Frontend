@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   planRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: space.sm,
     marginBottom: space.md,
   },
   link: {

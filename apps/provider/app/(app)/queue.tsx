@@ -32,7 +32,7 @@ import {
   ymd,
 } from "@/lib/types";
 import { colors, space } from "@/lib/theme";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
 import { applyLiveBookingEvent } from "@/lib/liveBooking";
 import {
@@ -189,7 +189,7 @@ export default function QueueScreen() {
           styles.content,
           {
             paddingTop: space.lg,
-            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+            paddingBottom: contentBottomPad(insets.bottom),
           },
         ]}
         refreshControl={
@@ -345,25 +345,30 @@ const styles = StyleSheet.create({
   metrics: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: space.md,
     marginBottom: space.lg,
   },
   metricCard: {
     flexGrow: 1,
-    flexBasis: "45%",
-    minHeight: 100,
+    flexBasis: "46%",
+    minHeight: 108,
   },
-  chips: { flexDirection: "row", flexWrap: "wrap", marginBottom: space.md },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginBottom: space.md,
+  },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
+    gap: space.sm,
   },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: space.md,
     flex: 1,
     minWidth: 0,
   },
@@ -380,7 +385,22 @@ const styles = StyleSheet.create({
   },
   avatarInitial: { fontSize: 15, fontWeight: "700", color: colors.brand },
   name: { fontSize: 16, fontWeight: "600", color: colors.ink, flex: 1 },
-  meta: { marginTop: 8, fontSize: 13, color: colors.inkSoft, lineHeight: 18 },
-  notes: { marginTop: 6, fontSize: 13, color: colors.inkFaint },
-  actions: { flexDirection: "row", flexWrap: "wrap", marginTop: space.md },
+  meta: {
+    marginTop: space.sm,
+    fontSize: 13,
+    color: colors.inkSoft,
+    lineHeight: 18,
+  },
+  notes: {
+    marginTop: space.xs,
+    fontSize: 13,
+    color: colors.inkFaint,
+    lineHeight: 18,
+  },
+  actions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginTop: space.md,
+  },
 });

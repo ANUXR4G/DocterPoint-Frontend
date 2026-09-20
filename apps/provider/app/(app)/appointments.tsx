@@ -29,7 +29,7 @@ import {
   ymd,
 } from "@/lib/types";
 import { colors, space } from "@/lib/theme";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 
 type Scope = "all" | "upcoming" | "past" | "active" | "done";
 
@@ -190,7 +190,7 @@ export default function AppointmentsScreen() {
           styles.content,
           {
             paddingTop: space.lg,
-            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+            paddingBottom: contentBottomPad(insets.bottom),
           },
         ]}
         refreshControl={
@@ -287,16 +287,22 @@ const styles = StyleSheet.create({
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: space.sm,
     marginTop: space.sm,
-    marginBottom: 0,
+    marginBottom: space.md,
   },
   cardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
+    gap: space.sm,
+    marginBottom: space.sm,
   },
   name: { flex: 1, fontSize: 16, fontWeight: "600", color: colors.ink },
-  meta: { fontSize: 13, color: colors.inkSoft, marginBottom: 2, lineHeight: 18 },
+  meta: {
+    fontSize: 13,
+    color: colors.inkSoft,
+    marginBottom: space.xs,
+    lineHeight: 18,
+  },
 });

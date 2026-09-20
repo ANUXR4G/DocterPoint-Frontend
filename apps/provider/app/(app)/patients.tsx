@@ -21,7 +21,7 @@ import {
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { resolveMediaUrl } from "@/lib/media";
 import { usePractice } from "@/lib/practiceContext";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { fetchPracticePatients } from "@/lib/procto";
 import type { PracticePatient } from "@/lib/types";
 import { colors, radii, shadows, space } from "@/lib/theme";
@@ -68,7 +68,7 @@ export default function PatientsScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24 },
+          { paddingBottom: contentBottomPad(insets.bottom) },
         ]}
         refreshControl={
           <RefreshControl

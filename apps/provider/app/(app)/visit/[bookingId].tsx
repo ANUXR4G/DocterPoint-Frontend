@@ -39,7 +39,9 @@ import {
   type BookingRow,
   type VisitDocument,
 } from "@/lib/types";
-import { colors, radii, space } from "@/lib/theme";
+import { colors, radii, shadows, space } from "@/lib/theme";
+import { contentBottomPad } from "@/lib/dockLayout";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const TIMES = ["morning", "afternoon", "evening", "night"] as const;
 
@@ -63,6 +65,7 @@ function ageFromDob(dob?: string | null): string {
 export default function VisitScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { practiceId } = usePractice();
   const [booking, setBooking] = useState<BookingRow | null>(null);
   const [error, setError] = useState("");
@@ -300,7 +303,10 @@ export default function VisitScreen() {
     >
       <ScrollView
         style={styles.root}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: contentBottomPad(insets.bottom, { fab: true }) },
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.banner}>
@@ -430,7 +436,7 @@ export default function VisitScreen() {
               onChangeText={setMedAmount}
               placeholder="Dose"
               placeholderTextColor={colors.inkFaint}
-              style={[styles.input, { marginTop: 8 }]}
+              style={[styles.input, { marginTop: space.sm }]}
             />
             <View style={styles.actions}>
               {TIMES.map((t) => (
@@ -497,7 +503,7 @@ export default function VisitScreen() {
         ) : (
           <View style={styles.card}>
             {!completed ? (
-              <View style={{ gap: 8, marginBottom: space.md }}>
+              <View style={{ gap: space.sm, marginBottom: space.md }}>
                 <PrimaryButton
                   label={uploading ? "Uploading…" : "Add photo"}
                   onPress={() => void attachFromLibrary()}
@@ -546,7 +552,7 @@ export default function VisitScreen() {
         <ErrorText text={error} />
 
         {!completed ? (
-          <View style={{ gap: 10, marginTop: space.md }}>
+          <View style={{ gap: space.md, marginTop: space.lg }}>
             <PrimaryButton
               label="Save visit notes"
               onPress={() => void saveVisit()}
@@ -559,8 +565,6 @@ export default function VisitScreen() {
             />
           </View>
         ) : null}
-
-        <View style={{ height: 40 }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -569,13 +573,15 @@ export default function VisitScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
   rootPad: { flex: 1, padding: space.xl, backgroundColor: colors.paper },
-  content: { padding: space.xl, paddingBottom: 48 },
+  content: { padding: space.xl },
   banner: {
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
     backgroundColor: colors.paperRaised,
-    marginBottom: space.md,
+    marginBottom: space.lg,
+    borderRadius: radii.xl,
     overflow: "hidden",
+    ...shadows.soft,
   },
   bannerHero: {
     backgroundColor: colors.brandLight,
@@ -587,7 +593,7 @@ const styles = StyleSheet.create({
     color: colors.brand,
     textTransform: "uppercase",
     letterSpacing: 0.6,
-    marginBottom: 4,
+    marginBottom: space.xs,
   },
   bannerName: {
     fontSize: 26,
@@ -596,7 +602,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   bannerSub: {
-    marginTop: 6,
+    marginTop: space.xs,
     fontSize: 14,
     color: colors.inkSoft,
     lineHeight: 20,
@@ -616,7 +622,7 @@ const styles = StyleSheet.create({
   patientHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.md,
   },
   avatar: {
     width: 64,
@@ -635,25 +641,41 @@ const styles = StyleSheet.create({
     color: colors.brand,
   },
   divider: {
-    height: 1,
-    backgroundColor: colors.line,
-    marginVertical: 10,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.lineStrong,
+    marginVertical: space.md,
   },
-  rowLabel: { fontSize: 14, color: colors.ink, marginBottom: 6 },
-  notes: { marginTop: 4, fontSize: 13, color: colors.inkSoft, lineHeight: 18 },
-  actions: { flexDirection: "row", flexWrap: "wrap", marginBottom: space.md },
+  rowLabel: {
+    fontSize: 14,
+    color: colors.ink,
+    marginBottom: space.sm,
+    lineHeight: 20,
+  },
+  notes: {
+    marginTop: space.xs,
+    fontSize: 13,
+    color: colors.inkSoft,
+    lineHeight: 19,
+  },
+  actions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginBottom: space.md,
+  },
   tabRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 4,
-    marginTop: space.md,
-    marginBottom: space.sm,
+    gap: space.sm,
+    marginTop: space.lg,
+    marginBottom: space.md,
   },
   lockedHint: {
     width: "100%",
-    marginTop: 4,
+    marginTop: space.xs,
     fontSize: 13,
     color: colors.inkSoft,
+    lineHeight: 18,
   },
   section: {
     fontSize: 12,
@@ -662,45 +684,49 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: colors.inkSoft,
     marginBottom: space.sm,
-    marginTop: space.sm,
+    marginTop: space.lg,
   },
   area: {
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
     backgroundColor: colors.paperRaised,
-    padding: 12,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
     minHeight: 120,
     fontSize: 15,
     color: colors.ink,
     textAlignVertical: "top",
     marginBottom: space.md,
+    borderRadius: radii.md,
   },
   input: {
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
     backgroundColor: colors.white,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: space.lg,
+    paddingVertical: 14,
     fontSize: 15,
     color: colors.ink,
+    borderRadius: radii.md,
   },
   readonly: { opacity: 0.75 },
   hint: { fontSize: 13, color: colors.inkFaint, marginBottom: space.md },
   medRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.line,
+    gap: space.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
     backgroundColor: colors.paperRaised,
     padding: space.md,
-    marginBottom: 8,
+    marginBottom: space.sm,
+    borderRadius: radii.lg,
   },
   docRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
+    gap: space.sm,
+    paddingVertical: space.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
   },

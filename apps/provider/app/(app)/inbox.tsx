@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Chip,
   EmptyState,
@@ -8,7 +9,8 @@ import {
 } from "@/components/ui";
 import { usePractice } from "@/lib/practiceContext";
 import { fetchConversations, setConversationStatus } from "@/lib/procto";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
 
 type Conv = {
@@ -19,6 +21,7 @@ type Conv = {
 };
 
 export default function InboxScreen() {
+  const insets = useSafeAreaInsets();
   const { practiceId, membership } = usePractice();
   const [rows, setRows] = useState<Conv[]>([]);
   const [error, setError] = useState("");
@@ -73,7 +76,13 @@ export default function InboxScreen() {
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={[
+        styles.content,
+        { paddingBottom: contentBottomPad(insets.bottom, { fab: true }) },
+      ]}
+    >
       <PageTitle
         eyebrow={membership?.practice.name}
         title="WhatsApp inbox"
@@ -126,15 +135,21 @@ export default function InboxScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: space.xl, paddingBottom: 48 },
+  content: { padding: space.xl },
   card: {
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
     backgroundColor: colors.paperRaised,
     padding: space.lg,
     marginBottom: space.md,
+    borderRadius: radii.xl,
   },
   phone: { fontSize: 16, fontWeight: "700", color: colors.ink },
-  meta: { marginTop: 4, fontSize: 12, color: colors.inkSoft },
-  actions: { flexDirection: "row", flexWrap: "wrap", marginTop: space.md },
+  meta: { marginTop: space.xs, fontSize: 12, color: colors.inkSoft },
+  actions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginTop: space.md,
+  },
 });

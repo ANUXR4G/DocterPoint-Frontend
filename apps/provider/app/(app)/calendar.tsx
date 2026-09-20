@@ -31,7 +31,7 @@ import {
   ymd,
 } from "@/lib/calendarDates";
 import { colors, radii, space } from "@/lib/theme";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
 import { applyLiveBookingEvent } from "@/lib/liveBooking";
 
@@ -157,7 +157,7 @@ export default function CalendarScreen() {
           styles.content,
           {
             paddingTop: space.lg,
-            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+            paddingBottom: contentBottomPad(insets.bottom),
           },
         ]}
         refreshControl={
@@ -238,16 +238,25 @@ export default function CalendarScreen() {
                         >
                           {day.getDate()}
                         </Text>
-                        <Text
-                          style={[
-                            styles.cellCount,
-                            n > 0 && styles.cellCountFilled,
-                            active && styles.cellNumActive,
-                            active && n > 0 && styles.cellCountActive,
-                          ]}
-                        >
-                          {n > 0 ? String(n) : ""}
-                        </Text>
+                        {n > 0 ? (
+                          <View
+                            style={[
+                              styles.cellDot,
+                              active && styles.cellDotActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.cellCount,
+                                active && styles.cellCountActive,
+                              ]}
+                            >
+                              {n}
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={styles.cellDotSpacer} />
+                        )}
                       </View>
                     </Pressable>
                   );
@@ -296,7 +305,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
   scroll: { flex: 1 },
   content: { paddingHorizontal: space.xl },
-  chips: { flexDirection: "row", flexWrap: "wrap", marginBottom: space.md },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginBottom: space.md,
+  },
   monthTitle: {
     fontSize: 18,
     fontWeight: "600",
@@ -307,11 +321,11 @@ const styles = StyleSheet.create({
   monthCard: {
     marginBottom: space.lg,
     paddingVertical: space.md,
-    paddingHorizontal: space.sm,
+    paddingHorizontal: space.md,
   },
   weekHead: {
     flexDirection: "row",
-    marginBottom: 6,
+    marginBottom: space.sm,
   },
   weekHeadText: {
     flex: 1,
@@ -321,24 +335,24 @@ const styles = StyleSheet.create({
     color: colors.inkFaint,
   },
   grid: {
-    gap: 4,
+    gap: space.xs,
   },
   gridRow: {
     flexDirection: "row",
-    gap: 4,
+    gap: space.xs,
   },
   cell: {
     flex: 1,
-    aspectRatio: 0.95,
+    aspectRatio: 1,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radii.md,
+    paddingVertical: space.xs,
   },
   cellInner: {
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
+    gap: 2,
   },
   cellMuted: { opacity: 0.4 },
   cellActive: { backgroundColor: colors.navy },
@@ -354,19 +368,32 @@ const styles = StyleSheet.create({
   },
   cellNumMuted: { color: colors.inkFaint },
   cellNumActive: { color: colors.white },
-  cellCount: {
-    minWidth: 10,
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.inkFaint,
+  cellDot: {
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brandLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cellCountFilled: { color: colors.brand },
-  cellCountActive: { color: "rgba(255,255,255,0.85)" },
+  cellDotActive: {
+    backgroundColor: "rgba(255,255,255,0.22)",
+  },
+  cellDotSpacer: {
+    height: 16,
+  },
+  cellCount: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.brand,
+  },
+  cellCountActive: { color: colors.white },
   sectionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: space.sm,
     marginBottom: space.sm,
     marginTop: space.sm,
   },
@@ -387,8 +414,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
+    gap: space.sm,
   },
   name: { fontSize: 16, fontWeight: "600", color: colors.ink, flex: 1 },
-  meta: { marginTop: 8, fontSize: 13, color: colors.inkSoft, lineHeight: 18 },
+  meta: {
+    marginTop: space.sm,
+    fontSize: 13,
+    color: colors.inkSoft,
+    lineHeight: 18,
+  },
 });

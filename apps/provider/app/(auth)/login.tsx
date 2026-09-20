@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   portalRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: space.sm,
     marginBottom: 8,
   },
   portalHint: {
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   registerBox: {
     marginTop: space.md,
-    gap: 10,
+    gap: space.md,
     padding: space.md,
     borderRadius: radii.lg,
     backgroundColor: colors.paperRaised,

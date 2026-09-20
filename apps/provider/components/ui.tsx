@@ -443,8 +443,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
     borderRadius: radii.pill,
-    marginRight: 8,
-    marginBottom: 8,
     backgroundColor: colors.white,
   },
   chipActive: {

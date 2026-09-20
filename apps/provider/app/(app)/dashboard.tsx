@@ -31,7 +31,7 @@ import {
 import type { BookingRow, PracticePatient } from "@/lib/types";
 import { ymd } from "@/lib/types";
 import { colors, dashOrder, space, type DashTone } from "@/lib/theme";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import {
   countQueueStatusFilters,
   matchesQueueStatusFilter,
@@ -155,7 +155,7 @@ export default function DashboardScreen() {
           styles.content,
           {
             paddingTop: space.lg,
-            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+            paddingBottom: contentBottomPad(insets.bottom),
           },
         ]}
         refreshControl={
@@ -257,21 +257,20 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
   scroll: { flex: 1 },
   content: {
-    paddingHorizontal: space.lg,
-    gap: space.sm,
+    paddingHorizontal: space.xl,
+    gap: space.md,
   },
   switchHint: {
     fontSize: 13,
     color: colors.inkFaint,
-    marginBottom: space.sm,
   },
   metricsRow: {
     flexDirection: "row",
-    gap: space.sm,
+    gap: space.md,
   },
   section: {
-    marginTop: space.md,
-    marginBottom: 4,
+    marginTop: space.sm,
+    marginBottom: space.xs,
     fontSize: 12,
     fontWeight: "700",
     color: colors.inkFaint,
@@ -281,7 +280,7 @@ const styles = StyleSheet.create({
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: space.sm,
+    gap: space.sm,
+    marginBottom: space.xs,
   },
 });

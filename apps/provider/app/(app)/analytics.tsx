@@ -13,7 +13,7 @@ import { DashMetric, PremiumAtmosphere } from "@/components/mobile/PremiumChrome
 import { usePractice } from "@/lib/practiceContext";
 import { fetchPracticeAnalytics } from "@/lib/procto";
 import { colors, dash, dashOrder, radii, space } from "@/lib/theme";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
 
 type Period = "week" | "month" | "day";
@@ -151,7 +151,7 @@ export default function AnalyticsScreen() {
           styles.content,
           {
             paddingTop: space.lg,
-            paddingBottom: dockClearance + Math.max(insets.bottom, 0) + 24,
+            paddingBottom: contentBottomPad(insets.bottom),
           },
         ]}
       >
@@ -266,13 +266,18 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
   scroll: { flex: 1 },
   content: { paddingHorizontal: space.xl },
-  chips: { flexDirection: "row", flexWrap: "wrap", marginBottom: space.md },
-  metrics: { flexDirection: "row", gap: 12, marginBottom: space.lg },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginBottom: space.md,
+  },
+  metrics: { flexDirection: "row", gap: space.md, marginBottom: space.lg },
   barRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 10,
+    gap: space.sm,
+    marginBottom: space.md,
   },
   barLabel: { width: 88, fontSize: 12, color: colors.inkSoft },
   barTrack: {
