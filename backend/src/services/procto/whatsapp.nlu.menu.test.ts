@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   exactMenuIntent,
   menuNumberShortcut,
+  postBookingNumberShortcut,
 } from "./whatsapp.nlu.js";
 
 describe("menuNumberShortcut", () => {
@@ -44,5 +45,32 @@ describe("exactMenuIntent", () => {
   it("still matches keywords (not digits)", () => {
     assert.equal(exactMenuIntent("BOOK"), "book");
     assert.equal(exactMenuIntent("1"), null);
+  });
+
+  it("maps post-booking titles typed as free text", () => {
+    assert.equal(exactMenuIntent("New booking"), "book");
+    assert.equal(exactMenuIntent("new book"), "book");
+    assert.equal(exactMenuIntent("3 · New booking"), "book");
+    assert.equal(exactMenuIntent("book another"), "book");
+    assert.equal(exactMenuIntent("Message your doctor"), "message_doctor");
+  });
+});
+
+describe("postBookingNumberShortcut", () => {
+  it("maps 1–4 and post: ids", () => {
+    assert.equal(postBookingNumberShortcut("1"), "reschedule");
+    assert.equal(postBookingNumberShortcut("2"), "cancel");
+    assert.equal(postBookingNumberShortcut("3"), "book");
+    assert.equal(postBookingNumberShortcut("4"), "message_doctor");
+    assert.equal(postBookingNumberShortcut("post:book"), "book");
+    assert.equal(postBookingNumberShortcut("post:new_book"), "book");
+  });
+
+  it("maps typed New booking / menu titles", () => {
+    assert.equal(postBookingNumberShortcut("New booking"), "book");
+    assert.equal(postBookingNumberShortcut("3 · New booking"), "book");
+    assert.equal(postBookingNumberShortcut("Reschedule"), "reschedule");
+    assert.equal(postBookingNumberShortcut("Cancel"), "cancel");
+    assert.equal(postBookingNumberShortcut("Message doctor"), "message_doctor");
   });
 });
