@@ -10,7 +10,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:empty-state": "tsx lib/practicesEmptyState.test.ts"
+    "test:empty-state": "tsx lib/practicesEmptyState.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@tabler/icons-react": "^3.46.0",
@@ -35,6 +38,7 @@
     "thinking-orbs": "^0.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.10",

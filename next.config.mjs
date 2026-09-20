@@ -3,6 +3,8 @@
 const nextConfig = {
   poweredByHeader: false,
   compress: true,
+  // Playwright / curl often use 127.0.0.1 while Next defaults to localhost
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   experimental: {
     optimizePackageImports: ["@tabler/icons-react", "lucide-react", "date-fns"],
   },
