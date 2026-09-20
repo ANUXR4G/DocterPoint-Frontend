@@ -772,6 +772,35 @@ export const WhatsAppService = {
         }
       }
 
+      // Who-to-book-for (yourself / family) when 4+ profiles
+      if (result.patientList && result.patientList.length > 0) {
+        const listSent = await sendWhatsAppInteractiveList(
+          item.from,
+          {
+            header: "Who is booking?",
+            body:
+              result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
+              "Choose yourself or a family member",
+            buttonLabel: "Profiles",
+            sectionTitle: "Patient profiles",
+            rows: result.patientList.map((p) => ({
+              id: `patient:${p.index}`,
+              title: p.label.slice(0, 24),
+              description: (p.description || `Profile ${p.index}`).slice(0, 72),
+            })),
+          },
+          item.phoneNumberId,
+        );
+        if (listSent.ok && !listSent.simulated) {
+          continue;
+        }
+        if (!listSent.ok) {
+          console.warn(
+            `[WhatsApp] patient list interactive failed: ${listSent.error}`,
+          );
+        }
+      }
+
       if (result.replyButtons && result.replyButtons.length > 0) {
         const btnSent = await sendWhatsAppInteractiveButtons(
           item.from,
@@ -830,6 +859,7 @@ export const WhatsAppService = {
     dateList?: Array<{ iso: string; label: string }>;
     slotList?: Array<{ index: number; label: string }>;
     bookingList?: Array<{ index: number; label: string; description?: string }>;
+    patientList?: Array<{ index: number; label: string; description?: string }>;
     menuList?: Array<{ id: string; title: string; description?: string }>;
   }> {
     const practice = await this.resolvePracticeByNumber(
