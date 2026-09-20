@@ -591,6 +591,32 @@ export const BotPrompts = {
     );
   },
 
+  askMessageDoctorPick(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    if (!options.length) {
+      return L(
+        lang,
+        "You have no active appointments to message a doctor about.",
+        "डॉक्टर को संदेश भेजने के लिए कोई सक्रिय अपॉइंटमेंट नहीं है।",
+      );
+    }
+    return L(
+      lang,
+      "Which appointment's doctor should we message? Choose below.",
+      "किस अपॉइंटमेंट के डॉक्टर को संदेश भेजें? नीचे चुनें।",
+    );
+  },
+
+  noBookingForMessageDoctor(lang?: WaLang): string {
+    return L(
+      lang,
+      "No active appointment found to message a doctor. Reply *BOOK* to schedule one.",
+      "डॉक्टर को संदेश के लिए कोई सक्रिय अपॉइंटमेंट नहीं मिली। बुक करने के लिए *BOOK* लिखें।",
+    );
+  },
+
   fallback(lang?: WaLang): string {
     return L(
       lang,
@@ -660,13 +686,13 @@ export const BotPrompts = {
     return L(
       lang,
       `✅ Booked at *${practiceName}*.\n${detail}\n\n` +
-        `What would you like to do next? Choose below.`,
+        `Tap *Menu* below to choose an option.`,
       `✅ *${practiceName}* पर बुकिंग हो गई।\n${detail}\n\n` +
-        `अब क्या करना है? नीचे से चुनें।`,
+        `विकल्प चुनने के लिए नीचे *Menu* दबाएँ।`,
     );
   },
 
-  /** After an active booking — reschedule / cancel / new book / message doctor. */
+  /** After an active booking — interactive menu has the actions. */
   postBookingAsk(
     practiceName: string,
     whenDetail?: string | null,
@@ -678,27 +704,30 @@ export const BotPrompts = {
     return L(
       lang,
       `Hi — you already have a booking at *${practiceName}*.${when}\n\n` +
-        `What do you want to do?\n` +
-        `1️⃣ Reschedule\n` +
-        `2️⃣ Cancel\n` +
-        `3️⃣ New booking\n` +
-        `4️⃣ Message your doctor`,
+        `Tap *Menu* below to choose an option.`,
       `नमस्ते — *${practiceName}* पर आपकी बुकिंग पहले से है।${when}\n\n` +
-        `आप क्या करना चाहते हैं?\n` +
-        `1️⃣ रीशेड्यूल\n` +
-        `2️⃣ रद्द करें\n` +
-        `3️⃣ नई बुकिंग\n` +
-        `4️⃣ डॉक्टर को संदेश`,
+        `विकल्प चुनने के लिए नीचे *Menu* दबाएँ।`,
     );
   },
 
-  messageDoctorHandoff(lang?: WaLang): string {
+  messageDoctorHandoff(
+    lang?: WaLang,
+    opts?: { doctorName?: string | null; whenLabel?: string | null },
+  ): string {
+    const doc = opts?.doctorName?.trim();
+    const when = opts?.whenLabel?.trim();
+    const who = doc
+      ? L(lang, ` your doctor *${doc}*`, ` अपने डॉक्टर *${doc}*`)
+      : L(lang, " your doctor", " अपने डॉक्टर");
+    const visit = when
+      ? L(lang, `\nVisit: *${when}*`, `\nविज़िट: *${when}*`)
+      : "";
     return L(
       lang,
-      "Okay — write your message for your doctor here.\n" +
-        "The clinic will see it in GlucoGuide. Reply *BOT* anytime for booking help.",
-      "ठीक है — डॉक्टर के लिए अपना संदेश यहाँ लिखें।\n" +
-        "क्लिनिक इसे GlucoGuide में देखेगा। बुकिंग मदद के लिए कभी भी *BOT* लिखें।",
+      `Okay — write your message for${who} here.${visit}\n` +
+        `The clinic will see it in GlucoGuide. Reply *BOT* anytime for booking help.`,
+      `ठीक है —${who} के लिए अपना संदेश यहाँ लिखें।${visit}\n` +
+        `क्लिनिक इसे GlucoGuide में देखेगा। बुकिंग मदद के लिए कभी भी *BOT* लिखें।`,
     );
   },
 

@@ -62,6 +62,7 @@ export type ConversationStep =
   | "awaiting_cancel_confirm"
   | "awaiting_reschedule_booking"
   | "awaiting_reschedule_slot"
+  | "awaiting_message_doctor_booking"
   | "awaiting_register_name"
   | "awaiting_register_gender"
   | "awaiting_register_email_opt"
@@ -121,6 +122,9 @@ export type ConversationState = {
    * or they pick another post-booking action.
    */
   postBookingCare?: boolean;
+  /** Booking / doctor selected for Message doctor care chat. */
+  careBookingId?: string;
+  careProviderId?: string;
   /** Preferred reply language (set on first contact) */
   preferredLanguage?: "en" | "hi";
 };
@@ -142,8 +146,8 @@ export type OrchestratorResult = {
   dateList?: Array<{ iso: string; label: string }>;
   /** Time slots as a tappable list (when more than 3 open times). */
   slotList?: Array<{ index: number; label: string }>;
-  /** Reschedule booking pick as a tappable list (when more than 3). */
-  bookingList?: Array<{ index: number; label: string }>;
+  /** Reschedule / message-doctor booking pick as a tappable list. */
+  bookingList?: Array<{ index: number; label: string; description?: string }>;
   /** Welcome / HELP menu as a tappable list (menu:book, …). */
   menuList?: Array<{ id: string; title: string; description?: string }>;
 };
@@ -362,12 +366,143 @@ async function findUpcomingBooking(practiceId: string, patientPhone: string) {
   );
 }
 
+async function listUpcomingBookings(practiceId: string, patientPhone: string) {
+  const bookings = await BookingService.listForPatient({ phone: patientPhone });
+  return bookings
+    .filter(
+      (b) =>
+        b.practiceId === practiceId &&
+        UPCOMING_STATUSES.includes(
+          b.status as (typeof UPCOMING_STATUSES)[number],
+        ),
+    )
+    .slice(0, 5);
+}
+
+function bookingDoctorLabel(b: {
+  mode: ScheduleMode;
+  tokenNumber?: number | null;
+  sessionDate?: Date | null;
+  slotStart?: Date | null;
+  provider?: { name?: string | null } | null;
+}): { title: string; description: string; when: string } {
+  const when = bookingWhenLabel(b);
+  const rawName = b.provider?.name?.trim() || "Doctor";
+  const title = (
+    rawName.toLowerCase().startsWith("dr") ? rawName : `Dr ${rawName}`
+  ).slice(0, 24);
+  return { title, description: when.slice(0, 72), when };
+}
+
+async function enterMessageDoctorCare(opts: {
+  convId: string;
+  state: ConversationState;
+  lang: WaLang;
+  booking: {
+    id: string;
+    providerId: string;
+    mode: ScheduleMode;
+    tokenNumber?: number | null;
+    sessionDate?: Date | null;
+    slotStart?: Date | null;
+    provider?: { name?: string | null } | null;
+  };
+}): Promise<OrchestratorResult> {
+  const { convId, state, lang, booking } = opts;
+  const labels = bookingDoctorLabel(booking);
+  const next: ConversationState = {
+    ...idleState(state),
+    handedOff: true,
+    postBookingCare: true,
+    careBookingId: booking.id,
+    careProviderId: booking.providerId,
+    lastBookingId: booking.id,
+    failedTurns: 0,
+    step: "idle",
+  };
+  await saveState(convId, next);
+  await prisma.whatsAppConversation.update({
+    where: { id: convId },
+    data: { status: "handed_off", state: touch(next) },
+  });
+  return {
+    reply: BotPrompts.messageDoctorHandoff(lang, {
+      doctorName: booking.provider?.name,
+      whenLabel: labels.when,
+    }),
+  };
+}
+
+async function startMessageDoctorFlow(opts: {
+  convId: string;
+  practice: PracticeCtx;
+  patientPhone: string;
+  state: ConversationState;
+  lang: WaLang;
+}): Promise<OrchestratorResult> {
+  const { convId, practice, patientPhone, state, lang } = opts;
+  const upcoming = await listUpcomingBookings(practice.id, patientPhone);
+  if (!upcoming.length) {
+    return { reply: BotPrompts.noBookingForMessageDoctor(lang) };
+  }
+  if (upcoming.length === 1) {
+    return enterMessageDoctorCare({
+      convId,
+      state,
+      lang,
+      booking: upcoming[0]!,
+    });
+  }
+
+  const bookingChoices = upcoming.map((b) => {
+    const labels = bookingDoctorLabel(b);
+    return {
+      id: b.id,
+      label: labels.title,
+      description: labels.description,
+    };
+  });
+  const next: ConversationState = {
+    ...idleState({ ...state, postBookingCare: false, handedOff: false }),
+    step: "awaiting_message_doctor_booking",
+    bookingChoices: bookingChoices.map((c) => ({
+      id: c.id,
+      label: `${c.label} · ${c.description}`,
+    })),
+    failedTurns: 0,
+  };
+  await saveState(convId, next);
+  await prisma.whatsAppConversation.update({
+    where: { id: convId },
+    data: { status: "bot_active", state: touch(next) },
+  });
+  return withBookingPicker(
+    BotPrompts.askMessageDoctorPick(
+      bookingChoices.map((c, i) => ({
+        index: i + 1,
+        label: `${c.label} · ${c.description}`,
+      })),
+      lang,
+    ),
+    bookingChoices,
+    { forceList: true },
+  );
+}
+
 function isLooseIdleMessage(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return true;
   // Explicit commands are handled elsewhere — everything else re-offers choices.
   if (
     /^(book|cancel|reschedule|status|help|menu|bot|resume|register|doctors?|faq|info|report|reports|my\s*docs?|message|msg|human|agent|staff)\b/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  // Post-booking menu titles typed as free text (e.g. "New booking")
+  if (
+    /^(new\s+book(ing)?|book\s+(another|again|new)|another\s+booking)\b/i.test(
       t,
     )
   ) {
@@ -423,13 +558,14 @@ function withSlotPicker(
   };
 }
 
-/** Reschedule booking pick — buttons if ≤3, else list. */
+/** Reschedule / message-doctor booking pick — buttons if ≤3, else list. */
 function withBookingPicker(
   reply: string,
-  choices: Array<{ label: string }>,
+  choices: Array<{ label: string; description?: string }>,
+  opts?: { forceList?: boolean },
 ): OrchestratorResult {
   if (!choices.length) return { reply };
-  if (choices.length <= 3) {
+  if (!opts?.forceList && choices.length <= 3) {
     return {
       reply,
       replyButtons: choices.map((c, i) => ({
@@ -443,6 +579,7 @@ function withBookingPicker(
     bookingList: choices.map((c, i) => ({
       index: i + 1,
       label: c.label,
+      description: c.description,
     })),
   };
 }
@@ -517,6 +654,8 @@ function keepPrefs(state: ConversationState): Pick<
   | "handedOff"
   | "postBookingCare"
   | "lastBookingId"
+  | "careBookingId"
+  | "careProviderId"
 > {
   return {
     preferredLanguage: state.preferredLanguage,
@@ -525,6 +664,13 @@ function keepPrefs(state: ConversationState): Pick<
     handedOff: state.handedOff,
     postBookingCare: state.postBookingCare,
     lastBookingId: state.lastBookingId,
+    // Keep selected doctor only while in Message-doctor care mode.
+    ...(state.postBookingCare
+      ? {
+          careBookingId: state.careBookingId,
+          careProviderId: state.careProviderId,
+        }
+      : {}),
   };
 }
 
@@ -1980,11 +2126,21 @@ async function runOrchestratorCore(input: {
   const menuIntent =
     (numberShortcut as BotIntent | null) ?? exactMenuIntent(text);
 
-  if (menuIntent === "message_doctor" || menuIntent === "human") {
+  if (menuIntent === "message_doctor") {
+    return startMessageDoctorFlow({
+      convId,
+      practice,
+      patientPhone,
+      state,
+      lang,
+    });
+  }
+
+  if (menuIntent === "human") {
     state = {
       ...idleState(state),
       handedOff: true,
-      postBookingCare: menuIntent === "message_doctor",
+      postBookingCare: false,
       failedTurns: 0,
     };
     await saveState(convId, state);
@@ -1992,12 +2148,7 @@ async function runOrchestratorCore(input: {
       where: { id: convId },
       data: { status: "handed_off" },
     });
-    return {
-      reply:
-        menuIntent === "message_doctor"
-          ? BotPrompts.messageDoctorHandoff(lang)
-          : escalateReply(lang),
-    };
+    return { reply: escalateReply(lang) };
   }
 
   if (menuIntent) {
@@ -2268,19 +2419,13 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "message_doctor") {
-    state = {
-      ...state,
-      handedOff: true,
-      postBookingCare: true,
-      step: "idle",
-      failedTurns: 0,
-    };
-    await saveState(convId, state);
-    await prisma.whatsAppConversation.update({
-      where: { id: convId },
-      data: { status: "handed_off" },
+    return startMessageDoctorFlow({
+      convId,
+      practice,
+      patientPhone,
+      state,
+      lang,
     });
-    return { reply: BotPrompts.messageDoctorHandoff(lang) };
   }
 
   // Active booking + idle free text → offer reschedule / cancel / new / message doctor
@@ -2545,6 +2690,51 @@ async function runOrchestratorCore(input: {
     return withDateButtons(
       `Rescheduling ${bookingWhenLabel(booking)}.\n${BotPrompts.askDate(lang)}`,
     );
+  }
+
+  if (state.step === "awaiting_message_doctor_booking") {
+    const choices = state.bookingChoices ?? [];
+    const idx = parseSlotChoiceIndex(text);
+    const choice =
+      idx !== null && idx >= 1 && idx <= choices.length
+        ? choices[idx - 1]
+        : null;
+    if (!choice) {
+      return withBookingPicker(
+        BotPrompts.askMessageDoctorPick(
+          choices.map((c, i) => ({ index: i + 1, label: c.label })),
+          lang,
+        ),
+        choices.map((c) => {
+          const [title, ...rest] = c.label.split(" · ");
+          return {
+            label: (title || c.label).slice(0, 24),
+            description: rest.join(" · ").slice(0, 72) || undefined,
+          };
+        }),
+        { forceList: true },
+      );
+    }
+    const booking = await prisma.practiceBooking.findUnique({
+      where: { id: choice.id },
+    });
+    if (!booking) {
+      await saveState(convId, idleState(state));
+      return { reply: BotPrompts.bookingNotFound(lang) };
+    }
+    const provider = await prisma.user.findUnique({
+      where: { id: booking.providerId },
+      select: { id: true, name: true },
+    });
+    return enterMessageDoctorCare({
+      convId,
+      state,
+      lang,
+      booking: {
+        ...booking,
+        provider: provider ? { name: provider.name } : null,
+      },
+    });
   }
 
   if (state.step === "awaiting_reschedule_slot") {

@@ -5,9 +5,9 @@ import { socketManager } from "../core/socket.js";
 function looksLikeBotCommand(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
-  if (/^(?:menu|post):/i.test(t)) return true;
+  if (/^(?:menu|post|booking|slot|date|mode):/i.test(t)) return true;
   if (
-    /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info|message|msg)\b/.test(
+    /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info|message|msg|new\s+book)\b/.test(
       t,
     )
   ) {
@@ -59,9 +59,17 @@ export async function ingestWhatsAppPatientReply(opts: {
   conversationAlreadyHandedOff?: boolean;
   /** True after patient chose "Message doctor" — free text stays in care chat. */
   postBookingCare?: boolean;
+  /** Doctor selected from multi-booking Message-doctor picker. */
+  preferredProviderId?: string;
+  preferredBookingId?: string;
 }): Promise<{ ingested: boolean; shouldDeferToHuman: boolean }> {
   const text = String(opts.text || "").trim();
   if (!text || text.length > 4000) {
+    return { ingested: false, shouldDeferToHuman: false };
+  }
+
+  // Menu / list taps and booking commands belong to the bot — never mirror them.
+  if (looksLikeBotCommand(text)) {
     return { ingested: false, shouldDeferToHuman: false };
   }
 
@@ -97,26 +105,65 @@ export async function ingestWhatsAppPatientReply(opts: {
     return { ingested: false, shouldDeferToHuman: false };
   }
 
+  const phoneOr = [
+    { patientId: patient.id },
+    { patientPhone: digits },
+    { patientPhone: { endsWith: digits } },
+    ...(digitsRaw.length >= 11
+      ? [{ patientPhone: digitsRaw }, { patientPhone: { endsWith: digitsRaw } }]
+      : []),
+  ];
+
+  // Prefer the booking/doctor the patient picked in Message-doctor flow.
+  let booking: {
+    providerId: string;
+    patientId: string | null;
+    status: string;
+  } | null = null;
+
+  if (opts.preferredBookingId) {
+    const preferred = await prisma.practiceBooking.findFirst({
+      where: {
+        id: opts.preferredBookingId,
+        practiceId: opts.practiceId,
+        OR: phoneOr,
+      },
+      select: { providerId: true, patientId: true, status: true },
+    });
+    if (preferred?.providerId) booking = preferred;
+  }
+
+  if (!booking?.providerId && opts.preferredProviderId) {
+    const preferred = await prisma.practiceBooking.findFirst({
+      where: {
+        practiceId: opts.practiceId,
+        providerId: opts.preferredProviderId,
+        OR: phoneOr,
+        status: {
+          in: ["SCHEDULED", "REQUESTED", "ACCEPTED", "IN_PROGRESS", "COMPLETED"],
+        },
+      },
+      orderBy: [{ slotStart: "desc" }, { updatedAt: "desc" }],
+      select: { providerId: true, patientId: true, status: true },
+    });
+    if (preferred?.providerId) booking = preferred;
+  }
+
   // Prefer an open visit; fall back to any recent booking so replies still land
   // in care chat after COMPLETED visits.
-  let booking = await prisma.practiceBooking.findFirst({
-    where: {
-      practiceId: opts.practiceId,
-      OR: [
-        { patientId: patient.id },
-        { patientPhone: digits },
-        { patientPhone: { endsWith: digits } },
-        ...(digitsRaw.length >= 11
-          ? [{ patientPhone: digitsRaw }, { patientPhone: { endsWith: digitsRaw } }]
-          : []),
-      ],
-      status: {
-        in: ["SCHEDULED", "REQUESTED", "ACCEPTED", "IN_PROGRESS", "COMPLETED"],
+  if (!booking?.providerId) {
+    booking = await prisma.practiceBooking.findFirst({
+      where: {
+        practiceId: opts.practiceId,
+        OR: phoneOr,
+        status: {
+          in: ["SCHEDULED", "REQUESTED", "ACCEPTED", "IN_PROGRESS", "COMPLETED"],
+        },
       },
-    },
-    orderBy: [{ slotStart: "desc" }, { updatedAt: "desc" }],
-    select: { providerId: true, patientId: true, status: true },
-  });
+      orderBy: [{ slotStart: "desc" }, { updatedAt: "desc" }],
+      select: { providerId: true, patientId: true, status: true },
+    });
+  }
   if (!booking?.providerId) {
     booking = await prisma.practiceBooking.findFirst({
       where: {
@@ -156,7 +203,7 @@ export async function ingestWhatsAppPatientReply(opts: {
       .catch(() => undefined);
   }
 
-  const providerId = booking.providerId;
+  const providerId = opts.preferredProviderId || booking.providerId;
 
   const deferFor = async (): Promise<boolean> => {
     // Booking commands / BOT resume / post-booking menu always go to orchestrator.

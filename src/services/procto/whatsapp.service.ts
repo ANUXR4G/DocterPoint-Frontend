@@ -743,7 +743,7 @@ export const WhatsAppService = {
         }
       }
 
-      // Reschedule: pick which booking (4+)
+      // Reschedule / message-doctor: pick which booking (list)
       if (result.bookingList && result.bookingList.length > 0) {
         const listSent = await sendWhatsAppInteractiveList(
           item.from,
@@ -751,13 +751,13 @@ export const WhatsAppService = {
             header: "Choose a booking",
             body:
               result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
-              "Which visit should we move?",
+              "Which appointment?",
             buttonLabel: "Bookings",
             sectionTitle: "Your bookings",
             rows: result.bookingList.map((b) => ({
               id: `booking:${b.index}`,
               title: b.label.slice(0, 24),
-              description: `Booking ${b.index}`,
+              description: (b.description || `Booking ${b.index}`).slice(0, 72),
             })),
           },
           item.phoneNumberId,
@@ -829,7 +829,7 @@ export const WhatsAppService = {
     replyButtons?: Array<{ id: string; title: string }>;
     dateList?: Array<{ iso: string; label: string }>;
     slotList?: Array<{ index: number; label: string }>;
-    bookingList?: Array<{ index: number; label: string }>;
+    bookingList?: Array<{ index: number; label: string; description?: string }>;
     menuList?: Array<{ id: string; title: string; description?: string }>;
   }> {
     const practice = await this.resolvePracticeByNumber(
@@ -913,6 +913,8 @@ export const WhatsAppService = {
         conversationAlreadyHandedOff:
           conv.status === "handed_off" || state.handedOff === true,
         postBookingCare: state.postBookingCare === true,
+        preferredProviderId: state.careProviderId,
+        preferredBookingId: state.careBookingId,
       });
       if (care.shouldDeferToHuman) {
         if (!state.handedOff) {

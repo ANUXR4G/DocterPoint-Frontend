@@ -410,6 +410,8 @@ export function exactMenuIntent(text: string): BotIntent | null {
     .trim()
     .toLowerCase()
     .replace(/^[*`~]+|[*`~]+$/g, "")
+    // Strip list labels like "3 · New booking" / "3. New booking"
+    .replace(/^[1-9]\s*[·.)\-:]+\s*/u, "")
     .replace(/\s+/g, " ");
   if (!raw || raw.length > 40) return null;
   const t = raw
@@ -426,6 +428,13 @@ export function exactMenuIntent(text: string): BotIntent | null {
     booking: "book",
     bok: "book",
     appointment: "book",
+    // Post-booking menu title ("3 · New booking") typed as free text
+    new_booking: "book",
+    new_book: "book",
+    book_another: "book",
+    another_booking: "book",
+    book_again: "book",
+    book_new: "book",
     cancel: "cancel",
     cancle: "cancel",
     cancell: "cancel",
@@ -450,6 +459,7 @@ export function exactMenuIntent(text: string): BotIntent | null {
     documents: "my_docs",
     message_doctor: "message_doctor",
     message: "message_doctor",
+    message_your_doctor: "message_doctor",
     msg_doctor: "message_doctor",
     chat_doctor: "message_doctor",
     doctor_chat: "message_doctor",
@@ -537,6 +547,22 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
       message: "message_doctor",
     };
     return map[key] ?? null;
+  }
+
+  // Typed menu titles (with or without "3 · " prefix)
+  const label = raw
+    .toLowerCase()
+    .replace(/^[1-4]\s*[·.)\-:]+\s*/u, "")
+    .trim();
+  if (/^(new\s+book(ing)?|book\s+(another|again|new)|another\s+booking)$/i.test(label)) {
+    return "book";
+  }
+  if (/^reschedule$/i.test(label)) return "reschedule";
+  if (/^cancel$/i.test(label)) return "cancel";
+  if (
+    /^(message(\s+(your|the))?\s+doctor|message_doctor)$/i.test(label)
+  ) {
+    return "message_doctor";
   }
 
   const m = raw.match(/^(?:option\s*)?([1-4])(?:\s*[.)]?)?$/i);
