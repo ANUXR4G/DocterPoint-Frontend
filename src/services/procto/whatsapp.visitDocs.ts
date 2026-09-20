@@ -394,8 +394,6 @@ export function registerFlowStep(step?: string | null): boolean {
     step === "awaiting_register_gender" ||
     step === "awaiting_register_email_opt" ||
     step === "awaiting_register_email" ||
-    step === "awaiting_register_phone_opt" ||
-    step === "awaiting_register_phone" ||
     step === "awaiting_register_confirm"
   );
 }
@@ -406,8 +404,6 @@ export function inActiveRegisterStep(step?: string | null): boolean {
     step === "awaiting_register_gender" ||
     step === "awaiting_register_email_opt" ||
     step === "awaiting_register_email" ||
-    step === "awaiting_register_phone_opt" ||
-    step === "awaiting_register_phone" ||
     step === "awaiting_register_confirm"
   );
 }

@@ -310,17 +310,20 @@ export class PatientService {
     return { img_src: src, imgSrc: src };
   }
 
-  /** Lookup patient by WhatsApp / contact phone (last 10 digits). */
+  /** Lookup patient by WhatsApp / contact phone (full MSISDN or last 10). */
   static async findByPhone(phone: string) {
-    const digits = phone.replace(/\D/g, "").slice(-10);
+    const digits = phone.replace(/\D/g, "");
     if (digits.length < 10) return null;
+    const last10 = digits.slice(-10);
 
     const user = await prisma.user.findFirst({
       where: {
         role: "user",
         OR: [
-          { phone: { endsWith: digits } },
-          { patient: { contactNumber: { endsWith: digits } } },
+          { phone: digits },
+          { phone: { endsWith: last10 } },
+          { patient: { contactNumber: digits } },
+          { patient: { contactNumber: { endsWith: last10 } } },
         ],
       },
       include: { patient: true },
@@ -343,20 +346,22 @@ export class PatientService {
     email?: string | null;
     address?: string | null;
   }) {
-    const phone = data.phone.replace(/\D/g, "").slice(-10);
-    if (phone.length < 10) {
-      throw new AppError(400, "A valid 10-digit phone is required.");
+    // Keep full WhatsApp MSISDN (e.g. 9715… / 9198…) — do not strip to last 10 / force +91.
+    const phone = data.phone.replace(/\D/g, "");
+    if (phone.length < 10 || phone.length > 15) {
+      throw new AppError(400, "A valid mobile number is required.");
     }
-    const waFrom = (data.whatsappFrom || phone).replace(/\D/g, "").slice(-10);
-    // Chat lookup uses contactNumber when login phone differs from WhatsApp sender.
+    const waFrom = (data.whatsappFrom || phone).replace(/\D/g, "");
     const contactNumber =
-      waFrom.length === 10 && waFrom !== phone ? waFrom : phone;
+      waFrom.length >= 10 && waFrom !== phone ? waFrom.slice(0, 15) : phone;
+
+    const last10 = phone.slice(-10);
 
     // WhatsApp registration is patient-only
     const staffPhone = await prisma.user.findFirst({
       where: {
         role: "doctor",
-        phone: { endsWith: phone },
+        OR: [{ phone }, { phone: { endsWith: last10 } }],
       },
       select: { id: true },
     });
@@ -370,7 +375,10 @@ export class PatientService {
       where: {
         isActive: true,
         role: { in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"] },
-        user: { phone: { endsWith: phone } },
+        OR: [
+          { user: { phone } },
+          { user: { phone: { endsWith: last10 } } },
+        ],
       },
       select: { id: true },
     });

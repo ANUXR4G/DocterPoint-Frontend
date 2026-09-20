@@ -17,6 +17,9 @@ export interface WhatsAppSendResult {
 
 function formatE164(phone: string): string {
   const digits = phone.replace(/\D/g, "");
+  // Already international (WhatsApp `from` / stored MSISDN) — keep as-is.
+  if (digits.length >= 11 && digits.length <= 15) return digits;
+  // Bare 10-digit Indian mobile (legacy) → prepend 91 only then.
   if (digits.length === 10) return `91${digits}`;
   return digits;
 }

@@ -64,8 +64,6 @@ export type ConversationStep =
   | "awaiting_register_gender"
   | "awaiting_register_email_opt"
   | "awaiting_register_email"
-  | "awaiting_register_phone_opt"
-  | "awaiting_register_phone"
   | "awaiting_register_confirm";
 
 export type ConversationState = {
@@ -92,8 +90,6 @@ export type ConversationState = {
   regName?: string;
   regGender?: string;
   regEmail?: string;
-  /** Confirmed registered mobile (WhatsApp sender or typed). Never from ID OCR. */
-  regPhone?: string;
   regDob?: string | null;
   regAddress?: string | null;
   /** Preferred visit time from free speech / voice (clock or day-part). */
@@ -404,7 +400,18 @@ type PracticeCtx = Practice & {
 };
 
 function normalizePhone(from: string): string {
-  return from.replace(/\D/g, "").slice(-10);
+  const digits = from.replace(/\D/g, "");
+  // Keep full WhatsApp MSISDN (country + national), e.g. 9715… / 9198…
+  if (digits.length >= 11 && digits.length <= 15) return digits;
+  if (digits.length === 10) return digits;
+  return digits.slice(-15);
+}
+
+/** Display WhatsApp sender as +<country><number> — never force +91. */
+function formatRegPhoneDisplay(phone: string): string {
+  const d = String(phone || "").replace(/\D/g, "");
+  if (!d) return String(phone || "");
+  return `+${d}`;
 }
 
 function isTimedOut(state: ConversationState): boolean {
@@ -1262,7 +1269,7 @@ async function confirmBooking(
   patientPhone: string,
 ): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
-  const phone = patientPhone.replace(/\D/g, "").slice(-10);
+  const phone = normalizePhone(patientPhone);
 
   if (!state.locationId || !state.providerId || !state.mode) {
     await saveState(convId, { ...state, step: "awaiting_confirm" });
@@ -1383,29 +1390,6 @@ function registerSummary(state: ConversationState, phone: string): string {
   return lines.join("\n");
 }
 
-/** Display WhatsApp sender number for registration confirm (no country-code prefix). */
-function formatRegPhoneDisplay(phone: string): string {
-  const d = String(phone || "").replace(/\D/g, "").slice(-10);
-  if (d.length !== 10) return String(phone || "").replace(/\D/g, "") || phone;
-  return `${d.slice(0, 5)} ${d.slice(5)}`;
-}
-
-function parseRegisterMobile(text: string): string | null {
-  const digits = String(text || "").replace(/\D/g, "");
-  const last10 = digits.slice(-10);
-  if (last10.length !== 10 || !/^[6-9]/.test(last10)) return null;
-  return last10;
-}
-
-function resolveRegisterPhone(
-  state: ConversationState,
-  whatsappFrom: string,
-): string {
-  const chosen = String(state.regPhone || "").replace(/\D/g, "").slice(-10);
-  if (chosen.length === 10) return chosen;
-  return String(whatsappFrom || "").replace(/\D/g, "").slice(-10);
-}
-
 function parseRegisterEmail(text: string): string | null {
   const raw = text.trim().toLowerCase();
   if (!raw) return null;
@@ -1419,7 +1403,7 @@ function isAffirmative(text: string): boolean {
     .trim()
     .toLowerCase()
     .replace(/^[*`~]+|[*`~]+$/g, "");
-  return /^(yes|y|haan|ha|हाँ|हां|ok|okay|sure|reg_email_yes|email_yes|reg_phone_yes)$/i.test(
+  return /^(yes|y|haan|ha|हाँ|हां|ok|okay|sure|reg_email_yes|email_yes)$/i.test(
     t,
   );
 }
@@ -1429,7 +1413,7 @@ function isNegative(text: string): boolean {
     .trim()
     .toLowerCase()
     .replace(/^[*`~]+|[*`~]+$/g, "");
-  return /^(no|n|nah|nope|nahi|नहीं|नही|skip|reg_email_no|email_no|reg_phone_no)$/i.test(
+  return /^(no|n|nah|nope|nahi|नहीं|नही|skip|reg_email_no|email_no)$/i.test(
     t,
   );
 }
@@ -1444,41 +1428,13 @@ function emailOptPrompt(lang: ReturnType<typeof resolveLang>): OrchestratorResul
   };
 }
 
-/** Ask to store WhatsApp sender number as registered mobile — Yes/No. */
-function phoneOptPrompt(
-  whatsappFrom: string,
-  lang: ReturnType<typeof resolveLang>,
-): OrchestratorResult {
-  return {
-    reply: BotPrompts.askRegisterPhoneOpt(
-      formatRegPhoneDisplay(whatsappFrom),
-      lang,
-    ),
-    replyButtons: [
-      { id: "reg_phone_yes", title: "Yes" },
-      { id: "reg_phone_no", title: "No" },
-    ],
-  };
-}
-
-function goToRegisterPhoneOpt(
-  state: ConversationState,
-  whatsappFrom: string,
-  lang: ReturnType<typeof resolveLang>,
-): OrchestratorResult {
-  delete state.regPhone;
-  state.step = "awaiting_register_phone_opt";
-  return phoneOptPrompt(whatsappFrom, lang);
-}
-
 function goToRegisterConfirm(
   state: ConversationState,
   patientPhone: string,
   lang: ReturnType<typeof resolveLang>,
 ): OrchestratorResult {
-  const phone = resolveRegisterPhone(state, patientPhone);
   state.step = "awaiting_register_confirm";
-  state.pendingSummary = registerSummary(state, phone);
+  state.pendingSummary = registerSummary(state, patientPhone);
   return withYesNo(
     BotPrompts.askRegisterConfirm(
       state.pendingSummary,
@@ -1516,8 +1472,7 @@ async function applyIdScanToRegister(
   state.regName = name;
   if (scan.dateOfBirth) state.regDob = scan.dateOfBirth;
   if (scan.address) state.regAddress = scan.address;
-  // Registered mobile is always WhatsApp sender (confirmed next) — never OCR contactNumber.
-  delete state.regPhone;
+  // Registered mobile is always the WhatsApp sender — never OCR contactNumber.
 
   const gender = scan.gender;
   if (gender) {
@@ -1592,8 +1547,8 @@ async function confirmRegister(
   }
   try {
     const result = await PatientService.registerViaWhatsApp({
-      phone: resolveRegisterPhone(state, patientPhone),
-      whatsappFrom: patientPhone,
+      phone: normalizePhone(patientPhone),
+      whatsappFrom: normalizePhone(patientPhone),
       name: state.regName!,
       gender: state.regGender,
       dateOfBirth: state.regDob ?? null,
@@ -1801,8 +1756,6 @@ async function runOrchestratorCore(input: {
       state.step === "awaiting_register_gender" ||
       state.step === "awaiting_register_email_opt" ||
       state.step === "awaiting_register_email" ||
-      state.step === "awaiting_register_phone_opt" ||
-      state.step === "awaiting_register_phone" ||
       state.step === "awaiting_register_confirm";
     if (!inRegister) {
       return { reply: BotPrompts.idPhotoWrongStep(lang) };
@@ -1867,7 +1820,7 @@ async function runOrchestratorCore(input: {
     }
     if (isNegative(text)) {
       delete state.regEmail;
-      const next = goToRegisterPhoneOpt(state, patientPhone, lang);
+      const next = goToRegisterConfirm(state, patientPhone, lang);
       await saveState(convId, state);
       return next;
     }
@@ -1875,7 +1828,7 @@ async function runOrchestratorCore(input: {
     const typedEmail = parseRegisterEmail(text);
     if (typedEmail) {
       state.regEmail = typedEmail;
-      const next = goToRegisterPhoneOpt(state, patientPhone, lang);
+      const next = goToRegisterConfirm(state, patientPhone, lang);
       await saveState(convId, state);
       return next;
     }
@@ -1886,48 +1839,13 @@ async function runOrchestratorCore(input: {
   if (state.step === "awaiting_register_email") {
     if (isNegative(text)) {
       delete state.regEmail;
-      const next = goToRegisterPhoneOpt(state, patientPhone, lang);
+      const next = goToRegisterConfirm(state, patientPhone, lang);
       await saveState(convId, state);
       return next;
     }
     const email = parseRegisterEmail(text);
     if (!email) return { reply: BotPrompts.askRegisterEmail(lang) };
     state.regEmail = email;
-    const next = goToRegisterPhoneOpt(state, patientPhone, lang);
-    await saveState(convId, state);
-    return next;
-  }
-
-  if (state.step === "awaiting_register_phone_opt") {
-    if (isAffirmative(text)) {
-      state.regPhone = String(patientPhone || "").replace(/\D/g, "").slice(-10);
-      const next = goToRegisterConfirm(state, patientPhone, lang);
-      await saveState(convId, state);
-      return next;
-    }
-    if (isNegative(text)) {
-      delete state.regPhone;
-      state.step = "awaiting_register_phone";
-      await saveState(convId, state);
-      return { reply: BotPrompts.askRegisterPhoneManual(lang) };
-    }
-    // Typed a mobile instead of Yes/No — accept as registered number
-    const typed = parseRegisterMobile(text);
-    if (typed) {
-      state.regPhone = typed;
-      const next = goToRegisterConfirm(state, patientPhone, lang);
-      await saveState(convId, state);
-      return next;
-    }
-    return phoneOptPrompt(patientPhone, lang);
-  }
-
-  if (state.step === "awaiting_register_phone") {
-    const typed = parseRegisterMobile(text);
-    if (!typed) {
-      return { reply: BotPrompts.askRegisterPhoneManual(lang) };
-    }
-    state.regPhone = typed;
     const next = goToRegisterConfirm(state, patientPhone, lang);
     await saveState(convId, state);
     return next;
@@ -1954,8 +1872,7 @@ async function runOrchestratorCore(input: {
     }
     return withYesNo(
       BotPrompts.askRegisterConfirm(
-        state.pendingSummary ||
-          registerSummary(state, resolveRegisterPhone(state, patientPhone)),
+        state.pendingSummary || registerSummary(state, patientPhone),
         state.afterRegister === "book",
         lang,
       ),
