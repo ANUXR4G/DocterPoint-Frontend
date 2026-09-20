@@ -1,7 +1,13 @@
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import { AppError } from "../core/response.js";
 import { settings } from "../config/index.js";
 import { normalizeGender as normalizeGenderValue } from "../core/gender.js";
-import { llmVisionProviders } from "../lib/llm.js";
+import { llmChatProviders, llmVisionProviders } from "../lib/llm.js";
+
+const nodeRequire = createRequire(import.meta.url);
 
 export type IdScanFields = {
   documentType: string | null;
@@ -72,49 +78,300 @@ function isPdfMime(mimeType: string): boolean {
   return m === "application/pdf" || m.includes("pdf");
 }
 
-/**
- * Rasterize page 1 of a PDF to PNG for the vision OCR stack
- * (OpenAI / HF chat completions only accept images).
- */
-async function pdfFirstPageToPng(pdfBytes: Buffer): Promise<Buffer> {
-  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const { createCanvas } = await import("@napi-rs/canvas");
+function looksLikePdf(bytes: Buffer): boolean {
+  if (bytes.length < 5) return false;
+  // BOM / leading whitespace then %PDF
+  const head = bytes.subarray(0, 1024).toString("latin1");
+  return /%PDF-/i.test(head);
+}
 
+type PdfJsPage = {
+  getViewport: (opts: { scale: number }) => { width: number; height: number };
+  render: (opts: Record<string, unknown>) => { promise: Promise<void> };
+  getTextContent: () => Promise<{ items: Array<{ str?: string }> }>;
+};
+
+type PdfJsDoc = {
+  numPages: number;
+  getPage: (n: number) => Promise<PdfJsPage>;
+  destroy?: () => Promise<void>;
+};
+
+class NodeCanvasFactory {
+  create(width: number, height: number) {
+    const w = Math.max(1, Math.ceil(width));
+    const h = Math.max(1, Math.ceil(height));
+    const canvas = createCanvas(w, h);
+    const context = canvas.getContext("2d");
+    return { canvas, context };
+  }
+  reset(
+    canvasAndContext: { canvas: { width: number; height: number } },
+    width: number,
+    height: number,
+  ) {
+    canvasAndContext.canvas.width = Math.max(1, Math.ceil(width));
+    canvasAndContext.canvas.height = Math.max(1, Math.ceil(height));
+  }
+  destroy(canvasAndContext: {
+    canvas: { width: number; height: number };
+  }) {
+    canvasAndContext.canvas.width = 0;
+    canvasAndContext.canvas.height = 0;
+  }
+}
+
+function pdfAssetUrls(): { cMapUrl: string; standardFontDataUrl: string } {
+  const root = path.dirname(nodeRequire.resolve("pdfjs-dist/package.json"));
+  return {
+    cMapUrl: `${pathToFileURL(path.join(root, "cmaps")).href}/`,
+    standardFontDataUrl: `${pathToFileURL(path.join(root, "standard_fonts")).href}/`,
+  };
+}
+
+async function loadPdfDocument(pdfBytes: Buffer): Promise<PdfJsDoc> {
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { cMapUrl, standardFontDataUrl } = pdfAssetUrls();
+  const canvasFactory = new NodeCanvasFactory();
   const loadingTask = getDocument({
     data: new Uint8Array(pdfBytes),
     useSystemFonts: true,
-    // Node has no web worker; keep parsing on this thread.
     disableWorker: true,
+    isEvalSupported: false,
+    cMapUrl,
+    cMapPacked: true,
+    standardFontDataUrl,
+    canvasFactory,
+    verbosity: 0,
   } as Parameters<typeof getDocument>[0]);
-  const pdf = await loadingTask.promise;
-  if (pdf.numPages < 1) {
-    throw new AppError(422, "PDF has no pages to read.");
-  }
+  return (await loadingTask.promise) as unknown as PdfJsDoc;
+}
 
-  const page = await pdf.getPage(1);
-  // Higher scale for small ID text on PDF pages.
-  const base = page.getViewport({ scale: 1 });
-  const scale = Math.min(3, 2000 / Math.max(base.width, base.height, 1));
-  const viewport = page.getViewport({ scale });
-  const canvas = createCanvas(
-    Math.max(1, Math.ceil(viewport.width)),
-    Math.max(1, Math.ceil(viewport.height)),
-  );
-  const ctx = canvas.getContext("2d");
-  await page
-    .render({
-      canvas: canvas as unknown as HTMLCanvasElement,
-      canvasContext: ctx as unknown as CanvasRenderingContext2D,
-      viewport,
-    })
-    .promise;
-  return canvas.toBuffer("image/png");
+/** Pull selectable text (DigiLocker / e-Aadhaar text PDFs). */
+async function extractPdfPlainText(pdf: PdfJsDoc): Promise<string> {
+  const maxPages = Math.min(pdf.numPages, 3);
+  const parts: string[] = [];
+  for (let n = 1; n <= maxPages; n++) {
+    const page = await pdf.getPage(n);
+    const content = await page.getTextContent();
+    const line = content.items
+      .map((it) => (typeof it.str === "string" ? it.str : ""))
+      .filter(Boolean)
+      .join(" ");
+    if (line.trim()) parts.push(line.trim());
+  }
+  return parts.join("\n").replace(/[ \t]+/g, " ").trim();
+}
+
+function nonWhiteRatio(
+  ctx: {
+    getImageData: (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+    ) => { data: Uint8ClampedArray };
+  },
+  width: number,
+  height: number,
+): number {
+  const step = Math.max(1, Math.floor(Math.min(width, height) / 80));
+  let nonWhite = 0;
+  let samples = 0;
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const { data } = ctx.getImageData(x, y, 1, 1);
+      samples++;
+      if (data[0]! < 250 || data[1]! < 250 || data[2]! < 250) nonWhite++;
+    }
+  }
+  return samples ? nonWhite / samples : 0;
+}
+
+/**
+ * One-pass PDF prepare: extract embedded text + raster pages 1–2 to PNG.
+ * CanvasFactory + cmaps/fonts so DigiLocker / CID glyphs actually draw.
+ */
+async function preparePdfForOcr(
+  pdfBytes: Buffer,
+): Promise<{ png: Buffer; pdfText: string }> {
+  const pdf = await loadPdfDocument(pdfBytes);
+  try {
+    if (pdf.numPages < 1) {
+      throw new AppError(422, "PDF has no pages to read.");
+    }
+
+    let pdfText = "";
+    try {
+      pdfText = await extractPdfPlainText(pdf);
+    } catch (err) {
+      console.warn(
+        "[idScan] PDF text extract failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+
+    const pageCount = Math.min(pdf.numPages, 2);
+    const pagePngs: Array<{
+      width: number;
+      height: number;
+      canvas: Canvas;
+    }> = [];
+
+    for (let n = 1; n <= pageCount; n++) {
+      const page = await pdf.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      // Target ~2200px on the long edge for small Aadhaar print.
+      const scale = Math.min(3.5, 2200 / Math.max(base.width, base.height, 1));
+      const viewport = page.getViewport({ scale });
+      const width = Math.max(1, Math.ceil(viewport.width));
+      const height = Math.max(1, Math.ceil(viewport.height));
+      const canvas: Canvas = createCanvas(width, height);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+
+      await page.render({
+        canvasContext: ctx,
+        viewport,
+        canvas,
+        background: "#ffffff",
+      }).promise;
+
+      const ink = nonWhiteRatio(ctx, width, height);
+      console.info(
+        `[idScan] PDF page ${n}/${pageCount} raster ${width}x${height} ink=${ink.toFixed(3)}`,
+      );
+      // Mostly-white DigiLocker pages can still have usable text; only skip near-empty.
+      if (ink < 0.0008 && !pdfText) {
+        console.warn(`[idScan] PDF page ${n} looks blank after rasterize`);
+        continue;
+      }
+      if (ink < 0.0008 && pdfText) {
+        // Keep a blank-ish page if we already have text — vision is fallback only.
+        continue;
+      }
+      pagePngs.push({ width, height, canvas });
+    }
+
+    // Text-only DigiLocker: synthesize a simple PNG so callers always get an image.
+    if (pagePngs.length === 0) {
+      if (pdfText && textLooksUsefulForId(pdfText)) {
+        const stub: Canvas = createCanvas(32, 32);
+        const sctx = stub.getContext("2d");
+        sctx.fillStyle = "#ffffff";
+        sctx.fillRect(0, 0, 32, 32);
+        return { png: stub.toBuffer("image/png"), pdfText };
+      }
+      throw new AppError(
+        422,
+        "Could not render that PDF. Export a clearer DigiLocker PDF or send a JPG/PNG photo of the ID.",
+      );
+    }
+
+    if (pagePngs.length === 1) {
+      return { png: pagePngs[0]!.canvas.toBuffer("image/png"), pdfText };
+    }
+
+    // Stack pages vertically with a small gap (front + back of Aadhaar).
+    const gap = 16;
+    const totalW = Math.max(...pagePngs.map((p) => p.width));
+    const totalH =
+      pagePngs.reduce((sum, p) => sum + p.height, 0) +
+      gap * (pagePngs.length - 1);
+    const stacked: Canvas = createCanvas(totalW, totalH);
+    const sctx = stacked.getContext("2d");
+    sctx.fillStyle = "#ffffff";
+    sctx.fillRect(0, 0, totalW, totalH);
+    let y = 0;
+    for (const p of pagePngs) {
+      sctx.drawImage(p.canvas, 0, y);
+      y += p.height + gap;
+    }
+    return { png: stacked.toBuffer("image/png"), pdfText };
+  } finally {
+    try {
+      await pdf.destroy?.();
+    } catch {
+      /* pdfjs may not expose destroy */
+    }
+  }
+}
+
+const TEXT_ID_PROMPT = `You extract identity fields from OCR / DigiLocker PDF text of an Indian ID (Aadhaar, PAN, etc.).
+Return ONE JSON object only — no markdown:
+{"documentType":"AADHAAR"|"PAN"|"DRIVING_LICENCE"|"PASSPORT"|"VOTER_ID"|"OTHER"|null,"name":string|null,"dateOfBirth":"YYYY-MM-DD"|null,"gender":"male"|"female"|"others"|null,"address":string|null,"contactNumber":null,"documentNumberMasked":string|null,"aadharNumber":string|null,"panNumber":string|null,"confidence":number}
+Prefer English Latin name. Convert DD/MM/YYYY to YYYY-MM-DD. contactNumber must be null. Do not invent values.`;
+
+async function callTextModel(systemPrompt: string, userText: string): Promise<string> {
+  const providers = llmChatProviders({ includeDeepSeek: true });
+  if (!providers.length) {
+    throw new AppError(503, "Document scan is not configured. Set OPENAI_API_KEY.");
+  }
+  let lastErr: unknown;
+  for (const provider of providers) {
+    try {
+      const body: Record<string, unknown> = {
+        model: provider.model,
+        temperature: 0,
+        max_tokens: 900,
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `Extract identity fields from this document text:\n\n${userText.slice(0, 12000)}`,
+          },
+        ],
+      };
+      if (provider.jsonObject) body.response_format = { type: "json_object" };
+      else body.chat_template_kwargs = { enable_thinking: false };
+
+      const res = await fetch(provider.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${provider.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as {
+        choices?: Array<{ message?: Record<string, unknown> }>;
+        error?: { message?: string };
+      };
+      if (!res.ok) {
+        throw new Error(data.error?.message ?? `${provider.label} failed`);
+      }
+      const text = extractMessageText(data.choices?.[0]?.message);
+      if (!text) throw new Error(`${provider.label} empty text OCR`);
+      console.info(`[idScan] PDF text OCR via ${provider.label}`);
+      return text;
+    } catch (err) {
+      lastErr = err;
+      console.warn(
+        `[idScan] text OCR ${provider.label} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error("PDF text OCR failed");
+}
+
+function textLooksUsefulForId(text: string): boolean {
+  if (text.length < 40) return false;
+  const letters = (text.match(/[A-Za-z\u0900-\u097F]/g) || []).length;
+  if (letters < 12) return false;
+  // DigiLocker / Aadhaar / PAN cues
+  return /aadhaar|aadhar|uidai|permanent account|pan|dob|date of birth|gender|male|female|पुरुष|महिला|\d{4}\s?\d{4}\s?\d{4}/i.test(
+    text,
+  ) || letters >= 40;
 }
 
 async function prepareDocument(input: {
   imageBase64: string;
   mimeType?: string;
-}): Promise<{ mimeType: string; raw: string }> {
+}): Promise<{ mimeType: string; raw: string; pdfText?: string }> {
   let raw = input.imageBase64.trim();
   let mimeType = (input.mimeType || "image/jpeg").toLowerCase();
 
@@ -124,29 +381,50 @@ async function prepareDocument(input: {
     raw = dataUrl[2]!;
   }
 
-  if (!ALLOWED_MIME.has(mimeType) && !isPdfMime(mimeType)) {
+  if (raw.length > 12_000_000) {
+    throw new AppError(400, "File is too large. Keep under ~9 MB.");
+  }
+
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(raw, "base64");
+  } catch {
+    throw new AppError(400, "Invalid file encoding.");
+  }
+
+  const isPdf = isPdfMime(mimeType) || looksLikePdf(bytes);
+  if (
+    !ALLOWED_MIME.has(mimeType) &&
+    !isPdfMime(mimeType) &&
+    !isPdf
+  ) {
     throw new AppError(
       400,
       "Unsupported file type. Upload a JPG, PNG, WEBP, or PDF.",
     );
   }
-  if (raw.length > 12_000_000) {
-    throw new AppError(400, "File is too large. Keep under ~9 MB.");
-  }
 
-  if (isPdfMime(mimeType)) {
+  if (isPdf) {
     try {
-      const png = await pdfFirstPageToPng(Buffer.from(raw, "base64"));
-      return { mimeType: "image/png", raw: png.toString("base64") };
+      // Single open: text first (DigiLocker), then high-DPI raster for vision.
+      const { png, pdfText } = await preparePdfForOcr(bytes);
+      console.info(
+        `[idScan] PDF prepared pngBytes=${png.length} textChars=${pdfText.length}`,
+      );
+      return {
+        mimeType: "image/png",
+        raw: png.toString("base64"),
+        pdfText: pdfText || undefined,
+      };
     } catch (err) {
       if (err instanceof AppError) throw err;
       console.warn(
-        "[idScan] PDF rasterize failed:",
+        "[idScan] PDF prepare failed:",
         err instanceof Error ? err.message : err,
       );
       throw new AppError(
         422,
-        "Could not read that PDF. Send a clearer JPG/PNG/PDF of the ID, or type your full name.",
+        "Could not read that PDF. Send a clearer DigiLocker PDF or a JPG/PNG photo of the ID.",
       );
     }
   }
@@ -567,7 +845,27 @@ export const IdScanService = {
     imageBase64: string;
     mimeType?: string;
   }): Promise<IdScanFields> {
-    const { mimeType, raw } = await prepareDocument(input);
+    const { mimeType, raw, pdfText } = await prepareDocument(input);
+
+    // DigiLocker / text PDFs: parse embedded text first (more reliable than raster).
+    if (pdfText && textLooksUsefulForId(pdfText)) {
+      try {
+        const textJson = await callTextModel(TEXT_ID_PROMPT, pdfText);
+        const fromText = toIdFields(parseJsonFromModel(textJson));
+        if (fromText.name || fromText.dateOfBirth || fromText.aadharNumber || fromText.panNumber) {
+          console.info(
+            `[idScan] PDF text path ok name=${fromText.name ?? "—"} dob=${fromText.dateOfBirth ?? "—"}`,
+          );
+          return fromText;
+        }
+      } catch (err) {
+        console.warn(
+          "[idScan] PDF text path failed, falling back to vision:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
     const text = await callVisionModel(mimeType, raw, ID_PROMPT);
     const fields = toIdFields(parseJsonFromModel(text));
 

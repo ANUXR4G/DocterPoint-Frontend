@@ -1375,7 +1375,7 @@ function registerSummary(state: ConversationState, phone: string): string {
   const lines = [
     `• Name: ${state.regName}`,
     `• Gender: ${state.regGender}`,
-    `• Phone: +91 ${phone}`,
+    `• Phone: ${formatRegPhoneDisplay(phone)}`,
   ];
   if (state.regEmail) lines.push(`• Email: ${state.regEmail}`);
   if (state.regDob) lines.push(`• DOB: ${state.regDob}`);
@@ -1383,11 +1383,11 @@ function registerSummary(state: ConversationState, phone: string): string {
   return lines.join("\n");
 }
 
-/** Display WhatsApp sender number for registration confirm (not from ID OCR). */
+/** Display WhatsApp sender number for registration confirm (no country-code prefix). */
 function formatRegPhoneDisplay(phone: string): string {
   const d = String(phone || "").replace(/\D/g, "").slice(-10);
-  if (d.length !== 10) return `+91 ${phone}`;
-  return `+91 ${d.slice(0, 5)} ${d.slice(5)}`;
+  if (d.length !== 10) return String(phone || "").replace(/\D/g, "") || phone;
+  return `${d.slice(0, 5)} ${d.slice(5)}`;
 }
 
 function parseRegisterMobile(text: string): string | null {

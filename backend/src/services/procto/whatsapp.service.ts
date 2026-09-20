@@ -24,16 +24,29 @@ function isIdOcrConfigured(): boolean {
   return Boolean(settings.openaiApiKey || settings.hfToken);
 }
 
-/** ID registration OCR — photos or PDF (first page rasterized in IdScanService). */
-function isOcrableIdMime(mime: string): boolean {
+/** ID registration OCR — photos or PDF (rasterized in IdScanService). */
+function isOcrableIdMime(
+  mime: string,
+  filename?: string,
+  bytes?: Buffer,
+): boolean {
   const m = mime.toLowerCase();
-  return (
+  if (
     m.includes("jpeg") ||
     m.includes("jpg") ||
     m.includes("png") ||
     m.includes("webp") ||
     m.includes("pdf")
-  );
+  ) {
+    return true;
+  }
+  // WhatsApp sometimes sends PDF as application/octet-stream
+  if (filename && /\.pdf$/i.test(filename)) return true;
+  if (bytes && bytes.length >= 5) {
+    const head = bytes.subarray(0, 1024).toString("latin1");
+    if (/%PDF-/i.test(head)) return true;
+  }
+  return false;
 }
 
 type MetaMessage = {
@@ -496,7 +509,7 @@ export const WhatsAppService = {
 
           // Idle + OCR-able ID image/PDF + no open booking → try registration ID scan.
           const canFallThroughOcr =
-            isOcrableIdMime(media.mimeType) &&
+            isOcrableIdMime(media.mimeType, filename, media.buffer) &&
             (!earlyState.step || earlyState.step === "idle") &&
             isIdOcrConfigured();
           if (!canFallThroughOcr) {
@@ -532,7 +545,7 @@ export const WhatsAppService = {
           continue;
         }
 
-        if (!isOcrableIdMime(media.mimeType)) {
+        if (!isOcrableIdMime(media.mimeType, filename, media.buffer)) {
           await sendWhatsAppText(
             item.from,
             BotPrompts.visitDocBadType(langEarly),
@@ -548,9 +561,17 @@ export const WhatsAppService = {
         );
 
         try {
+          const looksPdf =
+            /\.pdf$/i.test(filename) ||
+            /pdf/i.test(media.mimeType) ||
+            /%PDF-/i.test(media.buffer.subarray(0, 1024).toString("latin1"));
           idScan = await IdScanService.extractFromBase64({
             imageBase64: media.buffer.toString("base64"),
-            mimeType: media.mimeType,
+            mimeType: looksPdf
+              ? "application/pdf"
+              : media.mimeType.startsWith("image/")
+                ? media.mimeType
+                : "image/jpeg",
           });
           console.log(
             `[WhatsApp OCR] from=${item.from} type=${idScan.documentType ?? "?"} name=${idScan.name ?? "—"}`,

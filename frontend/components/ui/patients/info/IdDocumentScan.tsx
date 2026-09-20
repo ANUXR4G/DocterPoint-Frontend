@@ -55,12 +55,17 @@ export default function IdDocumentScan({
     setMessage(null)
     setFileName(file.name)
 
-    if (!file.type.startsWith("image/")) {
-      setError("Please upload a JPG, PNG, or WEBP photo of your ID.")
+    if (
+      !file.type.startsWith("image/") &&
+      file.type !== "application/pdf" &&
+      file.type !== "application/x-pdf" &&
+      !/\.pdf$/i.test(file.name)
+    ) {
+      setError("Please upload a JPG, PNG, WEBP, or PDF of your ID.")
       return
     }
-    if (file.size > 6 * 1024 * 1024) {
-      setError("Image must be under 6 MB.")
+    if (file.size > 9 * 1024 * 1024) {
+      setError("File must be under 9 MB.")
       return
     }
 
@@ -136,7 +141,7 @@ export default function IdDocumentScan({
             <input
               ref={inputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/jpg"
+              accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf,.pdf"
               className="hidden"
               onChange={handleFile}
             />
