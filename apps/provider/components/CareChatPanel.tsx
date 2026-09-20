@@ -103,7 +103,7 @@ export function CareChatPanel({
         <Text style={styles.title}>Care chat · {peerName}</Text>
         <Text style={styles.sub}>
           {subtitle ||
-            "WhatsApp is two-way: your texts go out, patient replies appear here."}
+            "Messages also send to the patient’s WhatsApp when their clinic line is live."}
         </Text>
       </View>
 

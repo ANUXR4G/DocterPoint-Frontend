@@ -14,8 +14,51 @@ import { OPT_OUT_FOOTER } from "./procto/whatsapp.metaTemplates.js";
 
 const PREVIEW_MAX = 280;
 
-function last10(phone: string): string {
-  return phone.replace(/\D/g, "").slice(-10);
+/** Keep full WhatsApp MSISDN (country + national); bare 10-digit stays legacy India. */
+function normalizePhone(from: string): string {
+  const digits = from.replace(/\D/g, "");
+  if (digits.length >= 11 && digits.length <= 15) return digits;
+  if (digits.length === 10) return digits;
+  return digits.slice(-15);
+}
+
+/**
+ * Resolve the Meta `to` number for care-chat fan-out.
+ * Prefer WhatsAppConversation.patientPhone (webhook MSISDN) over profile/booking
+ * fields that may still be last-10 or wrongly prefixed with 91.
+ */
+async function resolveWhatsAppMsisdn(
+  practiceId: string,
+  ...candidates: Array<string | null | undefined>
+): Promise<string> {
+  const normalized = candidates
+    .map((c) => (c ? normalizePhone(c) : ""))
+    .filter((d) => d.length >= 10);
+
+  const last10s = [...new Set(normalized.map((d) => d.slice(-10)))];
+  for (const last10 of last10s) {
+    if (last10.length !== 10) continue;
+    const conv = await prisma.whatsAppConversation.findFirst({
+      where: {
+        practiceId,
+        OR: [{ patientPhone: last10 }, { patientPhone: { endsWith: last10 } }],
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { patientPhone: true },
+    });
+    const fromConv = conv?.patientPhone
+      ? normalizePhone(conv.patientPhone)
+      : "";
+    // Authoritative Meta destination (e.g. 9715… / 9198…).
+    if (fromConv.length >= 11 && fromConv.length <= 15) return fromConv;
+  }
+
+  // Prefer any full international candidate (booking phone usually correct).
+  const intl = normalized.find((d) => d.length >= 11 && d.length <= 15);
+  if (intl) return intl;
+
+  // Legacy bare 10-digit India — formatE164 will prepend 91 on send.
+  return normalized[0] || "";
 }
 
 function truncate(text: string, max = PREVIEW_MAX): string {
@@ -144,10 +187,13 @@ async function resolveStaffToPatientContext(
           select: { name: true },
         });
 
-  const phone =
-    last10(booking.patientPhone || "") ||
-    last10(patient.patient?.contactNumber || "") ||
-    last10(patient.phone || "");
+  // Prefer booking phone (WhatsApp book path), then profile; conversation MSISDN wins inside resolver.
+  const phone = await resolveWhatsAppMsisdn(
+    booking.practiceId,
+    booking.patientPhone,
+    patient.patient?.contactNumber,
+    patient.phone,
+  );
   if (phone.length < 10) {
     console.warn(
       `[care-chat-wa] skip: patient phone missing for booking practice=${booking.practiceId}`,
@@ -269,6 +315,14 @@ export async function fanOutCareMessageToWhatsApp(
       return;
     }
 
+    console.log("[care-chat-wa] sending", {
+      practiceId: ctx.practiceId,
+      to: `…${ctx.patientPhone.slice(-4)}`,
+      toLen: ctx.patientPhone.length,
+      lineSource: line.source,
+      phoneNumberId: line.phoneNumberId?.slice(-6),
+    });
+
     const preview = truncate(content);
     const envFallback = settings.whatsappPhoneNumberId?.trim() || undefined;
     const candidates = [
@@ -281,6 +335,7 @@ export async function fanOutCareMessageToWhatsApp(
     const extraBase = {
       practiceId: ctx.practiceId,
       to: `…${ctx.patientPhone.slice(-4)}`,
+      toLen: ctx.patientPhone.length,
       lineSource: line.source,
     };
 

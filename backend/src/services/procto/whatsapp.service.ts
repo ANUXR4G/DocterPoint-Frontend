@@ -651,17 +651,22 @@ export const WhatsAppService = {
         // Simulated / Graph failure → send full text list so demos still work
       }
 
-      // Welcome / HELP — tappable Menu list
+      // Welcome / HELP / post-booking — tappable Menu list
       if (result.menuList && result.menuList.length > 0) {
+        const isPostBooking = result.menuList.some((row) =>
+          row.id.startsWith("post:"),
+        );
         const listSent = await sendWhatsAppInteractiveList(
           item.from,
           {
-            header: "Main menu",
+            header: isPostBooking ? "Your booking" : "Main menu",
             body:
               result.reply.split("\n").slice(0, 6).join("\n").slice(0, 400) ||
-              "How can I help you?",
+              (isPostBooking
+                ? "What would you like to do?"
+                : "How can I help you?"),
             buttonLabel: "Menu",
-            sectionTitle: "Options",
+            sectionTitle: isPostBooking ? "Choose one" : "Options",
             rows: result.menuList.map((row) => ({
               id: row.id,
               title: row.title.slice(0, 24),

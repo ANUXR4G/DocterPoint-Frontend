@@ -11,6 +11,7 @@ export type BotIntent =
   | "help"
   | "faq"
   | "human"
+  | "message_doctor"
   | "report"
   | "my_docs"
   | "confirm_yes"
@@ -447,6 +448,12 @@ export function exactMenuIntent(text: string): BotIntent | null {
     mydocs: "my_docs",
     my_doc: "my_docs",
     documents: "my_docs",
+    message_doctor: "message_doctor",
+    message: "message_doctor",
+    msg_doctor: "message_doctor",
+    chat_doctor: "message_doctor",
+    doctor_chat: "message_doctor",
+    talk_doctor: "message_doctor",
   };
   return aliases[t] ?? aliases[raw.replace(/\s+/g, "_")] ?? null;
 }
@@ -465,8 +472,8 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
     .replace(/[\uFE0F\u20E3]/g, ""); // emoji variation / keycap
   if (!raw) return null;
 
-  // Interactive list row ids from the welcome / HELP menu
-  const listPick = /^menu:([a-z_]+)$/i.exec(raw);
+  // Interactive list row ids from the welcome / HELP / post-booking menus
+  const listPick = /^(?:menu|post):([a-z_]+)$/i.exec(raw);
   if (listPick) {
     const key = listPick[1]!.toLowerCase();
     const map: Record<string, MenuShortcut> = {
@@ -482,6 +489,9 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
       report: "report",
       help: "help",
       menu: "help",
+      message_doctor: "message_doctor",
+      message: "message_doctor",
+      new_book: "book",
     };
     return map[key] ?? null;
   }
@@ -500,6 +510,43 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
     7: "reschedule",
     8: "language",
     9: "report",
+  };
+  return map[n] ?? null;
+}
+
+/**
+ * Digit / list shortcuts for the post-booking choice menu (idle + active visit).
+ * 1 Reschedule · 2 Cancel · 3 New booking · 4 Message doctor
+ */
+export function postBookingNumberShortcut(text: string): MenuShortcut | null {
+  const raw = text
+    .trim()
+    .replace(/^[*`~_]+|[*`~_]+$/g, "")
+    .replace(/[\uFE0F\u20E3]/g, "");
+  if (!raw) return null;
+
+  const listPick = /^post:([a-z_]+)$/i.exec(raw);
+  if (listPick) {
+    const key = listPick[1]!.toLowerCase();
+    const map: Record<string, MenuShortcut> = {
+      reschedule: "reschedule",
+      cancel: "cancel",
+      book: "book",
+      new_book: "book",
+      message_doctor: "message_doctor",
+      message: "message_doctor",
+    };
+    return map[key] ?? null;
+  }
+
+  const m = raw.match(/^(?:option\s*)?([1-4])(?:\s*[.)]?)?$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const map: Record<number, MenuShortcut> = {
+    1: "reschedule",
+    2: "cancel",
+    3: "book",
+    4: "message_doctor",
   };
   return map[n] ?? null;
 }
@@ -559,6 +606,14 @@ function parseIntentRegex(text: string): BotIntent {
     /इंसान|स्टाफ|डॉक्टर से बात/.test(text)
   ) {
     return "human";
+  }
+  if (
+    /^(message|msg|chat)$/i.test(t) ||
+    /\b(message|msg|chat|text)\s+(my\s+)?(the\s+)?doctor\b/.test(t) ||
+    /\b(talk|speak)\s+to\s+(my\s+)?doctor\b/.test(t) ||
+    /डॉक्टर\s*(को\s*)?(संदेश|मैसेज)/.test(text)
+  ) {
+    return "message_doctor";
   }
   if (
     /^(report|reports|send\s*report|attach|lab\s*report|prescription|rx)$/i.test(
@@ -702,7 +757,7 @@ Patients may speak or type in English or Hindi (Devanagari or Hinglish) — incl
 There is NO required message format. Extract EVERY useful slot from a single utterance.
 Examples: "book me tomorrow at 10 am with Kabir", "kal shaam wali appointment", "I need status", "mera naam Ravi hai".
 Return ONLY compact JSON: {"intent":"...","slots":{...}}
-intent must be one of: book,status,cancel,reschedule,register,doctors,help,faq,human,report,my_docs,confirm_yes,confirm_no,unknown
+intent must be one of: book,status,cancel,reschedule,register,doctors,help,faq,human,message_doctor,report,my_docs,confirm_yes,confirm_no,unknown
 slots may include: date (YYYY-MM-DD), providerName, providerIndex (1-based), mode (TIME_BASED|TOKEN_BASED), slotIndex (1-based), rawDateText, timeText, preferredHour (0-23), preferredMinute (0-59), preferredPeriod (morning|afternoon|evening|night), name, gender (male|female|others), email
 Today's date context may be given. Map TODAY/TOMORROW / आज / कल to ISO dates.
 If the patient says a clock time ("10 am", "3:30 pm"), set preferredHour/preferredMinute and timeText.

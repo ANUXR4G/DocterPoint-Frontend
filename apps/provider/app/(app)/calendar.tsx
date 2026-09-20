@@ -228,23 +228,27 @@ export default function CalendarScreen() {
                         isToday && !active && styles.cellToday,
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.cellNum,
-                          !inMonth && styles.cellNumMuted,
-                          active && styles.cellNumActive,
-                        ]}
-                      >
-                        {day.getDate()}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.cellCount,
-                          active && styles.cellNumActive,
-                        ]}
-                      >
-                        {n ? `${n}` : "·"}
-                      </Text>
+                      <View style={styles.cellInner}>
+                        <Text
+                          style={[
+                            styles.cellNum,
+                            !inMonth && styles.cellNumMuted,
+                            active && styles.cellNumActive,
+                          ]}
+                        >
+                          {day.getDate()}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.cellCount,
+                            n > 0 && styles.cellCountFilled,
+                            active && styles.cellNumActive,
+                            active && n > 0 && styles.cellCountActive,
+                          ]}
+                        >
+                          {n > 0 ? String(n) : ""}
+                        </Text>
+                      </View>
                     </Pressable>
                   );
                 })}
@@ -255,7 +259,13 @@ export default function CalendarScreen() {
 
         <ErrorText text={error} />
 
-        <Text style={styles.section}>{formatDayTitle(selectedDate)}</Text>
+        <View style={styles.sectionRow}>
+          <Text style={styles.section}>{formatDayTitle(selectedDate)}</Text>
+          <Text style={styles.sectionCount}>
+            {dayRows.length}{" "}
+            {dayRows.length === 1 ? "appointment" : "appointments"}
+          </Text>
+        </View>
         {dayRows.length === 0 ? (
           <EmptyState text="No appointments this day." />
         ) : (
@@ -324,6 +334,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radii.md,
   },
+  cellInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
   cellMuted: { opacity: 0.4 },
   cellActive: { backgroundColor: colors.navy },
   cellToday: {
@@ -339,18 +355,33 @@ const styles = StyleSheet.create({
   cellNumMuted: { color: colors.inkFaint },
   cellNumActive: { color: colors.white },
   cellCount: {
-    marginTop: 2,
-    fontSize: 10,
-    color: colors.inkSoft,
+    minWidth: 10,
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.inkFaint,
+  },
+  cellCountFilled: { color: colors.brand },
+  cellCountActive: { color: "rgba(255,255,255,0.85)" },
+  sectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: space.sm,
+    marginTop: space.sm,
   },
   section: {
+    flex: 1,
     fontSize: 12,
     fontWeight: "600",
     letterSpacing: 0.6,
     textTransform: "uppercase",
     color: colors.inkSoft,
-    marginBottom: space.sm,
-    marginTop: space.sm,
+  },
+  sectionCount: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.brand,
   },
   row: {
     flexDirection: "row",
