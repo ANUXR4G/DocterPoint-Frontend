@@ -862,8 +862,6 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_register_gender",
     "awaiting_register_email_opt",
     "awaiting_register_email",
-    "awaiting_register_phone_opt",
-    "awaiting_register_phone",
     "awaiting_register_confirm",
     "awaiting_date",
   ]);
@@ -886,7 +884,6 @@ export function shouldUseLlmForMessage(
     "awaiting_register_confirm",
     "awaiting_register_gender",
     "awaiting_register_email_opt",
-    "awaiting_register_phone_opt",
   ]);
   if (step && confirmish.has(step)) return false;
   const t = text.trim();

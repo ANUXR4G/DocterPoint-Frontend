@@ -173,7 +173,13 @@ function extractMetaMessages(body: unknown): Array<{
 
 function phoneMatches(stored: string | null | undefined, digits: string): boolean {
   if (!stored) return false;
-  return normalizePhone(stored) === digits;
+  const a = normalizePhone(stored);
+  if (a === digits) return true;
+  // Match across full MSISDN vs legacy last-10 storage
+  if (a.length >= 10 && digits.length >= 10 && a.slice(-10) === digits.slice(-10)) {
+    return true;
+  }
+  return false;
 }
 
 /** True if this phone belongs to a doctor, clinic owner/staff, or clinic business line. */
@@ -187,6 +193,7 @@ export async function isStaffOrClinicPhone(
 ): Promise<boolean> {
   const digits = normalizePhone(phone);
   if (digits.length < 10) return false;
+  const last10 = digits.slice(-10);
 
   if (
     phoneMatches(practice.phone, digits) ||
@@ -199,7 +206,7 @@ export async function isStaffOrClinicPhone(
     prisma.user.findFirst({
       where: {
         role: "doctor",
-        phone: { endsWith: digits },
+        OR: [{ phone: digits }, { phone: { endsWith: last10 } }],
       },
       select: { id: true },
     }),
@@ -209,7 +216,10 @@ export async function isStaffOrClinicPhone(
         role: {
           in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"],
         },
-        user: { phone: { endsWith: digits } },
+        OR: [
+          { user: { phone: digits } },
+          { user: { phone: { endsWith: last10 } } },
+        ],
       },
       select: { id: true },
     }),

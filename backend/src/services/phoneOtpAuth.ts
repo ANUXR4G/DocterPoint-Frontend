@@ -150,7 +150,9 @@ async function deliverOtp(phone: string, code: string): Promise<{
         },
         body: JSON.stringify({
           messaging_product: "whatsapp",
-          to: `91${phone}`,
+          to: phone.replace(/\D/g, "").length === 10
+            ? `91${phone.replace(/\D/g, "")}`
+            : phone.replace(/\D/g, ""),
           type: "template",
           template: {
             name: "glucoguide_login_otp",
