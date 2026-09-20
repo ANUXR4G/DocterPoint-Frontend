@@ -109,6 +109,11 @@ export type ConversationState = {
   waOptOut?: boolean;
   failedTurns?: number;
   handedOff?: boolean;
+  /**
+   * Patient chose "Message doctor" — free text goes to care chat until BOT/resume
+   * or they pick another post-booking action.
+   */
+  postBookingCare?: boolean;
   /** Preferred reply language (set on first contact) */
   preferredLanguage?: "en" | "hi";
 };
@@ -353,9 +358,16 @@ async function findUpcomingBooking(practiceId: string, patientPhone: string) {
 function isLooseIdleMessage(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return true;
-  return /^(hi|hello|hey|hii|hlo|yo|sup|namaste|नमस्ते|start|menu|help|मदद|मेनू|ok|okay|thanks|thank you|धन्यवाद|🙏)$/i.test(
-    t,
-  );
+  // Explicit commands are handled elsewhere — everything else re-offers choices.
+  if (
+    /^(book|cancel|reschedule|status|help|menu|bot|resume|register|doctors?|faq|info|report|reports|my\s*docs?|message|msg|human|agent|staff)\b/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  if (/^(?:menu|post):/i.test(t)) return false;
+  return true;
 }
 
 function withGenderButtons(reply: string): OrchestratorResult {
@@ -492,13 +504,20 @@ async function saveState(convId: string, state: ConversationState) {
 /** Preserve language / opt-out / disclosure when resetting booking flow. */
 function keepPrefs(state: ConversationState): Pick<
   ConversationState,
-  "preferredLanguage" | "aiDisclosed" | "waOptOut" | "handedOff"
+  | "preferredLanguage"
+  | "aiDisclosed"
+  | "waOptOut"
+  | "handedOff"
+  | "postBookingCare"
+  | "lastBookingId"
 > {
   return {
     preferredLanguage: state.preferredLanguage,
     aiDisclosed: state.aiDisclosed,
     waOptOut: state.waOptOut,
     handedOff: state.handedOff,
+    postBookingCare: state.postBookingCare,
+    lastBookingId: state.lastBookingId,
   };
 }
 
@@ -1780,7 +1799,6 @@ async function runOrchestratorCore(input: {
   if (state.handedOff) {
     const t = text.trim();
     const resumeMenuOnly = /^(bot|resume|menu)$/i.test(t);
-    // Match care-chat escape: booking commands must reclaim the bot (copy promised BOOK works).
     const resumeAndRun =
       /^(book|cancel|reschedule|status|help|hi|hello|hey|start|register|doctors?|faq|info|report|reports|my\s*docs?|message)\b/i.test(
         t,
@@ -1788,22 +1806,43 @@ async function runOrchestratorCore(input: {
       (/\b(book|cancel|reschedule|message)\b/i.test(t) && t.length < 80) ||
       /^(?:menu|post):/i.test(t);
 
-    if (!resumeMenuOnly && !resumeAndRun) {
+    // After booking, free text should get Reschedule/Cancel/New/Message-doctor
+    // unless the patient explicitly chose "Message doctor" (postBookingCare).
+    const offerPostBooking =
+      !state.postBookingCare && (!state.step || state.step === "idle");
+
+    if (!resumeMenuOnly && !resumeAndRun && !offerPostBooking) {
       return { reply: BotPrompts.handedOffWait(lang) };
     }
 
-    state = { ...state, handedOff: false, step: "idle", failedTurns: 0 };
+    state = {
+      ...state,
+      handedOff: false,
+      postBookingCare: false,
+      step: "idle",
+      failedTurns: 0,
+    };
     await saveState(convId, state);
     await prisma.whatsAppConversation.update({
       where: { id: convId },
-      data: { status: "bot_active" },
+      data: { status: "bot_active", state },
     });
 
     if (resumeMenuOnly) {
+      const upcoming = await findUpcomingBooking(practice.id, patientPhone);
+      if (upcoming) {
+        return withPostBookingMenu(
+          BotPrompts.postBookingAsk(
+            practice.name,
+            bookingWhenLabel(upcoming),
+            lang,
+          ),
+        );
+      }
       const patient = await PatientService.findByPhone(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
-    // Fall through — process BOOK / STATUS / etc. normally
+    // Fall through — process BOOK / STATUS / post-booking / etc. normally
   }
 
   // ID photo OCR → autofill registration (same vision stack as web /auth/id-scan)
@@ -1863,7 +1902,12 @@ async function runOrchestratorCore(input: {
     (numberShortcut as BotIntent | null) ?? exactMenuIntent(text);
 
   if (menuIntent === "message_doctor" || menuIntent === "human") {
-    state = { ...idleState(state), handedOff: true, failedTurns: 0 };
+    state = {
+      ...idleState(state),
+      handedOff: true,
+      postBookingCare: menuIntent === "message_doctor",
+      failedTurns: 0,
+    };
     await saveState(convId, state);
     await prisma.whatsAppConversation.update({
       where: { id: convId },
@@ -1878,8 +1922,20 @@ async function runOrchestratorCore(input: {
   }
 
   if (menuIntent) {
-    state = { ...idleState(state), failedTurns: 0 };
+    // Leaving care mode when they pick Book / Cancel / Reschedule / etc.
+    state = {
+      ...idleState(state),
+      failedTurns: 0,
+      postBookingCare: false,
+      handedOff: false,
+    };
     await saveState(convId, state);
+    if (state.handedOff === false) {
+      await prisma.whatsAppConversation.update({
+        where: { id: convId },
+        data: { status: "bot_active", state },
+      });
+    }
     const dispatched = await dispatchMenuIntent({
       intent: menuIntent,
       convId,
@@ -1891,10 +1947,26 @@ async function runOrchestratorCore(input: {
     if (dispatched) return dispatched;
   }
 
-  // Idle + active booking: any loose message → post-booking choices
-  if (isIdleMenu && upcomingIdle && isLooseIdleMessage(text) && !menuIntent) {
-    state = { ...idleState(state), failedTurns: 0 };
+  // Idle + active booking: ANY free-text message → post-booking choices
+  // (unless they already chose "Message doctor" and are chatting).
+  if (
+    isIdleMenu &&
+    upcomingIdle &&
+    !state.postBookingCare &&
+    isLooseIdleMessage(text) &&
+    !menuIntent
+  ) {
+    state = {
+      ...idleState(state),
+      failedTurns: 0,
+      postBookingCare: false,
+      handedOff: false,
+    };
     await saveState(convId, state);
+    await prisma.whatsAppConversation.update({
+      where: { id: convId },
+      data: { status: "bot_active", state },
+    });
     return withPostBookingMenu(
       BotPrompts.postBookingAsk(
         practice.name,
@@ -2038,7 +2110,13 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "message_doctor") {
-    state = { ...state, handedOff: true, step: "idle", failedTurns: 0 };
+    state = {
+      ...state,
+      handedOff: true,
+      postBookingCare: true,
+      step: "idle",
+      failedTurns: 0,
+    };
     await saveState(convId, state);
     await prisma.whatsAppConversation.update({
       where: { id: convId },
@@ -2050,6 +2128,7 @@ async function runOrchestratorCore(input: {
   // Active booking + idle free text → offer reschedule / cancel / new / message doctor
   if (
     (!state.step || state.step === "idle") &&
+    !state.postBookingCare &&
     nlu.intent !== "faq" &&
     nlu.intent !== "book" &&
     nlu.intent !== "cancel" &&
@@ -2067,7 +2146,17 @@ async function runOrchestratorCore(input: {
   ) {
     const upcoming = await findUpcomingBooking(practice.id, patientPhone);
     if (upcoming) {
-      await saveState(convId, { ...state, failedTurns: 0 });
+      state = {
+        ...idleState(state),
+        failedTurns: 0,
+        postBookingCare: false,
+        handedOff: false,
+      };
+      await saveState(convId, state);
+      await prisma.whatsAppConversation.update({
+        where: { id: convId },
+        data: { status: "bot_active", state },
+      });
       return withPostBookingMenu(
         BotPrompts.postBookingAsk(
           practice.name,

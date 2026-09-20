@@ -9,12 +9,30 @@ export type CareChatMessage = {
   type?: string | null;
 };
 
+/** Prefer real UUIDs over legacy base64 chat ids. */
+function pickUuid(...candidates: unknown[]): string {
+  for (const c of candidates) {
+    const s = String(c ?? "").trim();
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+    ) {
+      return s;
+    }
+  }
+  for (const c of candidates) {
+    const s = String(c ?? "").trim();
+    if (s) return s;
+  }
+  return "";
+}
+
 export function normalizeMsg(raw: Record<string, unknown>): CareChatMessage {
   return {
-    id: String(raw.idUuid || raw.id || ""),
+    id: pickUuid(raw.idUuid, raw.id),
     content: String(raw.content || ""),
-    senderId: String(raw.senderId || raw.sender_id || ""),
-    receiverId: (raw.receiverId ?? raw.receiver_id ?? null) as string | null,
+    senderId: pickUuid(raw.senderId, raw.sender_id),
+    receiverId:
+      pickUuid(raw.receiverId, raw.receiver_id) || null,
     createdAt: String(
       raw.createdAt || raw.created_at || new Date().toISOString(),
     ),
@@ -32,7 +50,16 @@ export async function getCareMessages(selfUserId: string, peerUserId: string) {
       messages: [] as CareChatMessage[],
     };
   }
-  const list = Array.isArray(res.data?.messages) ? res.data.messages : [];
+  // GET /chats/:a/:b returns { total, messages } — api() may wrap as data.
+  const payload = (res.data ?? {}) as {
+    messages?: Record<string, unknown>[];
+  };
+  const topLevel = res as unknown as { messages?: Record<string, unknown>[] };
+  const list = Array.isArray(payload.messages)
+    ? payload.messages
+    : Array.isArray(topLevel.messages)
+      ? topLevel.messages
+      : [];
   return { error: "", messages: list.map(normalizeMsg).reverse() };
 }
 

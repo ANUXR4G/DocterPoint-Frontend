@@ -50,13 +50,15 @@ function serializedCareMsg(data: {
 
 /**
  * Mirror a patient WhatsApp text into GlucoGuide care chat (portal + apps).
- * Returns whether the bot should defer (doctor already in the thread).
+ * Returns whether the bot should defer (doctor / message-doctor owns the thread).
  */
 export async function ingestWhatsAppPatientReply(opts: {
   practiceId: string;
   patientPhone: string;
   text: string;
   conversationAlreadyHandedOff?: boolean;
+  /** True after patient chose "Message doctor" — free text stays in care chat. */
+  postBookingCare?: boolean;
 }): Promise<{ ingested: boolean; shouldDeferToHuman: boolean }> {
   const text = String(opts.text || "").trim();
   if (!text || text.length > 4000) {
@@ -74,9 +76,14 @@ export async function ingestWhatsAppPatientReply(opts: {
       role: "user",
       OR: [
         ...(digitsRaw.length >= 11
-          ? [{ phone: digitsRaw }, { patient: { is: { contactNumber: digitsRaw } } }]
+          ? [
+              { phone: digitsRaw },
+              { patient: { is: { contactNumber: digitsRaw } } },
+            ]
           : []),
+        { phone: digits },
         { phone: { endsWith: digits } },
+        { patient: { is: { contactNumber: digits } } },
         { patient: { is: { contactNumber: { endsWith: digits } } } },
       ],
     },
@@ -90,20 +97,41 @@ export async function ingestWhatsAppPatientReply(opts: {
     return { ingested: false, shouldDeferToHuman: false };
   }
 
-  const booking = await prisma.practiceBooking.findFirst({
+  // Prefer an open visit; fall back to any recent booking so replies still land
+  // in care chat after COMPLETED visits.
+  let booking = await prisma.practiceBooking.findFirst({
     where: {
       practiceId: opts.practiceId,
       OR: [
         { patientId: patient.id },
+        { patientPhone: digits },
         { patientPhone: { endsWith: digits } },
+        ...(digitsRaw.length >= 11
+          ? [{ patientPhone: digitsRaw }, { patientPhone: { endsWith: digitsRaw } }]
+          : []),
       ],
-      status: { notIn: ["CANCELED", "NO_SHOW"] },
+      status: {
+        in: ["SCHEDULED", "REQUESTED", "ACCEPTED", "IN_PROGRESS", "COMPLETED"],
+      },
     },
     orderBy: [{ slotStart: "desc" }, { updatedAt: "desc" }],
-    select: { providerId: true },
+    select: { providerId: true, patientId: true, status: true },
   });
   if (!booking?.providerId) {
-    console.log("[care-chat-wa] inbound skip: no open booking for patient", {
+    booking = await prisma.practiceBooking.findFirst({
+      where: {
+        practiceId: opts.practiceId,
+        OR: [
+          { patientId: patient.id },
+          { patientPhone: { endsWith: digits } },
+        ],
+      },
+      orderBy: [{ updatedAt: "desc" }],
+      select: { providerId: true, patientId: true, status: true },
+    });
+  }
+  if (!booking?.providerId) {
+    console.log("[care-chat-wa] inbound skip: no booking for patient", {
       practiceId: opts.practiceId,
       patientId: patient.id,
       from: `…${digits.slice(-4)}`,
@@ -111,13 +139,37 @@ export async function ingestWhatsAppPatientReply(opts: {
     return { ingested: false, shouldDeferToHuman: false };
   }
 
+  // Keep patientId linked so doctor mobile visit chat can open the thread.
+  if (!booking.patientId) {
+    void prisma.practiceBooking
+      .updateMany({
+        where: {
+          practiceId: opts.practiceId,
+          patientId: null,
+          OR: [
+            { patientPhone: { endsWith: digits } },
+            ...(digitsRaw.length >= 11 ? [{ patientPhone: digitsRaw }] : []),
+          ],
+        },
+        data: { patientId: patient.id },
+      })
+      .catch(() => undefined);
+  }
+
   const providerId = booking.providerId;
 
   const deferFor = async (): Promise<boolean> => {
-    // Booking commands / BOT resume always go to the orchestrator.
+    // Booking commands / BOT resume / post-booking menu always go to orchestrator.
     if (looksLikeBotCommand(text)) return false;
-    if (opts.conversationAlreadyHandedOff === true) return true;
-    return hasRecentDoctorCareMessage(patient.id, providerId);
+    // Only park the bot after explicit "Message doctor".
+    if (opts.postBookingCare === true) return true;
+    // Doctor already chatting: still allow post-booking menu unless they
+    // are mid care-only mode (postBookingCare). Recent doctor messages alone
+    // must NOT swallow Reschedule/Cancel/New/Message-doctor prompts.
+    if (opts.conversationAlreadyHandedOff === true && opts.postBookingCare) {
+      return true;
+    }
+    return false;
   };
 
   const since = new Date(Date.now() - 30_000);
@@ -151,30 +203,24 @@ export async function ingestWhatsAppPatientReply(opts: {
   await socketManager.sendPrivateMsg(providerRoom, payload);
   await socketManager.sendPrivateMsg(patientRoom, payload);
 
+  // Also nudge practice live socket so visit screens refresh.
+  try {
+    await socketManager.sendPrivateMsg(`${opts.practiceId}_PROCTO`, {
+      event: "booking_updated",
+      booking: { id: undefined, patientId: patient.id },
+    });
+  } catch {
+    /* ignore */
+  }
+
   console.log("[care-chat-wa] ingested patient WA reply", {
     practiceId: opts.practiceId,
     from: `…${digits.slice(-4)}`,
     messageId: created.id,
+    providerId,
   });
 
   return { ingested: true, shouldDeferToHuman: await deferFor() };
-}
-
-async function hasRecentDoctorCareMessage(
-  patientId: string,
-  providerId: string,
-): Promise<boolean> {
-  const since = new Date(Date.now() - 72 * 3600_000);
-  const found = await prisma.message.findFirst({
-    where: {
-      type: "direct",
-      senderId: providerId,
-      receiverId: patientId,
-      createdAt: { gte: since },
-    },
-    select: { id: true },
-  });
-  return Boolean(found);
 }
 
 /** After doctor→patient WhatsApp care send, park the bot so replies stay human. */

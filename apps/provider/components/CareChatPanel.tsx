@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  AppState,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -41,7 +42,7 @@ export function CareChatPanel({
     async (opts?: { soft?: boolean }) => {
       if (!selfUserId || !peerUserId) return;
       if (!opts?.soft) setLoading(true);
-      setError("");
+      if (!opts?.soft) setError("");
       const res = await getCareMessages(selfUserId, peerUserId);
       if (!opts?.soft) setLoading(false);
       if (res.error) {
@@ -57,6 +58,21 @@ export function CareChatPanel({
     void load();
   }, [load]);
 
+  // WhatsApp inbound often lands while the Expo WS is idle — poll like web.
+  useEffect(() => {
+    const id = setInterval(() => {
+      void load({ soft: true });
+    }, 4000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void load({ soft: true });
+    });
+    return () => sub.remove();
+  }, [load]);
+
   useLiveSocket({
     path: selfUserId ? `/api/v1/ws/chats/${selfUserId}` : null,
     enabled: Boolean(selfUserId && peerUserId),
@@ -66,7 +82,8 @@ export function CareChatPanel({
       const involvesPeer =
         msg.senderId === peerUserId ||
         msg.receiverId === peerUserId ||
-        msg.senderId === selfUserId;
+        msg.senderId === selfUserId ||
+        msg.receiverId === selfUserId;
       if (!involvesPeer) return;
       setMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev;
@@ -103,7 +120,7 @@ export function CareChatPanel({
         <Text style={styles.title}>Care chat · {peerName}</Text>
         <Text style={styles.sub}>
           {subtitle ||
-            "Messages also send to the patient’s WhatsApp when their clinic line is live."}
+            "Patient WhatsApp replies appear here. Your texts also go to WhatsApp when the clinic line is live."}
         </Text>
       </View>
 

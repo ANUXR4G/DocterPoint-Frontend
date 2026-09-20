@@ -899,7 +899,9 @@ export const WhatsAppService = {
     }
 
     // Mirror patient WhatsApp text into care chat (portal + apps).
-    // When the doctor already owns the thread, skip the booking bot.
+    // Defer to human only after they chose "Message doctor" (postBookingCare).
+    // Otherwise, with an upcoming booking, fall through so the bot can offer
+    // Reschedule / Cancel / New booking / Message doctor.
     try {
       const { ingestWhatsAppPatientReply } = await import(
         "../chat.whatsappInbound.js"
@@ -910,6 +912,7 @@ export const WhatsAppService = {
         text,
         conversationAlreadyHandedOff:
           conv.status === "handed_off" || state.handedOff === true,
+        postBookingCare: state.postBookingCare === true,
       });
       if (care.shouldDeferToHuman) {
         if (!state.handedOff) {
