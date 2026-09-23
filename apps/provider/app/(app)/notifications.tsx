@@ -16,6 +16,7 @@ import {
 } from "@/components/ui";
 import { usePractice } from "@/lib/practiceContext";
 import {
+  dismissPracticeNotification,
   fetchPracticeNotifications,
   type PracticeNotificationRow,
 } from "@/lib/procto";
@@ -37,6 +38,7 @@ export default function NotificationsScreen() {
   const [failedCount, setFailedCount] = useState(0);
   const [sentCount, setSentCount] = useState(0);
   const [error, setError] = useState("");
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -81,6 +83,23 @@ export default function NotificationsScreen() {
     () => void load({ silent: true }),
   );
 
+  async function dismiss(id: string) {
+    if (!practiceId || dismissingId) return;
+    setDismissingId(id);
+    const prev = items;
+    setItems((cur) => cur.filter((n) => n.id !== id));
+    setTotal((t) => Math.max(0, t - 1));
+    const res = await dismissPracticeNotification(practiceId, id);
+    setDismissingId(null);
+    if (res.status !== "successful") {
+      setItems(prev);
+      setTotal(prev.length);
+      setError(res.message || "Could not clear notification");
+      return;
+    }
+    setError("");
+  }
+
   return (
     <ScrollView
       style={styles.root}
@@ -92,7 +111,7 @@ export default function NotificationsScreen() {
       <PageTitle
         eyebrow={membership?.practice.name}
         title="Notifications"
-        subtitle="WhatsApp booking alerts — confirmations, cancels, reminders, queue, and visit summaries."
+        subtitle="Open booking alerts. Tap a row to clear it."
       />
 
       <View style={styles.filters}>
@@ -107,7 +126,7 @@ export default function NotificationsScreen() {
       </View>
 
       <View style={styles.counts}>
-        <Text style={styles.count}>{total} total</Text>
+        <Text style={styles.count}>{total} open</Text>
         <Text style={styles.count}>{sentCount} sent</Text>
         <Text style={styles.count}>{pendingCount} pending</Text>
         <Text style={styles.count}>{failedCount} failed</Text>
@@ -116,10 +135,15 @@ export default function NotificationsScreen() {
       <ErrorText text={error} />
 
       {items.length === 0 ? (
-        <EmptyState text="No notifications yet." />
+        <EmptyState text="No open notifications." />
       ) : (
         items.map((n) => (
-          <View key={n.id} style={styles.card}>
+          <Pressable
+            key={n.id}
+            onPress={() => void dismiss(n.id)}
+            disabled={dismissingId === n.id}
+            style={[styles.card, dismissingId === n.id && styles.cardBusy]}
+          >
             <Text style={styles.title}>{n.title}</Text>
             <Text style={styles.summary}>{n.summary}</Text>
             <Text style={styles.meta}>
@@ -132,18 +156,20 @@ export default function NotificationsScreen() {
             </Text>
             <Text style={styles.when}>
               {new Date(n.createdAt).toLocaleString()}
+              {" · Tap to clear"}
             </Text>
             {n.booking?.id ? (
               <Pressable
-                onPress={() =>
-                  router.push(`/(app)/visit/${n.booking!.id}`)
-                }
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  router.push(`/(app)/visit/${n.booking!.id}`);
+                }}
                 style={styles.linkWrap}
               >
                 <Text style={styles.link}>Open visit →</Text>
               </Pressable>
             ) : null}
-          </View>
+          </Pressable>
         ))
       )}
     </ScrollView>
@@ -185,6 +211,7 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
     borderRadius: radii.xl,
   },
+  cardBusy: { opacity: 0.55 },
   title: { fontSize: 15, fontWeight: "700", color: colors.ink },
   summary: {
     marginTop: space.xs,

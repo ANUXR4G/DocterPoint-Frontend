@@ -147,6 +147,16 @@ export async function fetchPracticeNotifications(
   }>(`/procto/practices/${practiceId}/notifications${q ? `?${q}` : ""}`);
 }
 
+export async function dismissPracticeNotification(
+  practiceId: string,
+  notificationId: string,
+) {
+  return api<{ id: string; dismissed: boolean }>(
+    `/procto/practices/${practiceId}/notifications/${notificationId}/dismiss`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
 export async function setConversationStatus(
   practiceId: string,
   conversationId: string,

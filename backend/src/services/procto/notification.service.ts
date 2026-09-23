@@ -456,7 +456,7 @@ export const NotificationService = {
   },
 
   /**
-   * Practice inbox: all WhatsApp notification events for this clinic
+   * Practice inbox: undismissed WhatsApp notification events for this clinic
    * (patient + clinic recipients). Membership required.
    */
   async listForPractice(
@@ -474,6 +474,7 @@ export const NotificationService = {
 
     const where = {
       practiceId,
+      dismissedAt: null,
       ...(statusFilter ? { status: statusFilter } : {}),
     };
 
@@ -500,13 +501,13 @@ export const NotificationService = {
         }),
         prisma.notificationEvent.count({ where }),
         prisma.notificationEvent.count({
-          where: { practiceId, status: "PENDING" },
+          where: { practiceId, dismissedAt: null, status: "PENDING" },
         }),
         prisma.notificationEvent.count({
-          where: { practiceId, status: "FAILED" },
+          where: { practiceId, dismissedAt: null, status: "FAILED" },
         }),
         prisma.notificationEvent.count({
-          where: { practiceId, status: "SENT" },
+          where: { practiceId, dismissedAt: null, status: "SENT" },
         }),
       ]);
 
@@ -549,6 +550,34 @@ export const NotificationService = {
         };
       }),
     };
+  },
+
+  /** Soft-remove from practice inbox (keeps send audit for admin). */
+  async dismissForPractice(
+    practiceId: string,
+    notificationId: string,
+    actorUserId: string,
+  ) {
+    const { PracticeService } = await import("./practice.service.js");
+    await PracticeService.assertMember(practiceId, actorUserId);
+
+    const existing = await prisma.notificationEvent.findFirst({
+      where: { id: notificationId, practiceId },
+      select: { id: true, dismissedAt: true },
+    });
+    if (!existing) {
+      const { AppError } = await import("../../core/response.js");
+      throw new AppError(404, "Notification not found");
+    }
+    if (existing.dismissedAt) {
+      return { id: existing.id, dismissed: true };
+    }
+
+    await prisma.notificationEvent.update({
+      where: { id: notificationId },
+      data: { dismissedAt: new Date() },
+    });
+    return { id: notificationId, dismissed: true };
   },
 };
 

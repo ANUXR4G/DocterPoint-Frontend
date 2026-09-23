@@ -11,7 +11,7 @@ export default function DoctorNotificationsPage() {
         compact
         eyebrow="Practice"
         title="Notifications"
-        subtitle="Every WhatsApp booking alert for your clinic — confirmations, cancels, reminders, queue, and visit summaries"
+        subtitle="Every WhatsApp booking alert for your clinic — tap a row to clear it"
         action={
           <Link
             href="/doctor/queue"

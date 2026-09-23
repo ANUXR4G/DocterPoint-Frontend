@@ -317,6 +317,12 @@ export const proctoService = {
     );
   },
 
+  dismissPracticeNotification: (practiceId: string, notificationId: string) =>
+    proctoFetch(
+      `/procto/practices/${practiceId}/notifications/${notificationId}/dismiss`,
+      { method: "POST", body: JSON.stringify({}) },
+    ),
+
   getPracticeAnalytics: (
     practiceId: string,
     type: string,

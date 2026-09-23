@@ -365,6 +365,30 @@ router.get(
   },
 );
 
+router.post(
+  "/:practiceId/notifications/:notificationId/dismiss",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { NotificationService } = await import(
+        "../../services/procto/notification.service.js"
+      );
+      const data = await NotificationService.dismissForPractice(
+        param(req.params.practiceId),
+        param(req.params.notificationId),
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(
+        res,
+        "notification dismissed.",
+        data,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.patch(
   "/:practiceId/conversations/:conversationId",
   requireAuth("practice:write"),
