@@ -110,6 +110,43 @@ export async function fetchConversations(practiceId: string) {
   >(`/procto/practices/${practiceId}/conversations`);
 }
 
+export type PracticeNotificationRow = {
+  id: string;
+  type: string;
+  channel: string;
+  status: string;
+  templateKey: string;
+  recipientRole: string;
+  to: string;
+  title: string;
+  summary: string;
+  sentAt: string | null;
+  createdAt: string;
+  booking?: {
+    id: string;
+    patientPhone: string;
+    patientName: string | null;
+    status: string;
+  } | null;
+};
+
+export async function fetchPracticeNotifications(
+  practiceId: string,
+  opts?: { status?: string; take?: number },
+) {
+  const qs = new URLSearchParams();
+  if (opts?.status) qs.set("status", opts.status);
+  if (opts?.take != null) qs.set("take", String(opts.take));
+  const q = qs.toString();
+  return api<{
+    total: number;
+    pendingCount: number;
+    failedCount: number;
+    sentCount: number;
+    items: PracticeNotificationRow[];
+  }>(`/procto/practices/${practiceId}/notifications${q ? `?${q}` : ""}`);
+}
+
 export async function setConversationStatus(
   practiceId: string,
   conversationId: string,

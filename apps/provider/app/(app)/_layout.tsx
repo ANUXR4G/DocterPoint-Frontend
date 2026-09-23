@@ -188,6 +188,10 @@ export default function AppLayout() {
             options={{ href: null, title: "Inbox", headerShown: true }}
           />
           <Tabs.Screen
+            name="notifications"
+            options={{ href: null, title: "Notifications", headerShown: true }}
+          />
+          <Tabs.Screen
             name="queries"
             options={{ href: null, title: "Help", headerShown: true }}
           />

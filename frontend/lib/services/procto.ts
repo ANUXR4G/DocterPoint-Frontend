@@ -303,6 +303,20 @@ export const proctoService = {
   listPracticePatients: (practiceId: string) =>
     proctoFetch(`/procto/practices/${practiceId}/patients`),
 
+  listPracticeNotifications: (
+    practiceId: string,
+    opts?: { status?: string; take?: number; skip?: number },
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts?.status) qs.set("status", opts.status);
+    if (opts?.take != null) qs.set("take", String(opts.take));
+    if (opts?.skip != null) qs.set("skip", String(opts.skip));
+    const q = qs.toString();
+    return proctoFetch(
+      `/procto/practices/${practiceId}/notifications${q ? `?${q}` : ""}`,
+    );
+  },
+
   getPracticeAnalytics: (
     practiceId: string,
     type: string,
@@ -547,6 +561,38 @@ export type ProctoBooking = {
   doctorRemarks?: string | null;
   medicines?: Array<{ name: string; amount?: string; times?: string[] }> | null;
   documents?: Array<{ name: string; url: string; uploadedAt?: string }> | null;
+};
+
+export type PracticeNotification = {
+  id: string;
+  type: string;
+  channel: string;
+  status: string;
+  templateKey: string;
+  recipientRole: string;
+  to: string;
+  title: string;
+  summary: string;
+  payload?: Record<string, unknown>;
+  sentAt: string | null;
+  createdAt: string;
+  booking?: {
+    id: string;
+    patientPhone: string;
+    patientName: string | null;
+    status: string;
+    slotStart: string | null;
+    sessionDate: string | null;
+    providerId: string;
+  } | null;
+};
+
+export type PracticeNotificationsResponse = {
+  total: number;
+  pendingCount: number;
+  failedCount: number;
+  sentCount: number;
+  items: PracticeNotification[];
 };
 
 export type ProctoWsEvent =

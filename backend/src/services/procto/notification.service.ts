@@ -454,4 +454,150 @@ export const NotificationService = {
       },
     });
   },
+
+  /**
+   * Practice inbox: all WhatsApp notification events for this clinic
+   * (patient + clinic recipients). Membership required.
+   */
+  async listForPractice(
+    practiceId: string,
+    actorUserId: string,
+    opts?: { status?: string; take?: number; skip?: number },
+  ) {
+    const { PracticeService } = await import("./practice.service.js");
+    await PracticeService.assertMember(practiceId, actorUserId);
+
+    const take = Math.min(opts?.take ?? 50, 100);
+    const skip = opts?.skip ?? 0;
+    const statusFilter =
+      opts?.status && opts.status !== "ALL" ? opts.status.trim() : undefined;
+
+    const where = {
+      practiceId,
+      ...(statusFilter ? { status: statusFilter } : {}),
+    };
+
+    const [items, total, pendingCount, failedCount, sentCount] =
+      await Promise.all([
+        prisma.notificationEvent.findMany({
+          where,
+          take,
+          skip,
+          orderBy: { createdAt: "desc" },
+          include: {
+            booking: {
+              select: {
+                id: true,
+                patientPhone: true,
+                patientName: true,
+                status: true,
+                slotStart: true,
+                sessionDate: true,
+                providerId: true,
+              },
+            },
+          },
+        }),
+        prisma.notificationEvent.count({ where }),
+        prisma.notificationEvent.count({
+          where: { practiceId, status: "PENDING" },
+        }),
+        prisma.notificationEvent.count({
+          where: { practiceId, status: "FAILED" },
+        }),
+        prisma.notificationEvent.count({
+          where: { practiceId, status: "SENT" },
+        }),
+      ]);
+
+    return {
+      total,
+      pendingCount,
+      failedCount,
+      sentCount,
+      items: items.map((n) => {
+        const payload =
+          n.payload && typeof n.payload === "object"
+            ? (n.payload as Record<string, unknown>)
+            : {};
+        return {
+          id: n.id,
+          type: n.type,
+          channel: n.channel,
+          status: n.status,
+          templateKey: String(payload.templateKey || n.type),
+          recipientRole: String(payload.recipientRole || "patient"),
+          to: String(payload.to || ""),
+          title: notificationTitle(payload, n.type),
+          summary: notificationSummary(payload, n.booking),
+          payload,
+          sentAt: n.sentAt?.toISOString() ?? null,
+          createdAt: n.createdAt.toISOString(),
+          booking: n.booking
+            ? {
+                id: n.booking.id,
+                patientPhone: n.booking.patientPhone,
+                patientName: n.booking.patientName,
+                status: n.booking.status,
+                slotStart: n.booking.slotStart?.toISOString() ?? null,
+                sessionDate: n.booking.sessionDate
+                  ? n.booking.sessionDate.toISOString().slice(0, 10)
+                  : null,
+                providerId: n.booking.providerId,
+              }
+            : null,
+        };
+      }),
+    };
+  },
 };
+
+function notificationTitle(
+  payload: Record<string, unknown>,
+  type: string,
+): string {
+  const key = String(payload.templateKey || type);
+  const map: Record<string, string> = {
+    BOOKING_CONFIRMATION: "Booking confirmed (patient)",
+    CLINIC_NEW_BOOKING: "New booking (clinic alert)",
+    CANCELLATION: "Booking cancelled (patient)",
+    CLINIC_CANCEL: "Booking cancelled (clinic alert)",
+    REMINDER: "Appointment reminder",
+    RESCHEDULE: "Booking rescheduled (patient)",
+    CLINIC_RESCHEDULE: "Booking rescheduled (clinic alert)",
+    QUEUE_ALERT: "Queue alert (patient)",
+    CLINIC_QUEUE_ALERT: "Queue alert (clinic)",
+    VISIT_SUMMARY: "Visit summary sent",
+    PRESCRIPTION_UPDATE: "Prescription update sent",
+    OVERRIDE_IMPACT: "Schedule change notice",
+  };
+  return map[key] || key.replace(/_/g, " ");
+}
+
+function notificationSummary(
+  payload: Record<string, unknown>,
+  booking: {
+    patientName: string | null;
+    patientPhone: string;
+    slotStart: Date | null;
+    sessionDate: Date | null;
+  } | null,
+): string {
+  const patient =
+    String(payload.patientName || booking?.patientName || "").trim() ||
+    String(payload.patientPhone || booking?.patientPhone || "").trim() ||
+    "Patient";
+  const when =
+    String(payload.whenLabel || "").trim() ||
+    (booking?.slotStart
+      ? booking.slotStart.toLocaleString()
+      : booking?.sessionDate
+        ? booking.sessionDate.toISOString().slice(0, 10)
+        : "");
+  const role = String(payload.recipientRole || "patient");
+  const parts = [
+    role === "clinic" ? "To clinic" : `To ${patient}`,
+    when ? when : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
