@@ -38,4 +38,11 @@ server.listen(port, "0.0.0.0", () => {
       console.warn("[notification] worker failed to start:", err),
     );
   }
+
+  // Mid-flow idle: reminder → chat closed (in-process; disable with WA_IDLE_WORKER=0)
+  if ((process.env.WA_IDLE_WORKER ?? "1") !== "0") {
+    void import("./workers/whatsappIdleWorker.js").catch((err) =>
+      console.warn("[wa-idle] worker failed to start:", err),
+    );
+  }
 });

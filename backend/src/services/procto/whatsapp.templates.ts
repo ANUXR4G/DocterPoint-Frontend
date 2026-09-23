@@ -706,12 +706,27 @@ export const BotPrompts = {
     );
   },
 
-  idleReset(lang?: WaLang): string {
+  /** Proactive nudge when the patient goes quiet mid-flow. */
+  idleReminder(lang?: WaLang): string {
     return L(
       lang,
-      "Your previous chat timed out. Tap *Menu* below to start again.",
-      "पिछली चैट का समय खत्म हो गया। फिर से शुरू करने के लिए नीचे *Menu* दबाएँ।",
+      "Are you still there? Reply to continue — this chat will close soon if there's no reply.",
+      "क्या आप अभी भी यहाँ हैं? जारी रखने के लिए जवाब दें — जवाब न आने पर यह चैट जल्द बंद हो जाएगी।",
     );
+  },
+
+  /** After idle close (proactive or on next message). */
+  chatClosed(lang?: WaLang): string {
+    return L(
+      lang,
+      "This chat is now closed. Tap *Menu* below anytime to start again.",
+      "यह चैट अब बंद हो गई है। फिर से शुरू करने के लिए कभी भी नीचे *Menu* दबाएँ।",
+    );
+  },
+
+  /** @deprecated Prefer chatClosed — kept for call sites / older wording. */
+  idleReset(lang?: WaLang): string {
+    return BotPrompts.chatClosed(lang);
   },
 
   // Short in-session acks only — full UTILITY copy is Meta catalog (or skipped for WHATSAPP_AI).
@@ -725,20 +740,52 @@ export const BotPrompts = {
     );
   },
 
-  /** After an active booking — interactive menu has the actions. */
+  /** After active booking(s) — interactive menu has the actions. */
   postBookingAsk(
     practiceName: string,
-    whenDetail?: string | null,
+    whenDetail?: string | string[] | null,
     lang?: WaLang,
   ): string {
-    const when = whenDetail?.trim()
-      ? L(lang, `\nYour visit: *${whenDetail.trim()}*`, `\nआपकी विज़िट: *${whenDetail.trim()}*`)
-      : "";
+    const visits = (
+      Array.isArray(whenDetail)
+        ? whenDetail
+        : whenDetail
+          ? [whenDetail]
+          : []
+    )
+      .map((v) => String(v).trim())
+      .filter(Boolean);
+
+    if (visits.length === 0) {
+      return L(
+        lang,
+        `Hi — you already have a booking at *${practiceName}*.\n\n` +
+          `Tap *Menu* below to choose an option.`,
+        `नमस्ते — *${practiceName}* पर आपकी बुकिंग पहले से है।\n\n` +
+          `विकल्प चुनने के लिए नीचे *Menu* दबाएँ।`,
+      );
+    }
+
+    if (visits.length === 1) {
+      return L(
+        lang,
+        `Hi — you already have a booking at *${practiceName}*.\n` +
+          `Your visit: *${visits[0]}*\n\n` +
+          `Tap *Menu* below to choose an option.`,
+        `नमस्ते — *${practiceName}* पर आपकी बुकिंग पहले से है।\n` +
+          `आपकी विज़िट: *${visits[0]}*\n\n` +
+          `विकल्प चुनने के लिए नीचे *Menu* दबाएँ।`,
+      );
+    }
+
+    const numbered = visits.map((v, i) => `${i + 1}. *${v}*`).join("\n");
     return L(
       lang,
-      `Hi — you already have a booking at *${practiceName}*.${when}\n\n` +
+      `Hi — you have *${visits.length}* bookings at *${practiceName}*:\n` +
+        `${numbered}\n\n` +
         `Tap *Menu* below to choose an option.`,
-      `नमस्ते — *${practiceName}* पर आपकी बुकिंग पहले से है।${when}\n\n` +
+      `नमस्ते — *${practiceName}* पर आपकी *${visits.length}* बुकिंग हैं:\n` +
+        `${numbered}\n\n` +
         `विकल्प चुनने के लिए नीचे *Menu* दबाएँ।`,
     );
   },
