@@ -1136,7 +1136,8 @@ async function handleAwaitingDate(
   const trimmed = text.trim();
 
   // Escape hatches so users aren't trapped if they change their mind
-  if (/^(help|menu|\?)$/i.test(trimmed)) {
+  if (/^(help|menu|main\s*menu|\?)$/i.test(trimmed)) {
+    await saveState(convId, idleState(state));
     const patient = await PatientService.findByPhone(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
