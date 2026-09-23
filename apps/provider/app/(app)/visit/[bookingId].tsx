@@ -154,10 +154,21 @@ export default function VisitScreen() {
     if (!bookingId || booking?.status === "COMPLETED") return
     setBusy(true)
     setError("")
+    let docsToSave = documents
+    if (docsToSave.length === 0) {
+      const resFresh = await fetchBooking(bookingId)
+      const serverDocs = Array.isArray(resFresh.data?.documents)
+        ? (resFresh.data!.documents as VisitDocument[])
+        : []
+      if (serverDocs.length > 0) {
+        docsToSave = serverDocs
+        setDocuments(serverDocs)
+      }
+    }
     const res = await updateVisit(bookingId, {
       doctorRemarks: remarks,
       medicines: next,
-      documents,
+      documents: docsToSave,
     })
     setBusy(false)
     if (res.status !== "successful") {

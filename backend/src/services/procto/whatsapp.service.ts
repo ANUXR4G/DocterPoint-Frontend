@@ -870,13 +870,24 @@ export const WhatsAppService = {
       // Reschedule / cancel / message-doctor: pick which booking (list)
       if (result.bookingList && result.bookingList.length > 0) {
         const isCancel = /cancel|रद्द/i.test(result.reply);
+        const isReport = /report|document|रिपोर्ट|दस्तावेज|attach/i.test(
+          result.reply,
+        );
         const listSent = await sendWhatsAppInteractiveList(
           item.from,
           {
-            header: isCancel ? "Cancel booking" : "Choose a booking",
+            header: isCancel
+              ? "Cancel booking"
+              : isReport
+                ? "Attach to visit"
+                : "Choose a booking",
             body:
               result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
-              (isCancel ? "Tap a booking to cancel it" : "Which appointment?"),
+              (isCancel
+                ? "Tap a booking to cancel it"
+                : isReport
+                  ? "Which visit should get the file?"
+                  : "Which appointment?"),
             buttonLabel: "Bookings",
             sectionTitle: "Your bookings",
             rows: result.bookingList.map((b) => ({

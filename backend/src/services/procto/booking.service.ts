@@ -749,15 +749,23 @@ export const BookingService = {
       );
     }
 
-    const medicines = normalizeMedicines(data.medicines);
-    const documents = normalizeBookingDocuments(data.documents);
+    const medicines =
+      data.medicines !== undefined
+        ? normalizeMedicines(data.medicines)
+        : undefined;
+    const documents =
+      data.documents !== undefined
+        ? normalizeBookingDocuments(data.documents)
+        : undefined;
     const nextStatus = data.status ? parseBookingStatus(data.status) : undefined;
 
     const prevMedsKey = JSON.stringify(existing.medicines ?? []);
-    const nextMedsKey = JSON.stringify(medicines);
+    const nextMedsKey = JSON.stringify(medicines ?? existing.medicines ?? []);
     const medicinesChanged =
       data.medicines !== undefined && prevMedsKey !== nextMedsKey;
-    const hasMedicines = medicines.length > 0;
+    const hasMedicines =
+      (medicines ?? (Array.isArray(existing.medicines) ? existing.medicines : []))
+        .length > 0;
 
     const updated = await prisma.practiceBooking.update({
       where: { id: bookingId },
@@ -765,8 +773,8 @@ export const BookingService = {
         ...(data.doctorRemarks !== undefined
           ? { doctorRemarks: data.doctorRemarks?.trim() || null }
           : {}),
-        medicines,
-        documents,
+        ...(medicines !== undefined ? { medicines } : {}),
+        ...(documents !== undefined ? { documents } : {}),
         ...(nextStatus ? { status: nextStatus } : {}),
       },
       include: {
@@ -1115,6 +1123,8 @@ export const BookingService = {
         disease: true,
         notes: true,
         doctorRemarks: true,
+        medicines: true,
+        documents: true,
         createdAt: true,
         updatedAt: true,
         location: {
