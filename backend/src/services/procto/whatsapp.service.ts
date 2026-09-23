@@ -659,15 +659,35 @@ export const WhatsAppService = {
         const isPostBooking = result.menuList.some((row) =>
           row.id.startsWith("post:"),
         );
+        // Language-switch acks must not be silent if the interactive list fails
+        // or truncates — send the full text first, then the Menu list.
+        const sendTextFirst =
+          Boolean(result.textBeforeMenu) ||
+          /Language set|भाषा \*|भाषा.*सेट/i.test(result.reply);
+        if (sendTextFirst) {
+          const textSent = await sendWhatsAppText(
+            item.from,
+            result.reply,
+            item.phoneNumberId,
+          );
+          if (!textSent.ok) {
+            console.warn(
+              `[WhatsApp] language-switch text failed: ${textSent.error}`,
+            );
+          }
+        }
         const listSent = await sendWhatsAppInteractiveList(
           item.from,
           {
             header: isPostBooking ? "Your booking" : "Main menu",
-            body:
-              result.reply.split("\n").slice(0, 6).join("\n").slice(0, 400) ||
-              (isPostBooking
-                ? "What would you like to do?"
-                : "How can I help you?"),
+            body: sendTextFirst
+              ? (isPostBooking
+                  ? "What would you like to do?"
+                  : "How can I help you?")
+              : result.reply.split("\n").slice(0, 6).join("\n").slice(0, 400) ||
+                (isPostBooking
+                  ? "What would you like to do?"
+                  : "How can I help you?"),
             buttonLabel: "Menu",
             sectionTitle: isPostBooking ? "Choose one" : "Options",
             rows: result.menuList.map((row) => ({
@@ -685,6 +705,10 @@ export const WhatsAppService = {
           console.warn(
             `[WhatsApp] menu list interactive failed: ${listSent.error}`,
           );
+        }
+        // If language text already sent, don't fall through to duplicate text
+        if (sendTextFirst) {
+          continue;
         }
       }
 
@@ -865,6 +889,7 @@ export const WhatsAppService = {
     bookingList?: Array<{ index: number; label: string; description?: string }>;
     patientList?: Array<{ index: number; label: string; description?: string }>;
     menuList?: Array<{ id: string; title: string; description?: string }>;
+    textBeforeMenu?: boolean;
   }> {
     const practice = await this.resolvePracticeByNumber(
       payload.to,

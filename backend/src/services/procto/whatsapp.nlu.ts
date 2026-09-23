@@ -950,6 +950,7 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_register_family_phone",
     "awaiting_register_confirm",
     "awaiting_date",
+    "awaiting_language",
   ]);
   return !structured.has(step);
 }
