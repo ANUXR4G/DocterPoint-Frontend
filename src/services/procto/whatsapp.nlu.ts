@@ -389,7 +389,7 @@ const COMMAND_WORDS: Array<{ intent: BotIntent; words: string[] }> = [
   },
   {
     intent: "help",
-    words: ["help", "helpp", "menu", "hepl", "hlep"],
+    words: ["help", "helpp", "menu", "mainmenu", "hepl", "hlep"],
   },
   {
     intent: "report",
@@ -449,6 +449,12 @@ export function exactMenuIntent(text: string): BotIntent | null {
     providers: "doctors",
     help: "help",
     menu: "help",
+    main_menu: "help",
+    mainmenu: "help",
+    show_menu: "help",
+    open_menu: "help",
+    go_to_menu: "help",
+    back_to_menu: "help",
     faq: "faq",
     info: "faq",
     report: "report",
@@ -618,9 +624,10 @@ function parseIntentRegex(text: string): BotIntent {
   if (/^(no|n|nope|cancel that|nevermind|never mind|नहीं|ना)$/i.test(t) || t === "नहीं")
     return "confirm_no";
   if (
-    /^\bhelp\b|^menu$|^hi$|^hello$|^start$|^नमस्ते$|^हेल्प$/i.test(t) ||
+    /^(help|menu|main\s*menu|\?|hi|hello|hey|start|नमस्ते|हेल्प)$/i.test(t) ||
     t === "मदद" ||
-    t === "मेनू"
+    t === "मेनू" ||
+    t === "मुख्य मेनू"
   ) {
     return "help";
   }
@@ -791,7 +798,8 @@ If they only say morning/afternoon/evening/night (or सुबह/दोपह�
 REGISTER means create a patient account (sign up / new patient / रजिस्टर / पंजीकरण).
 DOCTORS means list doctors/providers at the clinic (doctor list / डॉक्टर). Accept misspellings like DOCTERS, DOKORS, DOCATORS.
 BOOK means book an appointment (बुक / अपॉइंटमेंट). Accept common typos (BOK, BOOOK, APPOINTMNET). Prefer book when they mention a date/time for a visit.
-Prefer a command intent over unknown when the message is clearly a mistyped menu word.`;
+Prefer a command intent over unknown when the message is clearly a mistyped menu word.
+"main menu", "menu", "help", "मेनू" → intent help (show the menu). Never treat those as a booking date.`;
 
 /** Keep WhatsApp snappy — abort slow HF/OpenAI NLU and fall back to regex. */
 const NLU_LLM_TIMEOUT_MS = 2_500;
@@ -867,7 +875,7 @@ async function parseWithChatLlm(
 async function parseWithLlm(
   text: string,
   contextHint?: string,
-): Promise<NluResult | null> {
+): Promise<(NluResult & { provider?: string }) | null> {
   // Prefer fast OpenAI for WhatsApp NLU; HF cold-starts are often multi-second.
   const providers = llmChatProviders().slice().sort((a, b) => {
     const rank = (p: { label: string }) =>
@@ -882,7 +890,7 @@ async function parseWithLlm(
       model: provider.model,
       jsonObject: provider.jsonObject,
     });
-    if (hit) return hit;
+    if (hit) return { ...hit, provider: provider.label };
   }
   return null;
 }
@@ -910,7 +918,7 @@ export async function parseUtterance(
   const llm = await parseWithLlm(text, contextHint);
   if (llm) {
     console.log(
-      `[WhatsApp NLU] llm=${llm.intent} via LLM in ${Date.now() - started}ms`,
+      `[WhatsApp NLU] llm=${llm.intent} via ${llm.provider ?? "LLM"} in ${Date.now() - started}ms`,
     );
     return {
       ...llm,
