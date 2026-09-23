@@ -2,10 +2,13 @@ import { prisma } from "../db/prisma.js";
 import { uuidToBase64 } from "../core/security.js";
 import { socketManager } from "../core/socket.js";
 
-function looksLikeBotCommand(text: string): boolean {
+export function looksLikeBotCommand(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
   if (/^(?:menu|post|booking|slot|date|mode|patient):/i.test(t)) return true;
+  // Bare menu digits / emoji keycaps (WhatsApp list taps often arrive as "1")
+  if (/^[1-9]$/.test(t)) return true;
+  if (/^[1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣]$/u.test(t.trim())) return true;
   if (
     /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info|message|msg|new\s+book)\b/.test(
       t,

@@ -823,8 +823,8 @@ BOOK means book an appointment (बुक / अपॉइंटमेंट). Acc
 Prefer a command intent over unknown when the message is clearly a mistyped menu word.
 "main menu", "menu", "help", "मेनू" → intent help (show the menu). Never treat those as a booking date.`;
 
-/** Keep WhatsApp snappy — abort slow HF/OpenAI NLU and fall back to regex. */
-const NLU_LLM_TIMEOUT_MS = 2_500;
+/** Keep WhatsApp snappy — abort slow NLU and fall back to regex. */
+const NLU_LLM_TIMEOUT_MS = Number(process.env.NLU_LLM_TIMEOUT_MS || 600);
 
 async function parseWithChatLlm(
   text: string,
@@ -898,13 +898,18 @@ async function parseWithLlm(
   text: string,
   contextHint?: string,
 ): Promise<(NluResult & { provider?: string }) | null> {
-  // Prefer fast OpenAI for WhatsApp NLU; HF cold-starts are often multi-second.
-  const providers = llmChatProviders().slice().sort((a, b) => {
-    const rank = (p: { label: string }) =>
-      p.label === "OpenAI" ? 0 : p.label === "DeepSeek" ? 1 : 2;
-    return rank(a) - rank(b);
-  });
-  for (const provider of providers) {
+  // WhatsApp: OpenAI only (skip HF/DeepSeek sequential timeouts).
+  const providers = llmChatProviders()
+    .slice()
+    .filter((p) => p.label === "OpenAI")
+    .concat(
+      // If OpenAI missing, try DeepSeek once (still skip cold HF).
+      llmChatProviders().filter((p) => p.label === "DeepSeek"),
+    );
+  const unique = providers.filter(
+    (p, i, arr) => arr.findIndex((x) => x.label === p.label) === i,
+  );
+  for (const provider of unique.slice(0, 1)) {
     const hit = await parseWithChatLlm(text, contextHint, {
       label: provider.label,
       url: provider.url,
