@@ -462,9 +462,14 @@ export function exactMenuIntent(text: string): BotIntent | null {
     report: "report",
     reports: "report",
     attach_report: "report",
+    attach_document: "report",
+    attach_doc: "report",
+    attach_file: "report",
     send_report: "report",
     upload_report: "report",
     lab_report: "report",
+    document: "report",
+    documents_send: "report",
     my_docs: "my_docs",
     mydocs: "my_docs",
     my_doc: "my_docs",
@@ -538,7 +543,7 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
 
 /**
  * Digit / list shortcuts for the post-booking choice menu (idle + active visit).
- * 1 Reschedule · 2 Cancel · 3 New booking · 4 Message doctor
+ * 1 Reschedule · 2 Cancel · 3 New booking · 4 Message doctor · 5 Report
  */
 export function postBookingNumberShortcut(text: string): MenuShortcut | null {
   const raw = text
@@ -557,6 +562,9 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
       new_book: "book",
       message_doctor: "message_doctor",
       message: "message_doctor",
+      report: "report",
+      attach: "report",
+      document: "report",
     };
     return map[key] ?? null;
   }
@@ -564,7 +572,7 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
   // Typed menu titles (with or without "3 · " prefix)
   const label = raw
     .toLowerCase()
-    .replace(/^[1-4]\s*[·.)\-:]+\s*/u, "")
+    .replace(/^[1-5]\s*[·.)\-:]+\s*/u, "")
     .trim();
   if (/^(new\s+book(ing)?|book\s+(another|again|new)|another\s+booking)$/i.test(label)) {
     return "book";
@@ -576,8 +584,15 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
   ) {
     return "message_doctor";
   }
+  if (
+    /^(report|attach(\s+(a\s+)?(report|document|doc|file))?|document|send\s+report)$/i.test(
+      label,
+    )
+  ) {
+    return "report";
+  }
 
-  const m = raw.match(/^(?:option\s*)?([1-4])(?:\s*[.)]?)?$/i);
+  const m = raw.match(/^(?:option\s*)?([1-5])(?:\s*[.)]?)?$/i);
   if (!m) return null;
   const n = Number(m[1]);
   const map: Record<number, MenuShortcut> = {
@@ -585,6 +600,7 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
     2: "cancel",
     3: "book",
     4: "message_doctor",
+    5: "report",
   };
   return map[n] ?? null;
 }
@@ -967,6 +983,7 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_date",
     "awaiting_language",
     "awaiting_attach_offer",
+    "awaiting_report_booking",
     "awaiting_report",
   ]);
   return !structured.has(step);

@@ -76,8 +76,8 @@ const MAIN_MENU_ROWS = [
   },
   {
     id: "menu:report",
-    title: "9 · Report",
-    description: "Visit docs & reports",
+    title: "9 · Attach doc",
+    description: "Send report to doctor",
   },
 ];
 

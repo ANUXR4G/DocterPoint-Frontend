@@ -67,19 +67,23 @@ describe("exactMenuIntent", () => {
   it("maps attach report phrases", () => {
     assert.equal(exactMenuIntent("report"), "report");
     assert.equal(exactMenuIntent("attach report"), "report");
+    assert.equal(exactMenuIntent("attach document"), "report");
     assert.equal(exactMenuIntent("send report"), "report");
     assert.equal(exactMenuIntent("9 · Report"), "report");
+    assert.equal(exactMenuIntent("9 · Attach doc"), "report");
   });
 });
 
 describe("postBookingNumberShortcut", () => {
-  it("maps 1–4 and post: ids", () => {
+  it("maps 1–5 and post: ids", () => {
     assert.equal(postBookingNumberShortcut("1"), "reschedule");
     assert.equal(postBookingNumberShortcut("2"), "cancel");
     assert.equal(postBookingNumberShortcut("3"), "book");
     assert.equal(postBookingNumberShortcut("4"), "message_doctor");
+    assert.equal(postBookingNumberShortcut("5"), "report");
     assert.equal(postBookingNumberShortcut("post:book"), "book");
     assert.equal(postBookingNumberShortcut("post:new_book"), "book");
+    assert.equal(postBookingNumberShortcut("post:report"), "report");
   });
 
   it("maps typed New booking / menu titles", () => {
@@ -88,5 +92,9 @@ describe("postBookingNumberShortcut", () => {
     assert.equal(postBookingNumberShortcut("Reschedule"), "reschedule");
     assert.equal(postBookingNumberShortcut("Cancel"), "cancel");
     assert.equal(postBookingNumberShortcut("Message doctor"), "message_doctor");
+    assert.equal(postBookingNumberShortcut("5 · Report"), "report");
+    assert.equal(postBookingNumberShortcut("5 · Attach doc"), "report");
+    assert.equal(postBookingNumberShortcut("Report"), "report");
+    assert.equal(postBookingNumberShortcut("Attach doc"), "report");
   });
 });

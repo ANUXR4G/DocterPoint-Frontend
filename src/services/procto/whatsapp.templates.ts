@@ -53,7 +53,7 @@ export const BotPrompts = {
         "6 · Cancel — cancel a visit\n" +
         "7 · Reschedule — change date/time\n" +
         "8 · Language — English / हिंदी\n" +
-        "9 · Report — attach a document\n\n" +
+        "9 · Attach document — send a report to your doctor\n\n" +
         "Reply with a *number* (1–9) or tap *Menu* below.",
       "*मुख्य मेनू*\n" +
         "1 · बुक — डॉक्टर, तारीख, स्लॉट\n" +
@@ -64,7 +64,7 @@ export const BotPrompts = {
         "6 · रद्द — विज़िट रद्द करें\n" +
         "7 · रीशेड्यूल — तारीख/समय बदलें\n" +
         "8 · भाषा — English / हिंदी\n" +
-        "9 · रिपोर्ट — दस्तावेज़ भेजें\n\n" +
+        "9 · दस्तावेज़ भेजें — डॉक्टर को रिपोर्ट\n\n" +
         "*संख्या* (1–9) लिखें या नीचे *Menu* दबाएँ।",
     );
   },
@@ -668,6 +668,48 @@ export const BotPrompts = {
     );
   },
 
+  askReportPick(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    if (!options.length) {
+      return L(
+        lang,
+        "You have no open visits to attach a document to.\nTap *Menu* → *Book* first.",
+        "दस्तावेज़ जोड़ने के लिए कोई खुली विज़िट नहीं है।\nपहले *Menu* → *Book* करें।",
+      );
+    }
+    if (options.length === 1) {
+      return L(
+        lang,
+        `Attach a report to this visit?\n*${options[0]!.label}*\n\nSend a *photo* or *PDF* now.`,
+        `इस विज़िट पर रिपोर्ट जोड़ें?\n*${options[0]!.label}*\n\nअभी *फ़ोटो* या *PDF* भेजें।`,
+      );
+    }
+    return L(
+      lang,
+      `You have *${options.length}* open visits. Which one should get the document?\n` +
+        options.map((o) => `${o.index}. ${o.label}`).join("\n") +
+        `\n\nTap a visit below, or reply with a *number*.`,
+      `आपकी *${options.length}* खुली विज़िट हैं। दस्तावेज़ किस पर जोड़ें?\n` +
+        options.map((o) => `${o.index}. ${o.label}`).join("\n") +
+        `\n\nनीचे विज़िट चुनें, या *संख्या* लिखें।`,
+    );
+  },
+
+  askReportForVisit(visitLabel: string, lang?: WaLang): string {
+    const visit = visitLabel.trim();
+    return L(
+      lang,
+      `Send a *photo* or *PDF* for this visit:\n*${visit}*\n\n` +
+        `It goes to your doctor in GlucoGuide (web + app).\n` +
+        `Or reply *No* / *SKIP* to cancel.`,
+      `इस विज़िट के लिए *फ़ोटो* या *PDF* भेजें:\n*${visit}*\n\n` +
+        `यह डॉक्टर की GlucoGuide (वेब + ऐप) पर जाएगी।\n` +
+        `रद्द करने के लिए *No* / *SKIP* लिखें।`,
+    );
+  },
+
   askMessageDoctorPick(
     options: Array<{ index: number; label: string }>,
     lang?: WaLang,
@@ -840,8 +882,8 @@ export const BotPrompts = {
   attachDocumentSkipped(lang?: WaLang): string {
     return L(
       lang,
-      "Okay — no document sent. You can attach one later via *Menu* → *Report* (option 9).",
-      "ठीक है — कोई दस्तावेज़ नहीं भेजा। बाद में *Menu* → *Report* (विकल्प 9) से जोड़ सकते हैं।",
+      "Okay — no document sent. You can attach one later via *Menu* → *Report*, or post-visit menu option *5*.",
+      "ठीक है — कोई दस्तावेज़ नहीं भेजा। बाद में *Menu* → *Report*, या विज़िट मेनू विकल्प *5* से जोड़ सकते हैं।",
     );
   },
 

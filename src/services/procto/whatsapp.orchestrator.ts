@@ -79,6 +79,7 @@ export type ConversationStep =
   | "awaiting_register_family_phone"
   | "awaiting_register_confirm"
   | "awaiting_attach_offer"
+  | "awaiting_report_booking"
   | "awaiting_report";
 
 export type ConversationState = {
@@ -349,14 +350,14 @@ function withMainMenu(reply: string): OrchestratorResult {
       },
       {
         id: "menu:report",
-        title: "9 · Report",
-        description: "Attach a document",
+        title: "9 · Attach doc",
+        description: "Send report to doctor",
       },
     ],
   };
 }
 
-/** After booking — reschedule / cancel / new book / message doctor. */
+/** After booking — reschedule / cancel / new book / message doctor / report. */
 function withPostBookingMenu(reply: string): OrchestratorResult {
   return {
     reply,
@@ -381,6 +382,11 @@ function withPostBookingMenu(reply: string): OrchestratorResult {
         id: "post:message_doctor",
         title: "4 · Message doctor",
         description: "Chat with your doctor",
+      },
+      {
+        id: "post:report",
+        title: "5 · Attach doc",
+        description: "Send report to doctor",
       },
     ],
   };
@@ -416,6 +422,75 @@ async function listUpcomingBookings(practiceId: string, patientPhone: string) {
         ),
     )
     .slice(0, 5);
+}
+
+/** Later attach: pick visit (if several), then wait for photo/PDF. */
+async function startReportAttachFlow(opts: {
+  convId: string;
+  practice: PracticeCtx;
+  patientPhone: string;
+  state: ConversationState;
+  lang: WaLang;
+}): Promise<OrchestratorResult> {
+  const { convId, practice, patientPhone, state, lang } = opts;
+  const upcoming = await listUpcomingBookings(practice.id, patientPhone);
+
+  if (!upcoming.length) {
+    await saveState(convId, {
+      ...idleState(state),
+      failedTurns: 0,
+      postBookingCare: false,
+      handedOff: false,
+    });
+    return {
+      reply: BotPrompts.askReportPick([], lang),
+    };
+  }
+
+  if (upcoming.length === 1) {
+    const b = upcoming[0]!;
+    const label = postBookingVisitLines([b])[0] || bookingWhenLabel(b);
+    await saveState(convId, {
+      ...keepPrefs(state),
+      step: "awaiting_report",
+      lastBookingId: b.id,
+      bookingChoices: undefined,
+      pendingSummary: label,
+      failedTurns: 0,
+      postBookingCare: false,
+      handedOff: false,
+    });
+    return { reply: BotPrompts.askReportForVisit(label, lang) };
+  }
+
+  const bookingChoices = upcoming.map((b) => ({
+    id: b.id,
+    label: postBookingVisitLines([b])[0] || bookingWhenLabel(b),
+  }));
+  await saveState(convId, {
+    ...keepPrefs(state),
+    step: "awaiting_report_booking",
+    bookingChoices,
+    lastBookingId: undefined,
+    pendingSummary: undefined,
+    failedTurns: 0,
+    postBookingCare: false,
+    handedOff: false,
+  });
+  return withBookingPicker(
+    BotPrompts.askReportPick(
+      bookingChoices.map((c, i) => ({ index: i + 1, label: c.label })),
+      lang,
+    ),
+    bookingChoices.map((c) => {
+      const [title, ...rest] = c.label.split(" · ");
+      return {
+        label: (title || c.label).slice(0, 24),
+        description: rest.join(" · ").slice(0, 72) || undefined,
+      };
+    }),
+    { forceList: true },
+  );
 }
 
 function bookingDoctorLabel(b: {
@@ -1062,16 +1137,14 @@ async function dispatchMenuIntent(opts: {
       const patient = await PatientService.findByPhone(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
-    case "report": {
-      await saveState(convId, {
-        ...keepPrefs(state),
-        step: "awaiting_report",
-        failedTurns: 0,
-        postBookingCare: false,
-        handedOff: false,
+    case "report":
+      return startReportAttachFlow({
+        convId,
+        practice,
+        patientPhone,
+        state,
+        lang,
       });
-      return { reply: BotPrompts.visitDocHowTo(lang) };
-    }
     case "my_docs": {
       const { listWhatsAppVisitDocuments } = await import("./whatsapp.visitDocs.js");
       return {
@@ -2563,7 +2636,11 @@ async function runOrchestratorCore(input: {
       !exactMenuIntent(text) &&
       !wantsFullMainMenu(text)
     ) {
-      return { reply: BotPrompts.askAttachDocumentNow(lang) };
+      return {
+        reply: state.pendingSummary
+          ? BotPrompts.askReportForVisit(state.pendingSummary, lang)
+          : BotPrompts.askAttachDocumentNow(lang),
+      };
     }
   }
 
@@ -2579,7 +2656,7 @@ async function runOrchestratorCore(input: {
     ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
     : null;
   // After full main menu, typed 1–9 mean Book/Doctors/… — not Reschedule/Cancel.
-  // After post-booking menu (or default with an upcoming visit), 1–4 mean post actions.
+  // After post-booking menu (or default with an upcoming visit), 1–5 mean post actions.
   const preferMainDigits = state.lastMenuKind === "main";
   const numberShortcut =
     listMenuPick ??
@@ -3193,6 +3270,50 @@ async function runOrchestratorCore(input: {
     return withYesNo(BotPrompts.askCancelConfirm(label, lang));
   }
 
+  // Later report attach — pick which visit first
+  if (state.step === "awaiting_report_booking") {
+    const choices = state.bookingChoices ?? [];
+    const idx = parseSlotChoiceIndex(text);
+    const choice =
+      idx !== null && idx >= 1 && idx <= choices.length
+        ? choices[idx - 1]
+        : null;
+
+    if (!choice && choices.length) {
+      return withBookingPicker(
+        BotPrompts.askReportPick(
+          choices.map((c, i) => ({ index: i + 1, label: c.label })),
+          lang,
+        ),
+        choices.map((c) => {
+          const [title, ...rest] = c.label.split(" · ");
+          return {
+            label: (title || c.label).slice(0, 24),
+            description: rest.join(" · ").slice(0, 72) || undefined,
+          };
+        }),
+        { forceList: true },
+      );
+    }
+
+    if (!choice) {
+      await saveState(convId, idleState(state));
+      return { reply: BotPrompts.noBookingSelected(lang) };
+    }
+
+    await saveState(convId, {
+      ...keepPrefs(state),
+      step: "awaiting_report",
+      lastBookingId: choice.id,
+      bookingChoices: undefined,
+      pendingSummary: choice.label,
+      failedTurns: 0,
+      postBookingCare: false,
+      handedOff: false,
+    });
+    return { reply: BotPrompts.askReportForVisit(choice.label, lang) };
+  }
+
   if (state.step === "awaiting_provider") {
     const providers = state.providerChoices ?? (await loadProviders(practice.id));
     const picked = pickProvider(providers, nlu.slots, text);
@@ -3445,14 +3566,13 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "report") {
-    await saveState(convId, {
-      ...keepPrefs(state),
-      step: "awaiting_report",
-      failedTurns: 0,
-      postBookingCare: false,
-      handedOff: false,
+    return startReportAttachFlow({
+      convId,
+      practice,
+      patientPhone,
+      state,
+      lang,
     });
-    return { reply: BotPrompts.visitDocHowTo(lang) };
   }
 
   if (nlu.intent === "my_docs") {

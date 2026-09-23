@@ -409,6 +409,10 @@ export async function attachWhatsAppVisitDocument(opts: {
     updated.patientId ?? booking.patientId,
   ).catch(() => undefined);
 
+  void import("../opsSocket.js")
+    .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
+    .catch(() => undefined);
+
   void notifyDoctorCareChat({
     practiceId: booking.practiceId,
     patientPhone: opts.patientPhone,
