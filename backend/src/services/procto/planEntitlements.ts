@@ -52,6 +52,7 @@ export function hasFeatureFlag(
 
 export async function getPracticeEntitlement(
   practiceId: string,
+  opts?: { skipBookingCount?: boolean },
 ): Promise<PracticeEntitlement> {
   const sub = await prisma.practiceSubscription.findUnique({
     where: { practiceId },
@@ -62,7 +63,7 @@ export async function getPracticeEntitlement(
   const usable = isSubscriptionUsable(sub?.status ?? null);
 
   let bookingsUsedThisPeriod = 0;
-  if (sub) {
+  if (sub && !opts?.skipBookingCount) {
     const periodStart =
       sub.currentPeriodStart ??
       (() => {

@@ -19,6 +19,40 @@ import { PracticeSubscriptionStatus } from "@prisma/client";
 import { IdScanService, type IdScanFields } from "../idScan.js";
 import { PatientService } from "../patient.js";
 import { settings, publicWebOrigin } from "../../config/index.js";
+import {
+  getPracticeEntitlement,
+  hasFeatureFlag,
+} from "./planEntitlements.js";
+import {
+  ingestWhatsAppPatientReply,
+  looksLikeBotCommand,
+} from "../chat.whatsappInbound.js";
+
+/** Short TTL caches — WhatsApp traffic is bursty; avoid repeat DB on every tap. */
+const PRACTICE_RESOLVE_TTL_MS = 60_000;
+const STAFF_CHECK_TTL_MS = 60_000;
+const ENTITLEMENT_TTL_MS = 30_000;
+
+const practiceResolveCache = new Map<
+  string,
+  {
+    at: number;
+    practice: Awaited<
+      ReturnType<typeof NumberPoolService.findPracticeByWhatsAppTo>
+    >;
+  }
+>();
+const staffCheckCache = new Map<string, { at: number; isStaff: boolean }>();
+const entitlementCache = new Map<
+  string,
+  { at: number; ent: Awaited<ReturnType<typeof getPracticeEntitlement>> }
+>();
+
+function fresh<T extends { at: number }>(hit: T | undefined, ttl: number): T | null {
+  if (!hit) return null;
+  if (Date.now() - hit.at > ttl) return null;
+  return hit;
+}
 
 function isIdOcrConfigured(): boolean {
   return Boolean(settings.openaiApiKey || settings.hfToken);
@@ -192,93 +226,128 @@ export async function isStaffOrClinicPhone(
     id?: string;
     phone?: string | null;
     whatsappBusinessNumber?: string | null;
+    members?: Array<{
+      user?: {
+        phone?: string | null;
+        doctor?: { contactNumbers?: unknown } | null;
+      } | null;
+    }>;
   },
 ): Promise<boolean> {
   const digits = normalizePhone(phone);
   if (digits.length < 10) return false;
   const last10 = digits.slice(-10);
+  const cacheKey = `${practice.id ?? ""}:${last10}`;
+  const cached = fresh(staffCheckCache.get(cacheKey), STAFF_CHECK_TTL_MS);
+  if (cached) return cached.isStaff;
+
+  let isStaff = false;
 
   if (
     phoneMatches(practice.phone, digits) ||
     phoneMatches(practice.whatsappBusinessNumber, digits)
   ) {
-    return true;
+    isStaff = true;
   }
 
-  const [doctorUser, member] = await Promise.all([
-    prisma.user.findFirst({
-      where: {
-        role: "doctor",
-        OR: [{ phone: digits }, { phone: { endsWith: last10 } }],
-      },
-      select: { id: true },
-    }),
-    prisma.practiceMember.findFirst({
-      where: {
-        isActive: true,
-        role: {
-          in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"],
-        },
-        OR: [
-          { user: { phone: digits } },
-          { user: { phone: { endsWith: last10 } } },
-        ],
-      },
-      select: { id: true },
-    }),
-  ]);
-  if (doctorUser || member) return true;
-
-  // Doctor.contactNumbers is JSON — check members of this practice
-  const practiceMembers = practice.id
-    ? await prisma.practiceMember.findMany({
-        where: {
-          practiceId: practice.id,
-          isActive: true,
-          role: { in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"] },
-        },
-        include: {
-          user: {
-            select: {
-              phone: true,
-              doctor: { select: { contactNumbers: true } },
-            },
-          },
-        },
-      })
-    : [];
-
-  for (const m of practiceMembers) {
-    if (phoneMatches(m.user.phone, digits)) return true;
-    const nums = Array.isArray(m.user.doctor?.contactNumbers)
-      ? m.user.doctor!.contactNumbers
-      : [];
-    for (const n of nums) {
-      if (phoneMatches(String(n), digits)) return true;
+  // Prefer already-loaded practice members (no extra DB).
+  if (!isStaff && Array.isArray(practice.members) && practice.members.length) {
+    for (const m of practice.members) {
+      if (phoneMatches(m.user?.phone, digits)) {
+        isStaff = true;
+        break;
+      }
+      const nums = Array.isArray(m.user?.doctor?.contactNumbers)
+        ? (m.user!.doctor!.contactNumbers as unknown[])
+        : [];
+      for (const n of nums) {
+        if (phoneMatches(String(n), digits)) {
+          isStaff = true;
+          break;
+        }
+      }
+      if (isStaff) break;
     }
   }
 
-  return false;
+  if (!isStaff) {
+    const [doctorUser, member] = await Promise.all([
+      prisma.user.findFirst({
+        where: {
+          role: "doctor",
+          OR: [{ phone: digits }, { phone: { endsWith: last10 } }],
+        },
+        select: { id: true },
+      }),
+      prisma.practiceMember.findFirst({
+        where: {
+          isActive: true,
+          role: {
+            in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"],
+          },
+          OR: [
+            { user: { phone: digits } },
+            { user: { phone: { endsWith: last10 } } },
+          ],
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (doctorUser || member) isStaff = true;
+  }
+
+  if (!isStaff && practice.id) {
+    const practiceMembers = await prisma.practiceMember.findMany({
+      where: {
+        practiceId: practice.id,
+        isActive: true,
+        role: { in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"] },
+      },
+      include: {
+        user: {
+          select: {
+            phone: true,
+            doctor: { select: { contactNumbers: true } },
+          },
+        },
+      },
+    });
+
+    for (const m of practiceMembers) {
+      if (phoneMatches(m.user.phone, digits)) {
+        isStaff = true;
+        break;
+      }
+      const nums = Array.isArray(m.user.doctor?.contactNumbers)
+        ? m.user.doctor!.contactNumbers
+        : [];
+      for (const n of nums) {
+        if (phoneMatches(String(n), digits)) {
+          isStaff = true;
+          break;
+        }
+      }
+      if (isStaff) break;
+    }
+  }
+
+  staffCheckCache.set(cacheKey, { at: Date.now(), isStaff });
+  return isStaff;
 }
 
 export const WhatsAppService = {
   async resolvePracticeByNumber(businessNumber: string, wabaPhoneNumberId?: string) {
+    const cacheKey = `${wabaPhoneNumberId || ""}:${businessNumber}`;
+    const cached = fresh(practiceResolveCache.get(cacheKey), PRACTICE_RESOLVE_TTL_MS);
+    if (cached) return cached.practice;
+
     const practice = await NumberPoolService.findPracticeByWhatsAppTo(
       businessNumber,
       wabaPhoneNumberId,
     );
-    if (!practice) return null;
-    // Re-fetch with WhatsApp include shape expected by orchestrator
-    return prisma.practice.findFirst({
-      where: { id: practice.id, isActive: true },
-      include: {
-        locations: { where: { isActive: true }, take: 5 },
-        members: {
-          where: { isActive: true, role: { in: ["DOCTOR", "PRACTICE_OWNER"] } },
-          include: { user: { select: { id: true, name: true, phone: true } } },
-        },
-      },
-    });
+    practiceResolveCache.set(cacheKey, { at: Date.now(), practice });
+    // Pool/practice hit already includes locations + doctor members — skip 2nd query.
+    return practice;
   },
 
   async getOrCreateConversation(practiceId: string, patientPhone: string) {
@@ -756,11 +825,10 @@ export const WhatsAppService = {
         );
         // Language-switch acks must not be silent if the interactive list fails
         // or truncates — send the full text first, then the Menu list.
+        // Do NOT force text+list for every "Main menu" (doubles Meta latency).
         const sendTextFirst =
           Boolean(result.textBeforeMenu) ||
-          /Language set|भाषा \*|भाषा.*सेट|Main menu|मुख्य मेनू/i.test(
-            result.reply,
-          );
+          /Language set|भाषा \*|भाषा.*सेट/i.test(result.reply);
         if (sendTextFirst) {
           const textSent = await sendWhatsAppText(
             item.from,
@@ -1034,13 +1102,20 @@ export const WhatsAppService = {
         ? payload.transcribedText
         : payload.body;
 
-    const { getPracticeEntitlement, hasFeatureFlag } = await import(
-      "./planEntitlements.js"
+    const entCached = fresh(
+      entitlementCache.get(practice.id),
+      ENTITLEMENT_TTL_MS,
     );
-
     const [isStaff, ent] = await Promise.all([
       isStaffOrClinicPhone(patientPhone, practice),
-      getPracticeEntitlement(practice.id),
+      entCached
+        ? Promise.resolve(entCached.ent)
+        : getPracticeEntitlement(practice.id, { skipBookingCount: true }).then(
+            (e) => {
+              entitlementCache.set(practice.id, { at: Date.now(), ent: e });
+              return e;
+            },
+          ),
     ]);
     const conv = convEarly;
 
@@ -1066,32 +1141,29 @@ export const WhatsAppService = {
     }
 
     // Mirror patient WhatsApp text into care chat (portal + apps).
-    // Defer to human only after they chose "Message doctor" (postBookingCare).
-    // Otherwise, with an upcoming booking, fall through so the bot can offer
-    // Reschedule / Cancel / New booking / Message doctor.
+    // Menu digits / BOOK / list taps skip this entirely (zero care-chat DB).
     try {
-      const { ingestWhatsAppPatientReply } = await import(
-        "../chat.whatsappInbound.js"
-      );
-      const care = await ingestWhatsAppPatientReply({
-        practiceId: practice.id,
-        patientPhone,
-        text,
-        conversationAlreadyHandedOff:
-          conv.status === "handed_off" || state.handedOff === true,
-        postBookingCare: state.postBookingCare === true,
-        preferredProviderId: state.careProviderId,
-        preferredBookingId: state.careBookingId,
-      });
-      if (care.shouldDeferToHuman) {
-        if (!state.handedOff) {
-          state.handedOff = true;
-          await prisma.whatsAppConversation.update({
-            where: { id: conv.id },
-            data: { status: "handed_off", state },
-          });
+      if (!looksLikeBotCommand(text)) {
+        const care = await ingestWhatsAppPatientReply({
+          practiceId: practice.id,
+          patientPhone,
+          text,
+          conversationAlreadyHandedOff:
+            conv.status === "handed_off" || state.handedOff === true,
+          postBookingCare: state.postBookingCare === true,
+          preferredProviderId: state.careProviderId,
+          preferredBookingId: state.careBookingId,
+        });
+        if (care.shouldDeferToHuman) {
+          if (!state.handedOff) {
+            state.handedOff = true;
+            await prisma.whatsAppConversation.update({
+              where: { id: conv.id },
+              data: { status: "handed_off", state },
+            });
+          }
+          return { reply: BotPrompts.careReplyReceived(lang) };
         }
-        return { reply: BotPrompts.careReplyReceived(lang) };
       }
     } catch (err) {
       console.warn(

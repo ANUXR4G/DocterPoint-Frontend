@@ -773,14 +773,33 @@ export const NumberPoolService = {
 
   /** Resolve practice for inbound WhatsApp `to` (phone) or Meta `phone_number_id`. */
   async findPracticeByWhatsAppTo(to: string, wabaPhoneNumberId?: string) {
-    const include = {
-      practice: {
+    const practiceInclude = {
+      locations: { where: { isActive: true }, take: 5 },
+      members: {
+        where: {
+          isActive: true,
+          role: { in: ["DOCTOR", "PRACTICE_OWNER"] as (
+            | "DOCTOR"
+            | "PRACTICE_OWNER"
+          )[] },
+        },
         include: {
-          locations: { where: { isActive: true } },
-          members: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              doctor: { select: { contactNumbers: true } },
+            },
+          },
         },
       },
-    } as const;
+    };
+    const include = {
+      practice: {
+        include: practiceInclude,
+      },
+    };
 
     const activeStatuses = [
       WhatsAppNumberStatus.LIVE,
@@ -824,10 +843,7 @@ export const NumberPoolService = {
           ],
           isActive: true,
         },
-        include: {
-          locations: { where: { isActive: true } },
-          members: true,
-        },
+        include: practiceInclude,
       });
       if (fromPractice) return fromPractice;
     }

@@ -1099,6 +1099,97 @@ async function replyStatus(
   };
 }
 
+async function startCancelFlow(opts: {
+  convId: string;
+  practice: PracticeCtx;
+  patientPhone: string;
+  state: ConversationState;
+  lang: WaLang;
+}): Promise<OrchestratorResult> {
+  const { convId, practice, patientPhone, state, lang } = opts;
+  const upcoming = await listUpcomingBookings(practice.id, patientPhone);
+  if (!upcoming.length) {
+    return {
+      reply:
+        lang === "hi"
+          ? "रद्द करने के लिए कोई सक्रिय बुकिंग नहीं मिली।"
+          : "No active booking found to cancel.",
+    };
+  }
+
+  const bookingChoices = upcoming.map((b) => ({
+    id: b.id,
+    label: postBookingVisitLines([b])[0] || bookingWhenLabel(b),
+  }));
+  await saveState(convId, {
+    ...state,
+    step: "awaiting_cancel_booking",
+    cancelBookingId: undefined,
+    bookingChoices,
+    pendingSummary: undefined,
+  });
+  return withBookingPicker(
+    BotPrompts.askCancelPick(
+      bookingChoices.map((c, i) => ({ index: i + 1, label: c.label })),
+      lang,
+    ),
+    bookingChoices.map((c) => {
+      const [title, ...rest] = c.label.split(" · ");
+      return {
+        label: (title || c.label).slice(0, 24),
+        description: rest.join(" · ").slice(0, 72) || undefined,
+      };
+    }),
+    { forceList: true },
+  );
+}
+
+async function startRescheduleFlow(opts: {
+  convId: string;
+  practice: PracticeCtx;
+  patientPhone: string;
+  state: ConversationState;
+  lang: WaLang;
+}): Promise<OrchestratorResult> {
+  const { convId, practice, patientPhone, state, lang } = opts;
+  const upcoming = await listUpcomingBookings(practice.id, patientPhone);
+  if (!upcoming.length) {
+    return { reply: "No active bookings to reschedule." };
+  }
+
+  if (upcoming.length === 1) {
+    const b = upcoming[0]!;
+    await saveState(convId, {
+      ...state,
+      step: "awaiting_date",
+      rescheduleBookingId: b.id,
+      providerId: b.providerId,
+      locationId: b.locationId,
+      mode: b.mode,
+    });
+    return withDateButtons(
+      `Rescheduling ${bookingWhenLabel(b)}.\n${BotPrompts.askDate(lang)}`,
+    );
+  }
+
+  const bookingChoices = upcoming.map((b) => ({
+    id: b.id,
+    label: postBookingVisitLines([b])[0] || bookingWhenLabel(b),
+  }));
+  await saveState(convId, {
+    ...state,
+    step: "awaiting_reschedule_booking",
+    bookingChoices,
+  });
+  return withBookingPicker(
+    BotPrompts.askReschedulePick(
+      bookingChoices.map((c, i) => ({ index: i + 1, label: c.label })),
+      lang,
+    ),
+    bookingChoices,
+  );
+}
+
 async function dispatchMenuIntent(opts: {
   intent: BotIntent;
   convId: string;
@@ -1173,9 +1264,21 @@ async function dispatchMenuIntent(opts: {
       return null;
     }
     case "cancel":
+      return startCancelFlow({
+        convId,
+        practice,
+        patientPhone,
+        state,
+        lang,
+      });
     case "reschedule":
-      // Handled below with booking lookups (same as NLU path)
-      return null;
+      return startRescheduleFlow({
+        convId,
+        practice,
+        patientPhone,
+        state,
+        lang,
+      });
     default:
       return null;
   }
@@ -2648,26 +2751,34 @@ async function runOrchestratorCore(input: {
   // Digit shortcuts (1–9) only when idle so doctor/slot picks still use digits.
   // Interactive menu:* / post:* list picks always apply (same as typing BOOK).
   const isIdleMenu = !state.step || state.step === "idle";
-  const upcomingIdleList = isIdleMenu
-    ? await listUpcomingBookings(practice.id, patientPhone)
-    : [];
-  const upcomingIdle = upcomingIdleList[0] ?? null;
   const listMenuPick = /^(?:menu|post):/i.test(text.trim())
     ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
     : null;
   // After full main menu, typed 1–9 mean Book/Doctors/… — not Reschedule/Cancel.
   // After post-booking menu (or default with an upcoming visit), 1–5 mean post actions.
   const preferMainDigits = state.lastMenuKind === "main";
-  const numberShortcut =
-    listMenuPick ??
-    (isIdleMenu
-      ? preferMainDigits
-        ? menuNumberShortcut(text) ??
-          (upcomingIdle ? postBookingNumberShortcut(text) : null)
-        : upcomingIdle
-          ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
-          : menuNumberShortcut(text)
-      : null);
+  let upcomingIdleList: Awaited<ReturnType<typeof listUpcomingBookings>> | null =
+    null;
+  const loadUpcomingIdle = async () => {
+    if (upcomingIdleList) return upcomingIdleList;
+    upcomingIdleList = isIdleMenu
+      ? await listUpcomingBookings(practice.id, patientPhone)
+      : [];
+    return upcomingIdleList;
+  };
+
+  let numberShortcut: ReturnType<typeof menuNumberShortcut> | null =
+    listMenuPick;
+  if (!numberShortcut && isIdleMenu) {
+    if (preferMainDigits) {
+      numberShortcut = menuNumberShortcut(text);
+    } else {
+      const upcomingForDigits = await loadUpcomingIdle();
+      numberShortcut = upcomingForDigits.length
+        ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
+        : menuNumberShortcut(text);
+    }
+  }
   if (numberShortcut === "language") {
     state = { ...state, step: "awaiting_language" };
     await saveState(convId, state);
@@ -2693,11 +2804,13 @@ async function runOrchestratorCore(input: {
       postBookingCare: false,
       failedTurns: 0,
     };
-    await saveState(convId, state);
-    await prisma.whatsAppConversation.update({
-      where: { id: convId },
-      data: { status: "handed_off" },
-    });
+    await Promise.all([
+      saveState(convId, state),
+      prisma.whatsAppConversation.update({
+        where: { id: convId },
+        data: { status: "handed_off" },
+      }),
+    ]);
     return { reply: escalateReply(lang) };
   }
 
@@ -2709,13 +2822,13 @@ async function runOrchestratorCore(input: {
       postBookingCare: false,
       handedOff: false,
     };
-    await saveState(convId, state);
-    if (state.handedOff === false) {
-      await prisma.whatsAppConversation.update({
+    await Promise.all([
+      saveState(convId, state),
+      prisma.whatsAppConversation.update({
         where: { id: convId },
         data: { status: "bot_active", state },
-      });
-    }
+      }),
+    ]);
     const dispatched = await dispatchMenuIntent({
       intent: menuIntent,
       convId,
@@ -2731,29 +2844,33 @@ async function runOrchestratorCore(input: {
   // (unless they already chose "Message doctor" and are chatting).
   if (
     isIdleMenu &&
-    upcomingIdle &&
     !state.postBookingCare &&
     isLooseIdleMessage(text) &&
     !menuIntent
   ) {
-    state = {
-      ...idleState(state),
-      failedTurns: 0,
-      postBookingCare: false,
-      handedOff: false,
-    };
-    await saveState(convId, state);
-    await prisma.whatsAppConversation.update({
-      where: { id: convId },
-      data: { status: "bot_active", state },
-    });
-    return withPostBookingMenu(
-      BotPrompts.postBookingAsk(
-        practice.name,
-        postBookingVisitLines(upcomingIdleList),
-        lang,
-      ),
-    );
+    const upcomingForLoose = await loadUpcomingIdle();
+    if (upcomingForLoose.length) {
+      state = {
+        ...idleState(state),
+        failedTurns: 0,
+        postBookingCare: false,
+        handedOff: false,
+      };
+      await Promise.all([
+        saveState(convId, state),
+        prisma.whatsAppConversation.update({
+          where: { id: convId },
+          data: { status: "bot_active", state },
+        }),
+      ]);
+      return withPostBookingMenu(
+        BotPrompts.postBookingAsk(
+          practice.name,
+          postBookingVisitLines(upcomingForLoose),
+          lang,
+        ),
+      );
+    }
   }
 
   // Fast path: registration gender/name/email/family/confirm — no NLU/LLM
@@ -3587,80 +3704,23 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "cancel") {
-    const upcoming = await listUpcomingBookings(practice.id, patientPhone);
-    if (!upcoming.length) {
-      return {
-        reply:
-          lang === "hi"
-            ? "रद्द करने के लिए कोई सक्रिय बुकिंग नहीं मिली।"
-            : "No active booking found to cancel.",
-      };
-    }
-
-    const bookingChoices = upcoming.map((b) => ({
-      id: b.id,
-      label: postBookingVisitLines([b])[0] || bookingWhenLabel(b),
-    }));
-    await saveState(convId, {
-      ...state,
-      step: "awaiting_cancel_booking",
-      cancelBookingId: undefined,
-      bookingChoices,
-      pendingSummary: undefined,
+    return startCancelFlow({
+      convId,
+      practice,
+      patientPhone,
+      state,
+      lang,
     });
-    return withBookingPicker(
-      BotPrompts.askCancelPick(
-        bookingChoices.map((c, i) => ({ index: i + 1, label: c.label })),
-        lang,
-      ),
-      bookingChoices.map((c) => {
-        const [title, ...rest] = c.label.split(" · ");
-        return {
-          label: (title || c.label).slice(0, 24),
-          description: rest.join(" · ").slice(0, 72) || undefined,
-        };
-      }),
-      { forceList: true },
-    );
   }
 
   if (nlu.intent === "reschedule") {
-    const upcoming = await listUpcomingBookings(practice.id, patientPhone);
-    if (!upcoming.length) {
-      return { reply: "No active bookings to reschedule." };
-    }
-
-    if (upcoming.length === 1) {
-      const b = upcoming[0]!;
-      await saveState(convId, {
-        ...state,
-        step: "awaiting_date",
-        rescheduleBookingId: b.id,
-        providerId: b.providerId,
-        locationId: b.locationId,
-        mode: b.mode,
-      });
-      return withDateButtons(
-        `Rescheduling ${bookingWhenLabel(b)}.\n${BotPrompts.askDate(lang)}`,
-      );
-    }
-
-    const bookingChoices = upcoming.map((b) => ({
-      id: b.id,
-      label: postBookingVisitLines([b])[0] || bookingWhenLabel(b),
-    }));
-    await saveState(convId, {
-      ...state,
-      step: "awaiting_reschedule_booking",
-      bookingChoices,
+    return startRescheduleFlow({
+      convId,
+      practice,
+      patientPhone,
+      state,
+      lang,
     });
-    return withBookingPicker(
-      BotPrompts.askReschedulePick(
-        bookingChoices.map((c, i) => ({ index: i + 1, label: c.label })),
-        lang,
-      ),
-      bookingChoices,
-    );
   }
 
   if (nlu.intent === "help") {
