@@ -43,6 +43,7 @@ export default function PracticeNotificationsPanel() {
   const [sentCount, setSentCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [dismissingId, setDismissingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!practiceId) return
@@ -92,6 +93,26 @@ export default function PracticeNotificationsPanel() {
     () => void load(),
   )
 
+  async function dismiss(id: string) {
+    if (!practiceId || dismissingId) return
+    setDismissingId(id)
+    const prev = items
+    setItems((cur) => cur.filter((n) => n.id !== id))
+    setTotal((t) => Math.max(0, t - 1))
+    const res = await proctoService.dismissPracticeNotification(
+      practiceId,
+      id,
+    )
+    setDismissingId(null)
+    if (res.status !== "successful") {
+      setItems(prev)
+      setTotal(prev.length)
+      setError(res.message || "Could not clear notification.")
+      return
+    }
+    setError("")
+  }
+
   if (!ready) {
     return (
       <p className="text-sm text-neutral-500">Loading practice…</p>
@@ -127,7 +148,7 @@ export default function PracticeNotificationsPanel() {
         </div>
         <div className="ml-auto flex flex-wrap gap-2 text-xs font-semibold">
           <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-100">
-            {total} total
+            {total} open
           </span>
           <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100">
             {sentCount} sent
@@ -142,11 +163,11 @@ export default function PracticeNotificationsPanel() {
       </div>
 
       <p className="text-sm text-neutral-500 dark:text-neutral-400">
-        All WhatsApp appointment alerts for{" "}
+        Open alerts for{" "}
         <span className="font-semibold text-neutral-800 dark:text-neutral-200">
           {practiceName || "your practice"}
-        </span>{" "}
-        — patient messages and clinic alerts.
+        </span>
+        . Tap a row to clear it from the list.
       </p>
 
       {error ? (
@@ -159,15 +180,26 @@ export default function PracticeNotificationsPanel() {
         <p className="text-sm text-neutral-500">Loading notifications…</p>
       ) : items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700">
-          No notifications yet. They appear when bookings are confirmed,
-          cancelled, reminded, or finished.
+          No open notifications. New booking alerts will appear here.
         </p>
       ) : (
         <ul className="space-y-2">
           {items.map((n) => (
             <li
               key={n.id}
-              className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900/40"
+              role="button"
+              tabIndex={0}
+              aria-disabled={dismissingId === n.id}
+              onClick={() => void dismiss(n.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  void dismiss(n.id)
+                }
+              }}
+              className={`cursor-pointer rounded-2xl border border-neutral-200 bg-white p-4 transition hover:border-[var(--theme-primary)] hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900/40 dark:hover:bg-neutral-900 ${
+                dismissingId === n.id ? "opacity-60" : ""
+              }`}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -192,6 +224,9 @@ export default function PracticeNotificationsPanel() {
                       via {n.channel}
                       {n.to ? ` · ${n.to}` : ""}
                     </span>
+                    <span className="font-semibold text-neutral-400">
+                      Tap to clear
+                    </span>
                   </div>
                 </div>
                 <div className="text-right text-xs text-neutral-500">
@@ -206,6 +241,7 @@ export default function PracticeNotificationsPanel() {
                   {n.booking?.id ? (
                     <Link
                       href={`/doctor/queue/${n.booking.id}`}
+                      onClick={(e) => e.stopPropagation()}
                       className="mt-2 inline-block font-semibold text-[var(--theme-primary)] hover:underline"
                     >
                       Open visit →
