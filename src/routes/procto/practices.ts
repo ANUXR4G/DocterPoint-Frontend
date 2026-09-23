@@ -337,6 +337,34 @@ router.get(
   },
 );
 
+router.get(
+  "/:practiceId/notifications",
+  requireAuth("practice:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { NotificationService } = await import(
+        "../../services/procto/notification.service.js"
+      );
+      const status =
+        typeof req.query.status === "string" ? req.query.status : undefined;
+      const take = req.query.take ? Number(req.query.take) : undefined;
+      const skip = req.query.skip ? Number(req.query.skip) : undefined;
+      const data = await NotificationService.listForPractice(
+        param(req.params.practiceId),
+        req.sessionUser!.id,
+        { status, take, skip },
+      );
+      return ResponseHandler.fetchSuccessful(
+        res,
+        "notifications fetched.",
+        data,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.patch(
   "/:practiceId/conversations/:conversationId",
   requireAuth("practice:write"),
