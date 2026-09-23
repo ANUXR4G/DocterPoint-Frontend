@@ -44,10 +44,10 @@ export function guardOutbound(reply: string, lang?: WaLang): string {
     lang,
     "I can only help with *appointments* (book, reschedule, cancel) and clinic info like fees or timings.\n" +
       "For medical questions, please speak with the doctor during your visit.\n" +
-      "Reply *BOOK*, *STATUS*, *REGISTER*, or *DOCTORS* to continue.",
+      "Reply *Menu* anytime, or *Book* / *Status* / *Doctors*.",
     "मैं सिर्फ *अपॉइंटमेंट* (बुक, रीशेड्यूल, रद्द) और क्लिनिक जानकारी (फीस, समय) में मदद कर सकता/सकती हूँ।\n" +
       "मेडिकल सवालों के लिए अपनी विज़िट पर डॉक्टर से बात करें।\n" +
-      "जारी रखने के लिए *BOOK*, *STATUS*, *REGISTER*, या *DOCTORS* लिखें।",
+      "कभी भी *Menu*, या *Book* / *Status* / *Doctors* लिखें।",
   );
 }
 

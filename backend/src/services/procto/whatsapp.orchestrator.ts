@@ -7,7 +7,7 @@ import {
   type PracticeMember,
 } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
-import { settings } from "../../config/index.js";
+import { publicWebOrigin } from "../../config/index.js";
 import { BookingService } from "./booking.service.js";
 import { PatientService } from "../patient.js";
 import { BotPrompts } from "./whatsapp.templates.js";
@@ -78,6 +78,7 @@ export type ConversationStep =
   | "awaiting_register_family_opt"
   | "awaiting_register_family_phone"
   | "awaiting_register_confirm"
+  | "awaiting_attach_offer"
   | "awaiting_report";
 
 export type ConversationState = {
@@ -142,6 +143,10 @@ export type ConversationState = {
   /** Preferred reply language (set on first contact) */
   preferredLanguage?: "en" | "hi";
   /**
+   * Last menu shown — typed 1–9 must match (main: Book… vs post: Reschedule…).
+   */
+  lastMenuKind?: "main" | "post";
+  /**
    * When set, an idle-reminder was already sent while waiting for a reply.
    * Cleared on patient activity or when the chat is closed.
    */
@@ -188,9 +193,13 @@ function withDoctorList(
     specialty?: string;
   }>,
 ): OrchestratorResult {
-  if (providers.length < 2) return { reply };
+  // Always send full text first — clinic URL must not be truncated in list body
+  if (providers.length < 2) {
+    return { reply, textBeforeMenu: /https?:\/\//i.test(reply) };
+  }
   return {
     reply,
+    textBeforeMenu: true,
     doctorList: providers.map((p) => ({
       id: p.id,
       name: p.name,
@@ -351,6 +360,7 @@ function withMainMenu(reply: string): OrchestratorResult {
 function withPostBookingMenu(reply: string): OrchestratorResult {
   return {
     reply,
+    textBeforeMenu: true,
     menuList: [
       {
         id: "post:reschedule",
@@ -755,6 +765,7 @@ function keepPrefs(state: ConversationState): Pick<
   | "careProviderId"
   | "bookPatientId"
   | "bookPatientName"
+  | "lastMenuKind"
 > {
   return {
     preferredLanguage: state.preferredLanguage,
@@ -765,6 +776,7 @@ function keepPrefs(state: ConversationState): Pick<
     lastBookingId: state.lastBookingId,
     bookPatientId: state.bookPatientId,
     bookPatientName: state.bookPatientName,
+    lastMenuKind: state.lastMenuKind,
     // Keep selected doctor only while in Message-doctor care mode.
     ...(state.postBookingCare
       ? {
@@ -893,13 +905,25 @@ async function notifyDoctorOfCancel(opts: {
   );
 }
 
-function parseCancelReason(text: string): string | null {
+function parseCancelReason(text: string): {
+  kind: "reason" | "skip" | "abort";
+  reason: string | null;
+} {
   const t = text.trim();
-  if (!t) return null;
-  if (/^(skip|none|no reason|n\/a|-|—|नहीं|कोई कारण नहीं)$/i.test(t)) {
-    return null;
+  if (!t) return { kind: "skip", reason: null };
+  // Keep the booking — do not cancel
+  if (
+    /^(no|n|nope|keep|stop|nevermind|never mind|abort|back|नहीं|ना|रखो|रद्द मत करो)$/i.test(
+      t,
+    )
+  ) {
+    return { kind: "abort", reason: null };
   }
-  return t.slice(0, 280);
+  // Cancel without sharing a reason
+  if (/^(skip|none|no reason|n\/a|-|—|कोई कारण नहीं)$/i.test(t)) {
+    return { kind: "skip", reason: null };
+  }
+  return { kind: "reason", reason: t.slice(0, 280) };
 }
 
 async function finishWhatsAppCancel(opts: {
@@ -930,8 +954,8 @@ async function finishWhatsAppCancel(opts: {
     return {
       reply:
         lang === "hi"
-          ? "यह बुकिंग रद्द नहीं हो सकी। *STATUS* से जाँचें या क्लिनिक से संपर्क करें।"
-          : "Couldn’t cancel that booking. Reply *STATUS* to check, or contact the clinic.",
+          ? "यह बुकिंग रद्द नहीं हो सकी। *Menu* → *Status* से जाँचें या क्लिनिक से संपर्क करें।"
+          : "Couldn’t cancel that booking. Tap *Menu* → *Status* to check, or contact the clinic.",
     };
   }
 
@@ -948,7 +972,9 @@ async function finishWhatsAppCancel(opts: {
     patientPhone,
     lang,
   });
-  const ack = BotPrompts.canceledWithReason(reason, lang);
+  const ack = BotPrompts.canceledWithReason(reason, lang, {
+    hasMoreVisits: Boolean(remaining),
+  });
   if (remaining) {
     return {
       ...remaining,
@@ -1016,7 +1042,8 @@ async function dispatchMenuIntent(opts: {
       return startRegisterFlow(convId, patientPhone, state);
     case "doctors": {
       const providers = await loadProviders(practice.id);
-      return withDoctorList(
+      // Browse-only: full text + clinic URL + main menu — no dead "pick doctor" taps
+      return withMainMenu(
         BotPrompts.doctorsList(
           practice.name,
           providers.map((p, i) => ({
@@ -1027,7 +1054,6 @@ async function dispatchMenuIntent(opts: {
           practiceClinicUrl(practice.slug),
           lang,
         ),
-        providers,
       );
     }
     case "help": {
@@ -1166,12 +1192,9 @@ async function loadProviders(practiceId: string) {
 }
 
 function practiceClinicUrl(slug: string): string | null {
-  const origin = settings.frontendOrigins
-    .split(",")[0]
-    ?.trim()
-    .replace(/\/$/, "");
-  if (!origin) return null;
-  return `${origin}/practices/${slug}`;
+  const origin = publicWebOrigin();
+  if (!origin || !slug?.trim()) return null;
+  return `${origin}/practices/${slug.trim()}`;
 }
 
 function pickProvider(
@@ -1857,10 +1880,12 @@ async function confirmBooking(
     await saveState(convId, {
       ...idleState(state),
       lastBookingId: verified.id,
+      step: "awaiting_attach_offer",
     });
     const detail = bookingWhenLabel(booking);
-    return withPostBookingMenu(
-      BotPrompts.bookingConfirmed(practice.name, detail, lang),
+    return withYesNo(
+      `${BotPrompts.bookingConfirmed(practice.name, detail, lang)}\n\n` +
+        BotPrompts.askAttachDocument(lang),
     );
   } catch (err) {
     // Keep awaiting_confirm so a second Yes can retry without restarting the flow.
@@ -2240,6 +2265,17 @@ export async function runOrchestrator(input: {
     where: { id: input.convId },
   });
   const st = (latest?.state as ConversationState) ?? input.state ?? {};
+
+  // Remember which menu was shown so typed 1–9 match (Book vs Reschedule)
+  const rows = result.menuList ?? [];
+  if (rows.some((r) => r.id.startsWith("menu:"))) {
+    const next = { ...st, lastMenuKind: "main" as const };
+    await saveState(input.convId, next);
+  } else if (rows.some((r) => r.id.startsWith("post:"))) {
+    const next = { ...st, lastMenuKind: "post" as const };
+    await saveState(input.convId, next);
+  }
+
   return {
     reply: guardOutbound(result.reply, resolveLang(st.preferredLanguage)),
     doctorList: result.doctorList,
@@ -2249,6 +2285,7 @@ export async function runOrchestrator(input: {
     bookingList: result.bookingList,
     patientList: result.patientList,
     menuList: result.menuList,
+    textBeforeMenu: result.textBeforeMenu,
   };
 }
 
@@ -2466,6 +2503,70 @@ async function runOrchestratorCore(input: {
     state = { ...state, idleReminderSentAt: undefined };
   }
 
+  // After booking — Yes/No attach-document offer (before menu shortcuts)
+  if (state.step === "awaiting_attach_offer") {
+    if (/^(yes|y|confirm|ok|हाँ|हां|जी)$/i.test(text.trim())) {
+      await saveState(convId, {
+        ...keepPrefs(state),
+        step: "awaiting_report",
+        lastBookingId: state.lastBookingId,
+        failedTurns: 0,
+        postBookingCare: false,
+        handedOff: false,
+      });
+      return { reply: BotPrompts.askAttachDocumentNow(lang) };
+    }
+    if (/^(no|n|nope|skip|later|बाद में|नहीं)$/i.test(text.trim())) {
+      await saveState(convId, {
+        ...idleState(state),
+        lastBookingId: state.lastBookingId,
+      });
+      const withBooking = await replyWithPostBookingMenu({
+        practice,
+        patientPhone,
+        lang,
+      });
+      if (withBooking) {
+        return {
+          ...withBooking,
+          reply: `${BotPrompts.attachDocumentSkipped(lang)}\n\n${withBooking.reply}`,
+        };
+      }
+      return withMainMenu(BotPrompts.attachDocumentSkipped(lang));
+    }
+    return withYesNo(BotPrompts.askAttachDocument(lang));
+  }
+
+  // Waiting for a report file — allow skip; otherwise remind (don't invent other intents)
+  if (state.step === "awaiting_report") {
+    if (/^(no|n|nope|skip|cancel|stop|later|बाद में|नहीं|रद्द)$/i.test(text.trim())) {
+      await saveState(convId, {
+        ...idleState(state),
+        lastBookingId: state.lastBookingId,
+      });
+      const withBooking = await replyWithPostBookingMenu({
+        practice,
+        patientPhone,
+        lang,
+      });
+      if (withBooking) {
+        return {
+          ...withBooking,
+          reply: `${BotPrompts.attachDocumentSkipped(lang)}\n\n${withBooking.reply}`,
+        };
+      }
+      return withMainMenu(BotPrompts.attachDocumentSkipped(lang));
+    }
+    // Typed menu escapes still work via list taps below; free text → re-ask for file
+    if (
+      !/^(?:menu|post):/i.test(text.trim()) &&
+      !exactMenuIntent(text) &&
+      !wantsFullMainMenu(text)
+    ) {
+      return { reply: BotPrompts.askAttachDocumentNow(lang) };
+    }
+  }
+
   // Global menu commands (typed or WhatsApp button) — always win over mid-flow steps
   // Digit shortcuts (1–9) only when idle so doctor/slot picks still use digits.
   // Interactive menu:* / post:* list picks always apply (same as typing BOOK).
@@ -2477,12 +2578,18 @@ async function runOrchestratorCore(input: {
   const listMenuPick = /^(?:menu|post):/i.test(text.trim())
     ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
     : null;
+  // After full main menu, typed 1–9 mean Book/Doctors/… — not Reschedule/Cancel.
+  // After post-booking menu (or default with an upcoming visit), 1–4 mean post actions.
+  const preferMainDigits = state.lastMenuKind === "main";
   const numberShortcut =
     listMenuPick ??
     (isIdleMenu
-      ? upcomingIdle
-        ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
-        : menuNumberShortcut(text)
+      ? preferMainDigits
+        ? menuNumberShortcut(text) ??
+          (upcomingIdle ? postBookingNumberShortcut(text) : null)
+        : upcomingIdle
+          ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
+          : menuNumberShortcut(text)
       : null);
   if (numberShortcut === "language") {
     state = { ...state, step: "awaiting_language" };
@@ -2949,7 +3056,7 @@ async function runOrchestratorCore(input: {
   // Doctors list (available anytime — does not clear in-progress booking)
   if (nlu.intent === "doctors") {
     const providers = await loadProviders(practice.id);
-    return withDoctorList(
+    return withMainMenu(
       BotPrompts.doctorsList(
         practice.name,
         providers.map((p, i) => ({
@@ -2960,7 +3067,6 @@ async function runOrchestratorCore(input: {
         practiceClinicUrl(practice.slug),
         lang,
       ),
-      providers,
     );
   }
 
@@ -2984,18 +3090,18 @@ async function runOrchestratorCore(input: {
       await saveState(convId, idleState(state));
       return { reply: BotPrompts.noBookingSelected(lang) };
     }
-    if (/^(stop|nevermind|never mind|abort|back)$/i.test(text.trim())) {
+    const parsed = parseCancelReason(text);
+    if (parsed.kind === "abort") {
       await saveState(convId, idleState(state));
       return withMainMenu(BotPrompts.keptBooking(lang));
     }
-    const reason = parseCancelReason(text);
     return finishWhatsAppCancel({
       convId,
       practice,
       patientPhone,
       state,
       bookingId,
-      reason,
+      reason: parsed.reason,
       lang,
     });
   }

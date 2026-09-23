@@ -5,7 +5,7 @@ import {
 import { prisma } from "../../db/prisma.js";
 import { NumberPoolService } from "./numberPool.service.js";
 import { AppError } from "../../core/response.js";
-import { settings } from "../../config/index.js";
+import { settings, publicWebOrigin } from "../../config/index.js";
 import { PracticeService } from "./practice.service.js";
 import { razorpay } from "../../lib/razorpay.js";
 import {
@@ -889,10 +889,8 @@ export const BillingService = {
     }
     const phone = practice.whatsappNumber.phoneNumber;
     const link = this.waMeLink(phone);
-    const origin = settings.frontendOrigins.split(",")[0]?.trim().replace(/\/$/, "");
-    const profileUrl = origin
-      ? `${origin}/practices/${practice.slug}`
-      : `/practices/${practice.slug}`;
+    const origin = publicWebOrigin();
+    const profileUrl = `${origin}/practices/${practice.slug}`;
     const message =
       `Your GlucoGuide WhatsApp line is live.\n` +
       `Patient link: ${link}\n` +

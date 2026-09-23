@@ -234,20 +234,22 @@ export const BotPrompts = {
   visitDocHowTo(lang?: WaLang): string {
     return L(
       lang,
-      "To share a report with your doctor:\n" +
-        "1. Book a visit (*BOOK*) if you don’t have one yet\n" +
-        "2. *Send a photo or PDF now* in this chat (optional caption = file name)\n" +
-        "3. The clinic sees it on your visit in GlucoGuide\n\n" +
+      "To send a report to your doctor:\n" +
+        "1. You need an *open booking* (*Menu* → *Book* if you don’t have one)\n" +
+        "2. Send a *photo* or *PDF* in this chat now\n" +
+        "3. Your doctor sees it on the visit in GlucoGuide (web + app)\n\n" +
         "Waiting for your file…\n" +
-        "Tip: for signup ID scan, reply *REGISTER* first, then send Aadhaar/PAN.\n" +
+        "Or reply *No* / *SKIP* to cancel.\n" +
+        "Tip: for signup ID scan, use *Menu* → *Register*, then send Aadhaar/PAN.\n" +
         "Reply *MY DOCS* to list files already attached.",
-      "डॉक्टर से रिपोर्ट साझा करने के लिए:\n" +
-        "1. अगर अपॉइंटमेंट नहीं है तो *BOOK* करें\n" +
-        "2. *अभी फ़ोटो या PDF भेजें* (कैप्शन = फ़ाइल नाम)\n" +
-        "3. क्लिनिक इसे GlucoGuide विज़िट में देखेगा\n\n" +
+      "डॉक्टर को रिपोर्ट भेजने के लिए:\n" +
+        "1. एक *खुली बुकिंग* चाहिए (नहीं है तो *Menu* → *Book*)\n" +
+        "2. *अभी फ़ोटो या PDF* भेजें\n" +
+        "3. डॉक्टर इसे GlucoGuide विज़िट (वेब + ऐप) में देखेंगे\n\n" +
         "आपकी फ़ाइल का इंतज़ार है…\n" +
-        "रजिस्टर ID स्कैन के लिए पहले *REGISTER*, फिर आधार/पैन भेजें।\n" +
-        "जुड़ी फ़ाइलें देखने के लिए *MY DOCS* लिखें।",
+        "रद्द करने के लिए *No* / *SKIP* लिखें।\n" +
+        "रजिस्टर ID स्कैन: *Menu* → *Register*, फिर आधार/पैन भेजें।\n" +
+        "जुड़ी फ़ाइलें: *MY DOCS*।",
     );
   },
 
@@ -255,19 +257,19 @@ export const BotPrompts = {
     return L(
       lang,
       "I don’t see an open appointment to attach this to.\n" +
-        "Reply *BOOK* to schedule, then send the file again.\n" +
-        "Or reply *REGISTER* and send an ID photo/PDF to create your account.",
+        "Tap *Menu* → *Book* (or reply *Book*), then send the file again.\n" +
+        "Or tap *Menu* → *Register* and send an ID photo/PDF.",
       "इस फ़ाइल को जोड़ने के लिए कोई खुली अपॉइंटमेंट नहीं मिली।\n" +
-        "पहले *BOOK* करें, फिर फ़ाइल फिर भेजें।\n" +
-        "या अकाउंट बनाने के लिए *REGISTER* लिखकर ID फ़ोटो/PDF भेजें।",
+        "*Menu* → *Book* (या *Book* लिखें), फिर फ़ाइल भेजें।\n" +
+        "या *Menu* → *Register* करके ID फ़ोटो/PDF भेजें।",
     );
   },
 
   visitDocBookingClosed(lang?: WaLang): string {
     return L(
       lang,
-      "That visit is already closed, so I can’t add more files. Reply *BOOK* for a new appointment.",
-      "वह विज़िट बंद हो चुकी है — और फ़ाइलें नहीं जोड़ सकते। नई अपॉइंटमेंट के लिए *BOOK* लिखें।",
+      "That visit is already closed, so I can’t add more files. Tap *Menu* → *Book* for a new appointment.",
+      "वह विज़िट बंद हो चुकी है — और फ़ाइलें नहीं जोड़ सकते। नई अपॉइंटमेंट के लिए *Menu* → *Book*।",
     );
   },
 
@@ -304,14 +306,14 @@ export const BotPrompts = {
   }): string {
     return L(
       opts.lang,
-      `✅ Attached *${opts.name}* to your visit (${opts.whenLabel}).\n` +
-        `Files on this visit: ${opts.count}/${opts.max}.\n` +
-        `Your doctor can open it in the GlucoGuide visit screen.\n` +
-        `Send another photo/PDF anytime, or reply *MY DOCS* / *STATUS*.`,
-      `✅ *${opts.name}* आपकी विज़िट (${opts.whenLabel}) से जुड़ गई।\n` +
-        `इस विज़िट पर फ़ाइलें: ${opts.count}/${opts.max}।\n` +
-        `डॉक्टर इसे GlucoGuide विज़िट स्क्रीन में खोल सकते हैं।\n` +
-        `और फ़ोटो/PDF भेज सकते हैं, या *MY DOCS* / *STATUS* लिखें।`,
+      `✅ Your report has been sent to the doctor.\n` +
+        `File: *${opts.name}* · Visit: ${opts.whenLabel}\n` +
+        `They can open it in GlucoGuide (dashboard + app). Files on this visit: ${opts.count}/${opts.max}.\n` +
+        `Reply *Menu* anytime for more options.`,
+      `✅ आपकी रिपोर्ट डॉक्टर को भेज दी गई है।\n` +
+        `फ़ाइल: *${opts.name}* · विज़िट: ${opts.whenLabel}\n` +
+        `डॉक्टर इसे GlucoGuide (डैशबोर्ड + ऐप) में देख सकते हैं। इस विज़िट पर फ़ाइलें: ${opts.count}/${opts.max}।\n` +
+        `और विकल्पों के लिए कभी भी *Menu* लिखें।`,
     );
   },
 
@@ -522,10 +524,14 @@ export const BotPrompts = {
         "इस क्लिनिक में अभी कोई डॉक्टर उपलब्ध नहीं है।",
       );
     }
+    const lines = options.map((o) => {
+      const detail = o.detail?.trim() ? ` — ${o.detail.trim()}` : "";
+      return `${o.index}. ${o.name}${detail}`;
+    });
     return L(
       lang,
-      "Choose your doctor — tap *Doctors* below.",
-      "अपना डॉक्टर चुनें — नीचे *Doctors* दबाएँ।",
+      `Choose your doctor (reply with a *number*, or tap *Doctors* below):\n${lines.join("\n")}`,
+      `अपना डॉक्टर चुनें (*संख्या* लिखें, या नीचे *Doctors* दबाएँ):\n${lines.join("\n")}`,
     );
   },
 
@@ -542,13 +548,21 @@ export const BotPrompts = {
         `*${practiceName}* के लिए अभी कोई डॉक्टर सूचीबद्ध नहीं है। विकल्पों के लिए *Menu* दबाएँ।`,
       );
     }
+    const lines = options.map((o) => {
+      const detail = o.detail?.trim() ? ` — ${o.detail.trim()}` : "";
+      return `${o.index}. ${o.name}${detail}`;
+    });
     const link = clinicUrl?.trim()
-      ? L(lang, `\nClinic page: ${clinicUrl.trim()}`, `\nक्लिनिक पेज: ${clinicUrl.trim()}`)
+      ? L(
+          lang,
+          `\n\nClinic page (open on your phone):\n${clinicUrl.trim()}`,
+          `\n\nक्लिनिक पेज (फ़ोन पर खोलें):\n${clinicUrl.trim()}`,
+        )
       : "";
     return L(
       lang,
-      `Doctors at *${practiceName}* — tap *Doctors* below to view or pick one.${link}`,
-      `*${practiceName}* के डॉक्टर — देखने या चुनने के लिए नीचे *Doctors* दबाएँ।${link}`,
+      `Doctors at *${practiceName}*:\n${lines.join("\n")}${link}\n\nTo book with one of them, tap *Menu* → *Book* (or reply *1*).`,
+      `*${practiceName}* के डॉक्टर:\n${lines.join("\n")}${link}\n\nबुकिंग के लिए *Menu* → *Book* (या *1* लिखें)।`,
     );
   },
 
@@ -708,8 +722,8 @@ export const BotPrompts = {
   noBookingForMessageDoctor(lang?: WaLang): string {
     return L(
       lang,
-      "No active appointment found to message a doctor. Reply *BOOK* to schedule one.",
-      "डॉक्टर को संदेश के लिए कोई सक्रिय अपॉइंटमेंट नहीं मिली। बुक करने के लिए *BOOK* लिखें।",
+      "No active appointment found to message a doctor. Tap *Menu* → *Book* to schedule one.",
+      "डॉक्टर को संदेश के लिए कोई सक्रिय अपॉइंटमेंट नहीं मिली। बुक करने के लिए *Menu* → *Book*।",
     );
   },
 
@@ -796,10 +810,38 @@ export const BotPrompts = {
   bookingConfirmed(practiceName: string, detail: string, lang?: WaLang): string {
     return L(
       lang,
-      `✅ Booked at *${practiceName}*.\n${detail}\n\n` +
-        `Tap *Menu* below to choose an option.`,
-      `✅ *${practiceName}* पर बुकिंग हो गई।\n${detail}\n\n` +
-        `विकल्प चुनने के लिए नीचे *Menu* दबाएँ।`,
+      `✅ Booked at *${practiceName}*.\n${detail}`,
+      `✅ *${practiceName}* पर बुकिंग हो गई।\n${detail}`,
+    );
+  },
+
+  askAttachDocument(lang?: WaLang): string {
+    return L(
+      lang,
+      "Would you like to send a *report or document* to your doctor?\n\n" +
+        "Tap *Yes* or *No* below.",
+      "क्या आप डॉक्टर को कोई *रिपोर्ट या दस्तावेज़* भेजना चाहेंगे?\n\n" +
+        "नीचे *Yes* या *No* दबाएँ।",
+    );
+  },
+
+  askAttachDocumentNow(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please send a *photo* or *PDF* of your report now.\n" +
+        "It goes to your doctor’s visit in GlucoGuide (web + app).\n\n" +
+        "Or reply *No* / *SKIP* to continue without a document.",
+      "कृपया अभी अपनी रिपोर्ट की *फ़ोटो* या *PDF* भेजें।\n" +
+        "यह डॉक्टर की GlucoGuide विज़िट (वेब + ऐप) पर जाएगी।\n\n" +
+        "बिना दस्तावेज़ के आगे बढ़ने के लिए *No* / *SKIP* लिखें।",
+    );
+  },
+
+  attachDocumentSkipped(lang?: WaLang): string {
+    return L(
+      lang,
+      "Okay — no document sent. You can attach one later via *Menu* → *Report* (option 9).",
+      "ठीक है — कोई दस्तावेज़ नहीं भेजा। बाद में *Menu* → *Report* (विकल्प 9) से जोड़ सकते हैं।",
     );
   },
 
@@ -874,14 +916,6 @@ export const BotPrompts = {
     );
   },
 
-  canceled(lang?: WaLang): string {
-    return L(
-      lang,
-      "✅ Cancelled. Tap *Menu* below for options.",
-      "✅ रद्द हो गई। विकल्पों के लिए नीचे *Menu* दबाएँ।",
-    );
-  },
-
   askCancelReason(visitLabel?: string, lang?: WaLang): string {
     const visit = visitLabel?.trim()
       ? L(lang, `\nVisit: *${visitLabel.trim()}*`, `\nविज़िट: *${visitLabel.trim()}*`)
@@ -889,23 +923,56 @@ export const BotPrompts = {
     return L(
       lang,
       `Please share a short reason for cancelling.${visit}\n` +
-        `Example: feeling better / schedule conflict / booked elsewhere.\n` +
-        `Or reply *SKIP* to cancel without a reason.`,
+        `Example: feeling better / schedule conflict / booked elsewhere.\n\n` +
+        `• Reply *SKIP* to cancel without a reason\n` +
+        `• Reply *NO* to keep this booking`,
       `कृपया रद्द करने का छोटा सा कारण लिखें।${visit}\n` +
-        `उदाहरण: तकलीफ़ कम हो गई / समय नहीं मिल रहा / कहीं और बुक है।\n` +
-        `बिना कारण के रद्द करने के लिए *SKIP* लिखें।`,
+        `उदाहरण: तकलीफ़ कम हो गई / समय नहीं मिल रहा / कहीं और बुक है।\n\n` +
+        `• बिना कारण के रद्द: *SKIP*\n` +
+        `• बुकिंग रखने के लिए: *NO* / *नहीं*`,
     );
   },
 
-  canceledWithReason(reason: string | null, lang?: WaLang): string {
+  canceled(lang?: WaLang): string {
+    return L(
+      lang,
+      "✅ Cancelled.\nTap *Menu* below for the full options list (Book, Status, …).",
+      "✅ रद्द हो गई।\nपूरे विकल्पों (बुक, स्टेटस, …) के लिए नीचे *Menu* दबाएँ।",
+    );
+  },
+
+  canceledWithReason(
+    reason: string | null,
+    lang?: WaLang,
+    opts?: { hasMoreVisits?: boolean },
+  ): string {
+    const more = opts?.hasMoreVisits
+      ? L(
+          lang,
+          "\nYou still have other visits — use the menu below.",
+          "\nआपकी और विज़िट हैं — नीचे मेनू देखें।",
+        )
+      : L(
+          lang,
+          "\nTap *Menu* below for Book, Status, and more.",
+          "\nबुक, स्टेटस आदि के लिए नीचे *Menu* दबाएँ।",
+        );
     if (reason) {
       return L(
         lang,
-        `✅ Cancelled.\nReason shared with the doctor: *${reason}*\nTap *Menu* below for options.`,
-        `✅ रद्द हो गई।\nडॉक्टर को कारण भेज दिया: *${reason}*\nविकल्पों के लिए नीचे *Menu* दबाएँ।`,
+        `✅ Cancelled.\nReason shared with your doctor: *${reason}*${more}`,
+        `✅ रद्द हो गई।\nडॉक्टर को कारण भेज दिया: *${reason}*${more}`,
       );
     }
-    return this.canceled(lang);
+    return L(lang, `✅ Cancelled.${more}`, `✅ रद्द हो गई।${more}`);
+  },
+
+  keptBooking(lang?: WaLang): string {
+    return L(
+      lang,
+      "Okay — your booking is *kept*.\nTap *Menu* below if you need anything else.",
+      "ठीक है — आपकी बुकिंग *रखी गई* है।\nऔर मदद के लिए नीचे *Menu* दबाएँ।",
+    );
   },
 
   rescheduled(detail: string, lang?: WaLang): string {
@@ -924,15 +991,24 @@ export const BotPrompts = {
     );
   },
 
-  patientsOnly(lang?: WaLang): string {
+  patientsOnly(lang?: WaLang, webOrigin?: string | null): string {
+    const base = (webOrigin || "").replace(/\/$/, "");
+    const queue = base ? `${base}/doctor/queue` : "Doctor Queue (web)";
+    const practice = base
+      ? `${base}/settings?tab=practice`
+      : "Practice settings (web)";
     return L(
       lang,
       "This WhatsApp assistant is for *patients* only.\n" +
-        "Doctors and clinics manage bookings in the GlucoGuide web portal " +
-        "(/doctor/queue, /doctor/practice) — not via this chat.",
+        "Doctors and clinics manage bookings in the GlucoGuide web portal:\n" +
+        `• Queue: ${queue}\n` +
+        `• Practice: ${practice}\n` +
+        "— not via this chat.",
       "यह WhatsApp सहायक सिर्फ *मरीज़ों* के लिए है।\n" +
-        "डॉक्टर और क्लिनिक बुकिंग GlucoGuide वेब पोर्टल से मैनेज करते हैं " +
-        "(/doctor/queue, /doctor/practice) — इस चैट से नहीं।",
+        "डॉक्टर और क्लिनिक बुकिंग GlucoGuide वेब पोर्टल से मैनेज करते हैं:\n" +
+        `• कतार: ${queue}\n` +
+        `• क्लिनिक: ${practice}\n` +
+        "— इस चैट से नहीं।",
     );
   },
 
@@ -947,16 +1023,8 @@ export const BotPrompts = {
   bookingFlowCanceled(lang?: WaLang): string {
     return L(
       lang,
-      "Okay, booking canceled. Reply BOOK when you're ready.",
-      "ठीक है, बुकिंग रद्द। तैयार होने पर BOOK लिखें।",
-    );
-  },
-
-  keptBooking(lang?: WaLang): string {
-    return L(
-      lang,
-      "Kept your booking. Reply STATUS to review.",
-      "बुकिंग रख ली गई। देखने के लिए STATUS लिखें।",
+      "Okay — that booking step is cancelled.\nTap *Menu* below, then *Book* when you're ready.",
+      "ठीक है — वह बुकिंग चरण रद्द है।\nनीचे *Menu* दबाएँ, फिर तैयार होने पर *Book* चुनें।",
     );
   },
 
