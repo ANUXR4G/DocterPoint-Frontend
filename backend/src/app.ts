@@ -3,10 +3,24 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { origins } from "./config/index.js";
+import { origins, settings } from "./config/index.js";
 import { rateLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/auth.js";
 import apiRouter from "./routes/index.js";
+
+function llmHealth() {
+  return {
+    openai: Boolean(settings.openaiApiKey),
+    huggingface: Boolean(settings.hfToken),
+    deepseek: Boolean(settings.deepseekApiKey),
+    /** WhatsApp NLU tries providers in this order for free-form text. */
+    nluOrder: [
+      settings.openaiApiKey ? "OpenAI" : null,
+      settings.deepseekApiKey ? "DeepSeek" : null,
+      settings.hfToken ? "HuggingFace" : null,
+    ].filter(Boolean),
+  };
+}
 
 const app = express();
 
@@ -67,11 +81,19 @@ app.use("/api/v1/uploads", express.static(uploadRoot));
 app.use("/api/v1", apiRouter);
 
 app.get("/health", (_req, res) => {
-  res.status(200).json({ ok: true, service: "glucoguide-api" });
+  res.status(200).json({
+    ok: true,
+    service: "glucoguide-api",
+    llm: llmHealth(),
+  });
 });
 
 app.get("/api/v1/health", (_req, res) => {
-  res.status(200).json({ ok: true, service: "glucoguide-api" });
+  res.status(200).json({
+    ok: true,
+    service: "glucoguide-api",
+    llm: llmHealth(),
+  });
 });
 
 app.use(errorHandler);

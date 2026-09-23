@@ -54,6 +54,14 @@ describe("exactMenuIntent", () => {
     assert.equal(exactMenuIntent("book another"), "book");
     assert.equal(exactMenuIntent("Message your doctor"), "message_doctor");
   });
+
+  it("maps main menu / menu to help", () => {
+    assert.equal(exactMenuIntent("menu"), "help");
+    assert.equal(exactMenuIntent("Main menu"), "help");
+    assert.equal(exactMenuIntent("main menu"), "help");
+    assert.equal(exactMenuIntent("MAIN MENU"), "help");
+    assert.equal(exactMenuIntent("show menu"), "help");
+  });
 });
 
 describe("postBookingNumberShortcut", () => {

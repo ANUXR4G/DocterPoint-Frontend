@@ -7,6 +7,9 @@ echo "PORT=${PORT:-3001}"
 if [ -n "$DATABASE_URL" ]; then echo "DATABASE_URL set? yes"; else echo "DATABASE_URL set? NO"; fi
 if [ -n "$JWT_SECRET_KEY" ]; then echo "JWT_SECRET_KEY set? yes"; else echo "JWT_SECRET_KEY set? NO (using default)"; fi
 if [ -n "$HASHING_SECRET_KEY" ]; then echo "HASHING_SECRET_KEY set? yes"; else echo "HASHING_SECRET_KEY set? NO (using default)"; fi
+if [ -n "$OPENAI_API_KEY" ]; then echo "OPENAI_API_KEY set? yes"; else echo "OPENAI_API_KEY set? NO"; fi
+if [ -n "$HF_TOKEN" ]; then echo "HF_TOKEN set? yes"; else echo "HF_TOKEN set? NO"; fi
+if [ -n "$DEEPSEEK_API_KEY" ]; then echo "DEEPSEEK_API_KEY set? yes"; else echo "DEEPSEEK_API_KEY set? NO"; fi
 echo "FRONTEND_ORIGINS=${FRONTEND_ORIGINS:-<default>}"
 echo "========================================"
 
