@@ -167,6 +167,12 @@ export type OrchestratorResult = {
   patientList?: Array<{ index: number; label: string; description?: string }>;
   /** Welcome / HELP menu as a tappable list (menu:book, …). */
   menuList?: Array<{ id: string; title: string; description?: string }>;
+  /**
+   * Send full `reply` as a text message before any Menu interactive list.
+   * Required for language-switch acks — Meta list bodies truncate and can fail
+   * silently, which previously left Hindi→English with no visible reply.
+   */
+  textBeforeMenu?: boolean;
 };
 
 function withDoctorList(
@@ -561,6 +567,7 @@ function isLooseIdleMessage(text: string): boolean {
     return false;
   }
   if (/^(?:menu|post):/i.test(t)) return false;
+  if (/^lang:(en|hi)$/i.test(t)) return false;
   return true;
 }
 
@@ -2108,65 +2115,104 @@ async function runOrchestratorCore(input: {
     return { reply: optInAck(resolveLang(state.preferredLanguage)) };
   }
 
-  // Preferred language — ask once, but skip the gate for demo-speed actions
-  // (BOOK / DOCTORS / hi) so the client demo reaches doctor pick in one turn.
-  // Never interrupt mid-flow confirms (cancel/book/register) for language —
-  // a wiped preferredLanguage used to re-ask English/Hindi after tapping No.
-  if (!state.preferredLanguage || state.step === "awaiting_language") {
-    const chosen = parseLanguageChoice(text);
-    if (chosen) {
+  // Preferred language — ask once; also handle explicit lang:en / lang:hi taps
+  // even when a language is already set (change-language flow).
+  // Never interrupt mid-flow confirms (cancel/book/register) to re-ask language.
+  {
+    const chosenNow = parseLanguageChoice(text);
+    const awaitingLang = state.step === "awaiting_language";
+    const langButton = /^lang:(en|hi)$/i.test(text.trim());
+
+    if (chosenNow && (awaitingLang || langButton || !state.preferredLanguage)) {
+      const previousLang = state.preferredLanguage;
       state = {
         ...state,
-        preferredLanguage: chosen,
+        preferredLanguage: chosenNow,
         step: "idle",
         aiDisclosed: true,
+        idleReminderSentAt: undefined,
       };
       await saveState(convId, state);
+
+      // Already had a language (switch or re-pick) — short ack, no re-disclosure
+      if (previousLang) {
+        const withBooking = await replyWithPostBookingMenu({
+          practice,
+          patientPhone,
+          lang: chosenNow,
+        });
+        if (withBooking) {
+          return {
+            ...withBooking,
+            textBeforeMenu: true,
+            reply: `${languageSetAck(chosenNow)}\n\n${withBooking.reply}`,
+          };
+        }
+        const patientAfterLang = await PatientService.findByPhone(patientPhone);
+        return {
+          ...withMainMenu(
+            `${languageSetAck(chosenNow)}\n\n` +
+              BotPrompts.welcome(
+                practice.name,
+                patientAfterLang?.name,
+                chosenNow,
+              ),
+          ),
+          textBeforeMenu: true,
+        };
+      }
+
+      // First-time language pick
       const patientAfterLang = await PatientService.findByPhone(patientPhone);
-      return withMainMenu(
-        aiDisclosure(practice.name, chosen) +
-          languageSetAck(chosen) +
-          "\n\n" +
-          BotPrompts.welcome(practice.name, patientAfterLang?.name, chosen),
-      );
+      return {
+        ...withMainMenu(
+          aiDisclosure(practice.name, chosenNow) +
+            languageSetAck(chosenNow) +
+            "\n\n" +
+            BotPrompts.welcome(practice.name, patientAfterLang?.name, chosenNow),
+        ),
+        textBeforeMenu: true,
+      };
     }
 
-    const midFlow =
-      Boolean(state.step) &&
-      state.step !== "idle" &&
-      state.step !== "awaiting_language";
+    if (!state.preferredLanguage || awaitingLang) {
+      const midFlow =
+        Boolean(state.step) &&
+        state.step !== "idle" &&
+        state.step !== "awaiting_language";
 
-    if (midFlow) {
-      state = {
-        ...state,
-        preferredLanguage: "en",
-        aiDisclosed: true,
-      };
-      await saveState(convId, state);
-      // Fall through — finish cancel/confirm/register with default English
-    } else {
-      const trimmed = text.trim();
-      const actionFastPath =
-        !state.preferredLanguage &&
-        state.step !== "awaiting_language" &&
-        (Boolean(exactMenuIntent(trimmed)) ||
-          Boolean(menuNumberShortcut(trimmed)) ||
-          /^(hi|hello|hey|start|book|doctors?|status)\b/i.test(trimmed));
-
-      if (actionFastPath) {
-        const inferred: WaLang = /[\u0900-\u097F]/.test(trimmed) ? "hi" : "en";
+      if (midFlow) {
         state = {
           ...state,
-          preferredLanguage: inferred,
-          step: "idle",
+          preferredLanguage: "en",
           aiDisclosed: true,
         };
         await saveState(convId, state);
-        // Fall through — process BOOK/DOCTORS immediately for demos
+        // Fall through — finish cancel/confirm/register with default English
       } else {
-        state = { ...state, step: "awaiting_language" };
-        await saveState(convId, state);
-        return withLanguageButtons(askPreferredLanguage());
+        const trimmed = text.trim();
+        const actionFastPath =
+          !state.preferredLanguage &&
+          !awaitingLang &&
+          (Boolean(exactMenuIntent(trimmed)) ||
+            Boolean(menuNumberShortcut(trimmed)) ||
+            /^(hi|hello|hey|start|book|doctors?|status)\b/i.test(trimmed));
+
+        if (actionFastPath) {
+          const inferred: WaLang = /[\u0900-\u097F]/.test(trimmed) ? "hi" : "en";
+          state = {
+            ...state,
+            preferredLanguage: inferred,
+            step: "idle",
+            aiDisclosed: true,
+          };
+          await saveState(convId, state);
+          // Fall through — process BOOK/DOCTORS immediately for demos
+        } else {
+          state = { ...state, step: "awaiting_language" };
+          await saveState(convId, state);
+          return withLanguageButtons(askPreferredLanguage());
+        }
       }
     }
   }

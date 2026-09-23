@@ -17,6 +17,7 @@ describe("whatsapp language choice", () => {
   it("accepts english and hindi choices", () => {
     assert.equal(parseLanguageChoice("1"), "en");
     assert.equal(parseLanguageChoice("english"), "en");
+    assert.equal(parseLanguageChoice("English"), "en");
     assert.equal(parseLanguageChoice("2"), "hi");
     assert.equal(parseLanguageChoice("hindi"), "hi");
     assert.equal(parseLanguageChoice("hin"), "hi");
@@ -26,6 +27,7 @@ describe("whatsapp language choice", () => {
   it("detects language change commands", () => {
     assert.equal(wantsLanguageChange("LANGUAGE"), true);
     assert.equal(wantsLanguageChange("भाषा"), true);
+    assert.equal(wantsLanguageChange("menu:language"), true);
     assert.equal(wantsLanguageChange("hi"), false);
   });
 
