@@ -119,11 +119,12 @@ export default function VisitPage() {
     } else {
       if (Array.isArray(data.medicines)) setMedicines(data.medicines)
       if (Array.isArray(data.documents)) setDocuments(data.documents)
+      if (data.doctorRemarks !== undefined) setRemarks(data.doctorRemarks ?? "")
     }
   }, [])
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!bookingId) return
+    if (!bookingId) return null
     if (!opts?.silent) {
       setLoading(true)
       setError("")
@@ -134,10 +135,12 @@ export default function VisitPage() {
         setError(res.message || "Visit not found.")
         if (!fromShared) setLoading(false)
       }
-      return
+      return null
     }
-    applyVisitData(res.data as VisitBooking, opts)
+    const data = res.data as VisitBooking
+    applyVisitData(data, opts)
     setDetailLoaded(true)
+    return data
   }, [bookingId, fromShared, applyVisitData])
 
   useEffect(() => {
@@ -147,6 +150,15 @@ export default function VisitPage() {
           ? patchBookingFields(prev, fromShared as Record<string, unknown>)
           : fromShared,
       )
+      if (Array.isArray(fromShared.documents)) {
+        setDocuments(fromShared.documents)
+      }
+      if (Array.isArray(fromShared.medicines)) {
+        setMedicines(fromShared.medicines as Medicine[])
+      }
+      if (fromShared.doctorRemarks != null) {
+        setRemarks(String(fromShared.doctorRemarks))
+      }
       if (ready) setLoading(false)
     }
   }, [fromShared, ready])
@@ -186,11 +198,22 @@ export default function VisitPage() {
     opts?: { status?: string; successMessage?: string },
   ) {
     if (!bookingId || booking?.status === "COMPLETED") return false
+    // Ensure WhatsApp / server documents are loaded before any save so we
+    // never POST documents:[] and wipe patient attachments.
+    let docsToSave = nextDocuments
+    if (!detailLoaded || docsToSave.length === 0) {
+      const fresh = await load({ silent: true })
+      const serverDocs = Array.isArray(fresh?.documents) ? fresh!.documents! : []
+      if (docsToSave.length === 0 && serverDocs.length > 0) {
+        docsToSave = serverDocs
+        setDocuments(serverDocs)
+      }
+    }
     setError("")
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
       medicines: nextMedicines,
-      documents: nextDocuments,
+      documents: docsToSave,
       ...(opts?.status ? { status: opts.status } : {}),
     })
     if (res.status !== "successful") {
