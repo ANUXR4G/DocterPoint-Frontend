@@ -83,9 +83,12 @@ function preferInteractiveId(id?: string, title?: string): string {
     trimmedId.startsWith("date:") ||
     trimmedId.startsWith("slot:") ||
     trimmedId.startsWith("booking:") ||
+    trimmedId.startsWith("patient:") ||
     trimmedId.startsWith("mode:") ||
     trimmedId.startsWith("menu:") ||
-    trimmedId.startsWith("lang:")
+    trimmedId.startsWith("post:") ||
+    trimmedId.startsWith("lang:") ||
+    /^(yes|no)$/i.test(trimmedId)
   ) {
     return trimmedId;
   }
@@ -743,15 +746,16 @@ export const WhatsAppService = {
         }
       }
 
-      // Reschedule / message-doctor: pick which booking (list)
+      // Reschedule / cancel / message-doctor: pick which booking (list)
       if (result.bookingList && result.bookingList.length > 0) {
+        const isCancel = /cancel|रद्द/i.test(result.reply);
         const listSent = await sendWhatsAppInteractiveList(
           item.from,
           {
-            header: "Choose a booking",
+            header: isCancel ? "Cancel booking" : "Choose a booking",
             body:
               result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
-              "Which appointment?",
+              (isCancel ? "Tap a booking to cancel it" : "Which appointment?"),
             buttonLabel: "Bookings",
             sectionTitle: "Your bookings",
             rows: result.bookingList.map((b) => ({

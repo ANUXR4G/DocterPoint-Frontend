@@ -12,6 +12,7 @@ import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
 import { PatientNameHover } from "@/components/ui/procto/PatientBookingHover"
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
+import ClinicBookAppointmentModal from "@/components/ui/procto/ClinicBookAppointmentModal"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 
 /** Clinic bookings from Procto — synced with backend queue/calendar. */
@@ -27,12 +28,15 @@ export default function DoctorAppointmentsList({
     practiceName,
     bookings: rows,
     patchBooking,
+    refresh,
   } = usePracticeDashboard()
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionError, setActionError] = useState("")
+  const [bookOpen, setBookOpen] = useState(false)
 
   const showLoading = !ready && loading
+  const isClinic = portal === "clinic"
 
   async function onStatus(id: string, status: string) {
     setBusyId(id)
@@ -59,18 +63,39 @@ export default function DoctorAppointmentsList({
     <>
       <DashboardPageHeader
         compact
-        eyebrow={portal === "clinic" ? "Clinic" : "Doctor"}
+        eyebrow={isClinic ? "Clinic" : "Doctor"}
         title="Appointments"
         subtitle={
           practiceName
-            ? portal === "clinic"
-              ? `All visits for ${practiceName} — clinic can change status for any doctor’s patients.`
+            ? isClinic
+              ? `All visits for ${practiceName} — book for any doctor or update patient status.`
               : `All visits for ${practiceName} (updates live).`
-            : portal === "clinic"
-              ? "All clinic visits — change patient status for any doctor."
+            : isClinic
+              ? "Book visits for your doctors or update patient status."
               : "All visits (updates live)."
         }
+        action={
+          isClinic ? (
+            <button
+              type="button"
+              className="dashboard-btn-primary"
+              onClick={() => setBookOpen(true)}
+            >
+              Book appointment
+            </button>
+          ) : null
+        }
       />
+
+      {isClinic ? (
+        <ClinicBookAppointmentModal
+          open={bookOpen}
+          onClose={() => setBookOpen(false)}
+          onBooked={() => {
+            void refresh({ silent: true })
+          }}
+        />
+      ) : null}
 
       {actionError ? (
         <p className="mb-3 text-sm text-red-700 dark:text-red-400" role="alert">
@@ -96,6 +121,18 @@ export default function DoctorAppointmentsList({
       ) : filtered.length === 0 ? (
         <p className="mt-4 text-sm text-neutral-500">
           No appointments in this filter.
+          {isClinic ? (
+            <>
+              {" "}
+              <button
+                type="button"
+                className="font-semibold text-[var(--theme-primary)] hover:underline"
+                onClick={() => setBookOpen(true)}
+              >
+                Book one now
+              </button>
+            </>
+          ) : null}
         </p>
       ) : (
         <>
