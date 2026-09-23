@@ -966,6 +966,7 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_register_confirm",
     "awaiting_date",
     "awaiting_language",
+    "awaiting_attach_offer",
     "awaiting_report",
   ]);
   return !structured.has(step);
@@ -983,6 +984,7 @@ export function shouldUseLlmForMessage(
   if (!fromVoice) return stepUsesLlm(step);
   const confirmish = new Set([
     "awaiting_confirm",
+    "awaiting_attach_offer",
     "awaiting_cancel_confirm",
     "awaiting_cancel_booking",
     "awaiting_cancel_reason",

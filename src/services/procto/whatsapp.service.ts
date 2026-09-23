@@ -18,7 +18,7 @@ import { NumberPoolService } from "./numberPool.service.js";
 import { PracticeSubscriptionStatus } from "@prisma/client";
 import { IdScanService, type IdScanFields } from "../idScan.js";
 import { PatientService } from "../patient.js";
-import { settings } from "../../config/index.js";
+import { settings, publicWebOrigin } from "../../config/index.js";
 
 function isIdOcrConfigured(): boolean {
   return Boolean(settings.openaiApiKey || settings.hfToken);
@@ -691,13 +691,32 @@ export const WhatsAppService = {
 
       // Clinic doctor pick: prefer tappable WhatsApp list (falls back to text).
       if (result.doctorList && result.doctorList.length > 1) {
+        // Full text first so clinic page URLs are never truncated in list body
+        if (
+          result.textBeforeMenu ||
+          /https?:\/\/|Clinic page|क्लिनिक पेज/i.test(result.reply)
+        ) {
+          const textSent = await sendWhatsAppText(
+            item.from,
+            result.reply,
+            item.phoneNumberId,
+          );
+          if (!textSent.ok) {
+            console.warn(
+              `[WhatsApp] doctor list text failed: ${textSent.error}`,
+            );
+          }
+        }
         const listSent = await sendWhatsAppInteractiveList(
           item.from,
           {
             header: "Choose a doctor",
             body:
-              result.reply.split("\n").slice(0, 3).join("\n").slice(0, 400) ||
-              "Select your doctor (with specialization):",
+              result.textBeforeMenu ||
+              /https?:\/\/|Clinic page|क्लिनिक पेज/i.test(result.reply)
+                ? "Select your doctor:"
+                : result.reply.split("\n").slice(0, 3).join("\n").slice(0, 400) ||
+                  "Select your doctor (with specialization):",
             buttonLabel: "Doctors",
             sectionTitle: "Available doctors",
             rows: result.doctorList.map((d, i) => ({
@@ -719,6 +738,13 @@ export const WhatsAppService = {
           console.warn(
             `[WhatsApp] doctor list interactive failed: ${listSent.error}`,
           );
+        }
+        // If full text already sent, don't duplicate
+        if (
+          result.textBeforeMenu ||
+          /https?:\/\/|Clinic page|क्लिनिक पेज/i.test(result.reply)
+        ) {
+          continue;
         }
         // Simulated / Graph failure → send full text list so demos still work
       }
@@ -1008,7 +1034,7 @@ export const WhatsAppService = {
     const conv = convEarly;
 
     if (isStaff) {
-      return { reply: BotPrompts.patientsOnly(lang) };
+      return { reply: BotPrompts.patientsOnly(lang, publicWebOrigin()) };
     }
 
     if (

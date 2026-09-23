@@ -31,7 +31,7 @@ const hasDatabaseUrl = Boolean(process.env.DATABASE_URL?.trim());
 export const settings = {
   frontendOrigins: env(
     "FRONTEND_ORIGINS",
-    "http://localhost:3000,https://docterpoint-six.vercel.app",
+    "https://docterpoint-six.vercel.app,http://localhost:3000",
   ),
   postgresUser: hasDatabaseUrl
     ? env("POSTGRES_USER", "postgres")
@@ -129,6 +129,32 @@ export const origins = settings.frontendOrigins
 /** First configured frontend origin — used for OAuth redirects. */
 export const frontendBaseUrl =
   origins[0]?.replace(/\/$/, "") || "http://localhost:3000";
+
+/**
+ * Public web origin for patient-facing WhatsApp links.
+ * Skips localhost so phones never get a dead link.
+ * Override with PUBLIC_WEB_ORIGIN; otherwise first non-local FRONTEND_ORIGINS entry;
+ * last resort: production Vercel app (never localhost).
+ */
+export function publicWebOrigin(): string {
+  const override = (process.env.PUBLIC_WEB_ORIGIN ?? "").trim().replace(/\/$/, "");
+  if (override) return override;
+  const publicHit = origins.find((o) => {
+    try {
+      const host = new URL(o).hostname.toLowerCase();
+      return (
+        host !== "localhost" &&
+        host !== "127.0.0.1" &&
+        !host.endsWith(".local")
+      );
+    } catch {
+      return false;
+    }
+  });
+  if (publicHit) return publicHit.replace(/\/$/, "");
+  // Local FRONTEND_ORIGINS often list only localhost — never send that to WhatsApp.
+  return "https://docterpoint-six.vercel.app";
+}
 
 export const databaseUrl =
   process.env.DATABASE_URL ??

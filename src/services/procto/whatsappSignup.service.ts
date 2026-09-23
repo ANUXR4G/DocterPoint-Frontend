@@ -9,7 +9,7 @@ import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../core/response.js";
 import { settings } from "../../config/index.js";
 import { MetaWhatsAppService } from "./metaWhatsApp.service.js";
-import { frontendBaseUrl } from "../../config/index.js";
+import { publicWebOrigin } from "../../config/index.js";
 
 const ACTIVE_LINE_STATUSES: WhatsAppNumberStatus[] = [
   WhatsAppNumberStatus.LIVE,
@@ -170,7 +170,7 @@ export const WhatsAppSignupService = {
               slug: n.practice.slug,
               planName: n.practice.subscription?.plan?.name ?? null,
               subscriptionStatus: n.practice.subscription?.status ?? null,
-              connectUrl: `${frontendBaseUrl}/doctor/subscription`,
+              connectUrl: `${publicWebOrigin()}/doctor/subscription`,
             }
           : null,
       })),
@@ -231,9 +231,9 @@ export const WhatsAppSignupService = {
           phone: m.user.phone,
         })),
         /** Doctor opens this after login to run Embedded Signup. */
-        connectUrl: `${frontendBaseUrl}/doctor/subscription`,
+        connectUrl: `${publicWebOrigin()}/doctor/subscription`,
         inviteMessage: signup.embeddedSignupEnabled
-          ? `Hi — please open ${frontendBaseUrl}/doctor/subscription, subscribe if needed, then tap "Connect with Meta" to link your clinic WhatsApp number. The booking bot will reply to patients automatically.`
+          ? `Hi — please open ${publicWebOrigin()}/doctor/subscription, subscribe if needed, then tap "Connect with Meta" to link your clinic WhatsApp number. The booking bot will reply to patients automatically.`
           : `WhatsApp Embedded Signup is not configured yet (set META_APP_ID + META_EMBEDDED_SIGNUP_CONFIG_ID).`,
       })),
     };
