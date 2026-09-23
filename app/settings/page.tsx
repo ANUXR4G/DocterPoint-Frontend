@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button, Icon, IconInput, ThemeUI } from "@/components"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { PracticeManagementPanel } from "@/app/doctor/practice/page"
+import { PracticeDashboardProvider } from "@/contexts/PracticeDashboardContext"
 import { useRole } from "@/hooks/useRole"
 import { useUser } from "@/hooks/useUser"
 import { proctoService } from "@/lib/services/procto"
@@ -141,7 +142,9 @@ function SettingsPageInner() {
               Schedule, hours, doctors, and WhatsApp inbox.
             </p>
           </div>
-          <PracticeManagementPanel embedded />
+          <PracticeDashboardProvider>
+            <PracticeManagementPanel embedded />
+          </PracticeDashboardProvider>
         </div>
       ) : (
         <div
