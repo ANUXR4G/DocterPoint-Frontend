@@ -456,16 +456,31 @@ export const WhatsAppService = {
           patientPhoneEarly,
         );
         const activelyRegistering = inActiveRegisterStep(earlyState.step);
+        const awaitingReport = earlyState.step === "awaiting_report";
+        const reportCaption = /^(report|reports|document|attach|lab)/i.test(
+          caption.trim(),
+        );
 
         const preferIdOcr =
           !alreadyRegistered &&
+          !awaitingReport &&
+          !reportCaption &&
           (activelyRegistering || isIdRegistrationCaption(caption));
 
-        // Visit report path: PDF always; images when not registering / ID caption.
+        const looksLikeVisitFile = isVisitDocumentMime(media.mimeType, {
+          filename,
+          buffer: media.buffer,
+        });
+
+        // Visit report path: PDFs/images for open visits. Prefer this whenever
+        // the patient chose Report, captioned a report, or is not mid-register.
         const tryVisitDoc =
-          isVisitDocumentMime(media.mimeType) &&
+          looksLikeVisitFile &&
           !preferIdOcr &&
-          (media.mimeType.toLowerCase().includes("pdf") ||
+          (awaitingReport ||
+            reportCaption ||
+            media.mimeType.toLowerCase().includes("pdf") ||
+            /\.pdf$/i.test(filename) ||
             !activelyRegistering);
 
         if (tryVisitDoc) {
@@ -482,9 +497,23 @@ export const WhatsAppService = {
             filename: filename || undefined,
             caption: caption || undefined,
             lang: langEarly,
+            preferredBookingId: earlyState.lastBookingId,
           });
 
           if (attached.attached) {
+            if (awaitingReport) {
+              await prisma.whatsAppConversation.update({
+                where: { id: convEarly.id },
+                data: {
+                  state: {
+                    ...earlyState,
+                    step: "idle",
+                    lastBookingId: attached.bookingId || earlyState.lastBookingId,
+                    idleReminderSentAt: undefined,
+                  },
+                },
+              });
+            }
             await sendWhatsAppText(
               item.from,
               attached.reply,
@@ -493,9 +522,24 @@ export const WhatsAppService = {
             continue;
           }
 
+          // Clear awaiting_report so they aren't stuck after a failed attach
+          if (awaitingReport) {
+            await prisma.whatsAppConversation.update({
+              where: { id: convEarly.id },
+              data: {
+                state: {
+                  ...earlyState,
+                  step: "idle",
+                  idleReminderSentAt: undefined,
+                },
+              },
+            });
+          }
+
           const midBookingFlow =
             Boolean(earlyState.step) &&
             earlyState.step !== "idle" &&
+            earlyState.step !== "awaiting_report" &&
             !activelyRegistering;
           if (midBookingFlow) {
             await sendWhatsAppText(
@@ -506,21 +550,17 @@ export const WhatsAppService = {
             continue;
           }
 
-          // Registered patient with no open booking: do not fall through to ID OCR.
-          if (alreadyRegistered) {
+          // Registered / Report flow: always show visit-doc outcome (no OCR).
+          if (alreadyRegistered || awaitingReport || reportCaption) {
             await sendWhatsAppText(
               item.from,
-              attached.reply ||
-                BotPrompts.alreadyRegistered(
-                  alreadyRegistered.name || "",
-                  langEarly,
-                ),
+              attached.reply,
               item.phoneNumberId,
             );
             continue;
           }
 
-          // Idle + OCR-able ID image/PDF + no open booking → try registration ID scan.
+          // Unregistered + no open booking: fall through to ID OCR when possible.
           const canFallThroughOcr =
             isOcrableIdMime(media.mimeType, filename, media.buffer) &&
             (!earlyState.step || earlyState.step === "idle") &&
@@ -535,8 +575,37 @@ export const WhatsAppService = {
           }
         }
 
-        // Registered numbers never enter ID OCR (even with "aadhaar" caption).
+        // Registered numbers never enter ID OCR (even with "aadhaar" caption),
+        // unless they are mid-register for a family member.
         if (alreadyRegistered && !activelyRegistering) {
+          // Last chance: treat any remaining image/PDF as a visit doc attempt
+          if (looksLikeVisitFile) {
+            await sendWhatsAppText(
+              item.from,
+              BotPrompts.visitDocProcessing(langEarly),
+              item.phoneNumberId,
+            );
+            const attached = await attachWhatsAppVisitDocument({
+              practiceId: practiceEarly.id,
+              patientPhone: patientPhoneEarly,
+              buffer: media.buffer,
+              mimeType: media.mimeType,
+              filename: filename || undefined,
+              caption: caption || undefined,
+              lang: langEarly,
+              preferredBookingId: earlyState.lastBookingId,
+            });
+            await sendWhatsAppText(
+              item.from,
+              attached.reply ||
+                BotPrompts.alreadyRegistered(
+                  alreadyRegistered.name || "",
+                  langEarly,
+                ),
+              item.phoneNumberId,
+            );
+            continue;
+          }
           await sendWhatsAppText(
             item.from,
             BotPrompts.alreadyRegistered(
@@ -663,7 +732,9 @@ export const WhatsAppService = {
         // or truncates — send the full text first, then the Menu list.
         const sendTextFirst =
           Boolean(result.textBeforeMenu) ||
-          /Language set|भाषा \*|भाषा.*सेट/i.test(result.reply);
+          /Language set|भाषा \*|भाषा.*सेट|Main menu|मुख्य मेनू/i.test(
+            result.reply,
+          );
         if (sendTextFirst) {
           const textSent = await sendWhatsAppText(
             item.from,
@@ -672,7 +743,7 @@ export const WhatsAppService = {
           );
           if (!textSent.ok) {
             console.warn(
-              `[WhatsApp] language-switch text failed: ${textSent.error}`,
+              `[WhatsApp] menu text-first failed: ${textSent.error}`,
             );
           }
         }
@@ -681,15 +752,15 @@ export const WhatsAppService = {
           {
             header: isPostBooking ? "Your booking" : "Main menu",
             body: sendTextFirst
-              ? (isPostBooking
-                  ? "What would you like to do?"
-                  : "How can I help you?")
+              ? isPostBooking
+                ? "What would you like to do?"
+                : "Tap an option (1–9):"
               : result.reply.split("\n").slice(0, 6).join("\n").slice(0, 400) ||
                 (isPostBooking
                   ? "What would you like to do?"
-                  : "How can I help you?"),
+                  : "Tap an option (1–9):"),
             buttonLabel: "Menu",
-            sectionTitle: isPostBooking ? "Choose one" : "Options",
+            sectionTitle: isPostBooking ? "Choose one" : "1–9 Options",
             rows: result.menuList.map((row) => ({
               id: row.id,
               title: row.title.slice(0, 24),

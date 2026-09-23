@@ -945,7 +945,12 @@ export const BookingService = {
 
   async cancelByPatient(
     bookingId: string,
-    opts: { phone?: string; patientId?: string; reason?: string },
+    opts: {
+      phone?: string;
+      patientId?: string;
+      reason?: string;
+      skipPatientNotification?: boolean;
+    },
   ) {
     const booking = await this.getById(bookingId);
     const phoneOk =
@@ -961,8 +966,13 @@ export const BookingService = {
         BookingStatus.SCHEDULED,
         BookingStatus.REQUESTED,
         BookingStatus.ACCEPTED,
+        BookingStatus.WAITING,
       ].includes(
-        booking.status as "SCHEDULED" | "REQUESTED" | "ACCEPTED",
+        booking.status as
+          | "SCHEDULED"
+          | "REQUESTED"
+          | "ACCEPTED"
+          | "WAITING",
       )
     ) {
       throw new AppError(
@@ -984,7 +994,9 @@ export const BookingService = {
         },
       });
     }
-    return this.updateStatus(bookingId, BookingStatus.CANCELED);
+    return this.updateStatus(bookingId, BookingStatus.CANCELED, undefined, {
+      skipPatientNotification: Boolean(opts.skipPatientNotification),
+    });
   },
 
   async listForPatient(opts: { phone?: string; patientId?: string }) {

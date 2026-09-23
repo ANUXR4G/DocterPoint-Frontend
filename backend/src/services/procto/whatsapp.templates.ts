@@ -40,6 +40,35 @@ function withOptOut(body: string, audience?: string): string {
 }
 
 export const BotPrompts = {
+  /** Numbered 1–9 options — always shown with the main menu. */
+  mainMenuOptions(lang?: WaLang): string {
+    return L(
+      lang,
+      "*Main menu*\n" +
+        "1 · Book — doctor, date, slot\n" +
+        "2 · Doctors — see doctor list\n" +
+        "3 · Status — upcoming visits\n" +
+        "4 · Register — create patient profile\n" +
+        "5 · FAQ — clinic info & fees\n" +
+        "6 · Cancel — cancel a visit\n" +
+        "7 · Reschedule — change date/time\n" +
+        "8 · Language — English / हिंदी\n" +
+        "9 · Report — attach a document\n\n" +
+        "Reply with a *number* (1–9) or tap *Menu* below.",
+      "*मुख्य मेनू*\n" +
+        "1 · बुक — डॉक्टर, तारीख, स्लॉट\n" +
+        "2 · डॉक्टर — सूची देखें\n" +
+        "3 · स्टेटस — आने वाली विज़िट\n" +
+        "4 · रजिस्टर — मरीज़ प्रोफ़ाइल\n" +
+        "5 · FAQ — क्लिनिक जानकारी व शुल्क\n" +
+        "6 · रद्द — विज़िट रद्द करें\n" +
+        "7 · रीशेड्यूल — तारीख/समय बदलें\n" +
+        "8 · भाषा — English / हिंदी\n" +
+        "9 · रिपोर्ट — दस्तावेज़ भेजें\n\n" +
+        "*संख्या* (1–9) लिखें या नीचे *Menu* दबाएँ।",
+    );
+  },
+
   welcome(
     practiceName: string,
     patientName?: string | null,
@@ -51,16 +80,23 @@ export const BotPrompts = {
     return (
       L(
         lang,
-        `${hello} Welcome to *${practiceName}*.\n\n` +
-          `How can I help you? Tap *Menu* below to choose an option.`,
-        `${hello} *${practiceName}* में आपका स्वागत है।\n\n` +
-          `मैं कैसे मदद करूँ? विकल्प चुनने के लिए नीचे *Menu* दबाएँ।`,
-      )
+        `${hello} Welcome to *${practiceName}*.\n\n`,
+        `${hello} *${practiceName}* में आपका स्वागत है।\n\n`,
+      ) + BotPrompts.mainMenuOptions(lang)
     );
   },
 
   help(practiceName: string, patientName?: string | null, lang?: WaLang): string {
-    return BotPrompts.welcome(practiceName, patientName, lang);
+    const hello = patientName
+      ? L(lang, `Hi *${patientName}*!`, `नमस्ते *${patientName}*!`)
+      : L(lang, "Hi!", "नमस्ते!");
+    return (
+      L(
+        lang,
+        `${hello} Here's how I can help at *${practiceName}*:\n\n`,
+        `${hello} *${practiceName}* पर मैं इस तरह मदद कर सकता/सकती हूँ:\n\n`,
+      ) + BotPrompts.mainMenuOptions(lang)
+    );
   },
 
   needRegisterThenBook(lang?: WaLang): string {
@@ -200,15 +236,17 @@ export const BotPrompts = {
       lang,
       "To share a report with your doctor:\n" +
         "1. Book a visit (*BOOK*) if you don’t have one yet\n" +
-        "2. Send a *photo* or *PDF* here (optional caption = file name)\n" +
+        "2. *Send a photo or PDF now* in this chat (optional caption = file name)\n" +
         "3. The clinic sees it on your visit in GlucoGuide\n\n" +
-        "Tip: for signup ID scan, reply *REGISTER* first, then send Aadhaar/PAN (JPG/PNG/PDF).\n" +
+        "Waiting for your file…\n" +
+        "Tip: for signup ID scan, reply *REGISTER* first, then send Aadhaar/PAN.\n" +
         "Reply *MY DOCS* to list files already attached.",
       "डॉक्टर से रिपोर्ट साझा करने के लिए:\n" +
         "1. अगर अपॉइंटमेंट नहीं है तो *BOOK* करें\n" +
-        "2. यहाँ *फ़ोटो* या *PDF* भेजें (कैप्शन = फ़ाइल नाम)\n" +
+        "2. *अभी फ़ोटो या PDF भेजें* (कैप्शन = फ़ाइल नाम)\n" +
         "3. क्लिनिक इसे GlucoGuide विज़िट में देखेगा\n\n" +
-        "रजिस्टर ID स्कैन के लिए पहले *REGISTER*, फिर आधार/पैन (JPG/PNG/PDF) भेजें।\n" +
+        "आपकी फ़ाइल का इंतज़ार है…\n" +
+        "रजिस्टर ID स्कैन के लिए पहले *REGISTER*, फिर आधार/पैन भेजें।\n" +
         "जुड़ी फ़ाइलें देखने के लिए *MY DOCS* लिखें।",
     );
   },
@@ -568,8 +606,8 @@ export const BotPrompts = {
   askCancelConfirm(summary: string, lang?: WaLang): string {
     return L(
       lang,
-      `Cancel this booking?\n${summary}`,
-      `यह बुकिंग रद्द करें?\n${summary}`,
+      `Are you sure you want to cancel this booking?\n*${summary}*\n\nReply *Yes* to confirm, or *No* to keep it.`,
+      `क्या आप वाकई यह बुकिंग रद्द करना चाहते हैं?\n*${summary}*\n\nपुष्टि के लिए *Yes*, रखने के लिए *No* लिखें।`,
     );
   },
 
@@ -587,8 +625,8 @@ export const BotPrompts = {
     if (options.length === 1) {
       return L(
         lang,
-        `Tap below to cancel this booking:\n*${options[0]!.label}*`,
-        `यह बुकिंग रद्द करने के लिए नीचे टैप करें:\n*${options[0]!.label}*`,
+        `Which booking do you want to cancel?\n*${options[0]!.label}*`,
+        `कौन सी बुकिंग रद्द करनी है?\n*${options[0]!.label}*`,
       );
     }
     return L(
@@ -842,6 +880,32 @@ export const BotPrompts = {
       "✅ Cancelled. Tap *Menu* below for options.",
       "✅ रद्द हो गई। विकल्पों के लिए नीचे *Menu* दबाएँ।",
     );
+  },
+
+  askCancelReason(visitLabel?: string, lang?: WaLang): string {
+    const visit = visitLabel?.trim()
+      ? L(lang, `\nVisit: *${visitLabel.trim()}*`, `\nविज़िट: *${visitLabel.trim()}*`)
+      : "";
+    return L(
+      lang,
+      `Please share a short reason for cancelling.${visit}\n` +
+        `Example: feeling better / schedule conflict / booked elsewhere.\n` +
+        `Or reply *SKIP* to cancel without a reason.`,
+      `कृपया रद्द करने का छोटा सा कारण लिखें।${visit}\n` +
+        `उदाहरण: तकलीफ़ कम हो गई / समय नहीं मिल रहा / कहीं और बुक है।\n` +
+        `बिना कारण के रद्द करने के लिए *SKIP* लिखें।`,
+    );
+  },
+
+  canceledWithReason(reason: string | null, lang?: WaLang): string {
+    if (reason) {
+      return L(
+        lang,
+        `✅ Cancelled.\nReason shared with the doctor: *${reason}*\nTap *Menu* below for options.`,
+        `✅ रद्द हो गई।\nडॉक्टर को कारण भेज दिया: *${reason}*\nविकल्पों के लिए नीचे *Menu* दबाएँ।`,
+      );
+    }
+    return this.canceled(lang);
   },
 
   rescheduled(detail: string, lang?: WaLang): string {

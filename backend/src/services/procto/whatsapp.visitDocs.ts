@@ -6,6 +6,7 @@ import { BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { uuidToBase64 } from "../../core/security.js";
 import { socketManager } from "../../core/socket.js";
+import { PatientService } from "../patient.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 import type { WaLang } from "./whatsapp.i18n.js";
 import { BotPrompts } from "./whatsapp.templates.js";
@@ -33,13 +34,39 @@ function last10(phone: string): string {
   return String(phone || "").replace(/\D/g, "").slice(-10);
 }
 
-export function isVisitDocumentMime(mimeType: string): boolean {
+export function isVisitDocumentMime(
+  mimeType: string,
+  opts?: { filename?: string; buffer?: Buffer },
+): boolean {
   const m = (mimeType || "").toLowerCase();
-  return (
+  if (
     m.startsWith("image/") ||
     m.includes("pdf") ||
-    m === "application/pdf"
-  );
+    m === "application/pdf" ||
+    m === "application/x-pdf"
+  ) {
+    return true;
+  }
+  const filename = opts?.filename || "";
+  if (/\.(pdf|jpe?g|png|webp|heic|heif)$/i.test(filename)) return true;
+  const bytes = opts?.buffer;
+  if (bytes && bytes.length >= 5) {
+    const head = bytes.subarray(0, 1024).toString("latin1");
+    if (/%PDF-/i.test(head)) return true;
+    // JPEG / PNG magic
+    if (bytes[0] === 0xff && bytes[1] === 0xd8) return true;
+    if (
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47
+    ) {
+      return true;
+    }
+  }
+  // Meta often labels PDFs as octet-stream — treat as visit doc when named .pdf
+  if (m.includes("octet-stream") && /\.pdf$/i.test(filename)) return true;
+  return false;
 }
 
 /** Captions that mean “this is my ID for registration”, not a visit report. */
@@ -111,9 +138,14 @@ export async function uploadBufferToCloudinary(opts: {
   form.append("upload_preset", UPLOAD_PRESET);
   form.append("public_id", publicIdFromName(filename));
 
-  const endpoint = (opts.mimeType || "").toLowerCase().startsWith("image/")
-    ? "image/upload"
-    : "auto/upload";
+  // Prefer auto/upload for PDF / HEIC / octet-stream; image/upload for jpeg/png/webp
+  const mime = (opts.mimeType || "").toLowerCase();
+  const useImageEndpoint =
+    mime.includes("jpeg") ||
+    mime.includes("jpg") ||
+    mime.includes("png") ||
+    mime.includes("webp");
+  const endpoint = useImageEndpoint ? "image/upload" : "auto/upload";
 
   const res = await fetch(
     `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${endpoint}`,
@@ -139,18 +171,37 @@ export async function uploadBufferToCloudinary(opts: {
 export async function findOpenBookingForWhatsApp(
   practiceId: string,
   patientPhone: string,
+  opts?: { preferredBookingId?: string; patientIds?: string[] },
 ) {
   const digits = last10(patientPhone);
-  if (digits.length < 10) return null;
+  if (digits.length < 10 && !(opts?.patientIds?.length)) return null;
+
+  if (opts?.preferredBookingId) {
+    const preferred = await prisma.practiceBooking.findFirst({
+      where: {
+        id: opts.preferredBookingId,
+        practiceId,
+        status: { in: OPEN_STATUSES },
+      },
+    });
+    if (preferred) return preferred;
+  }
+
+  const or: Array<Record<string, unknown>> = [];
+  if (digits.length >= 10) {
+    or.push({ patientPhone: { endsWith: digits } });
+    or.push({ patientPhone });
+  }
+  if (opts?.patientIds?.length) {
+    or.push({ patientId: { in: opts.patientIds } });
+  }
+  if (!or.length) return null;
 
   return prisma.practiceBooking.findFirst({
     where: {
       practiceId,
       status: { in: OPEN_STATUSES },
-      OR: [
-        { patientPhone: { endsWith: digits } },
-        { patientPhone },
-      ],
+      OR: or,
     },
     orderBy: [{ slotStart: "desc" }, { updatedAt: "desc" }],
   });
@@ -241,11 +292,22 @@ export async function attachWhatsAppVisitDocument(opts: {
   filename?: string;
   caption?: string;
   lang?: WaLang;
+  preferredBookingId?: string;
 }): Promise<{ reply: string; attached: boolean; bookingId?: string }> {
   const lang = opts.lang;
+
+  const linked = await PatientService.listLinkedToWhatsApp(opts.patientPhone).catch(
+    () => [] as Array<{ id: string }>,
+  );
+  const patientIds = linked.map((p) => p.id);
+
   const booking = await findOpenBookingForWhatsApp(
     opts.practiceId,
     opts.patientPhone,
+    {
+      preferredBookingId: opts.preferredBookingId,
+      patientIds,
+    },
   );
   if (!booking) {
     return {
@@ -273,7 +335,22 @@ export async function attachWhatsAppVisitDocument(opts: {
     };
   }
 
-  if (!isVisitDocumentMime(opts.mimeType)) {
+  // Normalize octet-stream PDFs so Cloudinary / storage treat them correctly
+  let mimeType = opts.mimeType;
+  const looksPdf =
+    /\.pdf$/i.test(opts.filename || "") ||
+    (opts.buffer.length >= 5 &&
+      /%PDF-/i.test(opts.buffer.subarray(0, 1024).toString("latin1")));
+  if (looksPdf && !mimeType.toLowerCase().includes("pdf")) {
+    mimeType = "application/pdf";
+  }
+
+  if (
+    !isVisitDocumentMime(mimeType, {
+      filename: opts.filename,
+      buffer: opts.buffer,
+    })
+  ) {
     return {
       attached: false,
       reply: BotPrompts.visitDocBadType(lang),
@@ -284,7 +361,7 @@ export async function attachWhatsAppVisitDocument(opts: {
   try {
     uploaded = await uploadBufferToCloudinary({
       buffer: opts.buffer,
-      mimeType: opts.mimeType,
+      mimeType,
       filename:
         opts.caption?.trim() ||
         opts.filename ||
@@ -367,10 +444,18 @@ export async function listWhatsAppVisitDocuments(opts: {
   practiceId: string;
   patientPhone: string;
   lang?: WaLang;
+  preferredBookingId?: string;
 }): Promise<string> {
+  const linked = await PatientService.listLinkedToWhatsApp(opts.patientPhone).catch(
+    () => [] as Array<{ id: string }>,
+  );
   const booking = await findOpenBookingForWhatsApp(
     opts.practiceId,
     opts.patientPhone,
+    {
+      preferredBookingId: opts.preferredBookingId,
+      patientIds: linked.map((p) => p.id),
+    },
   );
   if (!booking) return BotPrompts.visitDocNoBooking(opts.lang);
   const docs = readDocuments(booking.documents);

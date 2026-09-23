@@ -61,6 +61,14 @@ describe("exactMenuIntent", () => {
     assert.equal(exactMenuIntent("main menu"), "help");
     assert.equal(exactMenuIntent("MAIN MENU"), "help");
     assert.equal(exactMenuIntent("show menu"), "help");
+    assert.equal(exactMenuIntent("main\u00a0menu"), "help");
+  });
+
+  it("maps attach report phrases", () => {
+    assert.equal(exactMenuIntent("report"), "report");
+    assert.equal(exactMenuIntent("attach report"), "report");
+    assert.equal(exactMenuIntent("send report"), "report");
+    assert.equal(exactMenuIntent("9 · Report"), "report");
   });
 });
 

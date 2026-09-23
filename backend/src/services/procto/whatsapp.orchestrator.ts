@@ -35,6 +35,8 @@ import {
 } from "./whatsapp.nlu.js";
 import { formatLocalDate } from "./slotEngine.js";
 import { normalizeGender } from "../../core/gender.js";
+import { uuidToBase64 } from "../../core/security.js";
+import { socketManager } from "../../core/socket.js";
 import {
   aiDisclosure,
   escalateReply,
@@ -64,6 +66,7 @@ export type ConversationStep =
   | "awaiting_confirm"
   | "awaiting_cancel_confirm"
   | "awaiting_cancel_booking"
+  | "awaiting_cancel_reason"
   | "awaiting_reschedule_booking"
   | "awaiting_reschedule_slot"
   | "awaiting_message_doctor_booking"
@@ -74,7 +77,8 @@ export type ConversationStep =
   | "awaiting_register_email"
   | "awaiting_register_family_opt"
   | "awaiting_register_family_phone"
-  | "awaiting_register_confirm";
+  | "awaiting_register_confirm"
+  | "awaiting_report";
 
 export type ConversationState = {
   step?: ConversationStep;
@@ -287,10 +291,12 @@ function withFaqActions(reply: string, lang: WaLang): OrchestratorResult {
   };
 }
 
-/** Welcome / HELP — interactive list (Meta allows ≤10 rows). */
+/** Welcome / HELP — full 1–9 main menu (Meta list ≤10 rows). */
 function withMainMenu(reply: string): OrchestratorResult {
+  // Always send the numbered list as text first — interactive Menu body truncates.
   return {
     reply,
+    textBeforeMenu: true,
     menuList: [
       {
         id: "menu:book",
@@ -552,7 +558,7 @@ function isLooseIdleMessage(text: string): boolean {
   if (!t) return true;
   // Explicit commands are handled elsewhere — everything else re-offers choices.
   if (
-    /^(book|cancel|reschedule|status|help|menu|bot|resume|register|doctors?|faq|info|report|reports|my\s*docs?|message|msg|human|agent|staff)\b/i.test(
+    /^(book|cancel|reschedule|status|help|menu|main\s*menu|show\s*menu|bot|resume|register|doctors?|faq|info|report|reports|my\s*docs?|message|msg|human|agent|staff)\b/i.test(
       t,
     )
   ) {
@@ -569,6 +575,13 @@ function isLooseIdleMessage(text: string): boolean {
   if (/^(?:menu|post):/i.test(t)) return false;
   if (/^lang:(en|hi)$/i.test(t)) return false;
   return true;
+}
+
+/** Typed Menu / HELP / main menu — always the full 1–9 list (not post-booking). */
+function wantsFullMainMenu(text: string): boolean {
+  return /^(help|menu|main\s*menu|show\s*menu|open\s*menu|back\s*to\s*menu|मेनू|मुख्य\s*मेनू|\?)$/i.test(
+    text.trim(),
+  );
 }
 
 function withGenderButtons(reply: string): OrchestratorResult {
@@ -806,6 +819,145 @@ function bookingWhenLabel(b: {
   return b.slotStart?.toLocaleString() ?? "scheduled time";
 }
 
+/** Tell the doctor in care chat that the patient cancelled (with optional reason). */
+async function notifyDoctorOfCancel(opts: {
+  booking: {
+    id: string;
+    practiceId: string;
+    providerId: string;
+    patientId?: string | null;
+    patientName?: string | null;
+    patientPhone: string;
+    slotStart?: Date | null;
+    sessionDate?: Date | null;
+    mode: ScheduleMode;
+    tokenNumber?: number | null;
+  };
+  reason: string | null;
+}): Promise<void> {
+  const digits = opts.booking.patientPhone.replace(/\D/g, "").slice(-10);
+  let patientUserId = opts.booking.patientId ?? null;
+  if (!patientUserId && digits.length >= 10) {
+    const user = await prisma.user.findFirst({
+      where: {
+        role: "user",
+        OR: [
+          { phone: { endsWith: digits } },
+          { patient: { is: { contactNumber: { endsWith: digits } } } },
+        ],
+      },
+      select: { id: true },
+    });
+    patientUserId = user?.id ?? null;
+  }
+  if (!patientUserId) return;
+
+  const when = bookingWhenLabel(opts.booking);
+  const who = opts.booking.patientName?.trim() || "Patient";
+  const reasonLine = opts.reason
+    ? `\nReason: ${opts.reason}`
+    : "\n(No reason given)";
+  const content =
+    `❌ Cancelled via WhatsApp: *${who}* — ${when}.${reasonLine}`;
+
+  const created = await prisma.message.create({
+    data: {
+      content,
+      type: "direct",
+      senderId: patientUserId,
+      receiverId: opts.booking.providerId,
+      isSeen: false,
+    },
+  });
+
+  const payload: Record<string, unknown> = {
+    id: uuidToBase64(created.id),
+    sender_id: uuidToBase64(created.senderId),
+    content: created.content,
+    is_seen: created.isSeen,
+    type: created.type,
+    created_at: created.createdAt,
+    idUuid: created.id,
+    senderId: created.senderId,
+    receiverId: created.receiverId,
+    receiver_id: uuidToBase64(created.receiverId!),
+  };
+
+  await socketManager.sendPrivateMsg(
+    `${uuidToBase64(opts.booking.providerId)}_CHAT`,
+    payload,
+  );
+  await socketManager.sendPrivateMsg(
+    `${uuidToBase64(patientUserId)}_CHAT`,
+    payload,
+  );
+}
+
+function parseCancelReason(text: string): string | null {
+  const t = text.trim();
+  if (!t) return null;
+  if (/^(skip|none|no reason|n\/a|-|—|नहीं|कोई कारण नहीं)$/i.test(t)) {
+    return null;
+  }
+  return t.slice(0, 280);
+}
+
+async function finishWhatsAppCancel(opts: {
+  convId: string;
+  practice: PracticeCtx;
+  patientPhone: string;
+  state: ConversationState;
+  bookingId: string;
+  reason: string | null;
+  lang: WaLang;
+}): Promise<OrchestratorResult> {
+  const { convId, practice, patientPhone, state, bookingId, reason, lang } =
+    opts;
+
+  let booking;
+  try {
+    booking = await BookingService.cancelByPatient(bookingId, {
+      phone: patientPhone,
+      reason: reason ?? undefined,
+      skipPatientNotification: true,
+    });
+  } catch (err) {
+    console.warn(
+      "[WhatsApp cancel]",
+      err instanceof Error ? err.message : err,
+    );
+    await saveState(convId, idleState(state));
+    return {
+      reply:
+        lang === "hi"
+          ? "यह बुकिंग रद्द नहीं हो सकी। *STATUS* से जाँचें या क्लिनिक से संपर्क करें।"
+          : "Couldn’t cancel that booking. Reply *STATUS* to check, or contact the clinic.",
+    };
+  }
+
+  void notifyDoctorOfCancel({ booking, reason }).catch((err) => {
+    console.warn(
+      "[WhatsApp cancel] doctor notify failed:",
+      err instanceof Error ? err.message : err,
+    );
+  });
+
+  await saveState(convId, idleState(state));
+  const remaining = await replyWithPostBookingMenu({
+    practice,
+    patientPhone,
+    lang,
+  });
+  const ack = BotPrompts.canceledWithReason(reason, lang);
+  if (remaining) {
+    return {
+      ...remaining,
+      reply: `${ack}\n\n${remaining.reply}`,
+    };
+  }
+  return withMainMenu(ack);
+}
+
 async function replyStatus(
   practice: PracticeCtx,
   patientPhone: string,
@@ -879,17 +1031,21 @@ async function dispatchMenuIntent(opts: {
       );
     }
     case "help": {
-      const withBooking = await replyWithPostBookingMenu({
-        practice,
-        patientPhone,
-        lang,
-      });
-      if (withBooking) return withBooking;
+      // Always the full main menu (1–9). Post-booking chips are for idle "hi"
+      // / free-text after a visit — not for Menu / Main menu / HELP.
       const patient = await PatientService.findByPhone(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
-    case "report":
+    case "report": {
+      await saveState(convId, {
+        ...keepPrefs(state),
+        step: "awaiting_report",
+        failedTurns: 0,
+        postBookingCare: false,
+        handedOff: false,
+      });
       return { reply: BotPrompts.visitDocHowTo(lang) };
+    }
     case "my_docs": {
       const { listWhatsAppVisitDocuments } = await import("./whatsapp.visitDocs.js");
       return {
@@ -1136,7 +1292,11 @@ async function handleAwaitingDate(
   const trimmed = text.trim();
 
   // Escape hatches so users aren't trapped if they change their mind
-  if (/^(help|menu|main\s*menu|\?)$/i.test(trimmed)) {
+  if (
+    /^(help|menu|main\s*menu|show\s*menu|open\s*menu|back\s*to\s*menu|\?)$/i.test(
+      trimmed,
+    )
+  ) {
     await saveState(convId, idleState(state));
     const patient = await PatientService.findByPhone(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
@@ -2228,9 +2388,12 @@ async function runOrchestratorCore(input: {
 
   if (state.handedOff) {
     const t = text.trim();
-    const resumeMenuOnly = /^(bot|resume|menu)$/i.test(t);
+    const resumeMenuOnly =
+      /^(bot|resume|menu|main\s*menu|show\s*menu|open\s*menu|back\s*to\s*menu|help)$/i.test(
+        t,
+      );
     const resumeAndRun =
-      /^(book|cancel|reschedule|status|help|hi|hello|hey|start|register|doctors?|faq|info|report|reports|my\s*docs?|message)\b/i.test(
+      /^(book|cancel|reschedule|status|help|hi|hello|hey|start|register|doctors?|faq|info|report|reports|my\s*docs?|message|main\s*menu)\b/i.test(
         t,
       ) ||
       (/\b(book|cancel|reschedule|message)\b/i.test(t) && t.length < 80) ||
@@ -2259,12 +2422,6 @@ async function runOrchestratorCore(input: {
     });
 
     if (resumeMenuOnly) {
-      const withBooking = await replyWithPostBookingMenu({
-        practice,
-        patientPhone,
-        lang,
-      });
-      if (withBooking) return withBooking;
       const patient = await PatientService.findByPhone(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
@@ -2777,12 +2934,14 @@ async function runOrchestratorCore(input: {
 
   // Personalized help / greeting
   if (nlu.intent === "help" && (!state.step || state.step === "idle")) {
-    const withBooking = await replyWithPostBookingMenu({
-      practice,
-      patientPhone,
-      lang,
-    });
-    if (withBooking) return withBooking;
+    if (!wantsFullMainMenu(text)) {
+      const withBooking = await replyWithPostBookingMenu({
+        practice,
+        patientPhone,
+        lang,
+      });
+      if (withBooking) return withBooking;
+    }
     const patient = await PatientService.findByPhone(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
@@ -2819,45 +2978,72 @@ async function runOrchestratorCore(input: {
     );
   }
 
-  if (
-    state.step === "awaiting_cancel_booking" ||
-    state.step === "awaiting_cancel_confirm"
-  ) {
-    const choices = state.bookingChoices ?? [];
-    // Legacy Yes/No path (single booking with cancelBookingId already set)
-    if (state.cancelBookingId && !choices.length) {
-      if (
-        nlu.intent === "confirm_yes" ||
-        /^(yes|y|confirm|ok)$/i.test(text.trim())
-      ) {
-        await BookingService.updateStatus(
-          state.cancelBookingId,
-          BookingStatus.CANCELED,
-          undefined,
-          { skipPatientNotification: true },
-        );
-        await saveState(convId, idleState(state));
-        return withMainMenu(BotPrompts.canceled(lang));
-      }
-      if (
-        nlu.intent === "confirm_no" ||
-        /^(no|n)$/i.test(text.trim())
-      ) {
-        await saveState(convId, idleState(state));
-        const withBooking = await replyWithPostBookingMenu({
-          practice,
-          patientPhone,
-          lang,
-        });
-        if (withBooking) {
-          return {
-            ...withBooking,
-            reply: `${BotPrompts.keptBooking(lang)}\n\n${withBooking.reply}`,
-          };
-        }
-        return withMainMenu(BotPrompts.keptBooking(lang));
-      }
+  if (state.step === "awaiting_cancel_reason") {
+    const bookingId = state.cancelBookingId;
+    if (!bookingId) {
+      await saveState(convId, idleState(state));
+      return { reply: BotPrompts.noBookingSelected(lang) };
     }
+    if (/^(stop|nevermind|never mind|abort|back)$/i.test(text.trim())) {
+      await saveState(convId, idleState(state));
+      return withMainMenu(BotPrompts.keptBooking(lang));
+    }
+    const reason = parseCancelReason(text);
+    return finishWhatsAppCancel({
+      convId,
+      practice,
+      patientPhone,
+      state,
+      bookingId,
+      reason,
+      lang,
+    });
+  }
+
+  // After picking a booking — Yes/No confirm before asking for a reason
+  if (state.step === "awaiting_cancel_confirm") {
+    const bookingId = state.cancelBookingId;
+    const label = state.pendingSummary || "this booking";
+    if (!bookingId) {
+      await saveState(convId, idleState(state));
+      return { reply: BotPrompts.noBookingSelected(lang) };
+    }
+    if (
+      nlu.intent === "confirm_yes" ||
+      /^(yes|y|confirm|ok|हाँ|हां|जी)$/i.test(text.trim())
+    ) {
+      await saveState(convId, {
+        ...state,
+        step: "awaiting_cancel_reason",
+        failedTurns: 0,
+      });
+      return { reply: BotPrompts.askCancelReason(label, lang) };
+    }
+    if (
+      nlu.intent === "confirm_no" ||
+      /^(no|n|nope|keep|stop|nevermind|never mind|abort|back|नहीं)$/i.test(
+        text.trim(),
+      )
+    ) {
+      await saveState(convId, idleState(state));
+      const withBooking = await replyWithPostBookingMenu({
+        practice,
+        patientPhone,
+        lang,
+      });
+      if (withBooking) {
+        return {
+          ...withBooking,
+          reply: `${BotPrompts.keptBooking(lang)}\n\n${withBooking.reply}`,
+        };
+      }
+      return withMainMenu(BotPrompts.keptBooking(lang));
+    }
+    return withYesNo(BotPrompts.askCancelConfirm(label, lang));
+  }
+
+  if (state.step === "awaiting_cancel_booking") {
+    const choices = state.bookingChoices ?? [];
 
     const idx = parseSlotChoiceIndex(text);
     const choice =
@@ -2890,25 +3076,15 @@ async function runOrchestratorCore(input: {
       return { reply: BotPrompts.noBookingSelected(lang) };
     }
 
-    await BookingService.updateStatus(
-      bookingId,
-      BookingStatus.CANCELED,
-      undefined,
-      { skipPatientNotification: true },
-    );
-    await saveState(convId, idleState(state));
-    const remaining = await replyWithPostBookingMenu({
-      practice,
-      patientPhone,
-      lang,
+    const label = choice?.label || state.pendingSummary || "this booking";
+    await saveState(convId, {
+      ...state,
+      step: "awaiting_cancel_confirm",
+      cancelBookingId: bookingId,
+      pendingSummary: label,
+      failedTurns: 0,
     });
-    if (remaining) {
-      return {
-        ...remaining,
-        reply: `${BotPrompts.canceled(lang)}\n\n${remaining.reply}`,
-      };
-    }
-    return withMainMenu(BotPrompts.canceled(lang));
+    return withYesNo(BotPrompts.askCancelConfirm(label, lang));
   }
 
   if (state.step === "awaiting_provider") {
@@ -3163,6 +3339,13 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "report") {
+    await saveState(convId, {
+      ...keepPrefs(state),
+      step: "awaiting_report",
+      failedTurns: 0,
+      postBookingCare: false,
+      handedOff: false,
+    });
     return { reply: BotPrompts.visitDocHowTo(lang) };
   }
 
@@ -3255,12 +3438,14 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "help") {
-    const withBooking = await replyWithPostBookingMenu({
-      practice,
-      patientPhone,
-      lang,
-    });
-    if (withBooking) return withBooking;
+    if (!wantsFullMainMenu(text)) {
+      const withBooking = await replyWithPostBookingMenu({
+        practice,
+        patientPhone,
+        lang,
+      });
+      if (withBooking) return withBooking;
+    }
     const patient = await PatientService.findByPhone(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
