@@ -409,6 +409,8 @@ export function exactMenuIntent(text: string): BotIntent | null {
   const raw = text
     .trim()
     .toLowerCase()
+    // Normalize NBSP / thin spaces that phones sometimes insert
+    .replace(/[\u00a0\u202f\u2007\u2009]/g, " ")
     .replace(/^[*`~]+|[*`~]+$/g, "")
     // Strip list labels like "3 · New booking" / "3. New booking"
     .replace(/^[1-9]\s*[·.)\-:]+\s*/u, "")
@@ -459,6 +461,10 @@ export function exactMenuIntent(text: string): BotIntent | null {
     info: "faq",
     report: "report",
     reports: "report",
+    attach_report: "report",
+    send_report: "report",
+    upload_report: "report",
+    lab_report: "report",
     my_docs: "my_docs",
     mydocs: "my_docs",
     my_doc: "my_docs",
@@ -649,7 +655,7 @@ function parseIntentRegex(text: string): BotIntent {
     return "message_doctor";
   }
   if (
-    /^(report|reports|send\s*report|attach|lab\s*report|prescription|rx)$/i.test(
+    /^(report|reports|send\s*report|attach(\s+report)?|lab\s*report|prescription|rx)$/i.test(
       t,
     ) ||
     /\b(send|attach|upload)\s+(a\s+)?(report|document|lab|prescription|pdf)\b/.test(
@@ -946,6 +952,7 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_confirm",
     "awaiting_cancel_confirm",
     "awaiting_cancel_booking",
+    "awaiting_cancel_reason",
     "awaiting_reschedule_booking",
     "awaiting_reschedule_slot",
     "awaiting_message_doctor_booking",
@@ -959,6 +966,7 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_register_confirm",
     "awaiting_date",
     "awaiting_language",
+    "awaiting_report",
   ]);
   return !structured.has(step);
 }
@@ -977,6 +985,7 @@ export function shouldUseLlmForMessage(
     "awaiting_confirm",
     "awaiting_cancel_confirm",
     "awaiting_cancel_booking",
+    "awaiting_cancel_reason",
     "awaiting_register_confirm",
     "awaiting_register_gender",
     "awaiting_register_email_opt",
