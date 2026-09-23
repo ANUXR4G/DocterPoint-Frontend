@@ -49,7 +49,10 @@ import {
 } from "./whatsapp.policy.js";
 import type { IdScanFields } from "../idScan.js";
 
-const IDLE_MS = 30 * 60_000;
+/** Full idle close (aligned with proactive worker). Override via WA_IDLE_CLOSE_MS. */
+const IDLE_MS = Number(process.env.WA_IDLE_CLOSE_MS) > 0
+  ? Number(process.env.WA_IDLE_CLOSE_MS)
+  : 30 * 60_000;
 
 export type ConversationStep =
   | "idle"
@@ -133,6 +136,11 @@ export type ConversationState = {
   careProviderId?: string;
   /** Preferred reply language (set on first contact) */
   preferredLanguage?: "en" | "hi";
+  /**
+   * When set, an idle-reminder was already sent while waiting for a reply.
+   * Cleared on patient activity or when the chat is closed.
+   */
+  idleReminderSentAt?: string;
 };
 
 export type DoctorListRow = {
@@ -400,6 +408,41 @@ function bookingDoctorLabel(b: {
     rawName.toLowerCase().startsWith("dr") ? rawName : `Dr ${rawName}`
   ).slice(0, 24);
   return { title, description: when.slice(0, 72), when };
+}
+
+/** Lines for post-booking greeting — doctor + when for each upcoming visit. */
+function postBookingVisitLines(
+  bookings: Array<{
+    mode: ScheduleMode;
+    tokenNumber?: number | null;
+    sessionDate?: Date | null;
+    slotStart?: Date | null;
+    provider?: { name?: string | null } | null;
+  }>,
+): string[] {
+  return bookings.map((b) => {
+    const labels = bookingDoctorLabel(b);
+    return `${labels.title} · ${labels.when}`;
+  });
+}
+
+async function replyWithPostBookingMenu(opts: {
+  practice: PracticeCtx;
+  patientPhone: string;
+  lang: WaLang;
+}): Promise<OrchestratorResult | null> {
+  const upcoming = await listUpcomingBookings(
+    opts.practice.id,
+    opts.patientPhone,
+  );
+  if (!upcoming.length) return null;
+  return withPostBookingMenu(
+    BotPrompts.postBookingAsk(
+      opts.practice.name,
+      postBookingVisitLines(upcoming),
+      opts.lang,
+    ),
+  );
 }
 
 async function enterMessageDoctorCare(opts: {
@@ -712,7 +755,12 @@ function keepPrefs(state: ConversationState): Pick<
 }
 
 function idleState(state: ConversationState): ConversationState {
-  return { ...keepPrefs(state), step: "idle", aiDisclosed: true };
+  return {
+    ...keepPrefs(state),
+    step: "idle",
+    aiDisclosed: true,
+    idleReminderSentAt: undefined,
+  };
 }
 
 /** Copy spoken date/time preferences from NLU onto conversation state. */
@@ -823,16 +871,12 @@ async function dispatchMenuIntent(opts: {
       );
     }
     case "help": {
-      const upcoming = await findUpcomingBooking(practice.id, patientPhone);
-      if (upcoming) {
-        return withPostBookingMenu(
-          BotPrompts.postBookingAsk(
-            practice.name,
-            bookingWhenLabel(upcoming),
-            lang,
-          ),
-        );
-      }
+      const withBooking = await replyWithPostBookingMenu({
+        practice,
+        patientPhone,
+        lang,
+      });
+      if (withBooking) return withBooking;
       const patient = await PatientService.findByPhone(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
@@ -2150,16 +2194,12 @@ async function runOrchestratorCore(input: {
     });
 
     if (resumeMenuOnly) {
-      const upcoming = await findUpcomingBooking(practice.id, patientPhone);
-      if (upcoming) {
-        return withPostBookingMenu(
-          BotPrompts.postBookingAsk(
-            practice.name,
-            bookingWhenLabel(upcoming),
-            lang,
-          ),
-        );
-      }
+      const withBooking = await replyWithPostBookingMenu({
+        practice,
+        patientPhone,
+        lang,
+      });
+      if (withBooking) return withBooking;
       const patient = await PatientService.findByPhone(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
     }
@@ -2196,16 +2236,22 @@ async function runOrchestratorCore(input: {
   if (state.step && state.step !== "idle" && isTimedOut(state)) {
     state = idleState(state);
     await saveState(convId, state);
-    return withMainMenu(BotPrompts.idleReset(lang));
+    return withMainMenu(BotPrompts.chatClosed(lang));
+  }
+
+  // Patient replied — clear any pending idle-reminder flag
+  if (state.idleReminderSentAt) {
+    state = { ...state, idleReminderSentAt: undefined };
   }
 
   // Global menu commands (typed or WhatsApp button) — always win over mid-flow steps
   // Digit shortcuts (1–9) only when idle so doctor/slot picks still use digits.
   // Interactive menu:* / post:* list picks always apply (same as typing BOOK).
   const isIdleMenu = !state.step || state.step === "idle";
-  const upcomingIdle = isIdleMenu
-    ? await findUpcomingBooking(practice.id, patientPhone)
-    : null;
+  const upcomingIdleList = isIdleMenu
+    ? await listUpcomingBookings(practice.id, patientPhone)
+    : [];
+  const upcomingIdle = upcomingIdleList[0] ?? null;
   const listMenuPick = /^(?:menu|post):/i.test(text.trim())
     ? postBookingNumberShortcut(text) ?? menuNumberShortcut(text)
     : null;
@@ -2298,7 +2344,7 @@ async function runOrchestratorCore(input: {
     return withPostBookingMenu(
       BotPrompts.postBookingAsk(
         practice.name,
-        bookingWhenLabel(upcomingIdle),
+        postBookingVisitLines(upcomingIdleList),
         lang,
       ),
     );
@@ -2617,8 +2663,8 @@ async function runOrchestratorCore(input: {
       nlu.slots.preferredPeriod
     )
   ) {
-    const upcoming = await findUpcomingBooking(practice.id, patientPhone);
-    if (upcoming) {
+    const upcoming = await listUpcomingBookings(practice.id, patientPhone);
+    if (upcoming.length) {
       state = {
         ...idleState(state),
         failedTurns: 0,
@@ -2633,7 +2679,7 @@ async function runOrchestratorCore(input: {
       return withPostBookingMenu(
         BotPrompts.postBookingAsk(
           practice.name,
-          bookingWhenLabel(upcoming),
+          postBookingVisitLines(upcoming),
           lang,
         ),
       );
@@ -2666,16 +2712,12 @@ async function runOrchestratorCore(input: {
 
   // Personalized help / greeting
   if (nlu.intent === "help" && (!state.step || state.step === "idle")) {
-    const upcoming = await findUpcomingBooking(practice.id, patientPhone);
-    if (upcoming) {
-      return withPostBookingMenu(
-        BotPrompts.postBookingAsk(
-          practice.name,
-          bookingWhenLabel(upcoming),
-          lang,
-        ),
-      );
-    }
+    const withBooking = await replyWithPostBookingMenu({
+      practice,
+      patientPhone,
+      lang,
+    });
+    if (withBooking) return withBooking;
     const patient = await PatientService.findByPhone(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
@@ -3083,16 +3125,12 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "help") {
-    const upcoming = await findUpcomingBooking(practice.id, patientPhone);
-    if (upcoming) {
-      return withPostBookingMenu(
-        BotPrompts.postBookingAsk(
-          practice.name,
-          bookingWhenLabel(upcoming),
-          lang,
-        ),
-      );
-    }
+    const withBooking = await replyWithPostBookingMenu({
+      practice,
+      patientPhone,
+      lang,
+    });
+    if (withBooking) return withBooking;
     const patient = await PatientService.findByPhone(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, patient?.name, lang));
   }
@@ -3109,12 +3147,12 @@ async function runOrchestratorCore(input: {
   }
   await saveState(convId, { ...state, failedTurns: fails });
   {
-    const upcoming = await findUpcomingBooking(practice.id, patientPhone);
-    if (upcoming && (!state.step || state.step === "idle")) {
+    const upcoming = await listUpcomingBookings(practice.id, patientPhone);
+    if (upcoming.length && (!state.step || state.step === "idle")) {
       return withPostBookingMenu(
         BotPrompts.postBookingAsk(
           practice.name,
-          bookingWhenLabel(upcoming),
+          postBookingVisitLines(upcoming),
           lang,
         ),
       );
