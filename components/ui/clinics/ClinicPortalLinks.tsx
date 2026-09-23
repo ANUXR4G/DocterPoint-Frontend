@@ -7,6 +7,7 @@ import { practiceTabHref, DOCTOR_PATIENTS_HREF } from "@/lib/doctorPracticeTabs"
 const LINKS = [
   { href: "/clinic/dashboard", label: "Dashboard" },
   { href: "/doctor/queue", label: "Queue" },
+  { href: "/doctor/notifications", label: "Notifications" },
   { href: "/doctor/appointments", label: "Appointments" },
   { href: DOCTOR_PATIENTS_HREF, label: "Patients" },
   { href: "/doctor/calendar", label: "Calendar" },
@@ -58,6 +59,10 @@ export function isClinicNavActive(
     return (
       pathname === "/doctor/queue" || pathname.startsWith("/doctor/queue/")
     )
+  }
+
+  if (destPath === "/doctor/notifications") {
+    return pathname === "/doctor/notifications"
   }
 
   if (destPath === "/doctor/appointments") {
