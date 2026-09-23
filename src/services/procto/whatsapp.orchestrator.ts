@@ -63,6 +63,7 @@ export type ConversationStep =
   | "awaiting_slot"
   | "awaiting_confirm"
   | "awaiting_cancel_confirm"
+  | "awaiting_cancel_booking"
   | "awaiting_reschedule_booking"
   | "awaiting_reschedule_slot"
   | "awaiting_message_doctor_booking"
@@ -2109,6 +2110,8 @@ async function runOrchestratorCore(input: {
 
   // Preferred language — ask once, but skip the gate for demo-speed actions
   // (BOOK / DOCTORS / hi) so the client demo reaches doctor pick in one turn.
+  // Never interrupt mid-flow confirms (cancel/book/register) for language —
+  // a wiped preferredLanguage used to re-ask English/Hindi after tapping No.
   if (!state.preferredLanguage || state.step === "awaiting_language") {
     const chosen = parseLanguageChoice(text);
     if (chosen) {
@@ -2128,28 +2131,43 @@ async function runOrchestratorCore(input: {
       );
     }
 
-    const trimmed = text.trim();
-    const actionFastPath =
-      !state.preferredLanguage &&
-      state.step !== "awaiting_language" &&
-      (Boolean(exactMenuIntent(trimmed)) ||
-        Boolean(menuNumberShortcut(trimmed)) ||
-        /^(hi|hello|hey|start|book|doctors?|status)\b/i.test(trimmed));
+    const midFlow =
+      Boolean(state.step) &&
+      state.step !== "idle" &&
+      state.step !== "awaiting_language";
 
-    if (actionFastPath) {
-      const inferred: WaLang = /[\u0900-\u097F]/.test(trimmed) ? "hi" : "en";
+    if (midFlow) {
       state = {
         ...state,
-        preferredLanguage: inferred,
-        step: "idle",
+        preferredLanguage: "en",
         aiDisclosed: true,
       };
       await saveState(convId, state);
-      // Fall through — process BOOK/DOCTORS immediately for demos
+      // Fall through — finish cancel/confirm/register with default English
     } else {
-      state = { ...state, step: "awaiting_language" };
-      await saveState(convId, state);
-      return withLanguageButtons(askPreferredLanguage());
+      const trimmed = text.trim();
+      const actionFastPath =
+        !state.preferredLanguage &&
+        state.step !== "awaiting_language" &&
+        (Boolean(exactMenuIntent(trimmed)) ||
+          Boolean(menuNumberShortcut(trimmed)) ||
+          /^(hi|hello|hey|start|book|doctors?|status)\b/i.test(trimmed));
+
+      if (actionFastPath) {
+        const inferred: WaLang = /[\u0900-\u097F]/.test(trimmed) ? "hi" : "en";
+        state = {
+          ...state,
+          preferredLanguage: inferred,
+          step: "idle",
+          aiDisclosed: true,
+        };
+        await saveState(convId, state);
+        // Fall through — process BOOK/DOCTORS immediately for demos
+      } else {
+        state = { ...state, step: "awaiting_language" };
+        await saveState(convId, state);
+        return withLanguageButtons(askPreferredLanguage());
+      }
     }
   }
 
@@ -2754,28 +2772,96 @@ async function runOrchestratorCore(input: {
     );
   }
 
-  if (state.step === "awaiting_cancel_confirm") {
-    if (nlu.intent === "confirm_yes" || /^(yes|y|confirm|ok)$/i.test(text.trim())) {
-      if (!state.cancelBookingId) {
+  if (
+    state.step === "awaiting_cancel_booking" ||
+    state.step === "awaiting_cancel_confirm"
+  ) {
+    const choices = state.bookingChoices ?? [];
+    // Legacy Yes/No path (single booking with cancelBookingId already set)
+    if (state.cancelBookingId && !choices.length) {
+      if (
+        nlu.intent === "confirm_yes" ||
+        /^(yes|y|confirm|ok)$/i.test(text.trim())
+      ) {
+        await BookingService.updateStatus(
+          state.cancelBookingId,
+          BookingStatus.CANCELED,
+          undefined,
+          { skipPatientNotification: true },
+        );
         await saveState(convId, idleState(state));
-        return { reply: BotPrompts.noBookingSelected(lang) };
+        return withMainMenu(BotPrompts.canceled(lang));
       }
-      await BookingService.updateStatus(
-        state.cancelBookingId,
-        BookingStatus.CANCELED,
-        undefined,
-        { skipPatientNotification: true },
+      if (
+        nlu.intent === "confirm_no" ||
+        /^(no|n)$/i.test(text.trim())
+      ) {
+        await saveState(convId, idleState(state));
+        const withBooking = await replyWithPostBookingMenu({
+          practice,
+          patientPhone,
+          lang,
+        });
+        if (withBooking) {
+          return {
+            ...withBooking,
+            reply: `${BotPrompts.keptBooking(lang)}\n\n${withBooking.reply}`,
+          };
+        }
+        return withMainMenu(BotPrompts.keptBooking(lang));
+      }
+    }
+
+    const idx = parseSlotChoiceIndex(text);
+    const choice =
+      idx !== null && idx >= 1 && idx <= choices.length
+        ? choices[idx - 1]
+        : state.cancelBookingId
+          ? choices.find((c) => c.id === state.cancelBookingId) ?? null
+          : null;
+
+    if (!choice && choices.length) {
+      return withBookingPicker(
+        BotPrompts.askCancelPick(
+          choices.map((c, i) => ({ index: i + 1, label: c.label })),
+          lang,
+        ),
+        choices.map((c) => {
+          const [title, ...rest] = c.label.split(" · ");
+          return {
+            label: (title || c.label).slice(0, 24),
+            description: rest.join(" · ").slice(0, 72) || undefined,
+          };
+        }),
+        { forceList: true },
       );
-      await saveState(convId, idleState(state));
-      return withMainMenu(BotPrompts.canceled(lang));
     }
-    if (nlu.intent === "confirm_no" || /^(no|n)$/i.test(text.trim())) {
+
+    const bookingId = choice?.id || state.cancelBookingId;
+    if (!bookingId) {
       await saveState(convId, idleState(state));
-      return { reply: BotPrompts.keptBooking(lang) };
+      return { reply: BotPrompts.noBookingSelected(lang) };
     }
-    return withYesNo(
-      BotPrompts.askCancelConfirm(state.pendingSummary || "this booking", lang),
+
+    await BookingService.updateStatus(
+      bookingId,
+      BookingStatus.CANCELED,
+      undefined,
+      { skipPatientNotification: true },
     );
+    await saveState(convId, idleState(state));
+    const remaining = await replyWithPostBookingMenu({
+      practice,
+      patientPhone,
+      lang,
+    });
+    if (remaining) {
+      return {
+        ...remaining,
+        reply: `${BotPrompts.canceled(lang)}\n\n${remaining.reply}`,
+      };
+    }
+    return withMainMenu(BotPrompts.canceled(lang));
   }
 
   if (state.step === "awaiting_provider") {
@@ -3045,20 +3131,8 @@ async function runOrchestratorCore(input: {
   }
 
   if (nlu.intent === "cancel") {
-    const bookings = await BookingService.listForPatient({ phone: patientPhone });
-    // Completed / canceled / no-show visits are locked — never offered here.
-    const upcoming = bookings.find(
-      (b) =>
-        b.practiceId === practice.id &&
-        [
-          BookingStatus.SCHEDULED,
-          BookingStatus.REQUESTED,
-          BookingStatus.ACCEPTED,
-        ].includes(
-          b.status as "SCHEDULED" | "REQUESTED" | "ACCEPTED",
-        ),
-    );
-    if (!upcoming) {
+    const upcoming = await listUpcomingBookings(practice.id, patientPhone);
+    if (!upcoming.length) {
       return {
         reply:
           lang === "hi"
@@ -3066,36 +3140,44 @@ async function runOrchestratorCore(input: {
             : "No active booking found to cancel.",
       };
     }
+
+    const bookingChoices = upcoming.map((b) => ({
+      id: b.id,
+      label: postBookingVisitLines([b])[0] || bookingWhenLabel(b),
+    }));
     await saveState(convId, {
-      step: "awaiting_cancel_confirm",
-      cancelBookingId: upcoming.id,
+      ...state,
+      step: "awaiting_cancel_booking",
+      cancelBookingId: undefined,
+      bookingChoices,
+      pendingSummary: undefined,
     });
-    return withYesNo(
-      BotPrompts.askCancelConfirm(bookingWhenLabel(upcoming), lang),
+    return withBookingPicker(
+      BotPrompts.askCancelPick(
+        bookingChoices.map((c, i) => ({ index: i + 1, label: c.label })),
+        lang,
+      ),
+      bookingChoices.map((c) => {
+        const [title, ...rest] = c.label.split(" · ");
+        return {
+          label: (title || c.label).slice(0, 24),
+          description: rest.join(" · ").slice(0, 72) || undefined,
+        };
+      }),
+      { forceList: true },
     );
   }
 
   if (nlu.intent === "reschedule") {
-    const bookings = await BookingService.listForPatient({ phone: patientPhone });
-    // Matches BookingService.reschedule — completed visits are excluded.
-    const upcoming = bookings
-      .filter(
-        (b) =>
-          b.practiceId === practice.id &&
-          [
-            BookingStatus.SCHEDULED,
-            BookingStatus.REQUESTED,
-            BookingStatus.ACCEPTED,
-          ].includes(
-            b.status as "SCHEDULED" | "REQUESTED" | "ACCEPTED",
-          ),
-      )
-      .slice(0, 5);
-    if (!upcoming.length) return { reply: "No active bookings to reschedule." };
+    const upcoming = await listUpcomingBookings(practice.id, patientPhone);
+    if (!upcoming.length) {
+      return { reply: "No active bookings to reschedule." };
+    }
 
     if (upcoming.length === 1) {
       const b = upcoming[0]!;
       await saveState(convId, {
+        ...state,
         step: "awaiting_date",
         rescheduleBookingId: b.id,
         providerId: b.providerId,
@@ -3109,9 +3191,10 @@ async function runOrchestratorCore(input: {
 
     const bookingChoices = upcoming.map((b) => ({
       id: b.id,
-      label: bookingWhenLabel(b),
+      label: postBookingVisitLines([b])[0] || bookingWhenLabel(b),
     }));
     await saveState(convId, {
+      ...state,
       step: "awaiting_reschedule_booking",
       bookingChoices,
     });

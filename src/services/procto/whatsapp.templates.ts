@@ -573,6 +573,31 @@ export const BotPrompts = {
     );
   },
 
+  askCancelPick(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    if (!options.length) {
+      return L(
+        lang,
+        "You have no active bookings to cancel.",
+        "रद्द करने के लिए कोई सक्रिय बुकिंग नहीं है।",
+      );
+    }
+    if (options.length === 1) {
+      return L(
+        lang,
+        `Tap below to cancel this booking:\n*${options[0]!.label}*`,
+        `यह बुकिंग रद्द करने के लिए नीचे टैप करें:\n*${options[0]!.label}*`,
+      );
+    }
+    return L(
+      lang,
+      `You have *${options.length}* bookings. Tap the one to cancel:`,
+      `आपकी *${options.length}* बुकिंग हैं। रद्द करने वाली चुनें:`,
+    );
+  },
+
   askReschedulePick(
     options: Array<{ index: number; label: string }>,
     lang?: WaLang,

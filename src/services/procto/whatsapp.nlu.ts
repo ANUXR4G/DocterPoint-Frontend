@@ -937,6 +937,7 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_slot",
     "awaiting_confirm",
     "awaiting_cancel_confirm",
+    "awaiting_cancel_booking",
     "awaiting_reschedule_booking",
     "awaiting_reschedule_slot",
     "awaiting_message_doctor_booking",
@@ -966,6 +967,7 @@ export function shouldUseLlmForMessage(
   const confirmish = new Set([
     "awaiting_confirm",
     "awaiting_cancel_confirm",
+    "awaiting_cancel_booking",
     "awaiting_register_confirm",
     "awaiting_register_gender",
     "awaiting_register_email_opt",
