@@ -1,3 +1,5 @@
+import { ageFromDob } from "./dob.js";
+
 export const scopes: Record<string, string[]> = {
   user: [
     "users:chat",
@@ -134,25 +136,8 @@ export const statusPriorityMap = [
 ];
 
 export function calculateAge(birthDateStr?: string | null): number | undefined {
-  if (!birthDateStr) return undefined;
-  const [month, day, year] = birthDateStr.split("/").map(Number);
-  if (!month || !day || !year) return undefined;
-  const parsed = new Date(year, month - 1, day);
-  if (Number.isNaN(parsed.getTime())) return undefined;
-  return ageFromDate(parsed);
-}
-
-function ageFromDate(birthDate: Date): number {
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-  if (
-    monthDiff < 0 ||
-    (monthDiff === 0 && today.getDate() < birthDate.getDate())
-  ) {
-    age -= 1;
-  }
-  return age;
+  const age = ageFromDob(birthDateStr);
+  return age == null ? undefined : age;
 }
 
 export function getAgeGroup(age: number | undefined): string {

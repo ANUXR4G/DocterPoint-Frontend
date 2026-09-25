@@ -12,6 +12,7 @@ import { Custom } from "../core/utils.js";
 import { settings, frontendBaseUrl } from "../config/index.js";
 import { assertValidTimeRange, minutesOf } from "./procto/slotEngine.js";
 import { requireGender } from "../core/gender.js";
+import { normalizeDateOfBirth, ageFromDob } from "../core/dob.js";
 
 type AuthRole = "user" | "doctor" | "admin";
 
@@ -50,6 +51,8 @@ export class AuthService {
       name?: string
       phone?: string
       gender?: string
+      dateOfBirth?: string | null
+      date_of_birth?: string | null
       appointmentValidityDays?: number
       /** clinic register → clinic_owner_signup; otherwise self_attempted */
       portal?: string
@@ -107,6 +110,15 @@ export class AuthService {
       });
     } else {
       const gender = requireGender(credentials.gender);
+      const dobRaw =
+        credentials.dateOfBirth ?? credentials.date_of_birth ?? null;
+      const dateOfBirth = normalizeDateOfBirth(dobRaw);
+      if (!dateOfBirth) {
+        throw new AppError(
+          400,
+          "Date of birth is required (use DD/MM/YYYY or YYYY-MM-DD).",
+        );
+      }
       user = await prisma.user.create({
         data: {
           email: credentials.email,
@@ -116,7 +128,7 @@ export class AuthService {
           phone,
           gender,
           createdBy: "self_attempted",
-          patient: { create: {} },
+          patient: { create: { dateOfBirth } },
         },
         include: { patient: true },
       });
@@ -132,7 +144,15 @@ export class AuthService {
 
     const tokenResult = getUserToken(sessionUser, 201);
     setTokenCookies(res, tokenResult.cookies);
-    return res.status(201).json(tokenResult.responseBody);
+    const patientDob =
+      role === "user" && "patient" in user
+        ? (user.patient?.dateOfBirth ?? null)
+        : null;
+    return res.status(201).json({
+      ...tokenResult.responseBody,
+      date_of_birth: patientDob,
+      age: patientDob ? ageFromDob(patientDob) : null,
+    });
   }
 
   /**
@@ -246,9 +266,11 @@ export class AuthService {
 
     const tokenResult = getUserToken(user!);
     setTokenCookies(res, tokenResult.cookies);
+    const patientDob = user!.patient?.dateOfBirth ?? null;
     return res.status(200).json({
       ...tokenResult.responseBody,
-      date_of_birth: user!.patient?.dateOfBirth ?? null,
+      date_of_birth: patientDob,
+      age: patientDob ? ageFromDob(patientDob) : null,
     });
   }
 

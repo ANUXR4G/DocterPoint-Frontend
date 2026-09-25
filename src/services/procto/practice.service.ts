@@ -17,6 +17,11 @@ import {
   timeSlotsForProviderDay,
 } from "./slotEngine.js";
 import { last10Digits, normalizeGender } from "../../core/gender.js";
+import { ageFromDob } from "../../core/dob.js";
+import {
+  publicPatientAddress,
+  publicPatientEmail,
+} from "../../core/patientDisplay.js";
 
 const MEMBER_CACHE_TTL_MS = 60_000;
 const memberCache = new Map<
@@ -1082,6 +1087,8 @@ export const PracticeService = {
 
   /**
    * Distinct patients from practice bookings, with recent visit summary.
+   * One row per person (patientId) — family members who share a WhatsApp
+   * number appear separately. `phone` is always the number used to book.
    */
   async listPatients(practiceId: string, actorUserId: string) {
     const providerScope = await this.resolveDataProviderScope(
@@ -1128,26 +1135,36 @@ export const PracticeService = {
       },
     });
 
-    const byPhone = new Map<
-      string,
-      {
-        phone: string;
-        name: string | null;
-        patientId: string | null;
-        bookingCount: number;
-        lastVisitAt: Date | null;
-        lastStatus: string | null;
-        providers: Set<string>;
-        recent: typeof bookings;
-      }
-    >();
+    type PatientAgg = {
+      /** WhatsApp / contact number used to place the booking. */
+      phone: string;
+      name: string | null;
+      patientId: string | null;
+      bookingCount: number;
+      lastVisitAt: Date | null;
+      lastStatus: string | null;
+      providers: Set<string>;
+      recent: typeof bookings;
+    };
+
+    /**
+     * One roster row per member name on a booking number.
+     * Family shares the WhatsApp/clinic number; patientId may also collide —
+     * never key by patientId alone.
+     */
+    const rowKey = (b: (typeof bookings)[number]) => {
+      const name = (b.patientName || "").trim().toLowerCase() || "_unknown";
+      return `phone:${b.patientPhone}|name:${name}`;
+    };
+
+    const byPerson = new Map<string, PatientAgg>();
 
     for (const b of bookings) {
-      const phone = b.patientPhone;
-      let row = byPhone.get(phone);
+      const key = rowKey(b);
+      let row = byPerson.get(key);
       if (!row) {
         row = {
-          phone,
+          phone: b.patientPhone,
           name: b.patientName,
           patientId: b.patientId,
           bookingCount: 0,
@@ -1156,32 +1173,33 @@ export const PracticeService = {
           providers: new Set(),
           recent: [],
         };
-        byPhone.set(phone, row);
+        byPerson.set(key, row);
       }
       row.bookingCount += 1;
       row.providers.add(b.providerId);
-      if (b.patientName && !row.name) row.name = b.patientName;
-      if (b.patientId && !row.patientId) row.patientId = b.patientId;
-      if (row.recent.length < 8) row.recent.push(b);
+      if (b.patientName?.trim()) row.name = b.patientName.trim();
+      // Keep a patientId when present; do not overwrite a set id with null.
+      if (b.patientId) row.patientId = b.patientId;
       const visitAt = b.slotStart ?? b.sessionDate ?? b.createdAt;
       if (!row.lastVisitAt || visitAt > row.lastVisitAt) {
         row.lastVisitAt = visitAt;
         row.lastStatus = b.status;
+        row.phone = b.patientPhone;
       }
+      if (row.recent.length < 8) row.recent.push(b);
     }
 
     const providerIds = [...new Set(bookings.map((b) => b.providerId))];
     const patientIds = [
       ...new Set(
-        bookings.map((b) => b.patientId).filter((id): id is string => !!id),
+        [...byPerson.values()]
+          .map((row) => row.patientId)
+          .filter((id): id is string => !!id),
       ),
     ];
     const phones = [
       ...new Set(
-        [...byPhone.values()]
-          .filter((row) => !row.patientId)
-          .map((row) => row.phone)
-          .filter(Boolean),
+        [...byPerson.values()].map((row) => row.phone).filter(Boolean),
       ),
     ];
 
@@ -1205,9 +1223,9 @@ export const PracticeService = {
               imgSrc: true,
               patient: {
                 select: {
-                  profession: true,
                   dateOfBirth: true,
                   contactNumber: true,
+                  relationship: true,
                 },
               },
             },
@@ -1232,9 +1250,9 @@ export const PracticeService = {
               imgSrc: true,
               patient: {
                 select: {
-                  profession: true,
                   dateOfBirth: true,
                   contactNumber: true,
+                  relationship: true,
                 },
               },
             },
@@ -1244,32 +1262,53 @@ export const PracticeService = {
 
     const providerName = Object.fromEntries(providers.map((p) => [p.id, p.name]));
     const patientById = Object.fromEntries(patientsById.map((p) => [p.id, p]));
-    const patientByPhone = new Map<string, (typeof usersByPhone)[number]>();
+    /** phone → all linked profiles (self + family) for name-matched enrichment. */
+    const patientsByPhone = new Map<string, Array<(typeof usersByPhone)[number]>>();
     for (const u of usersByPhone) {
-      if (u.phone) patientByPhone.set(u.phone, u);
-      if (u.patient?.contactNumber) {
-        patientByPhone.set(u.patient.contactNumber, u);
+      const keys = [u.phone, u.patient?.contactNumber].filter(
+        (x): x is string => Boolean(x),
+      );
+      for (const k of keys) {
+        const list = patientsByPhone.get(k) ?? [];
+        if (!list.some((x) => x.id === u.id)) list.push(u);
+        patientsByPhone.set(k, list);
       }
     }
 
-    return [...byPhone.values()]
+    const namesMatch = (a: string | null | undefined, b: string | null | undefined) => {
+      const x = (a || "").trim().toLowerCase();
+      const y = (b || "").trim().toLowerCase();
+      return Boolean(x) && x === y;
+    };
+
+    return [...byPerson.values()]
       .sort((a, b) => (b.lastVisitAt?.getTime() ?? 0) - (a.lastVisitAt?.getTime() ?? 0))
       .map((row) => {
-        const linked =
-          (row.patientId ? patientById[row.patientId] : undefined) ??
-          patientByPhone.get(row.phone) ??
-          null;
+        const bookingName = (row.name || "").trim() || null;
+        const byId = row.patientId ? patientById[row.patientId] : undefined;
+        const phoneMatches = patientsByPhone.get(row.phone) ?? [];
+        const byName =
+          bookingName
+            ? phoneMatches.find((u) => namesMatch(u.name, bookingName))
+            : undefined;
+        // Prefer exact profile for this member; never steal another family profile.
+        const linked = byId ?? byName ?? null;
+        const relationship = linked?.patient?.relationship?.trim() || null;
+        // Display name is always the member booked for (booking patientName).
+        const memberName = bookingName || linked?.name?.trim() || null;
 
         return {
           phone: row.phone,
-          name: linked?.name ?? row.name,
+          bookedViaPhone: row.phone,
+          name: memberName,
           patientId: linked?.id ?? row.patientId,
-          email: linked?.email ?? null,
+          relationship,
+          email: publicPatientEmail(linked?.email),
           gender: linked?.gender ?? null,
-          address: linked?.address ?? null,
+          address: publicPatientAddress(linked?.address),
           imgSrc: linked?.imgSrc ?? null,
-          profession: linked?.patient?.profession ?? null,
           dateOfBirth: linked?.patient?.dateOfBirth ?? null,
+          age: ageFromDob(linked?.patient?.dateOfBirth),
           bookingCount: row.bookingCount,
           lastVisitAt: row.lastVisitAt,
           lastStatus: row.lastStatus,
@@ -1286,6 +1325,8 @@ export const PracticeService = {
             tokenNumber: b.tokenNumber,
             providerId: b.providerId,
             providerName: providerName[b.providerId] ?? null,
+            patientName: b.patientName,
+            patientPhone: b.patientPhone,
             notes: b.notes,
             consultationType: b.consultationType,
             disease: b.disease,

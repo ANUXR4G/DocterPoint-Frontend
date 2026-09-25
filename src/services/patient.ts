@@ -11,6 +11,7 @@ import {
 import { AppError } from "../core/response.js";
 import { noneExcluded } from "../core/utils.js";
 import { normalizeGender, requireGender } from "../core/gender.js";
+import { ageFromDob, normalizeDateOfBirth } from "../core/dob.js";
 import {
   saveAadharCardImage,
   saveProfilePhotoImage,
@@ -82,6 +83,7 @@ export class PatientService {
       address: patient!.user.address,
       profession: patient!.profession,
       dateOfBirth: patient!.dateOfBirth,
+      age: ageFromDob(patient!.dateOfBirth),
       contactNumber: patient!.contactNumber,
       emergencyNumber: patient!.emergencyNumber,
       aadharNumber: patient!.aadharNumber,
@@ -121,8 +123,18 @@ export class PatientService {
 
     for (const [key, value] of Object.entries(payload)) {
       if (key === "img_src") userUpdate.imgSrc = value;
-      else if (key === "date_of_birth") patientUpdate.dateOfBirth = value;
-      else if (key === "contact_number") patientUpdate.contactNumber = value;
+      else if (key === "date_of_birth" || key === "dateOfBirth") {
+        const normalized = normalizeDateOfBirth(
+          typeof value === "string" ? value : null,
+        );
+        if (!normalized) {
+          throw new AppError(
+            400,
+            "Date of birth is required (use DD/MM/YYYY or YYYY-MM-DD).",
+          );
+        }
+        patientUpdate.dateOfBirth = normalized;
+      } else if (key === "contact_number") patientUpdate.contactNumber = value;
       else if (key === "emergency_number") patientUpdate.emergencyNumber = value;
       else if (key === "aadhar_number" || key === "aadharNumber") {
         patientUpdate.aadharNumber = normalizeAadharInput(value);
@@ -524,6 +536,14 @@ export class PatientService {
     }
     const relationship = data.relationship?.trim().slice(0, 64) || null;
     const nationalId = data.nationalId?.replace(/\s+/g, "").slice(0, 32) || null;
+    const dateOfBirth = normalizeDateOfBirth(data.dateOfBirth);
+    if (!dateOfBirth) {
+      throw new AppError(
+        400,
+        "Date of birth is required (DD/MM/YYYY).",
+      );
+    }
+    const age = ageFromDob(dateOfBirth);
 
     // Random password for schema only — patients authenticate via phone OTP.
     const hashedPassword = await generateHash(
@@ -543,7 +563,7 @@ export class PatientService {
         patient: {
           create: {
             contactNumber,
-            dateOfBirth: data.dateOfBirth?.trim() || null,
+            dateOfBirth,
             ...(relationship ? { relationship } : {}),
             ...(nationalId ? { aadharNumber: nationalId } : {}),
           },
@@ -557,6 +577,8 @@ export class PatientService {
       name: user.name,
       email: user.email,
       phone,
+      dateOfBirth,
+      age,
       relationship: user.patient?.relationship ?? relationship,
     };
   }

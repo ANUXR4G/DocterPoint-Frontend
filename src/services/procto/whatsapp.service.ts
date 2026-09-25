@@ -574,8 +574,11 @@ export const WhatsAppService = {
               await prisma.whatsAppConversation.update({
                 where: { id: convEarly.id },
                 data: {
+                  status: "bot_active",
                   state: {
                     ...earlyState,
+                    handedOff: false,
+                    postBookingCare: false,
                     step: "awaiting_document_link",
                     pendingDoc: branchF.pendingDoc,
                     idleReminderSentAt: undefined,
