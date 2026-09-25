@@ -46,7 +46,7 @@ Return ONE JSON object only — no markdown, no commentary:
 
 Rules:
 - Prefer the English / Latin-script name printed on the card (not Devanagari alone). Title-case the name (e.g. "Anurag Nanda"). Omit titles like Mr/Mrs/Shri.
-- dateOfBirth: convert DD/MM/YYYY or DD-MM-YYYY (common on Aadhaar) to YYYY-MM-DD. Never invent a DOB.
+- dateOfBirth: look for labels "Date of Birth", "DOB", "जन्मतिथि" — value is often DD/MM/YYYY under or beside the label. Convert to YYYY-MM-DD. Never invent a DOB.
 - gender: map M/Male/पुरुष → male; F/Female/महिला → female; else others when printed.
 - address: full address line(s) as printed; keep pin code if visible.
 - aadharNumber: 12 digits only when clearly visible (Aadhaar). panNumber: ABCDE1234F form when clearly visible (PAN).
@@ -301,7 +301,30 @@ async function preparePdfForOcr(
 const TEXT_ID_PROMPT = `You extract identity fields from OCR / DigiLocker PDF text of an Indian ID (Aadhaar, PAN, etc.).
 Return ONE JSON object only — no markdown:
 {"documentType":"AADHAAR"|"PAN"|"DRIVING_LICENCE"|"PASSPORT"|"VOTER_ID"|"OTHER"|null,"name":string|null,"dateOfBirth":"YYYY-MM-DD"|null,"gender":"male"|"female"|"others"|null,"address":string|null,"contactNumber":null,"documentNumberMasked":string|null,"aadharNumber":string|null,"panNumber":string|null,"confidence":number}
-Prefer English Latin name. Convert DD/MM/YYYY to YYYY-MM-DD. contactNumber must be null. Do not invent values.`;
+Prefer English Latin name. Look for "Date of Birth" / "DOB" / "जन्मतिथि" and convert DD/MM/YYYY to YYYY-MM-DD. contactNumber must be null. Do not invent values.`;
+
+/** Regex fallback when vision/LLM misses an obvious labeled DOB on the card. */
+export function heuristicDobFromText(text: string): string | null {
+  if (!text?.trim()) return null;
+  const labeled = text.match(
+    /(?:जन्मतिथि|date\s*of\s*birth|d\.?\s*o\.?\s*b\.?)\s*[:\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i,
+  );
+  if (labeled?.[1]) return normalizeDob(labeled[1]);
+  // DigiLocker often puts the date on the next line after the label.
+  const nextLine = text.match(
+    /(?:जन्मतिथि|date\s*of\s*birth|d\.?\s*o\.?\s*b\.?)\s*[:\-]?\s*[\r\n]+\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i,
+  );
+  if (nextLine?.[1]) return normalizeDob(nextLine[1]);
+  return null;
+}
+
+function mergeHeuristicDob(fields: IdScanFields, text?: string | null): IdScanFields {
+  if (fields.dateOfBirth || !text) return fields;
+  const dob = heuristicDobFromText(text);
+  if (!dob) return fields;
+  console.info(`[idScan] heuristic DOB from text: ${dob}`);
+  return { ...fields, dateOfBirth: dob };
+}
 
 async function callTextModel(systemPrompt: string, userText: string): Promise<string> {
   const providers = llmChatProviders({ includeDeepSeek: true });
@@ -363,7 +386,7 @@ function textLooksUsefulForId(text: string): boolean {
   const letters = (text.match(/[A-Za-z\u0900-\u097F]/g) || []).length;
   if (letters < 12) return false;
   // DigiLocker / Aadhaar / PAN cues
-  return /aadhaar|aadhar|uidai|permanent account|pan|dob|date of birth|gender|male|female|पुरुष|महिला|\d{4}\s?\d{4}\s?\d{4}/i.test(
+  return /aadhaar|aadhar|uidai|permanent account|pan|dob|date of birth|जन्मतिथि|gender|male|female|पुरुष|महिला|\d{4}\s?\d{4}\s?\d{4}/i.test(
     text,
   ) || letters >= 40;
 }
@@ -851,7 +874,10 @@ export const IdScanService = {
     if (pdfText && textLooksUsefulForId(pdfText)) {
       try {
         const textJson = await callTextModel(TEXT_ID_PROMPT, pdfText);
-        const fromText = toIdFields(parseJsonFromModel(textJson));
+        const fromText = mergeHeuristicDob(
+          toIdFields(parseJsonFromModel(textJson)),
+          pdfText,
+        );
         if (fromText.name || fromText.dateOfBirth || fromText.aadharNumber || fromText.panNumber) {
           console.info(
             `[idScan] PDF text path ok name=${fromText.name ?? "—"} dob=${fromText.dateOfBirth ?? "—"}`,
@@ -867,7 +893,10 @@ export const IdScanService = {
     }
 
     const text = await callVisionModel(mimeType, raw, ID_PROMPT);
-    const fields = toIdFields(parseJsonFromModel(text));
+    const fields = mergeHeuristicDob(
+      toIdFields(parseJsonFromModel(text)),
+      pdfText,
+    );
 
     if (
       !fields.name &&

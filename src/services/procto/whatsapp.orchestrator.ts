@@ -3315,6 +3315,63 @@ function goToFamilyPhoneOrConfirm(
   return goToRegisterConfirm(state, patientPhone, lang);
 }
 
+function formatDobForWa(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || "").trim());
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+/**
+ * After name (+ optional OCR) and relationship: ask only for missing DOB/ID,
+ * or skip straight to gender when both are already filled from the ID scan.
+ */
+function continueFamilyAfterRelationship(
+  state: ConversationState,
+  lang: WaLang,
+  opts?: { ocrAckName?: string },
+): OrchestratorResult {
+  const hasDob = Boolean(state.regDob?.trim());
+  const hasId = Boolean(state.regNationalId?.trim());
+  const ack: string[] = [];
+  if (opts?.ocrAckName?.trim()) {
+    ack.push(BotPrompts.idOcrGotName(opts.ocrAckName.trim(), lang));
+  }
+  if (hasDob) {
+    ack.push(
+      L(
+        lang,
+        `Date of birth from the ID: *${formatDobForWa(state.regDob!)}*.`,
+        `ID से जन्म तारीख: *${formatDobForWa(state.regDob!)}*।`,
+      ),
+    );
+  }
+  if (hasId) {
+    ack.push(
+      L(
+        lang,
+        "National / Aadhaar ID saved from the document.",
+        "दस्तावेज़ से National / Aadhaar ID सेव हो गई।",
+      ),
+    );
+  }
+  const prefix = ack.length ? `${ack.join("\n")}\n\n` : "";
+
+  if (hasDob && hasId) {
+    state.step = "awaiting_register_gender";
+    const next = withGenderButtons(BotPrompts.askRegisterFamilyGender(lang));
+    return { ...next, reply: `${prefix}${next.reply}` };
+  }
+
+  state.step = "awaiting_register_family_details";
+  if (!hasDob && !hasId) {
+    return { reply: `${prefix}${BotPrompts.askRegisterFamilyDobAndId(lang)}` };
+  }
+  if (!hasDob) {
+    return { reply: `${prefix}${BotPrompts.askRegisterFamilyDobOnly(lang)}` };
+  }
+  return { reply: `${prefix}${BotPrompts.askRegisterFamilyIdOnly(lang)}` };
+}
+
 async function applyIdScanToRegister(
   convId: string,
   patientPhone: string,
@@ -3329,6 +3386,11 @@ async function applyIdScanToRegister(
     if (scan.dateOfBirth) state.regDob = scan.dateOfBirth;
     if (scan.address) state.regAddress = scan.address;
     if (scan.gender) state.regGender = scan.gender;
+    if (scan.aadharNumber) {
+      state.regNationalId = String(scan.aadharNumber).replace(/\D/g, "").slice(0, 32);
+    } else if (scan.panNumber) {
+      state.regNationalId = String(scan.panNumber).replace(/\s+/g, "").slice(0, 32);
+    }
     await saveState(convId, {
       ...keepPrefs(state),
       step: "awaiting_register_family_opt",
@@ -3337,6 +3399,7 @@ async function applyIdScanToRegister(
       regGender: state.regGender,
       regDob: state.regDob ?? null,
       regAddress: state.regAddress ?? null,
+      regNationalId: state.regNationalId ?? null,
     });
     return withYesNo(
       BotPrompts.askRegisterFamilyOpt(existing.name || "", lang) +
@@ -3358,31 +3421,34 @@ async function applyIdScanToRegister(
   if (scan.address) state.regAddress = scan.address;
   // Registered mobile is always the WhatsApp sender — never OCR contactNumber.
 
-  // Branch C family flow: name (from ID) → relationship → DOB/ID.
+  // Branch C family flow: name (from ID) → relationship → DOB/ID (skip what OCR filled).
   if (state.registeringFamily) {
     if (scan.aadharNumber) {
       state.regNationalId = String(scan.aadharNumber).replace(/\D/g, "").slice(0, 32);
     } else if (scan.panNumber) {
       state.regNationalId = String(scan.panNumber).replace(/\s+/g, "").slice(0, 32);
     }
-    state.step = state.regRelationship?.trim()
-      ? "awaiting_register_family_details"
-      : "awaiting_register_relationship";
-    await saveState(convId, state);
-    if (state.step === "awaiting_register_family_details") {
-      return {
-        reply:
-          BotPrompts.idOcrGotName(name, lang) +
+    if (scan.gender) state.regGender = scan.gender;
+
+    if (!state.regRelationship?.trim()) {
+      state.step = "awaiting_register_relationship";
+      await saveState(convId, state);
+      return withRelationshipButtons(
+        BotPrompts.idOcrGotName(name, lang) +
+          (state.regDob
+            ? `\n${L(lang, `Date of birth from the ID: *${formatDobForWa(state.regDob)}*.`, `ID से जन्म तारीख: *${formatDobForWa(state.regDob)}*।`)}`
+            : "") +
           "\n\n" +
-          BotPrompts.askRegisterFamilyDobAndId(lang),
-      };
+          BotPrompts.askRegisterFamilyRelationship(lang),
+        lang,
+      );
     }
-    return withRelationshipButtons(
-      BotPrompts.idOcrGotName(name, lang) +
-        "\n\n" +
-        BotPrompts.askRegisterFamilyRelationship(lang),
-      lang,
-    );
+
+    const next = continueFamilyAfterRelationship(state, lang, {
+      ocrAckName: name,
+    });
+    await saveState(convId, state);
+    return next;
   }
 
   const gender = scan.gender;
@@ -3406,7 +3472,10 @@ async function applyIdScanToRegister(
     const opt = emailOptPrompt(lang);
     return {
       reply:
-        BotPrompts.idOcrGotName(name, lang) + "\n\n" + opt.reply,
+        BotPrompts.idOcrGotName(name, lang) +
+        `\n${L(lang, `Date of birth from the ID: *${formatDobForWa(state.regDob)}*.`, `ID से जन्म तारीख: *${formatDobForWa(state.regDob)}*।`)}` +
+        "\n\n" +
+        opt.reply,
       replyButtons: opt.replyButtons,
     };
   }
@@ -3414,7 +3483,10 @@ async function applyIdScanToRegister(
   state.step = "awaiting_register_gender";
   await saveState(convId, state);
   return withGenderButtons(
-    BotPrompts.idOcrGotName(name, lang) + "\n\n" + BotPrompts.askRegisterGender(lang),
+    BotPrompts.idOcrGotName(name, lang) +
+      `\n${L(lang, `Date of birth from the ID: *${formatDobForWa(state.regDob)}*.`, `ID से जन्म तारीख: *${formatDobForWa(state.regDob)}*।`)}` +
+      "\n\n" +
+      BotPrompts.askRegisterGender(lang),
   );
 }
 
@@ -3562,9 +3634,9 @@ async function confirmFamilyMember(
     );
   }
   if (!state.regDob?.trim() || !state.regNationalId?.trim()) {
-    state.step = "awaiting_register_family_details";
+    const next = continueFamilyAfterRelationship(state, lang);
     await saveState(convId, state);
-    return { reply: BotPrompts.askRegisterFamilyDobAndId(lang) };
+    return next;
   }
   if (!state.regGender) {
     state.step = "awaiting_register_gender";
@@ -4587,9 +4659,9 @@ async function runOrchestratorCore(input: {
       );
     }
     state.regRelationship = rel;
-    state.step = "awaiting_register_family_details";
+    const next = continueFamilyAfterRelationship(state, lang);
     await saveState(convId, state);
-    return { reply: BotPrompts.askRegisterFamilyDobAndId(lang) };
+    return next;
   }
 
   if (state.step === "awaiting_register_family_details") {
