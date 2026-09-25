@@ -109,6 +109,7 @@ export function applyLiveBookingEvent<T extends { id: string }>(
 
 type PatientRowWithVisits = {
   phone: string
+  patientId?: string | null
   lastStatus?: string | null
   lastVisitAt?: string | Date | null
   recentBookings?: Array<{ id: string } & Record<string, unknown>>
@@ -126,6 +127,8 @@ export function patchPatientsFromBooking<T extends PatientRowWithVisits>(
   const id = String(incoming.id)
   const phone =
     str(incoming.patient_phone) ?? str(incoming.patientPhone) ?? undefined
+  const patientId =
+    str(incoming.patient_id) ?? str(incoming.patientId) ?? undefined
 
   let touched = false
   const next = patients.map((patient) => {
@@ -133,8 +136,11 @@ export function patchPatientsFromBooking<T extends PatientRowWithVisits>(
     if (!Array.isArray(recent) || !recent.length) return patient
     const idx = recent.findIndex((b) => b.id === id)
     if (idx < 0) {
-      // New visit for this phone — soft-refresh will pick it up.
-      if (phone && patient.phone === phone) touched = true
+      // New visit for this person — soft-refresh will pick it up.
+      const samePerson =
+        (patientId && patient.patientId && patient.patientId === patientId) ||
+        (phone && patient.phone === phone)
+      if (samePerson) touched = true
       return patient
     }
     touched = true

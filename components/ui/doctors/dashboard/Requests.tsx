@@ -12,8 +12,8 @@ import {
 /** Today's clinic bookings sidebar (Procto) — replaces legacy appointment requests. */
 export default function Requests() {
   const [today] = useState(() => startOfToday())
-  const { ready, loading, bookings: allBookings } = usePracticeDashboard()
-  const showLoading = !ready && loading
+  const { ready, hydrated, loading, bookings: allBookings } = usePracticeDashboard()
+  const showLoading = (!ready && loading) || (ready && !hydrated)
 
   const bookings = useMemo(() => {
     const date = format(today, "yyyy-MM-dd")

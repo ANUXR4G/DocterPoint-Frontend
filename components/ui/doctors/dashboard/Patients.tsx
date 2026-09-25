@@ -13,9 +13,9 @@ import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 
 /** Clinic patients from Procto bookings. */
 export default function Patients() {
-  const { ready, loading, patients: rows } = usePracticeDashboard()
+  const { ready, hydrated, loading, patients: rows } = usePracticeDashboard()
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
-  const showLoading = !ready && loading
+  const showLoading = (!ready && loading) || (ready && !hydrated)
 
   const filtered = useMemo(
     () =>

@@ -17,6 +17,7 @@ import {
   type WhatsAppPendingSignups,
   type WhatsAppRegistry,
 } from "@/lib/services/admin"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
 
 /**
@@ -430,7 +431,9 @@ export default function WhatsAppSignupPage() {
               header: "Number",
               cell: (n) => (
                 <div>
-                  <p className="font-semibold tabular-nums">+91 {n.phoneNumber}</p>
+                  <p className="font-semibold tabular-nums">
+                    {formatPhoneDisplay(n.phoneNumber)}
+                  </p>
                   {n.waMeLink ? (
                     <a
                       href={n.waMeLink}

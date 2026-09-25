@@ -13,6 +13,7 @@ import {
   statusTone,
 } from "@/components/admin/AdminBadge"
 import { adminService } from "@/lib/services/admin"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
 
 const PREVIEW_LIMIT = 2
@@ -235,7 +236,11 @@ export default function AdminApprovalsPage() {
               {data!.numbers.slice(0, PREVIEW_LIMIT).map((n) => (
                 <AdminListCard
                   key={n.id}
-                  title={<span className="tabular-nums">{n.phoneNumber}</span>}
+                  title={
+                    <span className="tabular-nums">
+                      {formatPhoneDisplay(n.phoneNumber)}
+                    </span>
+                  }
                   meta={n.practice?.name || "Unassigned"}
                   body={
                     <AdminBadge tone={statusTone(n.status)}>{n.status}</AdminBadge>

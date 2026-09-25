@@ -43,6 +43,11 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/doctor/dashboard",
     },
     {
+      name: "Queue",
+      icon: "inbox",
+      dest: "/doctor/queue",
+    },
+    {
       name: "Notifications",
       icon: "bell",
       dest: "/doctor/notifications",

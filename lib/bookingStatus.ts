@@ -70,6 +70,13 @@ export function bookingActionSelectClass(status: string): string {
   }
 }
 
+/** Finished / closed visits — status must not change again. */
+export function isTerminalVisitStatus(status: string): boolean {
+  return ["COMPLETED", "CANCELED", "CANCELLED", "NO_SHOW"].includes(
+    String(status || "").toUpperCase(),
+  )
+}
+
 /** Full status list clinic/doctor can set from queue / appointments. */
 export function bookingStatusControlOptions(): Array<{
   status: string

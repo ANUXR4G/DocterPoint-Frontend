@@ -18,6 +18,7 @@ import {
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
   filterBookingsByRange,
@@ -129,7 +130,7 @@ function statusClass(status: string) {
 }
 
 function phoneOf(b: CalBooking) {
-  return b.patientPhone || b.patient_phone || "—"
+  return formatPhoneDisplay(b.patientPhone || b.patient_phone)
 }
 
 function dateLabel(b: CalBooking) {
@@ -284,6 +285,7 @@ export default function AppointmentCalendar() {
     memberships,
     bookings: sharedBookings,
     ready,
+    hydrated,
     loading: shellLoading,
     error: shellError,
     isClinicAdmin,
@@ -299,7 +301,7 @@ export default function AppointmentCalendar() {
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
   const [view, setView] = useState<ViewMode>("week")
   const [anchor, setAnchor] = useState(() => startOfToday())
-  const loading = !ready && shellLoading
+  const loading = (!ready && shellLoading) || (ready && !hydrated)
 
   useEffect(() => {
     if (!ready || isClinicAdmin || !actorUserId) return

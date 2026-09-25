@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useMetaEmbeddedSignup } from "@/hooks/useMetaEmbeddedSignup"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { proctoService } from "@/lib/services/procto"
 
 type WhatsAppSetup = {
@@ -37,12 +38,6 @@ type Props = {
   hasWhatsAppEntitlement: boolean
   subscriptionUsable: boolean
   onConnected: () => void
-}
-
-function formatPhoneDisplay(digits: string): string {
-  const d = digits.replace(/\D/g, "").slice(-10)
-  if (d.length !== 10) return digits
-  return `+91 ${d.slice(0, 5)} ${d.slice(5)}`
 }
 
 export default function PracticeWhatsAppConnect({

@@ -18,6 +18,7 @@ import {
   bookingStatusClass,
   bookingStatusLabel,
 } from "@/lib/bookingStatus"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { patchBookingFields } from "@/lib/liveBooking"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
@@ -60,10 +61,27 @@ type VisitBooking = {
     gender: string | null
     address: string | null
     imgSrc?: string | null
-    profession: string | null
     dateOfBirth: string | null
+    age?: number | null
     contactNumber: string | null
   } | null
+}
+
+/** Auto-generated visit briefs — never load into the doctor's remarks box. */
+function isAutoVisitBrief(text?: string | null): boolean {
+  const t = text?.trim() || ""
+  if (!t) return false
+  return (
+    /^Chief complaint:/i.test(t) ||
+    /^Patient problem:/i.test(t) ||
+    /^Patient's description:/i.test(t) ||
+    /AI brief for doctor:/i.test(t)
+  )
+}
+
+function doctorRemarksForEdit(text?: string | null): string {
+  if (!text?.trim() || isAutoVisitBrief(text)) return ""
+  return text.trim()
 }
 
 const TIMES = ["morning", "afternoon", "evening", "night"] as const
@@ -72,10 +90,16 @@ function dash(v: string | null | undefined) {
   return v?.trim() ? v : "—"
 }
 
-function ageFromDob(dob?: string | null): string {
-  if (!dob?.trim()) return "—"
-  const age = firey.calculateAge(dob)
-  return age >= 0 && age <= 130 ? String(age) : "—"
+/** Optional patient fields: empty when we never collected the value. */
+function blank(v: string | null | undefined) {
+  return v?.trim() ? v.trim() : ""
+}
+
+function ageFromDob(dob?: string | null, age?: number | null): string {
+  if (typeof age === "number" && age >= 0 && age <= 130) return String(age)
+  if (!dob?.trim()) return ""
+  const n = firey.calculateAge(dob)
+  return n >= 0 && n <= 130 ? String(n) : ""
 }
 
 export default function VisitPage() {
@@ -112,14 +136,16 @@ export default function VisitPage() {
   const applyVisitData = useCallback((data: VisitBooking, opts?: { silent?: boolean }) => {
     setBooking(data)
     if (!opts?.silent) {
-      setRemarks(data.doctorRemarks ?? "")
+      setRemarks(doctorRemarksForEdit(data.doctorRemarks))
       setMedicines(Array.isArray(data.medicines) ? data.medicines : [])
       setDocuments(Array.isArray(data.documents) ? data.documents : [])
       setLoading(false)
     } else {
       if (Array.isArray(data.medicines)) setMedicines(data.medicines)
       if (Array.isArray(data.documents)) setDocuments(data.documents)
-      if (data.doctorRemarks !== undefined) setRemarks(data.doctorRemarks ?? "")
+      if (data.doctorRemarks !== undefined) {
+        setRemarks(doctorRemarksForEdit(data.doctorRemarks))
+      }
     }
   }, [])
 
@@ -157,7 +183,7 @@ export default function VisitPage() {
         setMedicines(fromShared.medicines as Medicine[])
       }
       if (fromShared.doctorRemarks != null) {
-        setRemarks(String(fromShared.doctorRemarks))
+        setRemarks(doctorRemarksForEdit(fromShared.doctorRemarks))
       }
       if (ready) setLoading(false)
     }
@@ -197,7 +223,8 @@ export default function VisitPage() {
     nextDocuments: VisitDoc[] = documents,
     opts?: { status?: string; successMessage?: string },
   ) {
-    if (!bookingId || booking?.status === "COMPLETED") return false
+    if (!bookingId || String(booking?.status || "").toUpperCase() === "COMPLETED")
+      return false
     // Ensure WhatsApp / server documents are loaded before any save so we
     // never POST documents:[] and wipe patient attachments.
     let docsToSave = nextDocuments
@@ -230,7 +257,7 @@ export default function VisitPage() {
 
   async function addMedicine() {
     if (!medName.trim() || !bookingId) return
-    if (booking?.status === "COMPLETED") return
+    if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
     const next = [
       ...medicines,
       {
@@ -248,7 +275,11 @@ export default function VisitPage() {
   }
 
   async function removeMedicine(idx: number) {
-    if (!bookingId || booking?.status === "COMPLETED") return
+    if (
+      !bookingId ||
+      String(booking?.status || "").toUpperCase() === "COMPLETED"
+    )
+      return
     const next = medicines.filter((_, i) => i !== idx)
     setMedicines(next)
     setMessage("")
@@ -256,7 +287,11 @@ export default function VisitPage() {
   }
 
   async function removeDocument(idx: number) {
-    if (!bookingId || booking?.status === "COMPLETED") return
+    if (
+      !bookingId ||
+      String(booking?.status || "").toUpperCase() === "COMPLETED"
+    )
+      return
     const nextDocs = documents.filter((_, i) => i !== idx)
     setDocuments(nextDocs)
     setMessage("")
@@ -302,7 +337,7 @@ export default function VisitPage() {
 
   async function save(nextStatus?: string) {
     if (!bookingId) return
-    if (booking?.status === "COMPLETED") return
+    if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
     setSaving(true)
     setError("")
     setMessage("")
@@ -317,7 +352,9 @@ export default function VisitPage() {
       setError(res.message || "Could not save visit.")
       return
     }
-    setBooking(res.data as VisitBooking)
+    const saved = res.data as VisitBooking
+    setBooking(saved)
+    patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
     if (nextStatus === "COMPLETED") {
       setMessage("Visit completed.")
       router.push(practiceTabHref("patients"))
@@ -347,7 +384,9 @@ export default function VisitPage() {
 
   const p = booking.patient
   const patientName = p?.name || booking.patientName || "Patient"
-  const phone = p?.contactNumber || p?.phone || booking.patientPhone || "—"
+  const phone = formatPhoneDisplay(
+    p?.contactNumber || p?.phone || booking.patientPhone,
+  )
   const slotLabel =
     booking.tokenNumber != null
       ? `Token #${booking.tokenNumber}`
@@ -370,14 +409,7 @@ export default function VisitPage() {
           year: "numeric",
         })
       : "—"
-  const diseaseLabel =
-    dash(booking.disease) !== "—"
-      ? dash(booking.disease)
-      : dash(booking.consultationType) !== "—"
-        ? dash(booking.consultationType)
-        : booking.mode?.replace(/_/g, " ") || "—"
-
-  const isCompleted = booking.status === "COMPLETED"
+  const isCompleted = String(booking.status || "").toUpperCase() === "COMPLETED"
   const selfId = getSessionUserId()
   const peerId = booking.patient?.id
 
@@ -392,27 +424,6 @@ export default function VisitPage() {
           aria-label={`Patient ${patientName}`}
         >
           <div className="bg-[color-mix(in_srgb,var(--theme-primary)_12%,transparent)] px-3 py-2.5 sm:px-5 sm:py-3 dark:bg-[color-mix(in_srgb,var(--theme-primary)_18%,var(--solune-surface))]">
-            <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => router.push("/doctor/queue")}
-                className="font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400"
-              >
-                ← Queue
-              </button>
-              <Link
-                href="/doctor/calendar"
-                className="font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400"
-              >
-                Calendar
-              </Link>
-              <Link
-                href={practiceTabHref("patients")}
-                className="font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400"
-              >
-                Patients
-              </Link>
-            </div>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="flex min-w-0 items-start gap-3">
                 <PatientAvatar
@@ -433,7 +444,7 @@ export default function VisitPage() {
                       ·
                     </span>
                     <span>
-                      Age {ageFromDob(p?.dateOfBirth)}
+                      Age {ageFromDob(p?.dateOfBirth, p?.age)}
                       {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
                     </span>
                   </p>
@@ -461,45 +472,33 @@ export default function VisitPage() {
 
       <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
         <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
-          <Fact label="Date of birth" value={dash(p?.dateOfBirth)} />
-          <Fact label="Age" value={ageFromDob(p?.dateOfBirth)} />
-          <Fact label="Gender" value={dash(p?.gender)} />
+          <Fact label="Date of birth" value={blank(p?.dateOfBirth)} />
+          <Fact label="Age" value={ageFromDob(p?.dateOfBirth, p?.age)} />
+          <Fact label="Gender" value={blank(p?.gender)} />
           <Fact label="Phone" value={phone} />
-          <Fact label="Email" value={dash(p?.email)} />
-          <Fact label="Profession" value={dash(p?.profession)} />
-          <Fact label="Address" value={dash(p?.address)} />
-          <Fact label="Problem" value={diseaseLabel} />
-          <Fact label="Doctor" value={dash(booking.provider?.name)} />
+          <Fact label="Email" value={blank(p?.email)} />
+          <Fact label="Address" value={blank(p?.address)} />
+          <Fact label="Doctor" value={blank(booking.provider?.name)} />
           <Fact
             label="Location"
             value={
               booking.location
                 ? [booking.location.name, booking.location.city]
                     .filter(Boolean)
-                    .join(", ") || "—"
-                : "—"
+                    .join(", ") || ""
+                : ""
             }
           />
           <Fact
             label="Mode"
-            value={booking.mode?.replace(/_/g, " ") || "—"}
+            value={booking.mode?.replace(/_/g, " ") || ""}
           />
           <Fact
             label="Channel"
-            value={booking.channel?.replace(/_/g, " ") || "—"}
+            value={booking.channel?.replace(/_/g, " ") || ""}
           />
           {booking.tokenNumber != null ? (
             <Fact label="Token" value={`#${booking.tokenNumber}`} />
-          ) : null}
-          {booking.notes ? (
-            <div className="sm:col-span-2 lg:col-span-3">
-              <dt className="text-xs font-medium text-neutral-500 dark:text-slate-400">
-                Patient problem &amp; AI brief
-              </dt>
-              <dd className="mt-0.5 whitespace-pre-wrap leading-relaxed font-medium text-neutral-900 dark:text-slate-100">
-                {booking.notes}
-              </dd>
-            </div>
           ) : null}
         </dl>
       </section>
@@ -510,8 +509,7 @@ export default function VisitPage() {
           Remarks
         </h2>
         <p className="mt-1 text-xs opacity-60">
-          Prefills from the patient&apos;s problem with an AI visit brief. Edit
-          freely before finishing the visit.
+          Clinical remarks, advice, and follow-up for this visit.
         </p>
         <textarea
           value={remarks}
@@ -781,13 +779,15 @@ export default function VisitPage() {
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
+  const v = value?.trim()
+  if (!v) return null
   return (
     <div>
       <dt className="text-xs font-medium text-neutral-500 dark:text-slate-400">
         {label}
       </dt>
       <dd className="mt-0.5 break-words font-medium text-neutral-900 dark:text-slate-100">
-        {value}
+        {v}
       </dd>
     </div>
   )

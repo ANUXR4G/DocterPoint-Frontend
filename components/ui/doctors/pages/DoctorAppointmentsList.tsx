@@ -5,6 +5,7 @@ import Link from "next/link"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { proctoService } from "@/lib/services/procto"
 import {
+  isTerminalVisitStatus,
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
@@ -14,6 +15,7 @@ import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import ClinicBookAppointmentModal from "@/components/ui/procto/ClinicBookAppointmentModal"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 
 /** Clinic bookings from Procto — synced with backend queue/calendar. */
 export default function DoctorAppointmentsList({
@@ -23,6 +25,7 @@ export default function DoctorAppointmentsList({
 } = {}) {
   const {
     ready,
+    hydrated,
     loading,
     error: loadError,
     practiceName,
@@ -35,13 +38,17 @@ export default function DoctorAppointmentsList({
   const [actionError, setActionError] = useState("")
   const [bookOpen, setBookOpen] = useState(false)
 
-  const showLoading = !ready && loading
+  const showLoading = (!ready && loading) || (ready && !hydrated)
   const isClinic = portal === "clinic"
 
   async function onStatus(id: string, status: string) {
+    const previous = rows.find((b) => b.id === id)?.status
+    if (isTerminalVisitStatus(previous || "")) {
+      setActionError("Completed appointments cannot change status.")
+      return
+    }
     setBusyId(id)
     setActionError("")
-    const previous = rows.find((b) => b.id === id)?.status
     patchBooking(id, { status })
     const res = await proctoService.updateBookingStatus(id, status)
     setBusyId(null)
@@ -149,21 +156,22 @@ export default function DoctorAppointmentsList({
                       className="truncate font-semibold text-neutral-900 dark:text-white"
                     />
                     <p className="text-xs text-neutral-500">
-                      {b.patientPhone || b.patient_phone || ""}
+                      {formatPhoneDisplay(
+                        b.patientPhone || b.patient_phone,
+                        "",
+                      )}
                     </p>
                   </div>
                 </div>
                 <p className="mt-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                   {formatBookingWhenDetailed(b)}
                 </p>
-                <p className="mt-0.5 truncate text-xs text-neutral-500">
-                  {b.disease || b.consultationType || "—"}
-                </p>
                 <div className="mt-3">
                   <BookingStatusControls
                     status={b.status || "SCHEDULED"}
                     busy={busyId === b.id}
                     compact
+                    showActionButtons={false}
                     ariaLabel={`Update status for ${b.patientName || "patient"}`}
                     onChange={(status) => void onStatus(b.id, status)}
                   />
@@ -179,13 +187,12 @@ export default function DoctorAppointmentsList({
           </ul>
 
           <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-neutral-300 bg-white dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] md:block">
-            <table className="w-full min-w-[880px] text-left text-sm">
+            <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-[var(--solune-elevated)] dark:text-neutral-300">
                 <tr>
                   <th className="px-4 py-3">Patient</th>
                   <th className="px-4 py-3">When</th>
-                  <th className="px-4 py-3">Reason</th>
-                  <th className="px-4 py-3">Update status</th>
+                  <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Visit</th>
                 </tr>
               </thead>
@@ -195,20 +202,21 @@ export default function DoctorAppointmentsList({
                     <td className="px-4 py-3 font-semibold">
                       <PatientNameHover booking={b} />
                       <p className="text-xs font-medium opacity-60">
-                        {b.patientPhone || b.patient_phone}
+                        {formatPhoneDisplay(
+                          b.patientPhone || b.patient_phone,
+                          "",
+                        )}
                       </p>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
                       {formatBookingWhenDetailed(b)}
-                    </td>
-                    <td className="max-w-[14rem] truncate px-4 py-3 text-xs">
-                      {b.disease || b.consultationType || "—"}
                     </td>
                     <td className="px-4 py-3">
                       <BookingStatusControls
                         status={b.status || "SCHEDULED"}
                         busy={busyId === b.id}
                         compact
+                        showActionButtons={false}
                         ariaLabel={`Update status for ${b.patientName || "patient"}`}
                         onChange={(status) => void onStatus(b.id, status)}
                       />

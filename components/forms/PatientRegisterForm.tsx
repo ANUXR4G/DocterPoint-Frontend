@@ -138,6 +138,7 @@ export default function PatientRegisterForm({
         name: profile.name.trim(),
         phone: profile.contactNumber.trim() || undefined,
         gender: profile.gender as "male" | "female" | "others",
+        date_of_birth: format(profile.dateOfBirth!, "yyyy-MM-dd"),
       })
 
       if (res?.status === "unsuccessful" || !res?.role) {
@@ -173,10 +174,9 @@ export default function PatientRegisterForm({
         name: profile.name.trim(),
         gender: profile.gender,
         address: profile.address.trim(),
-        profession: profile.profession.trim(),
         contact_number: profile.contactNumber.trim(),
         emergency_number: profile.emergencyNumber.trim(),
-        date_of_birth: format(profile.dateOfBirth!, "MM/dd/yyyy"),
+        date_of_birth: format(profile.dateOfBirth!, "yyyy-MM-dd"),
         ...(aadharNumber.trim()
           ? { aadhar_number: aadharNumber.replace(/\D/g, "") }
           : {}),
@@ -309,18 +309,6 @@ export default function PatientRegisterForm({
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="min-w-0">
-            <IconInput
-              icon="written-page"
-              name="profession"
-              label="Profession"
-              value={profile.profession}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setProfile((prev) => ({ ...prev, profession: e.target.value }))
-              }
-            />
           </div>
 
           <div className="min-w-0">

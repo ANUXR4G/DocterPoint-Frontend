@@ -19,6 +19,7 @@ import {
   adminService,
   type AdminWhatsAppOverview,
 } from "@/lib/services/admin"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
 
 export default function AdminWhatsAppPage() {
@@ -283,7 +284,7 @@ export default function AdminWhatsAppPage() {
               cell: (n) => (
                 <div>
                   <p className="font-semibold tabular-nums text-slate-900 dark:text-white">
-                    {n.phoneNumber}
+                    {formatPhoneDisplay(n.phoneNumber)}
                   </p>
                   {n.displayName ? (
                     <p className="text-xs text-slate-500">{n.displayName}</p>
@@ -387,7 +388,9 @@ export default function AdminWhatsAppPage() {
                 key: "phone",
                 header: "Number",
                 cell: (n) => (
-                  <span className="font-semibold tabular-nums">{n.phoneNumber}</span>
+                  <span className="font-semibold tabular-nums">
+                    {formatPhoneDisplay(n.phoneNumber)}
+                  </span>
                 ),
               },
               {
@@ -477,7 +480,9 @@ export default function AdminWhatsAppPage() {
                 key: "phone",
                 header: "Number",
                 cell: (n) => (
-                  <span className="font-semibold tabular-nums">{n.phoneNumber}</span>
+                  <span className="font-semibold tabular-nums">
+                    {formatPhoneDisplay(n.phoneNumber)}
+                  </span>
                 ),
               },
               {
@@ -542,7 +547,9 @@ export default function AdminWhatsAppPage() {
                 key: "phone",
                 header: "Number",
                 cell: (n) => (
-                  <span className="font-semibold tabular-nums">{n.phoneNumber}</span>
+                  <span className="font-semibold tabular-nums">
+                    {formatPhoneDisplay(n.phoneNumber)}
+                  </span>
                 ),
               },
               {

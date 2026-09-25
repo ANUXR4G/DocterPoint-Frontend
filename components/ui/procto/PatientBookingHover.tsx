@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import Link from "next/link"
 import type { ProctoBooking } from "@/lib/services/procto"
 import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 
 function dash(v: string | null | undefined) {
   return v?.trim() ? v : "—"
@@ -20,12 +21,11 @@ function patientName(booking: ProctoBooking) {
 }
 
 function patientPhone(booking: ProctoBooking) {
-  return (
+  return formatPhoneDisplay(
     booking.patientPhone ||
-    booking.patient_phone ||
-    booking.patient?.phone ||
-    booking.patient?.contactNumber ||
-    "—"
+      booking.patient_phone ||
+      booking.patient?.phone ||
+      booking.patient?.contactNumber,
   )
 }
 
@@ -73,11 +73,6 @@ export function BookingHoverDetailsPanel({
       <p className="text-base font-bold text-neutral-900 dark:text-white">
         {patientName(booking)}
       </p>
-      {p?.profession ? (
-        <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-          {p.profession}
-        </p>
-      ) : null}
 
       <dl className="mt-3 space-y-2 text-sm text-neutral-600 dark:text-neutral-300">
         <div className="flex justify-between gap-3">
@@ -134,12 +129,15 @@ export function BookingHoverDetailsPanel({
             </dd>
           </div>
         ) : null}
-        <div className="flex justify-between gap-3">
-          <dt className="opacity-60">Reason</dt>
-          <dd className="text-right font-semibold">
-            {dash(booking.disease || booking.consultationType)}
-          </dd>
-        </div>
+        {booking.disease?.trim() &&
+        !/^general\s+consultation$/i.test(booking.disease.trim()) ? (
+          <div className="flex justify-between gap-3">
+            <dt className="opacity-60">Reason</dt>
+            <dd className="text-right font-semibold">
+              {booking.disease.trim()}
+            </dd>
+          </div>
+        ) : null}
         <div className="flex justify-between gap-3">
           <dt className="opacity-60">Mode</dt>
           <dd className="font-semibold">

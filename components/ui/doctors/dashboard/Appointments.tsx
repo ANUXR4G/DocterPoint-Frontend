@@ -25,10 +25,10 @@ function patientLabel(b: ProctoBooking) {
 
 /** Recent clinic bookings table from Procto. */
 export default function Appointments() {
-  const { ready, loading, bookings: allBookings } = usePracticeDashboard()
+  const { ready, hydrated, loading, bookings: allBookings } = usePracticeDashboard()
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
 
-  const showLoading = !ready && loading
+  const showLoading = (!ready && loading) || (ready && !hydrated)
 
   const rows = useMemo(() => {
     const to = new Date()
