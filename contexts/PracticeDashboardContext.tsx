@@ -10,7 +10,6 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { addDays, format, subDays } from "date-fns"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import { useProctoSocket } from "@/hooks/useProctoSocket"
 import {
@@ -18,7 +17,7 @@ import {
   patchPatientsFromBooking,
 } from "@/lib/liveBooking"
 import { sortBookingsByWhen } from "@/lib/bookingDisplay"
-import { practiceDateIso } from "@/lib/practiceTime"
+import { practiceDateIso, practiceShiftDays, practiceTodayIso } from "@/lib/practiceTime"
 
 export type PracticeMembership = {
   id?: string
@@ -134,7 +133,9 @@ export function bookingDateIso(b: ProctoBooking): string | null {
   }
   const session =
     b.sessionDate ?? (b as { session_date?: string }).session_date
-  if (session) return String(session).slice(0, 10)
+  if (session) {
+    return practiceDateIso(String(session))
+  }
   return null
 }
 
@@ -210,10 +211,10 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     bootInFlight.current = true
     lastBootAt.current = now
     try {
-      const today = new Date()
+      const todayIso = practiceTodayIso()
       const boot = await proctoService.getPracticeBootstrap({
-        from: format(subDays(today, 90), "yyyy-MM-dd"),
-        to: format(addDays(today, 90), "yyyy-MM-dd"),
+        from: practiceShiftDays(todayIso, -90),
+        to: practiceShiftDays(todayIso, 90),
       })
 
       let mem: PracticeMembership[] = []

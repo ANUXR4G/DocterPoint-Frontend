@@ -3,7 +3,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { format, startOfToday } from "date-fns"
 import { DoctorAnalytics } from "@/components"
 import DoctorQueue from "@/components/ui/doctors/pages/DoctorQueue"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
@@ -13,6 +12,7 @@ import {
 } from "@/lib/doctorPracticeTabs"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import { matchesQueueStatusFilter } from "@/lib/bookingStatus"
+import { practiceTodayIso } from "@/lib/practiceTime"
 import {
   filterBookingsByDate,
   usePracticeDashboard,
@@ -124,7 +124,7 @@ function ClinicOpsHub() {
         membership.role === "PRACTICE_ADMIN",
     )
 
-    const date = format(startOfToday(), "yyyy-MM-dd")
+    const date = practiceTodayIso()
     const bookings = filterBookingsByDate(allBookings, date) as Array<
       ProctoBooking & {
         providerId?: string

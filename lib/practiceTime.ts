@@ -102,6 +102,28 @@ export function practiceTodayIso(): string {
   return practiceDateIso(new Date()) || new Date().toISOString().slice(0, 10)
 }
 
+/** Shift a YYYY-MM-DD calendar date by N days (clinic calendar arithmetic). */
+export function practiceShiftDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number)
+  if (!y || !m || !d) return iso
+  const utc = new Date(Date.UTC(y, m - 1, d + days))
+  return utc.toISOString().slice(0, 10)
+}
+
+/** First/last YYYY-MM-DD of the clinic calendar month containing `iso`. */
+export function practiceMonthRange(iso = practiceTodayIso()): {
+  from: string
+  to: string
+} {
+  const [y, m] = iso.split("-").map(Number)
+  if (!y || !m) return { from: iso, to: iso }
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return {
+    from: `${y}-${String(m).padStart(2, "0")}-01`,
+    to: `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`,
+  }
+}
+
 /** Hour 0–23 in clinic timezone (for calendar hour rows). */
 export function practiceHour(input: Date | string): number {
   const d = input instanceof Date ? input : new Date(input)

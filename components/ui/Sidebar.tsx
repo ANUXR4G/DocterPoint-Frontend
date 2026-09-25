@@ -14,6 +14,7 @@ import { isAdminNavActive } from "@/components/ui/admin/AdminPortalLinks"
 import { cookies } from "@/utils/cookies"
 import { navRoleFromContext, dashboardBrandLabel } from "@/lib/providerPortal"
 import { useAdminSupportUnread } from "@/hooks/useAdminSupportUnread"
+import { usePracticeOpenNotifications } from "@/hooks/usePracticeOpenNotifications"
 
 type Props = {
   role?: string | null
@@ -84,9 +85,13 @@ export default function Sidebar({ role, logout }: Props) {
 
   const { overview, support } = splitNav(navRole, { hideDoctorsNav })
   const { unreadTotal: supportUnread } = useAdminSupportUnread(navRole === "admin")
+  const { openCount: notificationOpen } = usePracticeOpenNotifications(
+    navRole === "doctor" || navRole === "clinic",
+  )
 
   function navBadgeCount(name: string) {
     if (name === "Support" && supportUnread > 0) return supportUnread
+    if (name === "Notifications" && notificationOpen > 0) return notificationOpen
     return 0
   }
 
@@ -114,13 +119,14 @@ export default function Sidebar({ role, logout }: Props) {
           </span>
           {overview.map(({ name, icon, dest }, idx) => {
             const active = navActiveFn(pathname, dest, currentTab)
+            const badge = navBadgeCount(name)
             return (
               <Link
                 href={dest ?? "#"}
                 className={navLinkClass(active)}
                 key={`sidebar_upper_link_${idx}`}
               >
-                <div className="flex size-12 shrink-0 items-center justify-center xl:size-10">
+                <div className="relative flex size-12 shrink-0 items-center justify-center xl:size-10">
                   <Icon
                     name={icon}
                     pathClassName={`transition duration-200 ${
@@ -129,9 +135,19 @@ export default function Sidebar({ role, logout }: Props) {
                         : "stroke-slate-400 dark:stroke-slate-500"
                     }`}
                   />
+                  {badge > 0 ? (
+                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  ) : null}
                 </div>
-                <span className="hidden text-[13px] font-semibold tracking-[-0.1px] xl:block">
-                  {name}
+                <span className="hidden flex-1 items-center gap-2 text-[13px] font-semibold tracking-[-0.1px] xl:flex">
+                  <span>{name}</span>
+                  {badge > 0 ? (
+                    <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  ) : null}
                 </span>
               </Link>
             )

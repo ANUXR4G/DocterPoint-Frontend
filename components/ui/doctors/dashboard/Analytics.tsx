@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { usePathname, useRouter } from "next/navigation"
-import { endOfMonth, format, startOfMonth, startOfToday } from "date-fns"
 import { InsightStatCard } from "@/components/dashboard/InsightStatCard"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import { useAnalytics, genderSum } from "@/hooks/useAnalysis"
@@ -12,6 +11,11 @@ import {
   filterBookingsByRange,
   usePracticeDashboard,
 } from "@/contexts/PracticeDashboardContext"
+import {
+  practiceMonthRange,
+  practiceTodayIso,
+  PRACTICE_TIMEZONE,
+} from "@/lib/practiceTime"
 
 const AnalyticsChartsStrip = dynamic(
   () =>
@@ -50,8 +54,10 @@ export default function Analytics() {
     : "/doctor/appointments"
   const queueHref = isClinic ? "/clinic/queue" : "/doctor/queue"
 
-  const today = startOfToday()
-  const currentMonthName = format(today, "MMMM")
+  const currentMonthName = new Date().toLocaleDateString("en-US", {
+    month: "long",
+    timeZone: PRACTICE_TIMEZONE,
+  })
 
   // Year series enables MoM %; card values use the current month bucket.
   const {
@@ -83,10 +89,8 @@ export default function Analytics() {
       }
       return
     }
-    const today = startOfToday()
-    const date = format(today, "yyyy-MM-dd")
-    const from = format(startOfMonth(today), "yyyy-MM-dd")
-    const to = format(endOfMonth(today), "yyyy-MM-dd")
+    const date = practiceTodayIso()
+    const { from, to } = practiceMonthRange(date)
 
     const todayList = filterBookingsByDate(allBookings, date)
     const monthList = filterBookingsByRange(allBookings, from, to)

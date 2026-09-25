@@ -3,6 +3,8 @@
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 
+import { usePracticeOpenNotifications } from "@/hooks/usePracticeOpenNotifications"
+
 const LINKS = [
   { href: "/doctor/dashboard", label: "Dashboard" },
   { href: "/doctor/queue", label: "Queue" },
@@ -29,6 +31,7 @@ export default function DoctorPortalLinks({
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab")
   const items = LINKS.filter((l) => !exclude?.includes(l.href))
+  const { openCount: notificationOpen } = usePracticeOpenNotifications(true)
 
   return (
     <nav
@@ -37,17 +40,32 @@ export default function DoctorPortalLinks({
     >
       {items.map((l) => {
         const active = isDoctorNavActive(pathname, l.href, currentTab)
+        const badge =
+          l.href === "/doctor/notifications" && notificationOpen > 0
+            ? notificationOpen
+            : 0
         return (
           <Link
             key={l.href}
             href={l.href}
-            className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold transition ${
               active
                 ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
                 : "border border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
             }`}
           >
             {l.label}
+            {badge > 0 ? (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                  active
+                    ? "bg-white/20 text-white dark:bg-black/15 dark:text-black"
+                    : "bg-rose-500 text-white"
+                }`}
+              >
+                {badge > 99 ? "99+" : badge}
+              </span>
+            ) : null}
           </Link>
         )
       })}

@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { format } from "date-fns"
 import { type ProctoBooking } from "@/lib/services/procto"
 import {
   bookingStatusLabel,
@@ -10,7 +9,14 @@ import {
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
-import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
+import {
+  filterBookingsByRange,
+  usePracticeDashboard,
+} from "@/contexts/PracticeDashboardContext"
+import {
+  practiceShiftDays,
+  practiceTodayIso,
+} from "@/lib/practiceTime"
 
 function patientLabel(b: ProctoBooking) {
   return (
@@ -35,23 +41,9 @@ export default function Appointments() {
   const showLoading = (!ready && loading) || (ready && !hydrated)
 
   const rows = useMemo(() => {
-    const to = new Date()
-    const from = new Date()
-    from.setDate(from.getDate() - 14)
-    return allBookings.filter((b) => {
-      const slot = b.slotStart ?? (b as { slot_start?: string }).slot_start
-      const session =
-        b.sessionDate ?? (b as { session_date?: string }).session_date
-      const day = slot
-        ? String(slot).slice(0, 10)
-        : session
-          ? String(session).slice(0, 10)
-          : null
-      if (!day) return false
-      const fromIso = format(from, "yyyy-MM-dd")
-      const toIso = format(to, "yyyy-MM-dd")
-      return day >= fromIso && day <= toIso
-    })
+    const to = practiceTodayIso()
+    const from = practiceShiftDays(to, -14)
+    return filterBookingsByRange(allBookings, from, to)
   }, [allBookings])
 
   const filtered = useMemo(
