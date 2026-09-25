@@ -11,14 +11,14 @@ export default function DoctorActivityPage() {
         compact
         eyebrow="Practice"
         title="Activity"
-        subtitle="Everything in one place — live alerts, today's visits, and patient documents"
+        subtitle="WhatsApp support requests — when a patient taps Talk to Support / Agent"
         action={
           <div className="flex flex-wrap gap-2">
             <Link
               href="/doctor/notifications"
               className="inline-flex h-11 items-center rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-900 transition hover:border-blue-300 dark:border-white/15 dark:bg-white/5 dark:text-white"
             >
-              Alerts only
+              Booking alerts
             </Link>
             <Link
               href="/doctor/queue"
