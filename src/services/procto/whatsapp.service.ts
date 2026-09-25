@@ -110,20 +110,15 @@ type MetaMessage = {
 };
 
 /** Prefer structured interactive ids over display titles. */
-function preferInteractiveId(id?: string, title?: string): string {
+export function preferInteractiveId(id?: string, title?: string): string {
   const trimmedId = id?.trim() || "";
+  // Meta sends both id + title; titles like "Cancel" must NOT replace ids
+  // like "confirm:cancel" (global Exit hijack would kill the booking flow).
   if (
-    trimmedId.startsWith("provider:") ||
-    trimmedId.startsWith("reg_email_") ||
-    trimmedId.startsWith("date:") ||
-    trimmedId.startsWith("slot:") ||
-    trimmedId.startsWith("booking:") ||
-    trimmedId.startsWith("patient:") ||
-    trimmedId.startsWith("mode:") ||
-    trimmedId.startsWith("menu:") ||
-    trimmedId.startsWith("post:") ||
-    trimmedId.startsWith("lang:") ||
-    /^(yes|no)$/i.test(trimmedId)
+    trimmedId &&
+    (/^[a-z][a-z0-9_]*:/i.test(trimmedId) ||
+      trimmedId.startsWith("reg_email_") ||
+      /^(yes|no)$/i.test(trimmedId))
   ) {
     return trimmedId;
   }
