@@ -19,6 +19,12 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import {
+  formatPracticeDateTime,
+  formatPracticeTime,
+  practiceDateIso,
+  practiceHour,
+} from "@/lib/practiceTime"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
   filterBookingsByRange,
@@ -80,25 +86,22 @@ function bookingStart(b: CalBooking): Date | null {
   const session = b.sessionDate ?? b.session_date
   if (session) {
     const d = new Date(session)
-    d.setHours(9, 0, 0, 0)
+    if (!Number.isNaN(d.getTime())) d.setUTCHours(12, 0, 0, 0)
     return d
   }
   return null
 }
 
 function bookingDayKey(b: CalBooking): string | null {
+  const slot = b.slotStart ?? b.slot_start
+  if (slot) return practiceDateIso(slot)
   const start = bookingStart(b)
-  return start ? ymd(start) : null
+  return start ? practiceDateIso(start) : null
 }
 
 function timeLabel(b: CalBooking) {
   const slot = b.slotStart ?? b.slot_start
-  if (slot) {
-    return new Date(slot).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
+  if (slot) return formatPracticeTime(slot)
   const token = b.tokenNumber ?? b.token_number
   if (token != null) return `#${token}`
   return "—"
@@ -136,13 +139,7 @@ function phoneOf(b: CalBooking) {
 function dateLabel(b: CalBooking) {
   const start = bookingStart(b)
   if (!start) return "—"
-  return start.toLocaleString([], {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatPracticeDateTime(start)
 }
 
 function BookingHoverDetails({ booking }: { booking: CalBooking }) {
@@ -152,6 +149,14 @@ function BookingHoverDetails({ booking }: { booking: CalBooking }) {
         {patientLabel(booking)}
       </p>
       <dl className="mt-3 space-y-2 text-sm text-neutral-600 dark:text-neutral-300">
+        {booking.patient?.mrn?.trim() ? (
+          <div className="flex justify-between gap-3">
+            <dt className="opacity-60">MRN</dt>
+            <dd className="font-semibold tabular-nums tracking-wide">
+              {booking.patient.mrn.trim()}
+            </dd>
+          </div>
+        ) : null}
         <div className="flex justify-between gap-3">
           <dt className="opacity-60">When</dt>
           <dd className="text-right font-semibold">{dateLabel(booking)}</dd>
@@ -680,7 +685,7 @@ function DayView({
           <div className="grid grid-cols-[repeat(auto-fill,minmax(6.25rem,1fr))] gap-2">
             {timeSlots.map((s) => {
               const start = new Date(s.start)
-              const label = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`
+              const label = formatPracticeTime(start)
               const filled = s.booked > 0
               return (
                 <span
@@ -711,7 +716,7 @@ function DayView({
         {HOURS.map((hour) => {
           const hourBookings = timed.filter((b) => {
             const start = bookingStart(b)
-            return start ? start.getHours() === hour : false
+            return start ? practiceHour(start) === hour : false
           })
           return (
             <div

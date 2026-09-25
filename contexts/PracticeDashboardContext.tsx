@@ -18,6 +18,7 @@ import {
   patchPatientsFromBooking,
 } from "@/lib/liveBooking"
 import { sortBookingsByWhen } from "@/lib/bookingDisplay"
+import { practiceDateIso } from "@/lib/practiceTime"
 
 export type PracticeMembership = {
   id?: string
@@ -44,6 +45,14 @@ export type PracticePatientRow = {
   bookedViaPhone?: string | null
   name: string | null
   patientId: string | null
+  /** Globally unique Medical Record Number, e.g. MR00000042 */
+  mrn?: string | null
+  /** WhatsApp / portal General Documents on the patient record. */
+  attachments?: Array<{
+    name: string
+    url: string
+    uploadedAt?: string
+  }> | null
   /** Spouse / Child / Parent when this profile is a family dependent. */
   relationship?: string | null
   email?: string | null
@@ -120,15 +129,8 @@ const PracticeDashboardContext = createContext<PracticeDashboardValue | null>(
 export function bookingDateIso(b: ProctoBooking): string | null {
   const slot = b.slotStart ?? (b as { slot_start?: string }).slot_start
   if (slot) {
-    const d = new Date(String(slot))
-    if (!Number.isNaN(d.getTime())) {
-      // Local calendar day — UTC ISO slice(0,10) shifts evening IST slots
-      // to the previous UTC day and empties "today" queues.
-      const y = d.getFullYear()
-      const m = String(d.getMonth() + 1).padStart(2, "0")
-      const day = String(d.getDate()).padStart(2, "0")
-      return `${y}-${m}-${day}`
-    }
+    const iso = practiceDateIso(String(slot))
+    if (iso) return iso
   }
   const session =
     b.sessionDate ?? (b as { session_date?: string }).session_date

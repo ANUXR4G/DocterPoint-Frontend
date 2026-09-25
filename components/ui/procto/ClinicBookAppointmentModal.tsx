@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import PopupModal from "@/components/modals/Modal"
 import { proctoService } from "@/lib/services/procto"
+import { formatPracticeTime } from "@/lib/practiceTime"
 import {
   usePracticeDashboard,
   type PracticeMembership,
@@ -351,10 +352,7 @@ export default function ClinicBookAppointmentModal({
             ) : (
               <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
                 {openSlots.map((s) => {
-                  const label = new Date(s.start).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
+                  const label = formatPracticeTime(s.start)
                   const active = selectedSlot === s.start
                   return (
                     <button

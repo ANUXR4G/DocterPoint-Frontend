@@ -23,6 +23,10 @@ function patientLabel(b: ProctoBooking) {
   )
 }
 
+function patientMrn(b: ProctoBooking) {
+  return b.patient?.mrn?.trim() || ""
+}
+
 /** Recent clinic bookings table from Procto. */
 export default function Appointments() {
   const { ready, hydrated, loading, bookings: allBookings } = usePracticeDashboard()
@@ -93,7 +97,12 @@ export default function Appointments() {
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{patientLabel(b)}</p>
                     <p className="text-xs text-neutral-500">
-                      {b.patientPhone || b.patient_phone || ""}
+                      {[
+                        patientMrn(b) ? `MRN ${patientMrn(b)}` : null,
+                        b.patientPhone || b.patient_phone || null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </p>
                   </div>
                   <span className="shrink-0 text-xs font-bold">
@@ -111,6 +120,7 @@ export default function Appointments() {
               <thead className="bg-neutral-100 text-xs font-bold uppercase dark:bg-neutral-900">
                 <tr>
                   <th className="px-4 py-3">Patient</th>
+                  <th className="px-4 py-3">MRN</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Reason</th>
                 </tr>
@@ -120,6 +130,9 @@ export default function Appointments() {
                   <tr key={b.id}>
                     <td className="px-4 py-3 font-semibold">
                       {patientLabel(b)}
+                    </td>
+                    <td className="px-4 py-3 font-semibold tabular-nums tracking-wide">
+                      {patientMrn(b) || "—"}
                     </td>
                     <td className="px-4 py-3">
                       {bookingStatusLabel(b.status || "")}

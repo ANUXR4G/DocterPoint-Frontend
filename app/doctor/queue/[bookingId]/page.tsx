@@ -19,6 +19,10 @@ import {
   bookingStatusLabel,
 } from "@/lib/bookingStatus"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import {
+  formatPracticeDate,
+  formatPracticeTime,
+} from "@/lib/practiceTime"
 import { patchBookingFields } from "@/lib/liveBooking"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
@@ -64,6 +68,8 @@ type VisitBooking = {
     dateOfBirth: string | null
     age?: number | null
     contactNumber: string | null
+    emergencyNumber?: string | null
+    mrn?: string | null
   } | null
 }
 
@@ -391,23 +397,12 @@ export default function VisitPage() {
     booking.tokenNumber != null
       ? `Token #${booking.tokenNumber}`
       : booking.slotStart
-        ? new Date(booking.slotStart).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
+        ? formatPracticeTime(booking.slotStart)
         : "—"
   const appointmentDate = booking.slotStart
-    ? new Date(booking.slotStart).toLocaleDateString([], {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+    ? formatPracticeDate(booking.slotStart)
     : booking.sessionDate
-      ? new Date(booking.sessionDate).toLocaleDateString([], {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })
+      ? formatPracticeDate(booking.sessionDate)
       : "—"
   const isCompleted = String(booking.status || "").toUpperCase() === "COMPLETED"
   const selfId = getSessionUserId()
@@ -472,6 +467,7 @@ export default function VisitPage() {
 
       <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
         <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
+          <Fact label="MRN" value={blank(p?.mrn)} />
           <Fact label="Date of birth" value={blank(p?.dateOfBirth)} />
           <Fact label="Age" value={ageFromDob(p?.dateOfBirth, p?.age)} />
           <Fact label="Gender" value={blank(p?.gender)} />

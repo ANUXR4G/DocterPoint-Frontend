@@ -9,9 +9,10 @@ import {
   bookingStatusTone,
   formatBookingStatus,
 } from "@/lib/bookingStatusTone"
+import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
 import {
-  formatBookingWhenDetailed,
-} from "@/lib/bookingDisplay"
+  formatPracticeDateTime,
+} from "@/lib/practiceTime"
 import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
 
 type PatientBooking = ProctoBooking & {
@@ -38,13 +39,7 @@ function formatWhen(booking: PatientBooking) {
 function bookedOnLabel(booking: PatientBooking) {
   const raw = booking.createdAt ?? booking.created_at
   if (!raw) return "—"
-  return new Date(raw).toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatPracticeDateTime(raw)
 }
 
 function dash(v: string | null | undefined) {

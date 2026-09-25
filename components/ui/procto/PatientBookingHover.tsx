@@ -75,6 +75,14 @@ export function BookingHoverDetailsPanel({
       </p>
 
       <dl className="mt-3 space-y-2 text-sm text-neutral-600 dark:text-neutral-300">
+        {p?.mrn?.trim() ? (
+          <div className="flex justify-between gap-3">
+            <dt className="opacity-60">MRN</dt>
+            <dd className="font-semibold tabular-nums tracking-wide">
+              {p.mrn.trim()}
+            </dd>
+          </div>
+        ) : null}
         <div className="flex justify-between gap-3">
           <dt className="opacity-60">Phone</dt>
           <dd className="text-right font-semibold">{patientPhone(booking)}</dd>

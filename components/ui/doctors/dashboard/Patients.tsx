@@ -58,6 +58,11 @@ export default function Patients() {
               className="rounded-2xl border border-neutral-300 bg-white px-4 py-3 dark:border-neutral-600 dark:bg-neutral-800"
             >
               <p className="font-semibold">{p.name || p.phone}</p>
+              {p.mrn?.trim() ? (
+                <p className="text-xs font-semibold tabular-nums tracking-wide opacity-70">
+                  MRN {p.mrn.trim()}
+                </p>
+              ) : null}
               <p className="text-xs opacity-70">
                 {bookingStatusLabel(p.lastStatus || "")} · {p.bookingCount}{" "}
                 visit{p.bookingCount === 1 ? "" : "s"}
