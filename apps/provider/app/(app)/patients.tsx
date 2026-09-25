@@ -19,6 +19,7 @@ import {
   SurfaceCard,
 } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
+import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { resolveMediaUrl } from "@/lib/media";
 import { usePractice } from "@/lib/practiceContext";
 import { contentBottomPad } from "@/lib/dockLayout";
@@ -57,7 +58,14 @@ export default function PatientsScreen() {
     return rows.filter((p) => {
       const name = (p.name || "").toLowerCase();
       const phone = (p.phone || "").toLowerCase();
-      return name.includes(needle) || phone.includes(needle);
+      const via = (p.bookedViaPhone || "").toLowerCase();
+      const rel = (p.relationship || "").toLowerCase();
+      return (
+        name.includes(needle) ||
+        phone.includes(needle) ||
+        via.includes(needle) ||
+        rel.includes(needle)
+      );
     });
   }, [rows, q]);
 
@@ -104,7 +112,7 @@ export default function PatientsScreen() {
           <EmptyState text="No patients match this search." />
         ) : (
           filtered.map((p) => {
-            const key = p.patientId || p.phone;
+            const key = `${p.phone}|${(p.name || "").trim().toLowerCase()}`;
             const open = expanded === key;
             const visits = p.recentBookings ?? p.recent ?? [];
             return (
@@ -126,9 +134,15 @@ export default function PatientsScreen() {
                     </View>
                   )}
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.name}>{p.name || p.phone}</Text>
+                    <Text style={styles.name}>
+                      {p.name || formatPhoneDisplay(p.phone)}
+                    </Text>
+                    {p.relationship?.trim() ? (
+                      <Text style={styles.meta}>{p.relationship.trim()}</Text>
+                    ) : null}
                     <Text style={styles.meta}>
-                      {p.phone} · {p.bookingCount} visits
+                      Booked via {formatPhoneDisplay(p.bookedViaPhone || p.phone)}{" "}
+                      · {p.bookingCount} visits
                     </Text>
                     {p.lastStatus ? (
                       <View style={{ marginTop: 8 }}>

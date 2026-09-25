@@ -12,6 +12,7 @@ import AdminButton from "@/components/admin/AdminButton"
 import AdminSection from "@/components/admin/AdminSection"
 import { AdminBadge, statusTone } from "@/components/admin/AdminBadge"
 import { adminService, type AdminPractice } from "@/lib/services/admin"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
 
 type PlanRow = {
@@ -281,7 +282,7 @@ export default function AdminClinicsPage() {
               r.whatsapp ? (
                 <div className="space-y-1">
                   <p className="font-semibold tabular-nums text-slate-800 dark:text-white">
-                    {r.whatsapp.phoneNumber}
+                    {formatPhoneDisplay(r.whatsapp.phoneNumber)}
                   </p>
                   <AdminBadge tone={statusTone(r.whatsapp.status)}>
                     {r.whatsapp.status.replace(/_/g, " ")}

@@ -5,6 +5,7 @@ import {
   bookingNextActions,
   bookingStatusControlValue,
   bookingStatusLabel,
+  isTerminalVisitStatus,
 } from "@/lib/bookingStatus"
 
 /**
@@ -25,16 +26,14 @@ type Props = {
   status: string
   busy?: boolean
   onChange: (status: string) => void
-  /** Quick next-step buttons; optional select limited to current + next actions. */
+  /** Status dropdown; limited to current + valid next steps. */
   showSelect?: boolean
+  /** Quick next-step buttons beside the select. */
+  showActionButtons?: boolean
   compact?: boolean
+  /** Keep select + action buttons on one horizontal row. */
+  nowrap?: boolean
   ariaLabel?: string
-}
-
-function isTerminalVisitStatus(status: string) {
-  return ["COMPLETED", "CANCELED", "CANCELLED", "NO_SHOW"].includes(
-    String(status || "").toUpperCase(),
-  )
 }
 
 /** Shared visit status controls for clinic and doctor portals. */
@@ -43,26 +42,32 @@ export default function BookingStatusControls({
   busy = false,
   onChange,
   showSelect = true,
+  showActionButtons = true,
   compact = false,
+  nowrap = false,
   ariaLabel = "Visit status",
 }: Props) {
   const value = bookingStatusControlValue(status)
   const locked = isTerminalVisitStatus(status)
   const actions = bookingNextActions(status)
   const btnPad = compact
-    ? "min-h-9 rounded-md px-2.5 py-1 text-xs"
+    ? "min-h-9 shrink-0 rounded-md px-2.5 py-1 text-xs"
     : "min-h-10 rounded-lg px-3 py-1.5 text-xs sm:min-h-11 sm:text-sm"
+  const rowClass = nowrap
+    ? "flex flex-nowrap items-center gap-1.5"
+    : "flex flex-wrap items-center gap-2"
+  const lockedTitle =
+    String(status || "").toUpperCase() === "COMPLETED"
+      ? "Completed — status cannot be changed"
+      : "Closed appointments cannot be canceled or rescheduled"
 
   if (locked) {
     return (
-      <div
-        className="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label={ariaLabel}
-      >
+      <div className={rowClass} role="group" aria-label={ariaLabel}>
         <span
-          className={`inline-flex items-center border-2 font-semibold ${btnPad} ${bookingActionSelectClass(value)}`}
-          title="Closed appointments cannot be canceled or rescheduled"
+          className={`inline-flex cursor-default items-center border-2 font-semibold opacity-90 ${btnPad} ${bookingActionSelectClass(value)}`}
+          title={lockedTitle}
+          aria-disabled="true"
         >
           {bookingStatusLabel(status)}
         </span>
@@ -82,13 +87,9 @@ export default function BookingStatusControls({
   ]
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-2"
-      role="group"
-      aria-label={ariaLabel}
-    >
+    <div className={rowClass} role="group" aria-label={ariaLabel}>
       {showSelect ? (
-        <label className="inline-flex items-center gap-1.5">
+        <label className="inline-flex shrink-0 items-center gap-1.5">
           <span className="sr-only">Set status</span>
           <select
             value={value}
@@ -106,17 +107,19 @@ export default function BookingStatusControls({
           </select>
         </label>
       ) : null}
-      {actions.map((a) => (
-        <button
-          key={a.status}
-          type="button"
-          disabled={busy}
-          onClick={() => onChange(a.status)}
-          className={`border-2 font-semibold transition disabled:opacity-50 ${btnPad} ${bookingActionSelectClass(a.status)}`}
-        >
-          {a.label}
-        </button>
-      ))}
+      {showActionButtons
+        ? actions.map((a) => (
+            <button
+              key={a.status}
+              type="button"
+              disabled={busy}
+              onClick={() => onChange(a.status)}
+              className={`border-2 font-semibold transition disabled:opacity-50 ${btnPad} ${bookingActionSelectClass(a.status)}`}
+            >
+              {a.label}
+            </button>
+          ))
+        : null}
     </div>
   )
 }

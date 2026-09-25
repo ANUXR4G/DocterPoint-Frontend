@@ -44,6 +44,7 @@ import {
 import { parseGlobalKeywordHijack } from "./whatsapp.hijacks.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 import { normalizeGender } from "../../core/gender.js";
+import { ageFromDob } from "../../core/dob.js";
 import { uuidToBase64 } from "../../core/security.js";
 import { socketManager } from "../../core/socket.js";
 import {
@@ -3117,7 +3118,6 @@ async function confirmBooking(
       slotStart: state.slotStart,
       sessionDate: state.sessionDate ?? state.date,
       channel: BookingChannel.WHATSAPP_AI,
-      disease: "General consultation",
       skipPatientNotification: true,
     });
 
@@ -3231,7 +3231,11 @@ function registerSummary(state: ConversationState, phone: string): string {
   if (state.registeringFamily) lines.unshift("• Type: Family member");
   if (state.regRelationship) lines.push(`• Relationship: ${state.regRelationship}`);
   if (state.regEmail) lines.push(`• Email: ${state.regEmail}`);
-  if (state.regDob) lines.push(`• DOB: ${state.regDob}`);
+  if (state.regDob) {
+    lines.push(`• DOB: ${state.regDob}`);
+    const age = ageFromDob(state.regDob);
+    if (age != null) lines.push(`• Age: ${age}`);
+  }
   if (state.regNationalId) lines.push(`• National ID: ${state.regNationalId}`);
   if (state.regAddress) lines.push(`• Address: ${state.regAddress}`);
   return lines.join("\n");
@@ -3608,6 +3612,7 @@ async function confirmFamilyMember(
             result.name || name,
             lang,
             result.relationship || state.regRelationship,
+            result.age,
           ) +
           "\n\n" +
           bookReply.reply,
@@ -3628,6 +3633,7 @@ async function confirmFamilyMember(
         result.name || name,
         lang,
         result.relationship || state.regRelationship,
+        result.age,
       ),
     );
   } catch (err) {
@@ -3696,6 +3702,7 @@ async function confirmRegister(
           BotPrompts.registered(
             {
               name: result.name || state.regName!,
+              age: result.age,
               continueToBook: true,
             },
             lang,
@@ -3718,6 +3725,7 @@ async function confirmRegister(
       BotPrompts.registered(
         {
           name: result.name || state.regName!,
+          age: result.age,
         },
         lang,
       ),
@@ -3931,14 +3939,27 @@ async function runOrchestratorCore(input: {
         t,
       ) ||
       (/\b(book|cancel|reschedule|message)\b/i.test(t) && t.length < 80) ||
-      /^(?:menu|post):/i.test(t);
+      /^(?:menu|post|doc|booking|whom|idle|confirm|cancel|nlu):/i.test(t) ||
+      /^(select(\s+appointment)?|general(\s+document)?)$/i.test(t);
+
+    // Mid-flow bot steps (Branch F document link, register, book, …) must not
+    // be trapped behind a prior support handoff — resume the bot and continue.
+    const midFlowBotStep =
+      Boolean(state.step) &&
+      state.step !== "idle" &&
+      state.step !== "agent_transfer";
 
     // After booking, free text should get Reschedule/Cancel/New/Message-doctor
     // unless the patient explicitly chose "Message doctor" (postBookingCare).
     const offerPostBooking =
       !state.postBookingCare && (!state.step || state.step === "idle");
 
-    if (!resumeMenuOnly && !resumeAndRun && !offerPostBooking) {
+    if (
+      !midFlowBotStep &&
+      !resumeMenuOnly &&
+      !resumeAndRun &&
+      !offerPostBooking
+    ) {
       return { reply: BotPrompts.handedOffWait(lang) };
     }
 
@@ -3946,7 +3967,8 @@ async function runOrchestratorCore(input: {
       ...state,
       handedOff: false,
       postBookingCare: false,
-      step: "idle",
+      // Keep mid-flow step (e.g. awaiting_document_link); otherwise idle.
+      step: midFlowBotStep ? state.step : "idle",
       failedTurns: 0,
     };
     await saveState(convId, state);
@@ -3966,11 +3988,11 @@ async function runOrchestratorCore(input: {
       },
     }).catch(() => undefined);
 
-    if (resumeMenuOnly) {
+    if (resumeMenuOnly && !midFlowBotStep) {
       const patient = await PatientService.findByPhone(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, greetingPatientName(patient), lang));
     }
-    // Fall through — process BOOK / STATUS / post-booking / etc. normally
+    // Fall through — process BOOK / STATUS / document link / etc. normally
   }
 
   // ID photo OCR → autofill registration (same vision stack as web /auth/id-scan)
@@ -4130,7 +4152,7 @@ async function runOrchestratorCore(input: {
         t,
       );
     const wantAppt =
-      /^(doc:appointment|select(\s*appointment)?|appointment|yes|link)$/i.test(
+      /^(doc:appointment|select(\s+appointment)?|appointment|yes|link)$/i.test(
         t,
       );
 

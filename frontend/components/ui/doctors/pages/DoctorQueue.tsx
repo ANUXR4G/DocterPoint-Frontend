@@ -14,12 +14,14 @@ import { firey } from "@/utils"
 import {
   bookingStatusClass,
   bookingStatusLabel,
+  isTerminalVisitStatus,
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 
 type QueueBooking = ProctoBooking & {
   patientPhone?: string
@@ -47,8 +49,8 @@ type QueueBooking = ProctoBooking & {
     gender: string | null
     address: string | null
     imgSrc?: string | null
-    profession: string | null
     dateOfBirth: string | null
+    age?: number | null
     contactNumber: string | null
     emergencyNumber: string | null
   } | null
@@ -109,10 +111,11 @@ function dash(value: string | null | undefined) {
   return v ? v : "—"
 }
 
-function ageFromDob(dob?: string | null): string {
+function ageFromDob(dob?: string | null, age?: number | null): string {
+  if (typeof age === "number" && age >= 0 && age <= 130) return String(age)
   if (!dob?.trim()) return "—"
-  const age = firey.calculateAge(dob)
-  return age >= 0 && age <= 130 ? String(age) : "—"
+  const n = firey.calculateAge(dob)
+  return n >= 0 && n <= 130 ? String(n) : "—"
 }
 
 export default function DoctorQueue({
@@ -132,6 +135,7 @@ export default function DoctorQueue({
   const [date] = useState(() => new Date().toISOString().slice(0, 10))
   const {
     ready,
+    hydrated,
     loading,
     error,
     memberships,
@@ -173,8 +177,9 @@ export default function DoctorQueue({
     : "flex h-full min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-sky-50/50 p-10 text-center dark:border-white/10 dark:bg-white/5"
 
   async function onStatus(id: string, status: string) {
-    setBusyId(id)
     const previous = allBookings.find((b) => b.id === id)?.status
+    if (isTerminalVisitStatus(previous || "")) return
+    setBusyId(id)
     patchBooking(id, { status })
     const res = await proctoService.updateBookingStatus(id, status)
     setBusyId(null)
@@ -183,7 +188,7 @@ export default function DoctorQueue({
     }
   }
 
-  const showLoading = !ready && loading
+  const showLoading = (!ready && loading) || (ready && !hydrated)
 
   const doctors = useMemo(() => {
     const map = new Map<string, string>()
@@ -393,20 +398,21 @@ export default function DoctorQueue({
                     {bookingStatusLabel(b.status)}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="mt-3 inline-flex flex-nowrap items-center gap-1.5 overflow-x-auto">
                   <BookingStatusControls
-                    status={b.status}
+                    status={b.status || "SCHEDULED"}
                     busy={busyId === b.id}
-                    showSelect={allowStatusControl}
                     compact
-                    ariaLabel={`Status for ${name}`}
+                    nowrap
+                    showSelect={allowStatusControl}
+                    ariaLabel={`Update status for ${name}`}
                     onChange={(status) => void onStatus(b.id, status)}
                   />
                   <Link
                     href={`/doctor/queue/${b.id}`}
-                    className="inline-flex min-h-10 items-center text-sm font-semibold text-[var(--theme-primary)] hover:underline"
+                    className="shrink-0 text-xs font-bold text-[var(--theme-primary)] hover:underline"
                   >
-                    Open visit →
+                    Open
                   </Link>
                 </div>
               </li>
@@ -415,17 +421,14 @@ export default function DoctorQueue({
         </ul>
 
         <div className="hidden md:block">
-          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
             <thead className="sticky top-0 z-20 bg-neutral-100 text-xs uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
               <tr>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
                   Booked on
                 </th>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
-                  Appt date
-                </th>
-                <th className="whitespace-nowrap px-3 py-3 font-semibold">
-                  Time
+                  Appointment
                 </th>
                 <th className="min-w-[140px] px-3 py-3 font-semibold">Name</th>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
@@ -435,12 +438,6 @@ export default function DoctorQueue({
                   Age
                 </th>
                 <th className="min-w-[120px] px-3 py-3 font-semibold">Doctor</th>
-                <th className="min-w-[120px] px-3 py-3 font-semibold">
-                  Disease
-                </th>
-                <th className="whitespace-nowrap px-3 py-3 font-semibold">
-                  Status
-                </th>
                 <th className="sticky right-0 z-30 whitespace-nowrap border-l border-neutral-200 bg-neutral-100 px-3 py-3 font-semibold dark:border-neutral-700 dark:bg-neutral-800">
                   Actions
                 </th>
@@ -449,22 +446,16 @@ export default function DoctorQueue({
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
               {filteredBookings.map((b) => {
                 const p = b.patient
-                const phone =
+                const phone = formatPhoneDisplay(
                   p?.contactNumber ||
-                  p?.phone ||
-                  b.patientPhone ||
-                  b.patient_phone ||
-                  "—"
+                    p?.phone ||
+                    b.patientPhone ||
+                    b.patient_phone,
+                )
                 const name =
                   p?.name || b.patientName || b.patient_name || "Unknown"
-                const disease =
-                  b.disease ||
-                  b.consultationType ||
-                  b.consultation_type ||
-                  b.notes ||
-                  null
                 const booked = bookedOnParts(b)
-                const age = ageFromDob(p?.dateOfBirth)
+                const age = ageFromDob(p?.dateOfBirth, p?.age)
 
                 return (
                   <tr
@@ -476,16 +467,8 @@ export default function DoctorQueue({
                       <p className="opacity-60">{booked.time}</p>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 align-middle">
-                      {appointmentDateLabel(b)}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-middle font-medium">
-                      {slotLabel(b)}
-                      <Link
-                        href={`/doctor/queue/${b.id}`}
-                        className="mt-0.5 block text-xs font-semibold text-[var(--theme-primary)] hover:underline"
-                      >
-                        Open visit →
-                      </Link>
+                      <p className="font-medium">{appointmentDateLabel(b)}</p>
+                      <p className="text-xs opacity-60">{slotLabel(b)}</p>
                     </td>
                     <td className="px-3 py-3 align-middle">
                       <div className="flex items-center gap-2.5">
@@ -506,34 +489,22 @@ export default function DoctorQueue({
                     <td className="px-3 py-3 align-middle">
                       {dash(b.provider?.name ?? undefined)}
                     </td>
-                    <td className="max-w-[180px] px-3 py-3 align-middle text-sm">
-                      {disease ? (
-                        <p className="line-clamp-2 font-medium">{disease}</p>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-middle">
-                      <span
-                        className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${bookingStatusClass(b.status)}`}
-                      >
-                        {bookingStatusLabel(b.status)}
-                      </span>
-                    </td>
-                    <td className="sticky right-0 z-10 min-w-[260px] border-l border-neutral-200 bg-white px-3 py-3 align-middle dark:border-neutral-700 dark:bg-neutral-900">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <td className="sticky right-0 z-10 whitespace-nowrap border-l border-neutral-200 bg-white px-3 py-3 align-middle dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="inline-flex flex-nowrap items-center gap-1.5">
                         <BookingStatusControls
-                          status={b.status}
+                          status={b.status || "SCHEDULED"}
                           busy={busyId === b.id}
+                          compact
+                          nowrap
                           showSelect={allowStatusControl}
-                          ariaLabel={`Actions for ${name}`}
+                          ariaLabel={`Update status for ${name}`}
                           onChange={(status) => void onStatus(b.id, status)}
                         />
                         <Link
                           href={`/doctor/queue/${b.id}`}
-                          className="min-h-11 inline-flex items-center rounded-lg px-2 text-sm font-semibold text-[var(--theme-primary)] underline-offset-2 hover:underline"
+                          className="shrink-0 text-xs font-bold text-[var(--theme-primary)] hover:underline"
                         >
-                          Visit
+                          Open
                         </Link>
                       </div>
                     </td>

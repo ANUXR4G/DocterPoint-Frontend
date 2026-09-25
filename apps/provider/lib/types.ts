@@ -52,20 +52,24 @@ export type BookingRow = {
     imgSrc?: string | null;
     profession?: string | null;
     dateOfBirth?: string | null;
+    age?: number | null;
     contactNumber?: string | null;
   } | null;
 };
 
 export type PracticePatient = {
   phone: string;
+  bookedViaPhone?: string | null;
   name: string | null;
   patientId: string | null;
+  relationship?: string | null;
   email?: string | null;
   gender?: string | null;
   address?: string | null;
   imgSrc?: string | null;
   profession?: string | null;
   dateOfBirth?: string | null;
+  age?: number | null;
   bookingCount: number;
   lastVisitAt: string | null;
   lastStatus: string | null;

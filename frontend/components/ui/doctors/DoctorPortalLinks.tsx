@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation"
 
 const LINKS = [
   { href: "/doctor/dashboard", label: "Dashboard" },
+  { href: "/doctor/queue", label: "Queue" },
   { href: "/doctor/appointments", label: "Appointments" },
   { href: "/doctor/patients", label: "Patients" },
   { href: "/doctor/calendar", label: "Calendar" },
@@ -61,11 +62,19 @@ export function isDoctorNavActive(
   if (!dest || dest === "#") return false
   const destPath = pathOnly(dest)
 
+  // Dashboard is only the home page — never steal active from Queue visits.
   if (destPath === "/doctor/dashboard") {
+    return pathname === "/doctor/dashboard"
+  }
+
+  if (destPath === "/doctor/queue") {
     return (
-      pathname === "/doctor/dashboard" ||
-      pathname.startsWith("/doctor/queue")
+      pathname === "/doctor/queue" || pathname.startsWith("/doctor/queue/")
     )
+  }
+
+  if (destPath === "/doctor/notifications") {
+    return pathname === "/doctor/notifications"
   }
 
   if (destPath === "/doctor/analytics") {
@@ -80,6 +89,13 @@ export function isDoctorNavActive(
     return (
       pathname === "/doctor/appointments" ||
       pathname.startsWith("/doctor/appointments/")
+    )
+  }
+
+  if (destPath === "/doctor/patients") {
+    return (
+      pathname === "/doctor/patients" ||
+      pathname.startsWith("/doctor/patients/")
     )
   }
 

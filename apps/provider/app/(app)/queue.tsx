@@ -81,6 +81,15 @@ export default function QueueScreen() {
   }, [isClinicAdmin, membership?.userId]);
 
   async function setStatus(id: string, status: string) {
+    const current = rows.find((b) => b.id === id)?.status;
+    if (
+      ["COMPLETED", "CANCELED", "CANCELLED", "NO_SHOW"].includes(
+        String(current || "").toUpperCase(),
+      )
+    ) {
+      setLocalError("Completed appointments cannot change status.");
+      return;
+    }
     setBusyId(id);
     const res = await updateBookingStatus(id, status);
     setBusyId(null);

@@ -178,10 +178,6 @@ export default function ClinicBookAppointmentModal({
       setMessage("Enter the patient name.")
       return
     }
-    if (!disease.trim()) {
-      setMessage("Enter the reason for visit.")
-      return
-    }
     if (mode === "TIME_BASED" && !selectedSlot) {
       setMessage("Select an available time slot.")
       return
@@ -201,8 +197,8 @@ export default function ClinicBookAppointmentModal({
       channel: "PROVIDER_APP",
       patientPhone: phone.slice(-10),
       patientName: patientName.trim(),
-      disease: disease.trim(),
     }
+    if (disease.trim()) body.disease = disease.trim()
     if (mode === "TIME_BASED" && selectedSlot) body.slotStart = selectedSlot
     if (mode === "TOKEN_BASED") body.sessionDate = date
 
@@ -410,13 +406,13 @@ export default function ClinicBookAppointmentModal({
         </label>
 
         <label className="block">
-          <span className="font-semibold">Reason for visit</span>
+          <span className="font-semibold">Reason for visit (optional)</span>
           <textarea
             className={fieldClass}
             rows={2}
             value={disease}
             onChange={(e) => setDisease(e.target.value)}
-            placeholder="e.g. Fever, follow-up"
+            placeholder="Optional — leave blank if not needed"
           />
         </label>
 

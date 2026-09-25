@@ -40,14 +40,19 @@ export type PracticeMembership = {
 
 export type PracticePatientRow = {
   phone: string
+  /** Number used to place the booking (WhatsApp / clinic book). Same as phone. */
+  bookedViaPhone?: string | null
   name: string | null
   patientId: string | null
+  /** Spouse / Child / Parent when this profile is a family dependent. */
+  relationship?: string | null
   email?: string | null
   gender?: string | null
   address?: string | null
   imgSrc?: string | null
   profession?: string | null
   dateOfBirth?: string | null
+  age?: number | null
   bookingCount: number
   lastVisitAt: string | null
   lastStatus: string | null
@@ -62,6 +67,8 @@ export type PracticePatientRow = {
     slotStart?: string | null
     sessionDate?: string | null
     createdAt?: string
+    patientName?: string | null
+    patientPhone?: string | null
   }>
 }
 
@@ -73,6 +80,11 @@ type PracticeDashboardValue = {
    * Bookings/patients may still fill in after (bootstrap).
    */
   ready: boolean
+  /**
+   * True after the first ±90d bookings/patients bootstrap attempt finishes.
+   * Do not treat an empty list as “no visits” until this is true.
+   */
+  hydrated: boolean
   liveConnected: boolean
   error: string | null
   memberships: PracticeMembership[]
@@ -151,6 +163,7 @@ export function filterBookingsByDate(
 export function PracticeDashboardProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [ready, setReady] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
   const [liveConnected, setLiveConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [memberships, setMemberships] = useState<PracticeMembership[]>([])
@@ -161,6 +174,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
   const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bootInFlight = useRef(false)
   const lastBootAt = useRef(0)
+  const hydratedRef = useRef(false)
 
   const practiceId =
     proctoService.resolvePracticeId(memberships[0]) ?? null
@@ -190,7 +204,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     if (bootInFlight.current) return
     const now = Date.now()
     // Avoid stampeding Supabase when WS reconnect storms fire.
-    if (now - lastBootAt.current < 4_000) return
+    if (hydratedRef.current && now - lastBootAt.current < 4_000) return
     bootInFlight.current = true
     lastBootAt.current = now
     try {
@@ -226,6 +240,8 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       }
     } finally {
       bootInFlight.current = false
+      hydratedRef.current = true
+      setHydrated(true)
     }
   }, [applyMembership])
 
@@ -233,6 +249,8 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     async (opts?: { silent?: boolean }) => {
       if (!opts?.silent) {
         setLoading(true)
+        hydratedRef.current = false
+        setHydrated(false)
         setError(null)
       }
 
@@ -277,6 +295,8 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
         setError("Could not load practice.")
         setLoading(false)
         setReady(true)
+        hydratedRef.current = true
+        setHydrated(true)
       }
     },
     [applyMembership, bootstrapBookings],
@@ -339,6 +359,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     (): PracticeDashboardValue => ({
       loading,
       ready,
+      hydrated,
       liveConnected,
       error,
       memberships,
@@ -361,6 +382,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     [
       loading,
       ready,
+      hydrated,
       liveConnected,
       error,
       memberships,

@@ -23,6 +23,7 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { uploadVisitFile } from "@/lib/cloudinary";
+import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { resolveMediaUrl } from "@/lib/media";
 import {
   fetchBooking,
@@ -50,15 +51,37 @@ function dash(v: string | null | undefined) {
   return v?.trim() ? v : "—";
 }
 
-function ageFromDob(dob?: string | null): string {
-  if (!dob?.trim()) return "—";
+/** Optional patient fields: empty when we never collected the value. */
+function blank(v: string | null | undefined) {
+  return v?.trim() ? v.trim() : "";
+}
+
+function isAutoVisitBrief(text?: string | null): boolean {
+  const t = text?.trim() || "";
+  if (!t) return false;
+  return (
+    /^Chief complaint:/i.test(t) ||
+    /^Patient problem:/i.test(t) ||
+    /^Patient's description:/i.test(t) ||
+    /AI brief for doctor:/i.test(t)
+  );
+}
+
+function doctorRemarksForEdit(text?: string | null): string {
+  if (!text?.trim() || isAutoVisitBrief(text)) return "";
+  return text.trim();
+}
+
+function ageFromDob(dob?: string | null, age?: number | null): string {
+  if (typeof age === "number" && age >= 0 && age <= 130) return String(age);
+  if (!dob?.trim()) return "";
   const d = new Date(dob);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "";
   const now = new Date();
-  let age = now.getFullYear() - d.getFullYear();
+  let n = now.getFullYear() - d.getFullYear();
   const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age -= 1;
-  return age >= 0 && age <= 130 ? String(age) : "—";
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) n -= 1;
+  return n >= 0 && n <= 130 ? String(n) : "";
 }
 
 export default function VisitScreen() {
@@ -95,7 +118,7 @@ export default function VisitScreen() {
     const b = res.data as BookingRow;
     setBooking(b);
     if (!opts?.silent) {
-      setRemarks(b.doctorRemarks || "");
+      setRemarks(doctorRemarksForEdit(b.doctorRemarks));
       setMedicines(Array.isArray(b.medicines) ? b.medicines : []);
       setDocuments(Array.isArray(b.documents) ? b.documents : []);
     } else {
@@ -218,6 +241,10 @@ export default function VisitScreen() {
 
   async function setStatus(status: string) {
     if (!bookingId) return;
+    if (String(booking?.status || "").toUpperCase() === "COMPLETED") {
+      setError("Completed appointments cannot change status.");
+      return;
+    }
     setBusy(true);
     const res = await updateBookingStatus(bookingId, status);
     setBusy(false);
@@ -320,7 +347,9 @@ export default function VisitScreen() {
               <Text style={styles.bannerEyebrow}>{whenLabel(booking)}</Text>
               <Text style={styles.bannerName}>{patientName}</Text>
               <Text style={styles.bannerSub}>
-                {dash(p?.contactNumber || p?.phone || booking.patientPhone)}
+                {formatPhoneDisplay(
+                  p?.contactNumber || p?.phone || booking.patientPhone,
+                )}
                 {" · "}
                 Age {ageFromDob(p?.dateOfBirth)}
                 {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
@@ -343,35 +372,50 @@ export default function VisitScreen() {
       >
         <View style={styles.banner}>
           <View style={styles.bannerFacts}>
-            <Text style={styles.rowLabel}>
-              Date of birth: {dash(p?.dateOfBirth)}
-            </Text>
-            <Text style={styles.rowLabel}>
-              Age: {ageFromDob(p?.dateOfBirth)}
-            </Text>
-            <Text style={styles.rowLabel}>Gender: {dash(p?.gender)}</Text>
-            <Text style={styles.rowLabel}>Email: {dash(p?.email)}</Text>
-            <Text style={styles.rowLabel}>
-              Phone:{" "}
-              {dash(p?.contactNumber || p?.phone || booking.patientPhone)}
-            </Text>
-            <Text style={styles.rowLabel}>
-              Profession: {dash(p?.profession)}
-            </Text>
-            <Text style={styles.rowLabel}>Address: {dash(p?.address)}</Text>
+            {blank(p?.dateOfBirth) ? (
+              <Text style={styles.rowLabel}>
+                Date of birth: {blank(p?.dateOfBirth)}
+              </Text>
+            ) : null}
+            {ageFromDob(p?.dateOfBirth, p?.age) ? (
+              <Text style={styles.rowLabel}>
+                Age: {ageFromDob(p?.dateOfBirth, p?.age)}
+              </Text>
+            ) : null}
+            {blank(p?.gender) ? (
+              <Text style={styles.rowLabel}>Gender: {blank(p?.gender)}</Text>
+            ) : null}
+            {blank(p?.email) ? (
+              <Text style={styles.rowLabel}>Email: {blank(p?.email)}</Text>
+            ) : null}
+            {blank(p?.contactNumber || p?.phone || booking.patientPhone) ? (
+              <Text style={styles.rowLabel}>
+                Phone:{" "}
+                {formatPhoneDisplay(
+                  p?.contactNumber || p?.phone || booking.patientPhone,
+                  "",
+                )}
+              </Text>
+            ) : null}
+            {blank(p?.address) ? (
+              <Text style={styles.rowLabel}>Address: {blank(p?.address)}</Text>
+            ) : null}
             <View style={styles.divider} />
-            <Text style={styles.rowLabel}>
-              Problem: {booking.disease || booking.consultationType || "—"}
-            </Text>
-            <Text style={styles.rowLabel}>
-              Doctor: {dash(booking.provider?.name)}
-            </Text>
-            <Text style={styles.rowLabel}>
-              Mode: {booking.mode?.replace(/_/g, " ") || "—"}
-            </Text>
-            <Text style={styles.rowLabel}>
-              Channel: {booking.channel?.replace(/_/g, " ") || "—"}
-            </Text>
+            {blank(booking.provider?.name) ? (
+              <Text style={styles.rowLabel}>
+                Doctor: {blank(booking.provider?.name)}
+              </Text>
+            ) : null}
+            {booking.mode ? (
+              <Text style={styles.rowLabel}>
+                Mode: {booking.mode.replace(/_/g, " ")}
+              </Text>
+            ) : null}
+            {booking.channel ? (
+              <Text style={styles.rowLabel}>
+                Channel: {booking.channel.replace(/_/g, " ")}
+              </Text>
+            ) : null}
             {booking.tokenNumber != null ? (
               <Text style={styles.rowLabel}>Token: #{booking.tokenNumber}</Text>
             ) : null}
@@ -380,7 +424,7 @@ export default function VisitScreen() {
                 Location:{" "}
                 {[booking.location.name, booking.location.city]
                   .filter(Boolean)
-                  .join(", ") || "—"}
+                  .join(", ") || ""}
               </Text>
             ) : null}
             {booking.notes ? (
@@ -409,7 +453,7 @@ export default function VisitScreen() {
 
         <Text style={styles.section}>Remarks</Text>
         <Text style={styles.lockedHint}>
-          Prefills from the patient problem with an AI visit brief.
+          Clinical remarks, advice, and follow-up for this visit.
         </Text>
         <TextInput
           value={remarks}

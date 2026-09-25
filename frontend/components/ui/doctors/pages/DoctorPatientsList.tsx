@@ -15,6 +15,7 @@ import {
 } from "@/lib/bookingStatus"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 
 type PracticePatient = PracticePatientRow & {
   recentBookings: Array<{
@@ -27,13 +28,27 @@ type PracticePatient = PracticePatientRow & {
     slotStart?: string | null
     sessionDate?: string | null
     createdAt?: string
+    patientName?: string | null
+    patientPhone?: string | null
   }>
 }
 
-function ageFromDob(dob?: string | null): string {
+function ageFromDob(dob?: string | null, age?: number | null): string {
+  if (typeof age === "number" && age >= 0 && age <= 130) return String(age)
   if (!dob?.trim()) return "—"
-  const age = firey.calculateAge(dob)
-  return age >= 0 && age <= 130 ? String(age) : "—"
+  const n = firey.calculateAge(dob)
+  return n >= 0 && n <= 130 ? String(n) : "—"
+}
+
+function patientRowKey(p: PracticePatientRow, index = 0) {
+  // Identity is member name + booking number (patientId may be shared).
+  const phone = p.bookedViaPhone || p.phone || ""
+  const name = (p.name || "").trim().toLowerCase() || "unknown"
+  return `${phone}|${name}|${index}`
+}
+
+function bookedViaPhone(p: PracticePatientRow) {
+  return p.bookedViaPhone || p.phone
 }
 
 function statusClass(status: string): string {
@@ -62,19 +77,10 @@ function genderLabel(gender?: string | null) {
   return "Not set"
 }
 
-function diseaseOf(p: PracticePatient) {
-  const latest = p.recentBookings?.[0]
-  return (
-    latest?.disease ||
-    latest?.consultationType ||
-    latest?.notes ||
-    "—"
-  )
-}
-
 export default function DoctorPatientsList() {
   const {
     ready,
+    hydrated,
     loading,
     error,
     practiceName,
@@ -85,7 +91,7 @@ export default function DoctorPatientsList() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
 
-  const showLoading = !ready && loading
+  const showLoading = (!ready && loading) || (ready && !hydrated)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -98,10 +104,10 @@ export default function DoctorPatientsList() {
         p.name,
         p.email,
         p.phone,
-        p.profession,
+        p.bookedViaPhone,
+        p.relationship,
         p.gender,
         p.address,
-        diseaseOf(p),
         ...(p.providerNames ?? []),
       ]
         .filter(Boolean)
@@ -178,10 +184,12 @@ export default function DoctorPatientsList() {
       {filtered.length > 0 ? (
         <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
           <ul className="divide-y divide-neutral-200 md:hidden dark:divide-neutral-700">
-            {filtered.map((p) => {
-              const open = expanded === p.phone
+            {filtered.map((p, index) => {
+              const key = patientRowKey(p, index)
+              const open = expanded === key
+              const via = formatPhoneDisplay(bookedViaPhone(p))
               return (
-                <li key={p.phone} className="px-4 py-3">
+                <li key={key} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
                       <PatientAvatar
@@ -194,12 +202,20 @@ export default function DoctorPatientsList() {
                         <p className="truncate font-semibold">
                           {p.name || "Unknown"}
                         </p>
+                        {p.relationship?.trim() ? (
+                          <p className="mt-0.5 text-xs font-medium text-[var(--theme-primary)]">
+                            {p.relationship.trim()}
+                          </p>
+                        ) : null}
                         <p className="mt-0.5 text-sm font-medium">
-                          {p.phone || "—"}
+                          Booked via {via}
                         </p>
                         <p className="mt-1 text-xs opacity-60">
                           {p.bookingCount} visit
                           {p.bookingCount === 1 ? "" : "s"}
+                          {ageFromDob(p.dateOfBirth, p.age) !== "—"
+                            ? ` · Age ${ageFromDob(p.dateOfBirth, p.age)}`
+                            : ""}
                         </p>
                       </div>
                     </div>
@@ -215,7 +231,7 @@ export default function DoctorPatientsList() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setExpanded(open ? null : p.phone)}
+                    onClick={() => setExpanded(open ? null : key)}
                     className="mt-2 text-xs font-semibold text-[var(--theme-primary)] hover:underline"
                   >
                     {open ? "Hide details" : "View details"}
@@ -224,23 +240,43 @@ export default function DoctorPatientsList() {
                     <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-950/40">
                       <div className="grid gap-2 text-xs">
                         <p>
-                          <span className="opacity-50">Address: </span>
-                          {p.address || "—"}
+                          <span className="opacity-50">Member: </span>
+                          {p.name || "—"}
                         </p>
                         <p>
-                          <span className="opacity-50">Seen by: </span>
-                          {p.providerNames?.join(", ") || "—"}
+                          <span className="opacity-50">Booked via: </span>
+                          {via}
                         </p>
-                        <p>
-                          <span className="opacity-50">DOB: </span>
-                          {p.dateOfBirth || "—"}
-                        </p>
-                        <p>
-                          <span className="opacity-50">Last visit: </span>
-                          {p.lastVisitAt
-                            ? new Date(p.lastVisitAt).toLocaleString()
-                            : "—"}
-                        </p>
+                        {p.relationship?.trim() ? (
+                          <p>
+                            <span className="opacity-50">Relation: </span>
+                            {p.relationship.trim()}
+                          </p>
+                        ) : null}
+                        {p.address?.trim() ? (
+                          <p>
+                            <span className="opacity-50">Address: </span>
+                            {p.address}
+                          </p>
+                        ) : null}
+                        {p.providerNames?.length ? (
+                          <p>
+                            <span className="opacity-50">Seen by: </span>
+                            {p.providerNames.join(", ")}
+                          </p>
+                        ) : null}
+                        {p.dateOfBirth?.trim() ? (
+                          <p>
+                            <span className="opacity-50">DOB: </span>
+                            {p.dateOfBirth}
+                          </p>
+                        ) : null}
+                        {p.lastVisitAt ? (
+                          <p>
+                            <span className="opacity-50">Last visit: </span>
+                            {new Date(p.lastVisitAt).toLocaleString()}
+                          </p>
+                        ) : null}
                       </div>
                       <p className="mt-3 text-xs font-semibold uppercase tracking-wide opacity-50">
                         Recent visits
@@ -253,7 +289,10 @@ export default function DoctorPatientsList() {
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <span className="font-medium">
-                                {b.disease || b.consultationType || "Visit"}
+                                {b.disease?.trim() &&
+                                !/^general\s+consultation$/i.test(b.disease)
+                                  ? b.disease
+                                  : "Visit"}
                               </span>
                               <span
                                 className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusClass(b.status)}`}
@@ -270,7 +309,9 @@ export default function DoctorPatientsList() {
                                     ? new Date(b.createdAt).toLocaleDateString()
                                     : "—"}
                             </p>
-                            {b.doctorRemarks?.trim() ? (
+                            {b.doctorRemarks?.trim() &&
+                            !/^Chief complaint:/i.test(b.doctorRemarks) &&
+                            !/AI brief for doctor:/i.test(b.doctorRemarks) ? (
                               <p className="mt-1 whitespace-pre-wrap text-sm opacity-90">
                                 <span className="font-semibold">Remarks: </span>
                                 {b.doctorRemarks}
@@ -296,21 +337,22 @@ export default function DoctorPatientsList() {
             <table className="w-full min-w-[900px] border-collapse text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                 <tr>
-                  <th className="px-4 py-3">Patient</th>
-                  <th className="whitespace-nowrap px-4 py-3">Number</th>
+                  <th className="px-4 py-3">Member</th>
+                  <th className="whitespace-nowrap px-4 py-3">Booked via</th>
                   <th className="whitespace-nowrap px-4 py-3">Age</th>
                   <th className="whitespace-nowrap px-4 py-3">Gender</th>
-                  <th className="px-4 py-3">Disease</th>
                   <th className="whitespace-nowrap px-4 py-3">Visits</th>
                   <th className="whitespace-nowrap px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                {filtered.map((p) => {
-                  const open = expanded === p.phone
+                {filtered.map((p, index) => {
+                  const key = patientRowKey(p, index)
+                  const open = expanded === key
+                  const via = formatPhoneDisplay(bookedViaPhone(p))
                   return (
-                    <Fragment key={p.phone}>
+                    <Fragment key={key}>
                       <tr className="bg-white dark:bg-neutral-900/40">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -323,17 +365,23 @@ export default function DoctorPatientsList() {
                               <p className="truncate font-semibold">
                                 {p.name || "Unknown"}
                               </p>
-                              <p className="truncate text-xs opacity-60">
-                                {p.email || p.profession || "—"}
-                              </p>
+                              {p.relationship?.trim() ? (
+                                <p className="truncate text-xs font-medium text-[var(--theme-primary)]">
+                                  {p.relationship.trim()}
+                                </p>
+                              ) : p.email ? (
+                                <p className="truncate text-xs opacity-60">
+                                  {p.email}
+                                </p>
+                              ) : null}
                             </div>
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 font-medium">
-                          {p.phone || "—"}
+                          {via}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
-                          {ageFromDob(p.dateOfBirth)}
+                          {ageFromDob(p.dateOfBirth, p.age)}
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -341,11 +389,6 @@ export default function DoctorPatientsList() {
                           >
                             {genderLabel(p.gender)}
                           </span>
-                        </td>
-                        <td className="max-w-[180px] px-4 py-3">
-                          <p className="line-clamp-2 font-medium">
-                            {diseaseOf(p)}
-                          </p>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           {p.bookingCount}
@@ -365,7 +408,7 @@ export default function DoctorPatientsList() {
                           <button
                             type="button"
                             onClick={() =>
-                              setExpanded(open ? null : p.phone)
+                              setExpanded(open ? null : key)
                             }
                             className="text-xs font-semibold text-[var(--theme-primary)] hover:underline"
                           >
@@ -375,26 +418,46 @@ export default function DoctorPatientsList() {
                       </tr>
                       {open ? (
                         <tr className="bg-neutral-50 dark:bg-neutral-950/40">
-                          <td colSpan={8} className="px-4 py-4">
+                          <td colSpan={7} className="px-4 py-4">
                             <div className="grid gap-3 text-xs sm:grid-cols-2">
                               <p>
-                                <span className="opacity-50">Address: </span>
-                                {p.address || "—"}
+                                <span className="opacity-50">Member: </span>
+                                {p.name || "—"}
                               </p>
                               <p>
-                                <span className="opacity-50">Seen by: </span>
-                                {p.providerNames?.join(", ") || "—"}
+                                <span className="opacity-50">Booked via: </span>
+                                {via}
                               </p>
-                              <p>
-                                <span className="opacity-50">DOB: </span>
-                                {p.dateOfBirth || "—"}
-                              </p>
-                              <p>
-                                <span className="opacity-50">Last visit: </span>
-                                {p.lastVisitAt
-                                  ? new Date(p.lastVisitAt).toLocaleString()
-                                  : "—"}
-                              </p>
+                              {p.relationship?.trim() ? (
+                                <p>
+                                  <span className="opacity-50">Relation: </span>
+                                  {p.relationship.trim()}
+                                </p>
+                              ) : null}
+                              {p.address?.trim() ? (
+                                <p>
+                                  <span className="opacity-50">Address: </span>
+                                  {p.address}
+                                </p>
+                              ) : null}
+                              {p.providerNames?.length ? (
+                                <p>
+                                  <span className="opacity-50">Seen by: </span>
+                                  {p.providerNames.join(", ")}
+                                </p>
+                              ) : null}
+                              {p.dateOfBirth?.trim() ? (
+                                <p>
+                                  <span className="opacity-50">DOB: </span>
+                                  {p.dateOfBirth}
+                                </p>
+                              ) : null}
+                              {p.lastVisitAt ? (
+                                <p>
+                                  <span className="opacity-50">Last visit: </span>
+                                  {new Date(p.lastVisitAt).toLocaleString()}
+                                </p>
+                              ) : null}
                             </div>
                             <p className="mt-3 text-xs font-semibold uppercase tracking-wide opacity-50">
                               Recent visits
@@ -407,9 +470,12 @@ export default function DoctorPatientsList() {
                                 >
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="font-medium">
-                                      {b.disease ||
-                                        b.consultationType ||
-                                        "Visit"}
+                                      {b.disease?.trim() &&
+                                      !/^general\s+consultation$/i.test(
+                                        b.disease,
+                                      )
+                                        ? b.disease
+                                        : "Visit"}
                                     </span>
                                     <span
                                       className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusClass(b.status)}`}
@@ -428,7 +494,11 @@ export default function DoctorPatientsList() {
                                             ).toLocaleDateString()
                                           : "—"}
                                   </p>
-                                  {b.doctorRemarks?.trim() ? (
+                                  {b.doctorRemarks?.trim() &&
+                                  !/^Chief complaint:/i.test(b.doctorRemarks) &&
+                                  !/AI brief for doctor:/i.test(
+                                    b.doctorRemarks,
+                                  ) ? (
                                     <p className="mt-1 whitespace-pre-wrap text-sm opacity-90">
                                       <span className="font-semibold">
                                         Remarks:{" "}

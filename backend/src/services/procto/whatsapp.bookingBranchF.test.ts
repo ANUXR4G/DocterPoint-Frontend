@@ -54,3 +54,13 @@ describe("Branch F attach document", () => {
     assert.equal(stepUsesLlm("awaiting_report_booking"), false);
   });
 });
+
+describe("Branch F button titles are bot commands (not care-chat)", () => {
+  it("Select Appointment / General Document / doc: ids skip care chat", async () => {
+    const { looksLikeBotCommand } = await import("../chat.whatsappInbound.js");
+    assert.equal(looksLikeBotCommand("Select Appointment"), true);
+    assert.equal(looksLikeBotCommand("General Document"), true);
+    assert.equal(looksLikeBotCommand("doc:appointment"), true);
+    assert.equal(looksLikeBotCommand("doc:general"), true);
+  });
+});

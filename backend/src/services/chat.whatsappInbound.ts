@@ -8,7 +8,7 @@ export function looksLikeBotCommand(text: string): boolean {
 
   // Structured interactive ids (list / button payloads)
   if (
-    /^(?:menu|post|booking|slot|date|mode|patient|provider|lang|reg_email_)/i.test(
+    /^(?:menu|post|booking|slot|date|mode|patient|provider|lang|rel|doc|whom|cancel|confirm|idle|continue|nlu|specialty|manage|reg_email_)/i.test(
       t,
     )
   ) {
@@ -25,7 +25,7 @@ export function looksLikeBotCommand(text: string): boolean {
 
   // Known button / list titles (display text when Meta sends title instead of id)
   if (
-    /^(main\s*menu|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back)$/i.test(
+    /^(main\s*menu|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back|select(\s+appointment)?|general(\s+document)?)$/i.test(
       t,
     )
   ) {

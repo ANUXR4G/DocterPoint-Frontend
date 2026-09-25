@@ -407,6 +407,7 @@ export const BotPrompts = {
   registered(
     opts: {
       name: string;
+      age?: number | null;
       continueToBook?: boolean;
     },
     lang?: WaLang,
@@ -418,12 +419,18 @@ export const BotPrompts = {
           `\n\nTap *Menu* below for options.`,
           `\n\nविकल्पों के लिए नीचे *Menu* दबाएँ।`,
         );
+    const ageLine =
+      opts.age != null
+        ? L(lang, `\nAge: *${opts.age}*`, `\nआयु: *${opts.age}*`)
+        : "";
     return (
       L(
         lang,
         `✅ Welcome, *${opts.name}*! Your patient profile is ready.`,
         `✅ स्वागत है, *${opts.name}*! आपका मरीज़ प्रोफ़ाइल तैयार है।`,
-      ) + next
+      ) +
+      ageLine +
+      next
     );
   },
 
@@ -514,17 +521,28 @@ export const BotPrompts = {
   },
 
   /** Branch C — success */
-  familyRegistered(name: string, lang?: WaLang, relationship?: string | null): string {
+  familyRegistered(
+    name: string,
+    lang?: WaLang,
+    relationship?: string | null,
+    age?: number | null,
+  ): string {
     const rel = relationship?.trim();
     const who = rel ? `*${name}* (${rel})` : `*${name}*`;
+    const ageLine =
+      age != null
+        ? L(lang, `\nAge: *${age}*`, `\nआयु: *${age}*`)
+        : "";
     return L(
       lang,
       `✅ Family member added successfully!\n` +
-        `${who} is saved under your profile.\n` +
-        `Tap *Menu* to book for them or yourself.`,
+        `${who} is saved under your profile.` +
+        ageLine +
+        `\nTap *Menu* to book for them or yourself.`,
       `✅ परिवार सदस्य सफलतापूर्वक जोड़ दिया गया!\n` +
-        `${who} आपकी प्रोफ़ाइल में सेव है।\n` +
-        `बुकिंग के लिए *Menu* दबाएँ।`,
+        `${who} आपकी प्रोफ़ाइल में सेव है।` +
+        ageLine +
+        `\nबुकिंग के लिए *Menu* दबाएँ।`,
     );
   },
 

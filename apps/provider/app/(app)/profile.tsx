@@ -10,6 +10,7 @@ import {
 import { Chip, EmptyState, PageTitle, PrimaryButton } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { clearSession } from "@/lib/api";
+import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { usePractice, usePracticeLabel } from "@/lib/practiceContext";
 import { fetchConversations, setConversationStatus } from "@/lib/procto";
 import { doctorWebPath } from "@/lib/webPortal";
@@ -193,7 +194,9 @@ export default function ProfileScreen() {
       ) : (
         rows.map((c) => (
           <View key={c.id} style={styles.card}>
-            <Text style={styles.phone}>{c.patientPhone}</Text>
+            <Text style={styles.phone}>
+              {formatPhoneDisplay(c.patientPhone)}
+            </Text>
             <Text style={styles.meta}>
               {c.status} · {new Date(c.updatedAt).toLocaleString()}
             </Text>

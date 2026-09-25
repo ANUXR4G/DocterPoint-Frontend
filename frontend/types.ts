@@ -110,6 +110,7 @@ export type AuthValueType = {
   name?: string
   phone?: string
   gender?: "male" | "female" | "others"
+  date_of_birth?: string
   appointmentValidityDays?: number
 }
 

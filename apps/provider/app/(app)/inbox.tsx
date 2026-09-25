@@ -8,6 +8,7 @@ import {
   PageTitle,
 } from "@/components/ui";
 import { usePractice } from "@/lib/practiceContext";
+import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { fetchConversations, setConversationStatus } from "@/lib/procto";
 import { colors, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
@@ -84,7 +85,9 @@ async function setStatus(
       ) : (
         rows.map((c) => (
           <View key={c.id} style={styles.card}>
-            <Text style={styles.phone}>{c.patientPhone}</Text>
+            <Text style={styles.phone}>
+              {formatPhoneDisplay(c.patientPhone)}
+            </Text>
             <Text style={styles.meta}>
               {c.status} · {new Date(c.updatedAt).toLocaleString()}
             </Text>

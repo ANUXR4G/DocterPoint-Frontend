@@ -14,6 +14,7 @@ import {
   waStatusLabel,
 } from "@/components/admin/AdminViewAllLink"
 import { adminService, type AdminPendingNumber } from "@/lib/services/admin"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
 
 export default function AdminPendingNumbersPage() {
@@ -95,7 +96,7 @@ export default function AdminPendingNumbersPage() {
             cell: (n) => (
               <div>
                 <p className="font-semibold tabular-nums text-slate-900 dark:text-white">
-                  {n.phoneNumber}
+                  {formatPhoneDisplay(n.phoneNumber)}
                 </p>
                 {n.displayName ? (
                   <p className="text-xs text-slate-500">{n.displayName}</p>

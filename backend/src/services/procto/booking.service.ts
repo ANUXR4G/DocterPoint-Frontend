@@ -1,6 +1,11 @@
 import { BookingChannel, BookingStatus, ScheduleMode } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError, ResponseHandler } from "../../core/response.js";
+import { ageFromDob } from "../../core/dob.js";
+import {
+  publicPatientAddress,
+  publicPatientEmail,
+} from "../../core/patientDisplay.js";
 import {
   assignNextToken,
   endOfLocalDay,
@@ -18,10 +23,6 @@ import {
 } from "./slotEngine.js";
 import { NotificationService } from "./notification.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
-import {
-  buildDoctorVisitBrief,
-  formatPatientProblemNotes,
-} from "./patientProblemBrief.service.js";
 
 const MAX_BOOKING_DOCUMENTS = 5;
 
@@ -268,14 +269,10 @@ export const BookingService = {
     }
 
     const diseaseText = data.disease?.trim().slice(0, 500) || "";
-    // Persist first with plain notes — never block DB write on OpenAI / brief LLM.
-    // Enrich doctorRemarks asynchronously after the row exists.
-    let notesText =
-      data.notes?.trim() ||
-      (diseaseText ? formatPatientProblemNotes(diseaseText, "") : null);
-    let remarksSeed: string | null = diseaseText
-      ? `Patient problem:\n${diseaseText}`
-      : null;
+    // Store patient-provided reason only when they actually entered one.
+    // Do not invent "General consultation" or auto-generate AI visit briefs.
+    const notesText = data.notes?.trim() || null;
+    const remarksSeed: string | null = null;
 
     // Serialize capacity check + create to reduce double-booking races
     const booking = await prisma.$transaction(async (tx) => {
@@ -387,28 +384,6 @@ export const BookingService = {
           })
           .catch(() => undefined),
       ]);
-    }
-
-    // AI visit brief after commit — dashboard still has the booking if LLM fails.
-    if (diseaseText && !data.notes?.trim()) {
-      void (async () => {
-        try {
-          const { brief } = await buildDoctorVisitBrief(diseaseText);
-          if (!brief) return;
-          await prisma.practiceBooking.update({
-            where: { id: booking.id },
-            data: {
-              notes: formatPatientProblemNotes(diseaseText, brief),
-              doctorRemarks: brief,
-            },
-          });
-        } catch (err) {
-          console.warn(
-            "[createBooking] patient problem brief failed (non-fatal):",
-            err instanceof Error ? err.message : err,
-          );
-        }
-      })();
     }
 
     void NotificationService.enqueueConfirmation(booking.id, {
@@ -868,7 +843,6 @@ export const BookingService = {
               imgSrc: true,
               patient: {
                 select: {
-                  profession: true,
                   dateOfBirth: true,
                   contactNumber: true,
                   emergencyNumber: true,
@@ -895,7 +869,6 @@ export const BookingService = {
           imgSrc: true,
           patient: {
             select: {
-              profession: true,
               dateOfBirth: true,
               contactNumber: true,
               emergencyNumber: true,
@@ -925,13 +898,13 @@ export const BookingService = {
         ? {
             id: linked.id,
             name: linked.name,
-            email: linked.email,
+            email: publicPatientEmail(linked.email),
             phone: linked.phone ?? linked.patient?.contactNumber ?? null,
             gender: linked.gender,
-            address: linked.address,
+            address: publicPatientAddress(linked.address),
             imgSrc: linked.imgSrc,
-            profession: linked.patient?.profession ?? null,
             dateOfBirth: linked.patient?.dateOfBirth ?? null,
+            age: ageFromDob(linked.patient?.dateOfBirth),
             contactNumber: linked.patient?.contactNumber ?? null,
             emergencyNumber: linked.patient?.emergencyNumber ?? null,
           }
@@ -943,8 +916,8 @@ export const BookingService = {
             gender: null,
             address: null,
             imgSrc: null,
-            profession: null,
             dateOfBirth: null,
+            age: null,
             contactNumber: booking.patientPhone,
             emergencyNumber: null,
           },
@@ -1169,7 +1142,6 @@ export const BookingService = {
               imgSrc: true,
               patient: {
                 select: {
-                  profession: true,
                   dateOfBirth: true,
                   contactNumber: true,
                   emergencyNumber: true,
@@ -1197,7 +1169,6 @@ export const BookingService = {
               imgSrc: true,
               patient: {
                 select: {
-                  profession: true,
                   dateOfBirth: true,
                   contactNumber: true,
                   emergencyNumber: true,
@@ -1244,13 +1215,13 @@ export const BookingService = {
           ? {
               id: linked.id,
               name: linked.name,
-              email: linked.email,
+              email: publicPatientEmail(linked.email),
               phone: linked.phone ?? linked.patient?.contactNumber ?? null,
               gender: linked.gender,
-              address: linked.address,
+              address: publicPatientAddress(linked.address),
               imgSrc: linked.imgSrc,
-              profession: linked.patient?.profession ?? null,
               dateOfBirth,
+              age: ageFromDob(dateOfBirth),
               contactNumber: linked.patient?.contactNumber ?? null,
               emergencyNumber: linked.patient?.emergencyNumber ?? null,
             }
@@ -1262,8 +1233,8 @@ export const BookingService = {
               gender: null,
               address: null,
               imgSrc: null,
-              profession: null,
               dateOfBirth: null,
+              age: null,
               contactNumber: b.patientPhone,
               emergencyNumber: null,
             },
