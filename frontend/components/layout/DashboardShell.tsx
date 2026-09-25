@@ -50,11 +50,11 @@ export default function DashboardShell({
       <Suspense fallback={null}>
         <Sidebar role={role} logout={handleLogout} />
       </Suspense>
-      <div className="dashboard-app-canvas relative z-10 flex min-h-screen flex-col md:pl-[72px] xl:pl-60">
-        {/* Floating top bar — no frame / border / fill */}
+      <div className="dashboard-app-canvas relative z-10 flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden md:pl-[72px] xl:pl-60">
+        {/* Sticky top bar — pinned while main content scrolls */}
         <Header role={role} embedded />
         <main
-          className={`dashboard-main flex-1 overflow-y-auto px-4 pb-8 pt-6 text-[var(--solune-ink)] xs:px-5 sm:pt-8 md:px-6 dark:text-slate-100 ${className}`}
+          className={`dashboard-main min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-8 pt-0 text-[var(--solune-ink)] xs:px-5 md:px-6 dark:text-slate-100 ${className}`}
         >
           {children}
         </main>

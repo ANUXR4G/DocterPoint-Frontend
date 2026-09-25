@@ -301,6 +301,38 @@ export default function VisitScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <View style={styles.stickyBanner}>
+        <View style={styles.bannerHero}>
+          <View style={styles.patientHeader}>
+            {resolveMediaUrl(p?.imgSrc) ? (
+              <Image
+                source={{ uri: resolveMediaUrl(p?.imgSrc)! }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={styles.avatarInitial}>
+                  {(patientName || "?").charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bannerEyebrow}>{whenLabel(booking)}</Text>
+              <Text style={styles.bannerName}>{patientName}</Text>
+              <Text style={styles.bannerSub}>
+                {dash(p?.contactNumber || p?.phone || booking.patientPhone)}
+                {" · "}
+                Age {ageFromDob(p?.dateOfBirth)}
+                {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.statusRow}>
+            <StatusBadge status={booking.status} />
+          </View>
+        </View>
+      </View>
+
       <ScrollView
         style={styles.root}
         contentContainerStyle={[
@@ -310,38 +342,6 @@ export default function VisitScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.banner}>
-          <View style={styles.bannerHero}>
-            <View style={styles.patientHeader}>
-              {resolveMediaUrl(p?.imgSrc) ? (
-                <Image
-                  source={{ uri: resolveMediaUrl(p?.imgSrc)! }}
-                  style={styles.avatar}
-                />
-              ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitial}>
-                    {(patientName || "?").charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.bannerEyebrow}>
-                  {whenLabel(booking)}
-                </Text>
-                <Text style={styles.bannerName}>{patientName}</Text>
-                <Text style={styles.bannerSub}>
-                  {dash(p?.contactNumber || p?.phone || booking.patientPhone)}
-                  {" · "}
-                  Age {ageFromDob(p?.dateOfBirth)}
-                  {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.statusRow}>
-              <StatusBadge status={booking.status} />
-            </View>
-          </View>
-
           <View style={styles.bannerFacts}>
             <Text style={styles.rowLabel}>
               Date of birth: {dash(p?.dateOfBirth)}
@@ -574,6 +574,13 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
   rootPad: { flex: 1, padding: space.xl, backgroundColor: colors.paper },
   content: { padding: space.xl },
+  stickyBanner: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.lineStrong,
+    backgroundColor: colors.paperRaised,
+    zIndex: 20,
+    ...shadows.soft,
+  },
   banner: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
