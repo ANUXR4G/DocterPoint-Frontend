@@ -466,12 +466,15 @@ export class AuthService {
     const decryptedPassword = unwrapPassword(input.password);
     const hashedPassword = await generateHash(decryptedPassword);
     const slotMins = Math.min(120, Math.max(5, Number(input.slotDurationMins) || 15));
-    const patientsPerSlot = Math.min(50, Math.max(1, Number(input.patientsPerSlot) || 1));
+    const mode = input.bookingType === "TOKEN" ? "TOKEN_BASED" : "TIME_BASED";
+    const patientsPerSlot =
+      mode === "TIME_BASED"
+        ? 1
+        : Math.min(50, Math.max(1, Number(input.patientsPerSlot) || 1));
     const validity = Math.min(
       90,
       Math.max(1, Number(input.appointmentValidityDays) || 7),
     );
-    const mode = input.bookingType === "TOKEN" ? "TOKEN_BASED" : "TIME_BASED";
     const phoneRaw = input.phone?.trim() || "";
     const phoneDigits = phoneRaw.replace(/\D/g, "").slice(-10);
     if (phoneDigits.length !== 10) {

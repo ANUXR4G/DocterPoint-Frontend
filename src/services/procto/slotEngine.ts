@@ -22,6 +22,9 @@ export interface TimeSlot {
   available: boolean;
 }
 
+/** Time-based slots are exclusive — one active patient per clock start. */
+export const TIME_SLOT_CAPACITY = 1;
+
 export interface TokenSession {
   date: Date;
   sessionStart: string;
@@ -123,6 +126,19 @@ export function parseTimeOnDate(date: Date, timeStr: string): Date {
   return zonedDateTime(formatLocalDate(date), timeStr);
 }
 
+/**
+ * Time-slot bookings must start strictly after "now".
+ * Used by the slot generator, create/reschedule, and WhatsApp confirm.
+ */
+export function isSlotStartBookable(
+  start: Date | string | number | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  if (start == null) return false;
+  const t = start instanceof Date ? start.getTime() : new Date(start).getTime();
+  return Number.isFinite(t) && t > nowMs;
+}
+
 /** Parse YYYY-MM-DD as clinic calendar day (midnight in PRACTICE_TIMEZONE). */
 export function parseLocalDate(dateStr: string): Date {
   const [y, mo, d] = dateStr.split("-").map(Number);
@@ -189,6 +205,26 @@ export function sameLocalSlot(a: Date, b: Date): boolean {
     pa.hour === pb.hour &&
     pa.minute === pb.minute
   );
+}
+
+/** Active TIME_BASED bookings for this clinic wall-clock slot. */
+export function countBookingsForSlot(
+  bookings: Array<{
+    mode: ScheduleMode;
+    slotStart: Date | null;
+    status?: BookingStatus;
+  }>,
+  slotStart: Date,
+): number {
+  return bookings.filter(
+    (b) =>
+      b.mode === ScheduleMode.TIME_BASED &&
+      b.slotStart != null &&
+      (b.status == null ||
+        (b.status !== BookingStatus.CANCELED &&
+          b.status !== BookingStatus.NO_SHOW)) &&
+      sameLocalSlot(b.slotStart, slotStart),
+  ).length;
 }
 
 /** Inclusive bookable window: today .. today + (validityDays - 1). */
@@ -259,7 +295,8 @@ export function generateTimeSlots(
   }
 
   const interval = schedule.slotIntervalMin ?? 30;
-  const capacity = Math.max(1, schedule.maxPerSlot ?? 1);
+  // One patient per clock slot (maxPerSlot on schedule is ignored for exclusivity).
+  const capacity = TIME_SLOT_CAPACITY;
   const dayStart = parseTimeOnDate(date, schedule.startTime);
   const dayEnd = parseTimeOnDate(date, schedule.endTime);
   const now = Date.now();
@@ -273,16 +310,9 @@ export function generateTimeSlots(
     // Skip break interval and overrides; past slots are not bookable
     const inBreak = overlapsBreak(schedule, cursor, slotEnd);
     const blocked = isBlockedByOverride(overrides, cursor, slotEnd);
-    const isPast = cursor.getTime() <= now;
+    const isPast = !isSlotStartBookable(cursor, now);
 
-    const booked = bookings.filter(
-      (b) =>
-        b.mode === ScheduleMode.TIME_BASED &&
-        b.status !== BookingStatus.CANCELED &&
-        b.status !== BookingStatus.NO_SHOW &&
-        b.slotStart &&
-        sameLocalSlot(b.slotStart, cursor),
-    ).length;
+    const booked = countBookingsForSlot(bookings, cursor);
 
     const available = !inBreak && !blocked && !isPast && booked < capacity;
 
@@ -309,10 +339,11 @@ export function generateExtraSlotsFromOverrides(
   date: Date,
   bookings: PracticeBooking[],
   slotIntervalMin: number,
-  maxPerSlot: number,
+  _maxPerSlot: number,
 ): TimeSlot[] {
   const interval = Math.max(5, slotIntervalMin || 15);
   const now = Date.now();
+  const capacity = TIME_SLOT_CAPACITY;
   const slots: TimeSlot[] = [];
 
   for (const override of overrides) {
@@ -325,7 +356,6 @@ export function generateExtraSlotsFromOverrides(
       continue;
     }
 
-    const capacity = Math.max(1, override.maxTokens ?? maxPerSlot);
     const windowStart = parseTimeOnDate(date, override.startTime);
     const windowEnd = parseTimeOnDate(date, override.endTime);
 
@@ -334,21 +364,14 @@ export function generateExtraSlotsFromOverrides(
       const slotEnd = new Date(cursor.getTime() + interval * 60_000);
       if (slotEnd > windowEnd) break;
 
-      const booked = bookings.filter(
-        (b) =>
-          b.mode === ScheduleMode.TIME_BASED &&
-          b.status !== BookingStatus.CANCELED &&
-          b.status !== BookingStatus.NO_SHOW &&
-          b.slotStart &&
-          sameLocalSlot(b.slotStart, cursor),
-      ).length;
+      const booked = countBookingsForSlot(bookings, cursor);
 
       slots.push({
         start: new Date(cursor),
         end: slotEnd,
         booked,
         capacity,
-        available: cursor.getTime() > now && booked < capacity,
+        available: isSlotStartBookable(cursor, now) && booked < capacity,
       });
 
       cursor = slotEnd;

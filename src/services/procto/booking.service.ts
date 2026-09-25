@@ -1,4 +1,4 @@
-import { BookingChannel, BookingStatus, ScheduleMode } from "@prisma/client";
+import { BookingChannel, BookingStatus, ScheduleMode, Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError, ResponseHandler } from "../../core/response.js";
 import { ageFromDob } from "../../core/dob.js";
@@ -8,12 +8,15 @@ import {
 } from "../../core/patientDisplay.js";
 import {
   assignNextToken,
+  countBookingsForSlot,
   endOfLocalDay,
   formatLocalDate,
+  formatPracticeTime,
   getTokenSession,
   getValidityBounds,
   hasExtraSlotsForDay,
   isDateWithinValidity,
+  isSlotStartBookable,
   parseLocalDate,
   practiceWeekday,
   formatPracticeDateTime,
@@ -21,6 +24,7 @@ import {
   sameLocalSlot,
   schedulesForActiveMode,
   startOfLocalDay,
+  TIME_SLOT_CAPACITY,
   timeSlotsForProviderDay,
 } from "./slotEngine.js";
 import { NotificationService } from "./notification.service.js";
@@ -30,6 +34,32 @@ const MAX_BOOKING_DOCUMENTS = 5;
 
 const BOOKING_STATUSES = new Set<string>(Object.values(BookingStatus));
 const BOOKING_CHANNELS = new Set<string>(Object.values(BookingChannel));
+
+/**
+ * Serialize concurrent book/reschedule for the same doctor + clock slot.
+ * Lock is held until the transaction commits/rolls back.
+ */
+async function lockProviderTimeSlot(
+  tx: Prisma.TransactionClient,
+  providerId: string,
+  slotStart: Date,
+): Promise<void> {
+  // Key by clinic wall-clock minute so second/ms differences share one lock.
+  const key = `${providerId}:${formatLocalDate(slotStart)} ${formatPracticeTime(slotStart)}`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+}
+
+function assertTimeSlotExclusive(
+  bookings: Array<{ mode: ScheduleMode; slotStart: Date | null }>,
+  slotStart: Date,
+): void {
+  if (countBookingsForSlot(bookings, slotStart) >= TIME_SLOT_CAPACITY) {
+    throw new AppError(
+      409,
+      "This time slot is already booked. Please pick another time.",
+    );
+  }
+}
 
 /** Accept common misspelling CANCELLED → CANCELED; reject unknown values with 400. */
 export function parseBookingStatus(raw: unknown): BookingStatus {
@@ -276,8 +306,22 @@ export const BookingService = {
     const notesText = data.notes?.trim() || null;
     const remarksSeed: string | null = null;
 
-    // Serialize capacity check + create to reduce double-booking races
+    // Serialize capacity check + create (advisory lock prevents double-book races)
     const booking = await prisma.$transaction(async (tx) => {
+      let slotStart: Date | undefined;
+      let slotEnd: Date | undefined;
+      let tokenNumber: number | undefined;
+      let sessionDate: Date | undefined;
+
+      if (mode === ScheduleMode.TIME_BASED) {
+        const startIso = data.slotStart!;
+        slotStart = new Date(startIso);
+        if (!isSlotStartBookable(slotStart)) {
+          throw new AppError(400, "That time slot has already passed. Pick a later time.");
+        }
+        await lockProviderTimeSlot(tx, data.providerId, slotStart);
+      }
+
       const [overrides, existingBookings] = await Promise.all([
         tx.scheduleOverride.findMany({
           where: {
@@ -299,17 +343,8 @@ export const BookingService = {
         }),
       ]);
 
-      let slotStart: Date | undefined;
-      let slotEnd: Date | undefined;
-      let tokenNumber: number | undefined;
-      let sessionDate: Date | undefined;
-
       if (mode === ScheduleMode.TIME_BASED) {
-        const startIso = data.slotStart!;
-        slotStart = new Date(startIso);
-        if (Number.isNaN(slotStart.getTime()) || slotStart.getTime() <= Date.now()) {
-          throw new AppError(400, "slot must be in the future.");
-        }
+        assertTimeSlotExclusive(existingBookings, slotStart!);
 
         if (
           !schedule &&
@@ -328,6 +363,8 @@ export const BookingService = {
         if (!match?.available) {
           throw new AppError(409, "selected slot is not available.");
         }
+        // Always persist the engine's clinic-wall-clock instant (not a skewed client parse).
+        slotStart = match.start;
         slotEnd = match.end;
       } else {
         if (!schedule) {
@@ -607,6 +644,19 @@ export const BookingService = {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      let slotStart: Date | null = null;
+      let slotEnd: Date | null = null;
+      let tokenNumber: number | null = null;
+      let sessionDate: Date | null = null;
+
+      if (existing.mode === ScheduleMode.TIME_BASED) {
+        slotStart = new Date(data.slotStart!);
+        if (!isSlotStartBookable(slotStart)) {
+          throw new AppError(400, "That time slot has already passed. Pick a later time.");
+        }
+        await lockProviderTimeSlot(tx, existing.providerId, slotStart);
+      }
+
       const [overrides, existingBookings] = await Promise.all([
         tx.scheduleOverride.findMany({
           where: {
@@ -629,16 +679,8 @@ export const BookingService = {
         }),
       ]);
 
-      let slotStart: Date | null = null;
-      let slotEnd: Date | null = null;
-      let tokenNumber: number | null = null;
-      let sessionDate: Date | null = null;
-
       if (existing.mode === ScheduleMode.TIME_BASED) {
-        slotStart = new Date(data.slotStart!);
-        if (Number.isNaN(slotStart.getTime()) || slotStart.getTime() <= Date.now()) {
-          throw new AppError(400, "slot must be in the future.");
-        }
+        assertTimeSlotExclusive(existingBookings, slotStart!);
         if (
           !schedule &&
           !hasExtraSlotsForDay(overrides, date)
@@ -656,6 +698,7 @@ export const BookingService = {
         if (!match?.available) {
           throw new AppError(409, "selected slot is not available.");
         }
+        slotStart = match.start;
         slotEnd = match.end;
       } else {
         if (!schedule) {
