@@ -5,7 +5,9 @@ import { usePathname, useSearchParams } from "next/navigation"
 
 const LINKS = [
   { href: "/doctor/dashboard", label: "Dashboard" },
+  { href: "/doctor/activity", label: "Activity" },
   { href: "/doctor/queue", label: "Queue" },
+  { href: "/doctor/notifications", label: "Notifications" },
   { href: "/doctor/appointments", label: "Appointments" },
   { href: "/doctor/patients", label: "Patients" },
   { href: "/doctor/calendar", label: "Calendar" },
@@ -75,6 +77,10 @@ export function isDoctorNavActive(
 
   if (destPath === "/doctor/notifications") {
     return pathname === "/doctor/notifications"
+  }
+
+  if (destPath === "/doctor/activity") {
+    return pathname === "/doctor/activity"
   }
 
   if (destPath === "/doctor/analytics") {
