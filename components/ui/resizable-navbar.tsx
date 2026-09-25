@@ -81,8 +81,7 @@ export const Navbar = ({
     <motion.div
       ref={ref}
       className={cn(
-        "fixed inset-x-0 top-0 z-[100] w-full overflow-x-clip text-neutral-900 dark:text-white",
-        visible ? "pt-3 sm:pt-4" : "pt-0",
+        "fixed inset-x-0 top-0 z-[100] w-full overflow-x-clip pt-2 text-neutral-900 dark:text-white sm:pt-3",
         className,
       )}
     >
@@ -104,20 +103,16 @@ export const NavBody = ({ children, className, visible }: NavBodyProps) => {
       animate={{
         boxShadow: visible
           ? "0 8px 32px rgba(0,0,0,0.08), inset 0 0.5px 0 rgba(255,255,255,0.65)"
-          : "inset 0 -0.5px 0 rgba(0,0,0,0.06)",
-        width: visible ? "min(920px, 92%)" : "100%",
-        borderRadius: visible ? 100 : 0,
+          : "0 4px 20px rgba(0,0,0,0.04), inset 0 0.5px 0 rgba(255,255,255,0.5)",
+        width: visible ? "min(920px, 92%)" : "min(1199px, 96%)",
+        borderRadius: 9999,
       }}
       transition={{ type: "spring", stiffness: 200, damping: 50 }}
       className={cn(
         "relative z-[60] mx-auto hidden h-14 w-full max-w-[1199px] flex-row items-center justify-between self-start px-[15px] lg:flex",
-        // iOS frosted glass
-        "backdrop-blur-xl backdrop-saturate-150",
-        "supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-[#242220]/55",
-        "bg-[color-mix(in_srgb,#ffffff_78%,transparent)] dark:bg-[#242220]/78",
-        visible
-          ? "border border-white/60 dark:border-white/10"
-          : "border-b border-black/[0.06] dark:border-white/[0.08]",
+        "rounded-full border border-white/60 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10",
+        "supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-[#1e293b]/70",
+        "bg-[color-mix(in_srgb,#ffffff_78%,transparent)] dark:bg-[#1e293b]/85",
         className,
       )}
     >
@@ -164,21 +159,18 @@ export const MobileNav = ({ children, className, visible }: MobileNavProps) => {
       animate={{
         boxShadow: visible
           ? "0 8px 32px rgba(0,0,0,0.08), inset 0 0.5px 0 rgba(255,255,255,0.55)"
-          : "inset 0 -0.5px 0 rgba(0,0,0,0.06)",
-        width: visible ? "90%" : "100%",
+          : "0 4px 20px rgba(0,0,0,0.04), inset 0 0.5px 0 rgba(255,255,255,0.45)",
+        width: visible ? "90%" : "94%",
         paddingRight: visible ? "12px" : "15px",
         paddingLeft: visible ? "12px" : "15px",
-        borderRadius: visible ? 20 : 0,
+        borderRadius: 9999,
       }}
       transition={{ type: "spring", stiffness: 200, damping: 50 }}
       className={cn(
         "relative z-50 mx-auto flex h-14 w-full max-w-full flex-col items-center justify-center lg:hidden",
-        "backdrop-blur-xl backdrop-saturate-150",
-        "supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-[#242220]/55",
-        "bg-[color-mix(in_srgb,#ffffff_78%,transparent)] dark:bg-[#242220]/78",
-        visible
-          ? "border border-white/60 dark:border-white/10"
-          : "border-b border-black/[0.06] dark:border-white/[0.08]",
+        "rounded-full border border-white/60 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10",
+        "supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-[#1e293b]/70",
+        "bg-[color-mix(in_srgb,#ffffff_78%,transparent)] dark:bg-[#1e293b]/85",
         className,
       )}
     >
@@ -288,11 +280,13 @@ export const NavbarButton = ({
     "relative inline-block cursor-pointer rounded-full px-[15px] py-[10px] text-center text-[14px] font-medium leading-none tracking-[-0.14px] transition duration-200 hover:scale-[0.98] active:scale-[0.96]"
 
   const variantStyles = {
+    // Dark: keep white CTA but use a fixed dark ink — --solune-ink flips to
+    // light in dark mode, which made "Book now" unreadable on white.
     primary:
-      "bg-[var(--solune-ink)] text-white dark:bg-white dark:text-[var(--solune-ink)]",
+      "bg-[var(--solune-ink)] text-white dark:bg-white dark:text-[#1a1816]",
     secondary:
       "border border-[var(--solune-border-strong)] bg-[var(--solune-surface)] text-[var(--solune-ink)] dark:border-white/12 dark:bg-[#242220] dark:text-white",
-    dark: "bg-[var(--solune-ink)] text-white",
+    dark: "bg-[var(--solune-ink)] text-white dark:bg-white dark:text-[#1a1816]",
     gradient:
       "bg-[var(--theme-primary)] text-[var(--theme-primary-foreground)] shadow-[0_8px_24px_-8px_color-mix(in_srgb,var(--theme-primary)_55%,transparent)] hover:bg-[var(--theme-primary-hover)]",
   }

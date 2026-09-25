@@ -20,7 +20,7 @@ export default function DocumentScanPreview({
 }: DocumentScanPreviewProps) {
   return (
     <div
-      className={`relative overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 ${className}`}
+      className={`relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-slate-800 ${className}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={alt} className={imageClassName} />
@@ -39,7 +39,7 @@ export default function DocumentScanPreview({
         </>
       ) : null}
       {fileName ? (
-        <p className="truncate border-t border-neutral-200 px-2 py-1.5 text-[11px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+        <p className="truncate border-t border-slate-200 px-2 py-1.5 text-[11px] text-slate-500 dark:border-white/10 dark:text-slate-400">
           {fileName}
         </p>
       ) : null}

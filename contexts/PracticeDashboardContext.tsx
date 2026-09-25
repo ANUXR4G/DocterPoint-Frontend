@@ -66,9 +66,14 @@ export type PracticePatientRow = {
 }
 
 type PracticeDashboardValue = {
-  /** True only on the very first load for this session. */
+  /** True only while membership is unresolved on first paint. */
   loading: boolean
+  /**
+   * Practice id / membership ready — UI and live socket may proceed.
+   * Bookings/patients may still fill in after (bootstrap).
+   */
   ready: boolean
+  liveConnected: boolean
   error: string | null
   memberships: PracticeMembership[]
   practiceId: string | null
@@ -89,6 +94,8 @@ type PracticeDashboardValue = {
   patients: PracticePatientRow[]
   /** Increments when WhatsApp inbox may have changed (single shared WS). */
   conversationTick: number
+  /** Increments on booking_created / booking_updated (notifications soft-refresh). */
+  bookingTick: number
   refresh: (opts?: { silent?: boolean }) => Promise<void>
   patchBooking: (id: string, patch: Partial<ProctoBooking>) => void
   setBookings: React.Dispatch<React.SetStateAction<ProctoBooking[]>>
@@ -144,14 +151,19 @@ export function filterBookingsByDate(
 export function PracticeDashboardProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [ready, setReady] = useState(false)
+  const [liveConnected, setLiveConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [memberships, setMemberships] = useState<PracticeMembership[]>([])
   const [bookings, setBookings] = useState<ProctoBooking[]>([])
   const [patients, setPatients] = useState<PracticePatientRow[]>([])
   const [conversationTick, setConversationTick] = useState(0)
+  const [bookingTick, setBookingTick] = useState(0)
   const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bootInFlight = useRef(false)
+  const lastBootAt = useRef(0)
 
-  const practiceId = memberships[0]?.practice?.id ?? null
+  const practiceId =
+    proctoService.resolvePracticeId(memberships[0]) ?? null
   const practiceName = memberships[0]?.practice?.name ?? null
   const practiceType = memberships[0]?.practice?.type ?? null
   const membershipRole = memberships[0]?.role ?? null
@@ -165,84 +177,135 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     membershipRole === "DOCTOR" &&
     !isClinicAdmin
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setLoading(true)
-    if (!opts?.silent) setError(null)
+  const applyMembership = useCallback((mem: PracticeMembership[]) => {
+    if (!mem.length) return
+    setMemberships(mem)
+    setReady(true)
+    setLoading(false)
+    setError(null)
+  }, [])
 
-    const today = new Date()
-    const boot = await proctoService.getPracticeBootstrap({
-      from: format(subDays(today, 90), "yyyy-MM-dd"),
-      to: format(addDays(today, 90), "yyyy-MM-dd"),
-    })
+  /** Heavy ±90d bootstrap — never blocks ready/socket. */
+  const bootstrapBookings = useCallback(async () => {
+    if (bootInFlight.current) return
+    const now = Date.now()
+    // Avoid stampeding Supabase when WS reconnect storms fire.
+    if (now - lastBootAt.current < 4_000) return
+    bootInFlight.current = true
+    lastBootAt.current = now
+    try {
+      const today = new Date()
+      const boot = await proctoService.getPracticeBootstrap({
+        from: format(subDays(today, 90), "yyyy-MM-dd"),
+        to: format(addDays(today, 90), "yyyy-MM-dd"),
+      })
 
-    let mem: PracticeMembership[] = []
-    let nextBookings: ProctoBooking[] = []
-    let nextPatients: PracticePatientRow[] = []
+      let mem: PracticeMembership[] = []
+      let nextBookings: ProctoBooking[] = []
+      let nextPatients: PracticePatientRow[] = []
 
-    if (boot.status === "successful" && boot.data) {
-      mem = (boot.data.memberships ?? []) as PracticeMembership[]
-      nextBookings = (Array.isArray(boot.data.bookings)
-        ? boot.data.bookings
-        : []) as ProctoBooking[]
-      nextPatients = (Array.isArray(boot.data.patients)
-        ? boot.data.patients
-        : []) as PracticePatientRow[]
-    }
-
-    // Fallback: independent SOLO / clinic-staff still load if bootstrap fails.
-    if (!mem.length) {
-      proctoService.invalidateMyPracticesCache()
-      const mine = await proctoService.getMyPractices()
-      if (mine.status === "successful" && Array.isArray(mine.data)) {
-        mem = mine.data as PracticeMembership[]
+      if (boot.status === "successful" && boot.data) {
+        if (
+          Array.isArray(boot.data.memberships) &&
+          boot.data.memberships.length
+        ) {
+          mem = boot.data.memberships as PracticeMembership[]
+        }
+        nextBookings = (Array.isArray(boot.data.bookings)
+          ? boot.data.bookings
+          : []) as ProctoBooking[]
+        nextPatients = (Array.isArray(boot.data.patients)
+          ? boot.data.patients
+          : []) as PracticePatientRow[]
       }
-    }
 
-    if (!mem.length) {
+      if (mem.length) applyMembership(mem)
+      if (boot.status === "successful") {
+        setBookings(sortBookingsByWhen(nextBookings, "asc"))
+        setPatients(nextPatients)
+      }
+    } finally {
+      bootInFlight.current = false
+    }
+  }, [applyMembership])
+
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) {
+        setLoading(true)
+        setError(null)
+      }
+
+      let mem: PracticeMembership[] = []
+      try {
+        const mineEarly = await proctoService.getMyPractices()
+        if (
+          mineEarly.status === "successful" &&
+          Array.isArray(mineEarly.data) &&
+          mineEarly.data.length
+        ) {
+          mem = mineEarly.data as PracticeMembership[]
+          applyMembership(mem)
+        }
+      } catch {
+        /* bootstrap may still succeed */
+      }
+
+      await bootstrapBookings()
+
+      if (mem.length) return
+
+      proctoService.invalidateMyPracticesCache()
+      try {
+        const mine = await proctoService.getMyPractices()
+        if (
+          mine.status === "successful" &&
+          Array.isArray(mine.data) &&
+          mine.data.length
+        ) {
+          applyMembership(mine.data as PracticeMembership[])
+          return
+        }
+      } catch {
+        /* empty */
+      }
+
       if (!opts?.silent) {
         setMemberships([])
         setBookings([])
         setPatients([])
-        setError(
-          boot.status !== "successful"
-            ? boot.message || "Could not load practice."
-            : null,
-        )
+        setError("Could not load practice.")
         setLoading(false)
         setReady(true)
       }
-      return
-    }
-
-    setMemberships(mem)
-    setBookings(sortBookingsByWhen(nextBookings, "asc"))
-    setPatients(nextPatients)
-    if (!opts?.silent) {
-      setLoading(false)
-      setReady(true)
-    }
-  }, [])
+    },
+    [applyMembership, bootstrapBookings],
+  )
 
   useEffect(() => {
     void load()
     return () => {
       if (softTimer.current) clearTimeout(softTimer.current)
     }
-  }, [load])
+    // Initial mount only — load identity is stable enough via refs for soft refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function scheduleSoftRefresh() {
     if (softTimer.current) clearTimeout(softTimer.current)
-    softTimer.current = setTimeout(() => void load({ silent: true }), 300)
+    // Debounced bootstrap only — never flip loading/ready.
+    softTimer.current = setTimeout(() => void bootstrapBookings(), 800)
   }
 
   useProctoSocket(
     practiceId,
     (event) => {
       if (event.event === "conversation_updated") {
+        // Inbox panels listen via conversationTick — do not re-bootstrap ±90d.
         setConversationTick((n) => n + 1)
-        scheduleSoftRefresh()
         return
       }
+      setBookingTick((n) => n + 1)
       const incoming = event.booking as Record<string, unknown> | undefined
       setBookings((prev) => {
         const { next, needsRefresh } = applyLiveBookingEvent(
@@ -253,13 +316,14 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
         if (needsRefresh) scheduleSoftRefresh()
         return sortBookingsByWhen(next, "asc")
       })
-      // Keep Patients → recent visits (remarks / status) in sync with queue.
       setPatients((prev) => patchPatientsFromBooking(prev, incoming))
       if (event.event === "booking_created") {
         scheduleSoftRefresh()
       }
     },
     scheduleSoftRefresh,
+    () => setLiveConnected(true),
+    () => setLiveConnected(false),
   )
 
   const patchBooking = useCallback(
@@ -275,6 +339,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     (): PracticeDashboardValue => ({
       loading,
       ready,
+      liveConnected,
       error,
       memberships,
       practiceId,
@@ -288,6 +353,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       bookings,
       patients,
       conversationTick,
+      bookingTick,
       refresh: load,
       patchBooking,
       setBookings,
@@ -295,6 +361,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     [
       loading,
       ready,
+      liveConnected,
       error,
       memberships,
       practiceId,
@@ -308,6 +375,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       bookings,
       patients,
       conversationTick,
+      bookingTick,
       load,
       patchBooking,
     ],

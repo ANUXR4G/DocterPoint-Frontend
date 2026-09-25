@@ -242,13 +242,13 @@ export default function AadharCardSection({
   return (
     <div className="min-w-0 space-y-3">
       <div
-        className={`w-full min-w-0 rounded-[16px] border border-dashed border-neutral-300 bg-gradient-to-br from-neutral-50 to-white dark:border-neutral-600 dark:from-[#161616] dark:to-[#101010] sm:rounded-[20px] ${
+        className={`w-full min-w-0 rounded-[16px] border border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-white dark:border-white/15 dark:from-slate-800 dark:to-slate-800/70 sm:rounded-[20px] ${
           compact ? "p-3" : "p-3 sm:p-4"
         }`}
       >
         <div className={`flex gap-3 ${compact ? "flex-col" : "flex-col sm:flex-row sm:items-start"}`}>
           <div
-            className={`flex shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--theme-primary)_16%,transparent)] ${
+            className={`flex shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--theme-primary)_16%,transparent)] dark:bg-[color-mix(in_srgb,var(--theme-primary)_22%,transparent)] ${
               compact ? "size-9" : "size-10"
             }`}
           >
@@ -259,10 +259,10 @@ export default function AadharCardSection({
             />
           </div>
           <div className="min-w-0 flex-1">
-            <p className={`font-semibold text-neutral-900 dark:text-neutral-100 ${compact ? "text-xs" : "text-sm"}`}>
+            <p className={`font-semibold text-slate-900 dark:text-white ${compact ? "text-xs" : "text-sm"}`}>
               Upload ID documents (optional)
             </p>
-            <p className={`mt-0.5 leading-relaxed text-neutral-500 dark:text-neutral-400 ${compact ? "text-[10px]" : "text-xs"}`}>
+            <p className={`mt-0.5 leading-relaxed text-slate-500 dark:text-slate-400 ${compact ? "text-[10px]" : "text-xs"}`}>
               Add up to {MAX_IMAGES} photos. We read each image, fill your details, and
               use your Aadhaar photo (or first upload) as your dashboard profile picture.
             </p>
@@ -272,7 +272,7 @@ export default function AadharCardSection({
                 type="button"
                 disabled={isLoading || images.length >= MAX_IMAGES}
                 onClick={() => inputRef.current?.click()}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-neutral-900 px-4 text-xs font-semibold text-white transition hover:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-black sm:w-auto sm:min-h-10"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-slate-900 px-4 text-xs font-semibold text-white transition hover:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-[#0f172a] sm:w-auto sm:min-h-10"
               >
                 <Icon
                   name="image-upload"

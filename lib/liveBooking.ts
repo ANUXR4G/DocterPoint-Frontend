@@ -98,10 +98,8 @@ export function applyLiveBookingEvent<T extends { id: string }>(
   const idx = prev.findIndex((b) => b.id === id)
 
   if (idx < 0) {
-    if (eventName === "booking_created") {
-      return { next: prev, needsRefresh: true }
-    }
-    return { next: prev, needsRefresh: false }
+    // Unknown id — soft-refresh so patient/clinic lists stay complete.
+    return { next: prev, needsRefresh: true }
   }
 
   const next = [...prev]

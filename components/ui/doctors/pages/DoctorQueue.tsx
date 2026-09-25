@@ -353,8 +353,8 @@ export default function DoctorQueue({
       <div
         className={
           compact
-            ? "max-h-[min(52vh,480px)] overflow-auto rounded-2xl border border-slate-200 dark:border-white/10"
-            : "min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-white/10"
+            ? "max-h-[min(52vh,480px)] overflow-auto rounded-2xl border border-slate-200 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)]"
+            : "min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)]"
         }
       >
         <ul className="divide-y divide-neutral-200 md:hidden dark:divide-neutral-700">

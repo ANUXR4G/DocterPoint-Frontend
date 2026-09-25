@@ -7,6 +7,7 @@ import { buildWsUrl } from "@/lib/wsOrigin"
 import { cookies } from "@/utils/cookies"
 import { firey } from "@/utils"
 import type { TSocketMessage } from "@/types"
+import { shouldHideFromCareChat } from "@/lib/careChatFilter"
 
 type CareMessage = {
   id: string
@@ -109,6 +110,7 @@ export default function CareChatPanel({
             : []
         const normalized = list
           .map((m: Record<string, unknown>) => normalizeMsg(m))
+          .filter((m: CareMessage) => !shouldHideFromCareChat(m.content))
           .reverse()
         setMessages(normalized)
       } catch (e) {
@@ -138,6 +140,7 @@ export default function CareChatPanel({
   useEffect(() => {
     if (!values) return
     const msg = normalizeMsg(values as unknown as Record<string, unknown>)
+    if (shouldHideFromCareChat(msg.content)) return
     const involvesPeer =
       msg.senderId === peerUserId ||
       msg.receiverId === peerUserId ||

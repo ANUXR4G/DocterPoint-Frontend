@@ -17,7 +17,7 @@ export default function AuthShell({
     <div className="gg-auth flex min-h-[100dvh] flex-col overflow-x-clip bg-gradient-to-b from-sky-50/90 via-white to-white text-slate-900 antialiased dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100">
       <SiteNavbar active={active} />
 
-      <main className="mx-auto flex w-full max-w-[1199px] flex-1 flex-col px-4 pt-[4.75rem] pb-8 sm:px-6 sm:pt-20 sm:pb-10">
+      <main className="mx-auto flex w-full max-w-[1199px] flex-1 flex-col px-4 pt-24 pb-8 sm:px-6 sm:pt-28 sm:pb-10">
         {children}
       </main>
 

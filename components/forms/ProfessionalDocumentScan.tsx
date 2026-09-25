@@ -109,9 +109,9 @@ export default function ProfessionalDocumentScan({
   }
 
   return (
-    <div className="w-full min-w-0 rounded-[16px] border border-dashed border-neutral-300 bg-gradient-to-br from-neutral-50 to-white p-3 dark:border-neutral-600 dark:from-[#161616] dark:to-[#101010] sm:rounded-[20px] sm:p-4">
+    <div className="w-full min-w-0 rounded-[16px] border border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-white p-3 dark:border-white/15 dark:from-slate-800 dark:to-slate-800/70 sm:rounded-[20px] sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--theme-primary)_16%,transparent)]">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--theme-primary)_16%,transparent)] dark:bg-[color-mix(in_srgb,var(--theme-primary)_22%,transparent)]">
           <Icon
             name="written-page"
             className="size-5"
@@ -119,10 +119,10 @@ export default function ProfessionalDocumentScan({
           />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">
             {copy.title}
           </p>
-          <p className="mt-0.5 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
             {copy.hint}
           </p>
 
@@ -131,7 +131,7 @@ export default function ProfessionalDocumentScan({
               type="button"
               disabled={isLoading}
               onClick={() => inputRef.current?.click()}
-              className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-neutral-900 px-4 text-xs font-semibold text-white transition hover:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-black sm:w-auto sm:min-h-10"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-slate-900 px-4 text-xs font-semibold text-white transition hover:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-[#0f172a] sm:w-auto sm:min-h-10"
             >
               <Icon
                 name="image-upload"
@@ -148,7 +148,7 @@ export default function ProfessionalDocumentScan({
               onChange={handleFile}
             />
             {fileName && !isLoading ? (
-              <span className="max-w-full truncate text-center text-xs text-neutral-500 sm:max-w-[14rem] sm:text-left">
+              <span className="max-w-full truncate text-center text-xs text-slate-500 dark:text-slate-400 sm:max-w-[14rem] sm:text-left">
                 {fileName}
               </span>
             ) : null}

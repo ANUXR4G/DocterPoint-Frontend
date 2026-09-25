@@ -3,6 +3,12 @@ import { cookies } from "@/utils/cookies"
 import { userService } from "@/lib/services/user"
 import { firey } from "@/utils"
 
+/** Same-origin in the browser — avoids localhost vs 127.0.0.1 cookie splits. */
+function apiBase() {
+  if (typeof window !== "undefined") return "/api/v1"
+  return process.env.NEXT_PUBLIC_API ?? "http://127.0.0.1:3000/api/v1"
+}
+
 /** Shared in-flight refresh so many useToken() callers don't stampede the API. */
 let refreshPromise: Promise<string | null> | null = null
 
@@ -11,16 +17,13 @@ async function refreshAccessToken(token: string): Promise<string | null> {
 
   refreshPromise = (async () => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API}/auth/token/refresh`,
-        {
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${apiBase()}/auth/token/refresh`, {
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      )
+      })
 
       // Rate-limited or transient — keep existing session; do not logout.
       if (response.status === 429 || response.status >= 500) {

@@ -68,11 +68,11 @@ function initials(name: string) {
 
 function avatarTone(seed: string) {
   const tones = [
-    "bg-[#e8f4ff] text-[#0066cc]",
-    "bg-[#eef8f0] text-[#1a7a3a]",
-    "bg-[#fff4e8] text-[#b45a00]",
-    "bg-[#f3eefe] text-[#5b3cc4]",
-    "bg-[#fdecef] text-[#b42318]",
+    "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+    "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+    "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
   ]
   let hash = 0
   for (let i = 0; i < seed.length; i++) hash = (hash + seed.charCodeAt(i)) % tones.length
@@ -244,10 +244,10 @@ function PracticesPageContent() {
 
         {/* Practo-style dual search */}
         <div className="sticky top-20 z-20 mt-6 sm:top-24">
-          <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.06)] dark:border-[#2a2a2a] dark:bg-[#141414] dark:shadow-none">
+          <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] sm:rounded-full dark:border-white/10 dark:bg-[var(--solune-surface)] dark:shadow-none">
             <div className="flex flex-col sm:flex-row sm:items-stretch">
-              <label className="flex min-h-[3.75rem] min-w-0 flex-1 items-center gap-3 border-b border-neutral-200 px-4 py-3 sm:max-w-[240px] sm:border-b-0 sm:border-r sm:border-neutral-200 sm:px-5 dark:border-[#2a2a2a]">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#e8f4ff] text-blue-600 dark:bg-blue-600/15">
+              <label className="flex min-h-[3.75rem] min-w-0 flex-1 items-center gap-3 border-b border-slate-200/80 px-4 py-3 sm:max-w-[240px] sm:border-b-0 sm:border-r sm:border-slate-200/80 sm:px-5 sm:pl-6 dark:border-white/10">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-blue-600 dark:bg-blue-500/15 dark:text-sky-300">
                   <svg
                     viewBox="0 0 24 24"
                     className="size-4"
@@ -261,7 +261,7 @@ function PracticesPageContent() {
                   </svg>
                 </span>
                 <div className="min-w-0 flex-1">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Location
                   </span>
                   <input
@@ -271,7 +271,7 @@ function PracticesPageContent() {
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     autoComplete="address-level2"
-                    className="gg-bare-input w-full min-w-0 text-sm font-semibold placeholder:font-medium placeholder:text-neutral-400"
+                    className="gg-bare-input w-full min-w-0 text-sm font-semibold placeholder:font-medium"
                     data-testid="practices-city"
                   />
                   <datalist id="practice-cities">
@@ -282,8 +282,8 @@ function PracticesPageContent() {
                 </div>
               </label>
 
-              <label className="flex min-h-[3.75rem] min-w-0 flex-[1.6] items-center gap-3 px-4 py-3 sm:px-5">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/10 dark:text-neutral-300">
+              <label className="flex min-h-[3.75rem] min-w-0 flex-[1.6] items-center gap-3 px-4 py-3 sm:px-5 sm:pr-6">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">
                   <svg
                     viewBox="0 0 24 24"
                     className="size-4"
@@ -297,7 +297,7 @@ function PracticesPageContent() {
                   </svg>
                 </span>
                 <div className="min-w-0 flex-1">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Search
                   </span>
                   <input
@@ -306,7 +306,7 @@ function PracticesPageContent() {
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     autoComplete="off"
-                    className="gg-bare-input w-full min-w-0 text-sm font-semibold placeholder:font-medium placeholder:text-neutral-400"
+                    className="gg-bare-input w-full min-w-0 text-sm font-semibold placeholder:font-medium"
                     data-testid="practices-search"
                   />
                 </div>
@@ -318,7 +318,7 @@ function PracticesPageContent() {
                         practicesFieldClearAction({ q, city, specialty, view, feeMax }),
                       )
                     }
-                    className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/10"
+                    className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10"
                     data-testid="practices-clear-search-field"
                   >
                     Clear
@@ -330,7 +330,7 @@ function PracticesPageContent() {
         </div>
 
         {/* Specialty chips */}
-        <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 custom-scroll">
+        <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 no-scrollbar">
           {SPECIALTIES.map((s) => {
             const active = specialty === s
             return (
@@ -341,7 +341,7 @@ function PracticesPageContent() {
                 className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold transition sm:text-sm ${
                   active
                     ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
-                    : "border border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-[#333] dark:bg-[#141414] dark:text-neutral-300"
+                    : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-[var(--solune-surface)] dark:text-slate-300 dark:hover:border-white/20"
                 }`}
               >
                 {s}
@@ -353,17 +353,17 @@ function PracticesPageContent() {
         {/* Results toolbar */}
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-neutral-900 dark:text-white">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">
               {loading ? "Searching…" : resultLabel}
             </p>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               {specialty !== "All" ? specialty : "All specialties"}
               {city ? ` · ${city}` : ""}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-full border border-neutral-200 bg-white p-0.5 dark:border-[#333] dark:bg-[#141414]">
+            <div className="inline-flex rounded-full border border-slate-200 bg-white p-0.5 dark:border-white/10 dark:bg-[var(--solune-surface)]">
               {(
                 [
                   ["all", "All"],
@@ -378,7 +378,7 @@ function PracticesPageContent() {
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     view === id
                       ? "bg-blue-600 text-white"
-                      : "bg-transparent text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                      : "bg-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
                   }`}
                 >
                   {label}
@@ -386,14 +386,14 @@ function PracticesPageContent() {
               ))}
             </div>
 
-            <label className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs dark:border-[#333] dark:bg-[#141414]">
-              <span className="shrink-0 text-neutral-400">Fee</span>
+            <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-white/10 dark:bg-[var(--solune-surface)]">
+              <span className="shrink-0 text-slate-400 dark:text-slate-500">Fee</span>
               <select
                 value={feeMax}
                 onChange={(e) =>
                   setFeeMax(e.target.value as "" | "500" | "1000" | "2000")
                 }
-                className="gg-bare-select max-w-[7.5rem] text-xs text-neutral-800 dark:text-white"
+                className="gg-bare-select max-w-[7.5rem] text-xs"
                 aria-label="Maximum consultation fee"
               >
                 <option value="">Any</option>
@@ -403,12 +403,12 @@ function PracticesPageContent() {
               </select>
             </label>
 
-            <label className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs dark:border-[#333] dark:bg-[#141414]">
-              <span className="shrink-0 text-neutral-400">Sort</span>
+            <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-white/10 dark:bg-[var(--solune-surface)]">
+              <span className="shrink-0 text-slate-400 dark:text-slate-500">Sort</span>
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}
-                className="gg-bare-select max-w-[11rem] text-xs text-neutral-800 dark:text-white"
+                className="gg-bare-select max-w-[11rem] text-xs"
                 aria-label="Sort results"
               >
                 <option value="relevance">Relevance</option>
@@ -426,7 +426,7 @@ function PracticesPageContent() {
             {Array.from({ length: 4 }).map((_, i) => (
               <li
                 key={i}
-                className="h-36 animate-pulse rounded-2xl border border-neutral-200 bg-neutral-100 dark:border-[#262626] dark:bg-[#1a1a1a]"
+                className="h-36 animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-[var(--solune-surface-muted)]"
               />
             ))}
           </ul>
@@ -435,7 +435,7 @@ function PracticesPageContent() {
         {/* Empty */}
         {!loading && filtered.length === 0 ? (
           <div
-            className="mt-6 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-6 py-12 text-center dark:border-[#333] dark:bg-[#121212]"
+            className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center dark:border-white/15 dark:bg-[var(--solune-surface)]"
             data-testid="practices-empty"
           >
             <p className="text-base font-semibold text-neutral-800 dark:text-neutral-200">
@@ -639,7 +639,7 @@ function PracticesPageContent() {
                       </BookAppointmentLink>
                       <BookAppointmentLink
                         slug={p.slug}
-                        className="inline-flex h-10 items-center justify-center rounded-lg border border-neutral-200 px-4 text-sm font-semibold text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-50 dark:border-[#333] dark:text-neutral-200 dark:hover:bg-white/5"
+                        className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:border-white/20 dark:hover:bg-white/5"
                       >
                         View Profile
                       </BookAppointmentLink>

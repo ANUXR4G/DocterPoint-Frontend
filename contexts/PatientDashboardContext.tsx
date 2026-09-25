@@ -18,6 +18,7 @@ import { sortBookingsByWhen } from "@/lib/bookingDisplay"
 type PatientDashboardValue = {
   loading: boolean
   ready: boolean
+  liveConnected: boolean
   error: string | null
   bookings: ProctoBooking[]
   refresh: (opts?: { silent?: boolean }) => Promise<void>
@@ -31,25 +32,37 @@ const PatientDashboardContext = createContext<PatientDashboardValue | null>(
 export function PatientDashboardProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [ready, setReady] = useState(false)
+  const [liveConnected, setLiveConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookings, setBookings] = useState<ProctoBooking[]>([])
   const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSoftAt = useRef(0)
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setLoading(true)
-    if (!opts?.silent) setError(null)
-    const res = await proctoService.getMyBookings()
-    if (res?.status === "successful") {
-      setBookings(
-        sortBookingsByWhen((res.data as ProctoBooking[]) ?? [], "desc"),
-      )
-    } else if (!opts?.silent) {
-      setBookings([])
-      setError(res?.message || "Could not load your bookings.")
-    }
     if (!opts?.silent) {
-      setLoading(false)
-      setReady(true)
+      setLoading(true)
+      setError(null)
+    }
+    try {
+      const res = await proctoService.getMyBookings()
+      if (res?.status === "successful") {
+        setBookings(
+          sortBookingsByWhen((res.data as ProctoBooking[]) ?? [], "desc"),
+        )
+      } else if (!opts?.silent) {
+        setBookings([])
+        setError(res?.message || "Could not load your bookings.")
+      }
+    } catch {
+      if (!opts?.silent) {
+        setBookings([])
+        setError("Could not load your bookings.")
+      }
+    } finally {
+      if (!opts?.silent) {
+        setLoading(false)
+        setReady(true)
+      }
     }
   }, [])
 
@@ -61,13 +74,26 @@ export function PatientDashboardProvider({ children }: { children: ReactNode }) 
   }, [load])
 
   function scheduleSoftRefresh() {
+    const now = Date.now()
+    if (now - lastSoftAt.current < 2_000) return
     if (softTimer.current) clearTimeout(softTimer.current)
-    softTimer.current = setTimeout(() => void load({ silent: true }), 300)
+    softTimer.current = setTimeout(() => {
+      lastSoftAt.current = Date.now()
+      void load({ silent: true })
+    }, 400)
   }
 
   usePatientLiveSocket(
-    true,
+    ready,
     (event) => {
+      if (
+        event &&
+        typeof event === "object" &&
+        "event" in event &&
+        event.event === "conversation_updated"
+      ) {
+        return
+      }
       if (
         event &&
         typeof event === "object" &&
@@ -90,6 +116,8 @@ export function PatientDashboardProvider({ children }: { children: ReactNode }) 
       scheduleSoftRefresh()
     },
     scheduleSoftRefresh,
+    () => setLiveConnected(true),
+    () => setLiveConnected(false),
   )
 
   const patchBooking = useCallback(
@@ -105,12 +133,13 @@ export function PatientDashboardProvider({ children }: { children: ReactNode }) 
     (): PatientDashboardValue => ({
       loading,
       ready,
+      liveConnected,
       error,
       bookings,
       refresh: load,
       patchBooking,
     }),
-    [loading, ready, error, bookings, load, patchBooking],
+    [loading, ready, liveConnected, error, bookings, load, patchBooking],
   )
 
   return (

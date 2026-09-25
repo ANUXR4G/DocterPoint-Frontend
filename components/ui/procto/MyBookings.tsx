@@ -68,6 +68,7 @@ export default function MyBookings() {
     bookings: rawBookings,
     loading,
     ready,
+    liveConnected,
     error: loadError,
     refresh,
   } = usePatientDashboard()
@@ -125,12 +126,28 @@ export default function MyBookings() {
         }
         subtitle="Your clinic appointments — open a row for visit details, medicines, and documents."
         action={
-          <Link
-            href="/practices"
-            className="inline-flex h-11 items-center rounded-full bg-blue-600 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
-          >
-            Book another
-          </Link>
+          <>
+            <span
+              className={`inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold ${
+                liveConnected
+                  ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                  : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+              }`}
+              title={
+                liveConnected
+                  ? "Live updates connected"
+                  : "Connecting live updates…"
+              }
+            >
+              {liveConnected ? "Live" : "Connecting…"}
+            </span>
+            <Link
+              href="/practices"
+              className="inline-flex h-11 items-center rounded-full bg-blue-600 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+            >
+              Book another
+            </Link>
+          </>
         }
       />
 

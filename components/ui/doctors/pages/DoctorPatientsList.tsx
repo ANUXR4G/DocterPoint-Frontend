@@ -176,7 +176,7 @@ export default function DoctorPatientsList() {
       />
 
       {filtered.length > 0 ? (
-        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900/40 dark:shadow-none">
+        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
           <ul className="divide-y divide-neutral-200 md:hidden dark:divide-neutral-700">
             {filtered.map((p) => {
               const open = expanded === p.phone

@@ -115,6 +115,7 @@ export default function PatientPhoneOtpLogin() {
           ) : null}
           <Button
             typeBtn="button"
+            className="gg-btn center !w-full !border-transparent !py-3.5 !text-base"
             disabled={busy || phone.replace(/\D/g, "").length < 10}
             onClick={() => void requestOtp()}
           >
@@ -149,6 +150,7 @@ export default function PatientPhoneOtpLogin() {
           ) : null}
           <Button
             typeBtn="button"
+            className="gg-btn center !w-full !border-transparent !py-3.5 !text-base"
             disabled={busy || code.replace(/\D/g, "").length < 6}
             onClick={() => void verifyOtp()}
           >

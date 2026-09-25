@@ -36,8 +36,8 @@ export default function PublicShell({
         <main
           className={
             compact
-              ? "mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-3 pb-4 pt-[4.25rem] sm:px-4"
-              : "mx-auto w-full max-w-[1400px] flex-1 px-3 pb-8 pt-[4.25rem] sm:px-4 sm:pb-12"
+              ? "mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-3 pb-4 pt-24 sm:px-4 sm:pt-28"
+              : "mx-auto w-full max-w-[1400px] flex-1 px-3 pb-8 pt-24 sm:px-4 sm:pb-12 sm:pt-28"
           }
         >
           <div className="dashboard-frame min-h-0 flex-1 overflow-hidden rounded-[28px] border border-slate-100/90 bg-white p-5 shadow-[0_24px_64px_-32px_rgba(37,99,235,0.22)] dark:border-white/10 dark:bg-slate-900 sm:p-8">

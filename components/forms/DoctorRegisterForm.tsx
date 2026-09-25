@@ -164,7 +164,7 @@ export default function DoctorRegisterForm({
 
   return (
     <form className="mt-4 w-full min-w-0 text-left sm:mt-5" onSubmit={handleSubmit}>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         1. Document scan (optional)
       </p>
       <ProfessionalDocumentScan
@@ -172,10 +172,10 @@ export default function DoctorRegisterForm({
         onExtract={applyDocumentScan}
       />
 
-      <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         2. Doctor profile
       </p>
-      <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+      <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
         This creates your own independent practice and dashboard (with a 14-day
         trial). Clinics cannot add this account to their roster — clinic staff
         are created from the clinic dashboard only.
@@ -259,7 +259,7 @@ export default function DoctorRegisterForm({
         />
       </div>
 
-      <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         3. Booking type
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
@@ -276,7 +276,7 @@ export default function DoctorRegisterForm({
             className={`min-h-12 rounded-xl border px-2 py-3 text-xs font-semibold transition sm:px-4 sm:text-sm ${
               bookingType === id
                 ? "border-[#0099ff] bg-[#0099ff]/10 text-neutral-900 dark:text-white"
-                : "border-neutral-200 text-neutral-500 dark:border-[#333] dark:text-[#999]"
+                : "border-slate-200 text-slate-500 dark:border-white/10 dark:text-slate-400"
             }`}
           >
             {label}
@@ -300,8 +300,8 @@ export default function DoctorRegisterForm({
               onClick={() => toggleDay(day.value)}
               className={`min-h-11 rounded-full px-2 py-2 text-sm font-semibold transition sm:min-w-[3rem] sm:px-3 ${
                 active
-                  ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
-                  : "border border-neutral-200 text-neutral-500 dark:border-[#333]"
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-[#0f172a]"
+                  : "border border-slate-200 text-slate-500 dark:border-white/10 dark:text-slate-400"
               }`}
             >
               {day.label}

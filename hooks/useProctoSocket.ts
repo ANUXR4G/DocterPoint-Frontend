@@ -7,6 +7,8 @@ export function useProctoSocket(
   practiceId: string | null,
   onEvent: (event: ProctoWsEvent) => void,
   onReconnect?: () => void,
+  onOpen?: () => void,
+  onClose?: () => void,
 ) {
   useLiveSocket({
     path: practiceId ? `/api/v1/ws/procto/${practiceId}` : null,
@@ -23,6 +25,8 @@ export function useProctoSocket(
       }
     },
     onReconnect,
+    onOpen,
+    onClose,
   })
 }
 
@@ -30,12 +34,16 @@ export function usePatientLiveSocket(
   enabled: boolean,
   onEvent: (event: LiveEvent) => void,
   onReconnect?: () => void,
+  onOpen?: () => void,
+  onClose?: () => void,
 ) {
   useLiveSocket({
     path: "/api/v1/ws/patient",
     enabled,
     onEvent,
     onReconnect,
+    onOpen,
+    onClose,
   })
 }
 

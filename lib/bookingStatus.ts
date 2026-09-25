@@ -33,40 +33,40 @@ export function bookingStatusClass(status: string): string {
   switch (String(status || "").toUpperCase()) {
     case "ACCEPTED":
     case "CONFIRMED":
-      return "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200"
+      return "bg-teal-100 text-teal-800 dark:bg-[#042f2e] dark:text-[#99f6e4]"
     case "WAITING":
     case "CHECKED_IN":
-      return "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200"
+      return "bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-100"
     case "IN_PROGRESS":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+      return "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
     case "COMPLETED":
-      return "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200"
+      return "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-100"
     case "CANCELED":
     case "CANCELLED":
-      return "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200"
+      return "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-100"
     case "NO_SHOW":
-      return "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200"
+      return "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-100"
     default:
-      return "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+      return "bg-sky-100 text-sky-800 dark:bg-neutral-800 dark:text-neutral-100"
   }
 }
 
 export function bookingActionSelectClass(status: string): string {
   switch (String(status || "").toUpperCase()) {
     case "ACCEPTED":
-      return "border-teal-400 bg-teal-100 text-teal-900 dark:border-teal-600 dark:bg-teal-900/50 dark:text-teal-100"
+      return "border-teal-400 bg-teal-100 text-teal-900 dark:border-[#2dd4bf] dark:bg-[#042f2e] dark:text-[#99f6e4]"
     case "WAITING":
-      return "border-violet-400 bg-violet-100 text-violet-900 dark:border-violet-600 dark:bg-violet-900/50 dark:text-violet-100"
+      return "border-violet-400 bg-violet-100 text-violet-900 dark:border-[#a78bfa] dark:bg-violet-950/40 dark:text-violet-100"
     case "IN_PROGRESS":
-      return "border-amber-400 bg-amber-100 text-amber-900 dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-100"
+      return "border-amber-400 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100"
     case "COMPLETED":
-      return "border-green-500 bg-green-100 text-green-900 dark:border-green-600 dark:bg-green-900/50 dark:text-green-100"
+      return "border-green-500 bg-green-100 text-green-900 dark:border-green-700 dark:bg-green-950/40 dark:text-green-100"
     case "CANCELED":
-      return "border-red-400 bg-red-100 text-red-900 dark:border-red-600 dark:bg-red-900/50 dark:text-red-100"
+      return "border-red-400 bg-red-100 text-red-900 dark:border-red-700 dark:bg-red-950/40 dark:text-red-100"
     case "NO_SHOW":
       return "border-neutral-400 bg-neutral-200 text-neutral-800 dark:border-neutral-500 dark:bg-neutral-700 dark:text-neutral-100"
     default:
-      return "border-sky-400 bg-sky-100 text-sky-900 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-100"
+      return "border-sky-400 bg-sky-100 text-sky-900 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
   }
 }
 

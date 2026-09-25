@@ -45,7 +45,7 @@ function navLinkClass(active: boolean) {
   return [
     "relative flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 transition-all duration-200",
     active
-      ? "bg-sky-100 text-slate-900 shadow-sm dark:bg-blue-500/15 dark:text-white"
+      ? "bg-sky-100 text-slate-900 shadow-sm dark:bg-blue-500/20 dark:text-white"
       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-white",
   ].join(" ")
 }
@@ -101,7 +101,7 @@ export default function Menu({ role, logout }: Props) {
         animate="animate"
         exit="exit"
         ref={containerRef}
-        className="fixed left-0 top-0 z-[70] flex h-full min-h-full w-60 flex-col border-r border-slate-100 bg-sky-50/98 pt-5 backdrop-blur-sm prevent-scroll md:hidden dark:border-white/10 dark:bg-slate-900/98"
+        className="fixed left-0 top-0 z-[70] flex h-full min-h-full w-60 flex-col border-r border-slate-100 bg-sky-50/98 pt-5 backdrop-blur-sm prevent-scroll md:hidden dark:border-white/10 dark:bg-[#0f172a] dark:backdrop-blur-none"
       >
         <Background name="half-box-pattern" className="hidden opacity-10 dark:block" />
 
