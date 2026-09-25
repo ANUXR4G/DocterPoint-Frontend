@@ -7,6 +7,13 @@ import {
   type PracticeBooking,
 } from "@prisma/client";
 
+/**
+ * Clinic wall-clock timezone. Schedule HH:MM and WhatsApp/dashboard times
+ * must agree — never rely on the server process TZ (Railway is often UTC).
+ */
+export const PRACTICE_TIMEZONE =
+  process.env.PRACTICE_TIMEZONE?.trim() || "Asia/Kolkata";
+
 export interface TimeSlot {
   start: Date;
   end: Date;
@@ -25,37 +32,119 @@ export interface TokenSession {
   available: boolean;
 }
 
-export function parseTimeOnDate(date: Date, timeStr: string): Date {
-  const [h, m] = timeStr.split(":").map(Number);
-  const d = new Date(date);
-  d.setHours(h, m ?? 0, 0, 0);
-  return d;
+type ZonedParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+function zonedParts(date: Date, timeZone = PRACTICE_TIMEZONE): ZonedParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value ?? NaN);
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+    second: get("second"),
+  };
 }
 
-/** Parse YYYY-MM-DD as local calendar day (avoids UTC day-shift). */
+/**
+ * Interpret YYYY-MM-DD + HH:MM as a wall-clock time in PRACTICE_TIMEZONE
+ * and return the corresponding UTC Date.
+ */
+export function zonedDateTime(
+  dateStr: string,
+  timeHHMM: string,
+  timeZone = PRACTICE_TIMEZONE,
+): Date {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const [h, mi] = timeHHMM.split(":").map(Number);
+  if (!y || !mo || !d || Number.isNaN(h) || Number.isNaN(mi)) {
+    return new Date(NaN);
+  }
+  // Guess = treat wall clock as UTC, then correct by the zone offset at that instant.
+  const utcGuess = Date.UTC(y, mo - 1, d, h, mi ?? 0, 0, 0);
+  const asZoned = zonedParts(new Date(utcGuess), timeZone);
+  const asIfUtc = Date.UTC(
+    asZoned.year,
+    asZoned.month - 1,
+    asZoned.day,
+    asZoned.hour,
+    asZoned.minute,
+    asZoned.second,
+  );
+  return new Date(utcGuess - (asIfUtc - utcGuess));
+}
+
+/** Format an instant in the practice timezone (12-hour clock by default). */
+export function formatPracticeDateTime(
+  date: Date,
+  opts?: { withDate?: boolean; withSeconds?: boolean },
+): string {
+  const withDate = opts?.withDate !== false;
+  return date.toLocaleString("en-US", {
+    timeZone: PRACTICE_TIMEZONE,
+    ...(withDate
+      ? { month: "numeric", day: "numeric", year: "numeric" }
+      : {}),
+    hour: "numeric",
+    minute: "2-digit",
+    ...(opts?.withSeconds ? { second: "2-digit" } : {}),
+    hour12: true,
+  });
+}
+
+export function formatPracticeTime(date: Date): string {
+  return date.toLocaleTimeString("en-US", {
+    timeZone: PRACTICE_TIMEZONE,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+export function parseTimeOnDate(date: Date, timeStr: string): Date {
+  return zonedDateTime(formatLocalDate(date), timeStr);
+}
+
+/** Parse YYYY-MM-DD as clinic calendar day (midnight in PRACTICE_TIMEZONE). */
 export function parseLocalDate(dateStr: string): Date {
   const [y, mo, d] = dateStr.split("-").map(Number);
   if (!y || !mo || !d) return new Date(dateStr);
-  return new Date(y, mo - 1, d, 0, 0, 0, 0);
+  return zonedDateTime(
+    `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+    "00:00",
+  );
 }
 
 export function startOfLocalDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return zonedDateTime(formatLocalDate(date), "00:00");
 }
 
 export function endOfLocalDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
+  // Asia/Kolkata has no DST — 24h window from clinic midnight is safe.
+  return new Date(startOfLocalDay(date).getTime() + 24 * 60 * 60 * 1000 - 1);
 }
 
 export function formatLocalDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const p = zonedParts(date);
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 
 export function minutesOf(time: string): number {
@@ -89,14 +178,16 @@ export function assertValidTimeRange(
   return { startMin, endMin };
 }
 
-/** Match slots by local wall-clock minute (avoids ISO/UTC equality bugs). */
+/** Match slots by clinic wall-clock minute (avoids ISO/UTC equality bugs). */
 export function sameLocalSlot(a: Date, b: Date): boolean {
+  const pa = zonedParts(a);
+  const pb = zonedParts(b);
   return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate() &&
-    a.getHours() === b.getHours() &&
-    a.getMinutes() === b.getMinutes()
+    pa.year === pb.year &&
+    pa.month === pb.month &&
+    pa.day === pb.day &&
+    pa.hour === pb.hour &&
+    pa.minute === pb.minute
   );
 }
 
@@ -123,11 +214,9 @@ export function isDateWithinValidity(
 }
 
 function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+  const pa = zonedParts(a);
+  const pb = zonedParts(b);
+  return pa.year === pb.year && pa.month === pb.month && pa.day === pb.day;
 }
 
 function overlapsBreak(
@@ -269,8 +358,27 @@ export function generateExtraSlotsFromOverrides(
   return slots;
 }
 
+/** Weekday 0=Sun … 6=Sat in PRACTICE_TIMEZONE. */
+export function practiceWeekday(date: Date): number {
+  const name = new Intl.DateTimeFormat("en-US", {
+    timeZone: PRACTICE_TIMEZONE,
+    weekday: "short",
+  }).format(date);
+  const map: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  return map[name] ?? 0;
+}
+
 function slotStartKey(slot: TimeSlot): string {
-  return `${slot.start.getFullYear()}-${slot.start.getMonth()}-${slot.start.getDate()}-${slot.start.getHours()}:${slot.start.getMinutes()}`;
+  const p = zonedParts(slot.start);
+  return `${p.year}-${p.month}-${p.day}-${p.hour}:${p.minute}`;
 }
 
 export function mergeTimeSlots(base: TimeSlot[], extra: TimeSlot[]): TimeSlot[] {
@@ -300,7 +408,7 @@ export function timeSlotsForProviderDay(
 ): TimeSlot[] {
   const activeSchedules = schedulesForActiveMode(schedules);
   const daySchedules = activeSchedules.filter(
-    (s) => s.dayOfWeek === date.getDay() && s.mode === ScheduleMode.TIME_BASED,
+    (s) => s.dayOfWeek === practiceWeekday(date) && s.mode === ScheduleMode.TIME_BASED,
   );
   const template = activeSchedules.find((s) => s.mode === ScheduleMode.TIME_BASED);
   const interval = daySchedules[0]?.slotIntervalMin ?? template?.slotIntervalMin ?? 15;

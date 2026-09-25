@@ -1,5 +1,26 @@
 import { llmChatProviders } from "../../lib/llm.js";
-import { formatLocalDate, parseLocalDate, startOfLocalDay } from "./slotEngine.js";
+import {
+  formatLocalDate,
+  parseLocalDate,
+  startOfLocalDay,
+  PRACTICE_TIMEZONE,
+} from "./slotEngine.js";
+
+function practiceMinutes(d: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: PRACTICE_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  return h * 60 + m;
+}
+
+function practiceHourOf(d: Date): number {
+  return Math.floor(practiceMinutes(d) / 60);
+}
 
 export type BotIntent =
   | "book"
@@ -289,7 +310,7 @@ export function matchPreferredSlotIndex(
     let bestIdx = 0;
     let bestDist = Infinity;
     open.forEach((s, i) => {
-      const mins = s.start.getHours() * 60 + s.start.getMinutes();
+      const mins = practiceMinutes(s.start);
       const dist = Math.abs(mins - targetMin);
       if (dist < bestDist) {
         bestDist = dist;
@@ -310,7 +331,7 @@ export function matchPreferredSlotIndex(
   };
   const [lo, hi] = ranges[period] ?? [0, 23];
   const inRange = open
-    .map((s, i) => ({ i, h: s.start.getHours() }))
+    .map((s, i) => ({ i, h: practiceHourOf(s.start) }))
     .filter((x) => x.h >= lo && x.h <= hi);
   if (!inRange.length) return null;
   return inRange[0]!.i;

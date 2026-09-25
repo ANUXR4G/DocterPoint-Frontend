@@ -49,7 +49,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Mira AI | **HTTP only** (`POST /assistant/chat`) | No WebSocket for Mira FAB/chat/LLM |
 | Post-visit ratings | Clinic + doctor stars after `COMPLETED` | Zomato-style; one review per booking |
 | Notifications | Redis BullMQ + WhatsApp (Meta when env set, else simulate); **notification worker runs in-process with API** (`NOTIFICATION_WORKER_INLINE=0` to disable) | Booking HTTP must not fail if notify fails; PENDING rows were stuck when only `yarn dev` ran without `worker:notifications` |
-| WhatsApp booking bot | DeepSeek/OpenAI NLU + regex fallback; multi-step orchestrator in `backend/`; **patients only**; voice notes = STT → free-form NLU (date+time in one utterance; clarify if unclear) | Patient register/book/status/cancel/reschedule via chat or voice; doctors/clinics use web portal; clinic alerts on confirm/cancel/reschedule/queue |
+| WhatsApp booking bot | DeepSeek/OpenAI NLU + regex fallback; multi-step orchestrator in `backend/`; **patients only**; voice notes = STT → free-form NLU (date+time in one utterance; clarify if unclear) | Patient register/book/status/cancel/reschedule via chat or voice; doctors/clinics use web portal; clinic alerts on confirm/cancel/reschedule/queue **and** waiting / no-show / completed / shared documents / schedule override |
 | Language choice | `1`/`English` → en; `2`/`Hindi`/`hin` → hi; bare **`hi` is greeting, not Hindi** | Avoid mis-setting language on "hi" |
 | Meta #131037 | Mark notification `SKIPPED` (display name not approved) | Do not leave infinite PENDING/FAILED retries when Meta blocks the number |
 

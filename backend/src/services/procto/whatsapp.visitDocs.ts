@@ -10,6 +10,7 @@ import { PatientService } from "../patient.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 import type { WaLang } from "./whatsapp.i18n.js";
 import { BotPrompts } from "./whatsapp.templates.js";
+import { formatPracticeDateTime } from "./slotEngine.js";
 
 const CLOUD_NAME = "dwhlynqj3";
 const UPLOAD_PRESET = "gluco-guide-users";
@@ -32,6 +33,11 @@ export type VisitDocItem = {
 
 function last10(phone: string): string {
   return String(phone || "").replace(/\D/g, "").slice(-10);
+}
+
+/** Visit datetime for WhatsApp confirmations — 12-hour clock in clinic TZ. */
+function formatVisitWhenLabel(d: Date): string {
+  return formatPracticeDateTime(d);
 }
 
 export function isVisitDocumentMime(
@@ -168,25 +174,12 @@ export async function uploadBufferToCloudinary(opts: {
   };
 }
 
-export async function findOpenBookingForWhatsApp(
+export async function listOpenBookingsForWhatsApp(
   practiceId: string,
   patientPhone: string,
-  opts?: { preferredBookingId?: string; patientIds?: string[] },
+  opts?: { patientIds?: string[]; take?: number },
 ) {
   const digits = last10(patientPhone);
-  if (digits.length < 10 && !(opts?.patientIds?.length)) return null;
-
-  if (opts?.preferredBookingId) {
-    const preferred = await prisma.practiceBooking.findFirst({
-      where: {
-        id: opts.preferredBookingId,
-        practiceId,
-        status: { in: OPEN_STATUSES },
-      },
-    });
-    if (preferred) return preferred;
-  }
-
   const or: Array<Record<string, unknown>> = [];
   if (digits.length >= 10) {
     or.push({ patientPhone: { endsWith: digits } });
@@ -195,16 +188,39 @@ export async function findOpenBookingForWhatsApp(
   if (opts?.patientIds?.length) {
     or.push({ patientId: { in: opts.patientIds } });
   }
-  if (!or.length) return null;
+  if (!or.length) return [];
 
-  return prisma.practiceBooking.findFirst({
+  return prisma.practiceBooking.findMany({
     where: {
       practiceId,
       status: { in: OPEN_STATUSES },
       OR: or,
     },
     orderBy: [{ slotStart: "desc" }, { updatedAt: "desc" }],
+    take: opts?.take ?? 5,
   });
+}
+
+export async function findOpenBookingForWhatsApp(
+  practiceId: string,
+  patientPhone: string,
+  opts?: { preferredBookingId?: string; patientIds?: string[] },
+) {
+  const digits = last10(patientPhone);
+  if (digits.length < 10 && !(opts?.patientIds?.length)) return null;
+
+  const open = await listOpenBookingsForWhatsApp(practiceId, patientPhone, {
+    patientIds: opts?.patientIds,
+    take: 5,
+  });
+  if (!open.length) return null;
+
+  // Prefer lastBookingId only when there is exactly one open visit.
+  // With 2+ bookings, fall through to most-recent (callers that need a
+  // picker should use receiveWhatsAppBranchFDocument instead).
+  if (open.length === 1) return open[0]!;
+
+  return open[0]!;
 }
 
 function readDocuments(raw: unknown): VisitDocItem[] {
@@ -291,6 +307,19 @@ async function attachDocItemToBooking(
     );
   });
 
+  void import("./notification.service.js")
+    .then(({ NotificationService }) =>
+      NotificationService.enqueueClinicDocumentAttached(booking.id, doc.name, {
+        kind: "visit",
+      }),
+    )
+    .catch((err) => {
+      console.warn(
+        "[WhatsApp visit-doc] clinic notification failed:",
+        err instanceof Error ? err.message : err,
+      );
+    });
+
   return {
     attached: true,
     bookingId: booking.id,
@@ -299,7 +328,7 @@ async function attachDocItemToBooking(
       count: nextDocs.length,
       max: MAX_BOOKING_DOCUMENTS,
       whenLabel: booking.slotStart
-        ? booking.slotStart.toLocaleString()
+        ? formatVisitWhenLabel(booking.slotStart)
         : booking.sessionDate
           ? booking.sessionDate.toISOString().slice(0, 10)
           : "your visit",
@@ -313,6 +342,8 @@ export async function attachWhatsAppPatientDocument(opts: {
   patientPhone: string;
   doc: VisitDocItem;
   lang?: WaLang;
+  /** When set, also enqueue a clinic inbox notification (needs a booking anchor). */
+  practiceId?: string;
 }): Promise<{ reply: string; attached: boolean }> {
   const linked = await PatientService.listLinkedToWhatsApp(opts.patientPhone).catch(
     () => [] as Array<{ id: string; isSelf?: boolean }>,
@@ -353,6 +384,34 @@ export async function attachWhatsAppPatientDocument(opts: {
     where: { id: patientId },
     data: { documents: nextDocs as unknown as Prisma.InputJsonValue },
   });
+
+  if (opts.practiceId) {
+    const digits = last10(opts.patientPhone);
+    const anchor = await prisma.practiceBooking.findFirst({
+      where: {
+        practiceId: opts.practiceId,
+        patientPhone: { endsWith: digits },
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      select: { id: true },
+    });
+    if (anchor) {
+      void import("./notification.service.js")
+        .then(({ NotificationService }) =>
+          NotificationService.enqueueClinicDocumentAttached(
+            anchor.id,
+            opts.doc.name,
+            { kind: "general" },
+          ),
+        )
+        .catch((err) => {
+          console.warn(
+            "[WhatsApp general-doc] clinic notification failed:",
+            err instanceof Error ? err.message : err,
+          );
+        });
+    }
+  }
 
   return {
     attached: true,
@@ -464,8 +523,30 @@ export async function receiveWhatsAppBranchFDocument(opts: {
   );
   const patientIds = linked.map((p) => p.id);
 
-  // Post-booking / explicit booking: attach immediately.
-  if (opts.preferredBookingId) {
+  const open = await listOpenBookingsForWhatsApp(
+    opts.practiceId,
+    opts.patientPhone,
+    { patientIds, take: 5 },
+  );
+
+  // Single open visit (or preferred with none listed): attach immediately.
+  // With 2+ open bookings, never skip the picker — lastBookingId is often stale.
+  if (open.length === 1) {
+    const result = await attachPendingDocToBooking({
+      practiceId: opts.practiceId,
+      patientPhone: opts.patientPhone,
+      bookingId: open[0]!.id,
+      doc,
+      lang,
+    });
+    return {
+      reply: result.reply,
+      attached: result.attached,
+      bookingId: result.bookingId,
+    };
+  }
+
+  if (opts.preferredBookingId && open.length === 0) {
     const result = await attachPendingDocToBooking({
       practiceId: opts.practiceId,
       patientPhone: opts.patientPhone,
@@ -480,25 +561,12 @@ export async function receiveWhatsAppBranchFDocument(opts: {
     };
   }
 
-  const open = await prisma.practiceBooking.findMany({
-    where: {
-      practiceId: opts.practiceId,
-      status: { in: OPEN_STATUSES },
-      OR: [
-        ...(patientIds.length ? [{ patientId: { in: patientIds } }] : []),
-        { patientPhone: { endsWith: last10(opts.patientPhone) } },
-        { patientPhone: opts.patientPhone },
-      ],
-    },
-    orderBy: [{ slotStart: "asc" }, { updatedAt: "desc" }],
-    take: 5,
-  });
-
   if (!open.length) {
     const general = await attachWhatsAppPatientDocument({
       patientPhone: opts.patientPhone,
       doc,
       lang,
+      practiceId: opts.practiceId,
     });
     // If patient profile missing, still confirm after Cloudinary upload via Admin help.
     if (!general.attached) {
@@ -738,6 +806,19 @@ export async function attachWhatsAppVisitDocument(opts: {
     );
   });
 
+  void import("./notification.service.js")
+    .then(({ NotificationService }) =>
+      NotificationService.enqueueClinicDocumentAttached(booking.id, doc.name, {
+        kind: "visit",
+      }),
+    )
+    .catch((err) => {
+      console.warn(
+        "[WhatsApp visit-doc] clinic notification failed:",
+        err instanceof Error ? err.message : err,
+      );
+    });
+
   return {
     attached: true,
     bookingId: booking.id,
@@ -746,7 +827,7 @@ export async function attachWhatsAppVisitDocument(opts: {
       count: nextDocs.length,
       max: MAX_BOOKING_DOCUMENTS,
       whenLabel: booking.slotStart
-        ? booking.slotStart.toLocaleString()
+        ? formatVisitWhenLabel(booking.slotStart)
         : booking.sessionDate
           ? booking.sessionDate.toISOString().slice(0, 10)
           : "your visit",
@@ -778,7 +859,7 @@ export async function listWhatsAppVisitDocuments(opts: {
   return BotPrompts.visitDocList({
     docs: docs.map((d) => d.name),
     whenLabel: booking.slotStart
-      ? booking.slotStart.toLocaleString()
+      ? formatVisitWhenLabel(booking.slotStart)
       : booking.sessionDate
         ? booking.sessionDate.toISOString().slice(0, 10)
         : "your visit",

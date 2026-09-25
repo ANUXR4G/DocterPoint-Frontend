@@ -22,6 +22,10 @@ import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import {
+  formatPracticeDate,
+  formatPracticeTime,
+} from "@/lib/practiceTime"
 
 type QueueBooking = ProctoBooking & {
   patientPhone?: string
@@ -53,17 +57,13 @@ type QueueBooking = ProctoBooking & {
     age?: number | null
     contactNumber: string | null
     emergencyNumber: string | null
+    mrn?: string | null
   } | null
 }
 
 function slotLabel(b: QueueBooking) {
   const start = b.slotStart ?? b.slot_start
-  if (start) {
-    return new Date(start).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
+  if (start) return formatPracticeTime(start)
   const token = b.tokenNumber ?? b.token_number
   if (token != null) return `#${token}`
   return "—"
@@ -72,37 +72,17 @@ function slotLabel(b: QueueBooking) {
 function bookedOnParts(b: QueueBooking) {
   const raw = b.createdAt ?? b.created_at
   if (!raw) return { date: "—", time: "" }
-  const d = new Date(raw)
   return {
-    date: d.toLocaleDateString([], {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }),
-    time: d.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+    date: formatPracticeDate(raw),
+    time: formatPracticeTime(raw),
   }
 }
 
 function appointmentDateLabel(b: QueueBooking) {
   const start = b.slotStart ?? b.slot_start
-  if (start) {
-    return new Date(start).toLocaleDateString([], {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })
-  }
+  if (start) return formatPracticeDate(start)
   const session = b.sessionDate ?? b.session_date
-  if (session) {
-    return new Date(session).toLocaleDateString([], {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })
-  }
+  if (session) return formatPracticeDate(session)
   return "—"
 }
 
@@ -386,6 +366,11 @@ export default function DoctorQueue({
                       <p className="truncate font-medium text-neutral-900 dark:text-white">
                         {name}
                       </p>
+                      {p?.mrn?.trim() ? (
+                        <p className="mt-0.5 text-xs font-semibold tabular-nums tracking-wide text-neutral-500 dark:text-neutral-400">
+                          MRN {p.mrn.trim()}
+                        </p>
+                      ) : null}
                       <p className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
                         {when}
                         {b.provider?.name ? ` · ${b.provider.name}` : ""}
@@ -431,6 +416,9 @@ export default function DoctorQueue({
                   Appointment
                 </th>
                 <th className="min-w-[140px] px-3 py-3 font-semibold">Name</th>
+                <th className="whitespace-nowrap px-3 py-3 font-semibold">
+                  MRN
+                </th>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
                   Number
                 </th>
@@ -479,6 +467,9 @@ export default function DoctorQueue({
                         />
                         <p className="font-medium">{name}</p>
                       </div>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 align-middle font-semibold tabular-nums tracking-wide">
+                      {p?.mrn?.trim() || "—"}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 align-middle">
                       {phone}

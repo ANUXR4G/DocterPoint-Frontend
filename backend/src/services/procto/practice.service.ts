@@ -8,9 +8,13 @@ import { AuthService } from "../auth.js";
 import {
   assertValidTimeRange,
   endOfLocalDay,
+  formatLocalDate,
+  formatPracticeDateTime,
   getTokenSession,
   minutesOf,
   parseLocalDate,
+  PRACTICE_TIMEZONE,
+  practiceWeekday,
   resolveProviderBookingMode,
   schedulesForActiveMode,
   startOfLocalDay,
@@ -42,6 +46,26 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80);
+}
+
+/** Patient-level General Documents (WhatsApp Branch F → General Document). */
+function readPatientGeneralDocuments(raw: unknown): Array<{
+  name: string;
+  url: string;
+  uploadedAt: string;
+}> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((d) => {
+      const row = d as { name?: string; url?: string; uploadedAt?: string };
+      return {
+        name: String(row.name || "").trim() || "Document",
+        url: String(row.url || "").trim(),
+        uploadedAt: row.uploadedAt || new Date().toISOString(),
+      };
+    })
+    .filter((d) => d.url.length > 0)
+    .slice(0, 20);
 }
 
 type OnboardDoctorInput = {
@@ -1223,9 +1247,11 @@ export const PracticeService = {
               imgSrc: true,
               patient: {
                 select: {
+                  mrn: true,
                   dateOfBirth: true,
                   contactNumber: true,
                   relationship: true,
+                  documents: true,
                 },
               },
             },
@@ -1250,9 +1276,11 @@ export const PracticeService = {
               imgSrc: true,
               patient: {
                 select: {
+                  mrn: true,
                   dateOfBirth: true,
                   contactNumber: true,
                   relationship: true,
+                  documents: true,
                 },
               },
             },
@@ -1297,11 +1325,26 @@ export const PracticeService = {
         // Display name is always the member booked for (booking patientName).
         const memberName = bookingName || linked?.name?.trim() || null;
 
+        // General Documents land on the WhatsApp primary (self) profile.
+        const phoneSelf =
+          phoneMatches.find((u) => !u.patient?.relationship?.trim()) ??
+          phoneMatches[0] ??
+          null;
+        const isPrimaryMember =
+          !relationship &&
+          (!phoneSelf || !linked || linked.id === phoneSelf.id);
+        const attachments = readPatientGeneralDocuments(
+          isPrimaryMember
+            ? (phoneSelf?.patient?.documents ?? linked?.patient?.documents)
+            : linked?.patient?.documents,
+        );
+
         return {
           phone: row.phone,
           bookedViaPhone: row.phone,
           name: memberName,
           patientId: linked?.id ?? row.patientId,
+          mrn: linked?.patient?.mrn ?? null,
           relationship,
           email: publicPatientEmail(linked?.email),
           gender: linked?.gender ?? null,
@@ -1309,6 +1352,7 @@ export const PracticeService = {
           imgSrc: linked?.imgSrc ?? null,
           dateOfBirth: linked?.patient?.dateOfBirth ?? null,
           age: ageFromDob(linked?.patient?.dateOfBirth),
+          attachments,
           bookingCount: row.bookingCount,
           lastVisitAt: row.lastVisitAt,
           lastStatus: row.lastStatus,
@@ -1473,8 +1517,14 @@ export const PracticeService = {
     const { NotificationService } = await import("./notification.service.js");
     for (const booking of affected) {
       if (data.type === "BLOCK_SLOT" && data.startTime && booking.slotStart) {
-        const hh = String(booking.slotStart.getHours()).padStart(2, "0");
-        const mm = String(booking.slotStart.getMinutes()).padStart(2, "0");
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: PRACTICE_TIMEZONE,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).formatToParts(booking.slotStart);
+        const hh = parts.find((p) => p.type === "hour")?.value ?? "00";
+        const mm = parts.find((p) => p.type === "minute")?.value ?? "00";
         const slotHm = `${hh}:${mm}`;
         if (slotHm < data.startTime || (data.endTime && slotHm >= data.endTime)) {
           continue;
@@ -2030,7 +2080,7 @@ export const PracticeService = {
     dateStr: string,
   ) {
     const date = parseLocalDate(dateStr);
-    const dayOfWeek = date.getDay();
+    const dayOfWeek = practiceWeekday(date);
     const dayStart = startOfLocalDay(date);
     const dayEnd = endOfLocalDay(date);
 

@@ -557,8 +557,15 @@ export const WhatsAppService = {
             item.phoneNumberId,
           );
 
-          // Branch F (Menu → Attach, or post-booking Yes): upload-first flow.
-          if (awaitingDocUpload || reportCaption) {
+          // Branch F: Menu → Attach, post-booking Yes, or registered idle drop.
+          // Registered patients with 2+ open visits must get Select Appointment
+          // (never silent attach via lastBookingId).
+          const useBranchF =
+            awaitingDocUpload ||
+            reportCaption ||
+            (Boolean(alreadyRegistered) && !activelyRegistering);
+
+          if (useBranchF) {
             const branchF = await receiveWhatsAppBranchFDocument({
               practiceId: practiceEarly.id,
               patientPhone: patientPhoneEarly,
@@ -674,16 +681,6 @@ export const WhatsAppService = {
             continue;
           }
 
-          // Registered / Report flow: always show visit-doc outcome (no OCR).
-          if (alreadyRegistered || reportCaption) {
-            await sendWhatsAppText(
-              item.from,
-              attached.reply,
-              item.phoneNumberId,
-            );
-            continue;
-          }
-
           // Unregistered + no open booking: fall through to ID OCR when possible.
           const canFallThroughOcr =
             isOcrableIdMime(media.mimeType, filename, media.buffer) &&
@@ -702,34 +699,6 @@ export const WhatsAppService = {
         // Registered numbers never enter ID OCR (even with "aadhaar" caption),
         // unless they are mid-register for a family member.
         if (alreadyRegistered && !activelyRegistering) {
-          // Last chance: treat any remaining image/PDF as a visit doc attempt
-          if (looksLikeVisitFile) {
-            await sendWhatsAppText(
-              item.from,
-              BotPrompts.visitDocProcessing(langEarly),
-              item.phoneNumberId,
-            );
-            const attached = await attachWhatsAppVisitDocument({
-              practiceId: practiceEarly.id,
-              patientPhone: patientPhoneEarly,
-              buffer: media.buffer,
-              mimeType: media.mimeType,
-              filename: filename || undefined,
-              caption: caption || undefined,
-              lang: langEarly,
-              preferredBookingId: earlyState.lastBookingId,
-            });
-            await sendWhatsAppText(
-              item.from,
-              attached.reply ||
-                BotPrompts.alreadyRegistered(
-                  alreadyRegistered.name || "",
-                  langEarly,
-                ),
-              item.phoneNumberId,
-            );
-            continue;
-          }
           await sendWhatsAppText(
             item.from,
             BotPrompts.alreadyRegistered(

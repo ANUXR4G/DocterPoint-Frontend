@@ -9,6 +9,7 @@ import {
 } from "@/components/ui";
 import { usePractice } from "@/lib/practiceContext";
 import { formatPhoneDisplay } from "@/lib/formatPhone";
+import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { fetchConversations, setConversationStatus } from "@/lib/procto";
 import { colors, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
@@ -89,7 +90,7 @@ async function setStatus(
               {formatPhoneDisplay(c.patientPhone)}
             </Text>
             <Text style={styles.meta}>
-              {c.status} · {new Date(c.updatedAt).toLocaleString()}
+              {c.status} · {formatPracticeDateTime(c.updatedAt)}
             </Text>
             <View style={styles.actions}>
               <Chip

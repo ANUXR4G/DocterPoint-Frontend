@@ -8,11 +8,19 @@ import {
 import { stepUsesLlm } from "./whatsapp.nlu.js";
 
 describe("Branch C family member registration", () => {
-  it("askRegisterFamilyName asks for full name", () => {
-    assert.match(
-      BotPrompts.askRegisterFamilyName("en"),
-      /full name.*family member/i,
-    );
+  it("askRegisterFamilyName asks for full name or ID document", () => {
+    const reply = BotPrompts.askRegisterFamilyName("en");
+    assert.match(reply, /full name.*family member/i);
+    assert.match(reply, /photo or PDF/i);
+    assert.match(reply, /Aadhaar|PAN|ID/i);
+    assert.doesNotMatch(reply, /already registered/i);
+  });
+
+  it("askRegisterFamilyName includes already-registered notice when primary exists", () => {
+    const reply = BotPrompts.askRegisterFamilyName("en", "Anurag Nanda");
+    assert.match(reply, /already registered.*Anurag Nanda/i);
+    assert.match(reply, /full name.*family member/i);
+    assert.match(reply, /photo or PDF/i);
   });
 
   it("askRegisterFamilyRelationship offers Spouse/Child/Parent cue", () => {

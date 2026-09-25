@@ -29,10 +29,11 @@ export function formatBookingDateLabel(dateIso: string): string {
 export function formatBookingTimeLabel(slotStartIso: string): string {
   const d = new Date(slotStartIso)
   if (Number.isNaN(d.getTime())) return slotStartIso
-  return d.toLocaleTimeString(undefined, {
-    hour: "2-digit",
+  return d.toLocaleTimeString("en-US", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   })
 }
 

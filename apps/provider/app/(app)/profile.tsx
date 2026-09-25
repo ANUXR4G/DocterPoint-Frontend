@@ -11,6 +11,7 @@ import { Chip, EmptyState, PageTitle, PrimaryButton } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { clearSession } from "@/lib/api";
 import { formatPhoneDisplay } from "@/lib/formatPhone";
+import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { usePractice, usePracticeLabel } from "@/lib/practiceContext";
 import { fetchConversations, setConversationStatus } from "@/lib/procto";
 import { doctorWebPath } from "@/lib/webPortal";
@@ -198,7 +199,7 @@ export default function ProfileScreen() {
               {formatPhoneDisplay(c.patientPhone)}
             </Text>
             <Text style={styles.meta}>
-              {c.status} · {new Date(c.updatedAt).toLocaleString()}
+              {c.status} · {formatPracticeDateTime(c.updatedAt)}
             </Text>
             <View style={styles.chips}>
               <Chip

@@ -15,6 +15,7 @@ import {
   PageTitle,
 } from "@/components/ui";
 import { usePractice } from "@/lib/practiceContext";
+import { formatPracticeDateTime } from "@/lib/practiceTime";
 import {
   dismissPracticeNotification,
   fetchPracticeNotifications,
@@ -141,7 +142,7 @@ async function dismiss(id: string) {
               {n.to ? ` · ${n.to}` : ""}
             </Text>
             <Text style={styles.when}>
-              {new Date(n.createdAt).toLocaleString()}
+              {formatPracticeDateTime(n.createdAt)}
               {" · Tap to clear"}
             </Text>
             {n.booking?.id ? (

@@ -9,6 +9,7 @@ import {
   renderUtilityTemplateBody,
 } from "./whatsapp.metaTemplates.js";
 import { L, type WaLang } from "./whatsapp.i18n.js";
+import { formatPracticeDateTime } from "./slotEngine.js";
 
 export type TemplatePayload = Record<string, unknown>;
 
@@ -27,7 +28,7 @@ function whenLabel(payload: TemplatePayload): string {
   }
   if (payload.slotStart) {
     const d = new Date(String(payload.slotStart));
-    if (!Number.isNaN(d.getTime())) return d.toLocaleString();
+    if (!Number.isNaN(d.getTime())) return formatPracticeDateTime(d);
   }
   if (payload.newWhen) return str(payload, "newWhen");
   return "your scheduled time";
@@ -37,6 +38,13 @@ function withOptOut(body: string, audience?: string): string {
   if (audience === "clinic") return body;
   if (body.includes("STOP to opt out") || body.includes("STOP लिखें")) return body;
   return body + OPT_OUT_FOOTER;
+}
+
+/** First token of a full name for compact Self labels (buttons / Branch A). */
+export function firstGivenName(full: string | null | undefined): string {
+  const t = String(full || "").trim();
+  if (!t) return "";
+  return t.split(/\s+/)[0] || t;
 }
 
 export const BotPrompts = {
@@ -457,12 +465,30 @@ export const BotPrompts = {
     );
   },
 
-  /** Branch C — Prompt 1 */
-  askRegisterFamilyName(lang?: WaLang): string {
-    return L(
-      lang,
-      "Please enter the *full name* of the family member.",
-      "कृपया परिवार के सदस्य का *पूरा नाम* लिखें।",
+  /** Branch C — Prompt 1 (when primary is already registered, lead with that). */
+  askRegisterFamilyName(
+    lang?: WaLang,
+    alreadyRegisteredAs?: string | null,
+  ): string {
+    const who = alreadyRegisteredAs?.trim()
+      ? ` as *${alreadyRegisteredAs.trim()}*`
+      : "";
+    const already = alreadyRegisteredAs
+      ? L(
+          lang,
+          `You're already registered${who}.\n`,
+          `आप पहले से रजिस्टर्ड हैं${who ? ` (*${alreadyRegisteredAs.trim()}*)` : ""}।\n`,
+        )
+      : "";
+    return (
+      already +
+      L(
+        lang,
+        "Please enter the *full name* of the family member.\n" +
+          "Or send a clear *photo or PDF* of their *Aadhaar / PAN / ID* (JPG/PNG/PDF).",
+        "कृपया परिवार के सदस्य का *पूरा नाम* लिखें।\n" +
+          "या उनके *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* (JPG/PNG/PDF) भेजें।",
+      )
     );
   },
 
@@ -976,8 +1002,9 @@ export const BotPrompts = {
   },
 
   askBookWhom(selfName: string | null, lang?: WaLang): string {
-    const selfLabel = selfName?.trim()
-      ? L(lang, `Self (*${selfName.trim()}*)`, `स्वयं (*${selfName.trim()}*)`)
+    const short = firstGivenName(selfName);
+    const selfLabel = short
+      ? L(lang, `Self (*${short}*)`, `स्वयं (*${short}*)`)
       : L(lang, "Self", "स्वयं");
     return L(
       lang,
@@ -1527,8 +1554,51 @@ export function renderNotificationTemplate(
   const fromCatalog = renderUtilityTemplateBody(templateKey, enriched);
   if (fromCatalog) return fromCatalog;
 
+  // Clinic activity alerts without dedicated Meta templates → free-form WA text.
+  const practice = str(enriched, "practiceName", "your clinic");
+  const patient = str(enriched, "patientName", "Patient");
+  const when = str(enriched, "whenLabel", "scheduled time");
+  if (templateKey === "CLINIC_WAITING") {
+    return withOptOut(
+      `Patient ${patient} is waiting at ${practice} (${when}).`,
+      str(payload, "recipientRole"),
+    );
+  }
+  if (templateKey === "CLINIC_NO_SHOW") {
+    return withOptOut(
+      `Patient ${patient} marked no-show at ${practice} (${when}).`,
+      str(payload, "recipientRole"),
+    );
+  }
+  if (templateKey === "CLINIC_COMPLETED") {
+    return withOptOut(
+      `Visit completed for ${patient} at ${practice} (${when}).`,
+      str(payload, "recipientRole"),
+    );
+  }
+  if (templateKey === "CLINIC_DOCUMENT") {
+    const docName = str(enriched, "docName", "Document");
+    const kind =
+      str(enriched, "docKind", "visit") === "general"
+        ? "general document"
+        : "visit document";
+    return withOptOut(
+      `${patient} shared a ${kind} via WhatsApp: ${docName} (${practice}).`,
+      str(payload, "recipientRole"),
+    );
+  }
+  if (templateKey === "CLINIC_OVERRIDE") {
+    const reason = str(enriched, "reason", "");
+    return withOptOut(
+      `Schedule override affects ${patient} at ${practice} (${when})${
+        reason ? `: ${reason}` : "."
+      }`,
+      str(payload, "recipientRole"),
+    );
+  }
+
   return withOptOut(
-    `Appointment update from ${str(enriched, "practiceName", "your clinic")}.`,
+    `Appointment update from ${practice}.`,
     str(payload, "recipientRole"),
   );
 }

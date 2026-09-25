@@ -571,6 +571,8 @@ export type ProctoBooking = {
     contactNumber: string | null;
     emergencyNumber: string | null;
     imgSrc?: string | null;
+    age?: number | null;
+    mrn?: string | null;
   } | null;
   doctorRemarks?: string | null;
   medicines?: Array<{ name: string; amount?: string; times?: string[] }> | null;

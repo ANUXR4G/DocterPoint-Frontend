@@ -16,6 +16,7 @@ import {
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import { formatPracticeDateTime } from "@/lib/practiceTime"
 
 type PracticePatient = PracticePatientRow & {
   recentBookings: Array<{
@@ -38,6 +39,45 @@ function ageFromDob(dob?: string | null, age?: number | null): string {
   if (!dob?.trim()) return "—"
   const n = firey.calculateAge(dob)
   return n >= 0 && n <= 130 ? String(n) : "—"
+}
+
+type PatientAttachment = {
+  name: string
+  url: string
+  uploadedAt?: string
+}
+
+function patientAttachments(p: PracticePatientRow): PatientAttachment[] {
+  return Array.isArray(p.attachments) ? p.attachments.filter((d) => d?.url) : []
+}
+
+function AttachmentsCell({
+  attachments,
+  compact = false,
+}: {
+  attachments: PatientAttachment[]
+  compact?: boolean
+}) {
+  if (!attachments.length) {
+    return <span className="opacity-40">—</span>
+  }
+  return (
+    <ul className={compact ? "space-y-1" : "max-w-[14rem] space-y-1"}>
+      {attachments.map((doc) => (
+        <li key={`${doc.url}-${doc.name}`}>
+          <a
+            href={doc.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block truncate text-xs font-semibold text-[var(--theme-primary)] hover:underline"
+            title={doc.name}
+          >
+            {doc.name}
+          </a>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 function patientRowKey(p: PracticePatientRow, index = 0) {
@@ -105,6 +145,7 @@ export default function DoctorPatientsList() {
         p.email,
         p.phone,
         p.bookedViaPhone,
+        p.mrn,
         p.relationship,
         p.gender,
         p.address,
@@ -210,6 +251,11 @@ export default function DoctorPatientsList() {
                         <p className="mt-0.5 text-sm font-medium">
                           Booked via {via}
                         </p>
+                        {p.mrn?.trim() ? (
+                          <p className="mt-0.5 text-xs font-semibold tabular-nums tracking-wide opacity-70">
+                            MRN {p.mrn.trim()}
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-xs opacity-60">
                           {p.bookingCount} visit
                           {p.bookingCount === 1 ? "" : "s"}
@@ -243,6 +289,14 @@ export default function DoctorPatientsList() {
                           <span className="opacity-50">Member: </span>
                           {p.name || "—"}
                         </p>
+                        {p.mrn?.trim() ? (
+                          <p>
+                            <span className="opacity-50">MRN: </span>
+                            <span className="font-semibold tabular-nums">
+                              {p.mrn.trim()}
+                            </span>
+                          </p>
+                        ) : null}
                         <p>
                           <span className="opacity-50">Booked via: </span>
                           {via}
@@ -274,9 +328,20 @@ export default function DoctorPatientsList() {
                         {p.lastVisitAt ? (
                           <p>
                             <span className="opacity-50">Last visit: </span>
-                            {new Date(p.lastVisitAt).toLocaleString()}
+                            {formatPracticeDateTime(p.lastVisitAt)}
                           </p>
                         ) : null}
+                      </div>
+                      <div className="mt-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide opacity-50">
+                          Attachments
+                        </p>
+                        <div className="mt-1.5">
+                          <AttachmentsCell
+                            attachments={patientAttachments(p)}
+                            compact
+                          />
+                        </div>
                       </div>
                       <p className="mt-3 text-xs font-semibold uppercase tracking-wide opacity-50">
                         Recent visits
@@ -302,11 +367,11 @@ export default function DoctorPatientsList() {
                             </div>
                             <p className="mt-0.5 opacity-60">
                               {b.slotStart
-                                ? new Date(b.slotStart).toLocaleString()
+                                ? formatPracticeDateTime(b.slotStart)
                                 : b.sessionDate
                                   ? String(b.sessionDate).slice(0, 10)
                                   : b.createdAt
-                                    ? new Date(b.createdAt).toLocaleDateString()
+                                    ? formatPracticeDateTime(b.createdAt)
                                     : "—"}
                             </p>
                             {b.doctorRemarks?.trim() &&
@@ -338,10 +403,12 @@ export default function DoctorPatientsList() {
               <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                 <tr>
                   <th className="px-4 py-3">Member</th>
+                  <th className="whitespace-nowrap px-4 py-3">MRN</th>
                   <th className="whitespace-nowrap px-4 py-3">Booked via</th>
                   <th className="whitespace-nowrap px-4 py-3">Age</th>
                   <th className="whitespace-nowrap px-4 py-3">Gender</th>
                   <th className="whitespace-nowrap px-4 py-3">Visits</th>
+                  <th className="min-w-[10rem] px-4 py-3">Attachments</th>
                   <th className="whitespace-nowrap px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Details</th>
                 </tr>
@@ -377,6 +444,9 @@ export default function DoctorPatientsList() {
                             </div>
                           </div>
                         </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums tracking-wide">
+                          {p.mrn?.trim() || "—"}
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3 font-medium">
                           {via}
                         </td>
@@ -392,6 +462,9 @@ export default function DoctorPatientsList() {
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           {p.bookingCount}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <AttachmentsCell attachments={patientAttachments(p)} />
                         </td>
                         <td className="px-4 py-3">
                           {p.lastStatus ? (
@@ -418,16 +491,31 @@ export default function DoctorPatientsList() {
                       </tr>
                       {open ? (
                         <tr className="bg-neutral-50 dark:bg-neutral-950/40">
-                          <td colSpan={7} className="px-4 py-4">
+                          <td colSpan={9} className="px-4 py-4">
                             <div className="grid gap-3 text-xs sm:grid-cols-2">
                               <p>
                                 <span className="opacity-50">Member: </span>
                                 {p.name || "—"}
                               </p>
                               <p>
+                                <span className="opacity-50">MRN: </span>
+                                <span className="font-semibold tabular-nums">
+                                  {p.mrn?.trim() || "—"}
+                                </span>
+                              </p>
+                              <p>
                                 <span className="opacity-50">Booked via: </span>
                                 {via}
                               </p>
+                              <div className="sm:col-span-2">
+                                <p className="opacity-50">Attachments</p>
+                                <div className="mt-1">
+                                  <AttachmentsCell
+                                    attachments={patientAttachments(p)}
+                                    compact
+                                  />
+                                </div>
+                              </div>
                               {p.relationship?.trim() ? (
                                 <p>
                                   <span className="opacity-50">Relation: </span>
@@ -455,7 +543,7 @@ export default function DoctorPatientsList() {
                               {p.lastVisitAt ? (
                                 <p>
                                   <span className="opacity-50">Last visit: </span>
-                                  {new Date(p.lastVisitAt).toLocaleString()}
+                                  {formatPracticeDateTime(p.lastVisitAt)}
                                 </p>
                               ) : null}
                             </div>
@@ -485,13 +573,11 @@ export default function DoctorPatientsList() {
                                   </div>
                                   <p className="mt-0.5 opacity-60">
                                     {b.slotStart
-                                      ? new Date(b.slotStart).toLocaleString()
+                                      ? formatPracticeDateTime(b.slotStart)
                                       : b.sessionDate
                                         ? String(b.sessionDate).slice(0, 10)
                                         : b.createdAt
-                                          ? new Date(
-                                              b.createdAt,
-                                            ).toLocaleDateString()
+                                          ? formatPracticeDateTime(b.createdAt)
                                           : "—"}
                                   </p>
                                   {b.doctorRemarks?.trim() &&

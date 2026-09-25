@@ -156,10 +156,17 @@ export default function DoctorAppointmentsList({
                       className="truncate font-semibold text-neutral-900 dark:text-white"
                     />
                     <p className="text-xs text-neutral-500">
-                      {formatPhoneDisplay(
-                        b.patientPhone || b.patient_phone,
-                        "",
-                      )}
+                      {[
+                        b.patient?.mrn?.trim()
+                          ? `MRN ${b.patient.mrn.trim()}`
+                          : null,
+                        formatPhoneDisplay(
+                          b.patientPhone || b.patient_phone,
+                          "",
+                        ) || null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </p>
                   </div>
                 </div>
@@ -191,6 +198,7 @@ export default function DoctorAppointmentsList({
               <thead className="bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-[var(--solune-elevated)] dark:text-neutral-300">
                 <tr>
                   <th className="px-4 py-3">Patient</th>
+                  <th className="px-4 py-3">MRN</th>
                   <th className="px-4 py-3">When</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Visit</th>
@@ -207,6 +215,9 @@ export default function DoctorAppointmentsList({
                           "",
                         )}
                       </p>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums tracking-wide">
+                      {b.patient?.mrn?.trim() || "—"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
                       {formatBookingWhenDetailed(b)}

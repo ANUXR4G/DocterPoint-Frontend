@@ -409,11 +409,11 @@ export default function PracticeNotificationsPanel() {
                 </div>
                 <div className="text-right text-xs text-neutral-500">
                   <p>
-                    {format(new Date(n.createdAt), "dd MMM yyyy · HH:mm")}
+                    {format(new Date(n.createdAt), "dd MMM yyyy · h:mm a")}
                   </p>
                   {n.sentAt ? (
                     <p className="mt-0.5 opacity-80">
-                      Sent {format(new Date(n.sentAt), "HH:mm")}
+                      Sent {format(new Date(n.sentAt), "h:mm a")}
                     </p>
                   ) : null}
                   {n.booking?.id ? (

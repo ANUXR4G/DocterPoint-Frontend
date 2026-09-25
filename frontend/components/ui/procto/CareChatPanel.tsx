@@ -228,9 +228,11 @@ export default function CareChatPanel({
                       mine ? "text-blue-100" : "text-slate-400"
                     }`}
                   >
-                    {new Date(m.createdAt).toLocaleString([], {
-                      hour: "2-digit",
+                    {new Date(m.createdAt).toLocaleString("en-US", {
+                      timeZone: "Asia/Kolkata",
+                      hour: "numeric",
                       minute: "2-digit",
+                      hour12: true,
                       day: "numeric",
                       month: "short",
                     })}

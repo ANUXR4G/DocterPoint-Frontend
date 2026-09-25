@@ -1,3 +1,5 @@
+import { formatPracticeDateTime, practiceDateIso } from "./practiceTime";
+
 export type PracticeMembership = {
   role: string;
   userId: string;
@@ -54,6 +56,7 @@ export type BookingRow = {
     dateOfBirth?: string | null;
     age?: number | null;
     contactNumber?: string | null;
+    mrn?: string | null;
   } | null;
 };
 
@@ -62,6 +65,7 @@ export type PracticePatient = {
   bookedViaPhone?: string | null;
   name: string | null;
   patientId: string | null;
+  mrn?: string | null;
   relationship?: string | null;
   email?: string | null;
   gender?: string | null;
@@ -122,12 +126,7 @@ export function whenLabel(b: BookingRow) {
     return `Token #${b.tokenNumber ?? "?"} · ${b.sessionDate?.slice(0, 10) ?? ""}`;
   }
   if (b.slotStart) {
-    return new Date(b.slotStart).toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatPracticeDateTime(b.slotStart);
   }
   return "—";
 }
@@ -167,10 +166,7 @@ export function nextActions(status: string): Array<{ status: string; label: stri
 }
 
 export function ymd(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return practiceDateIso(d) ?? "";
 }
 
 export function addDays(d: Date, n: number) {

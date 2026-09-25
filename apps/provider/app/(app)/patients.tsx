@@ -59,11 +59,13 @@ export default function PatientsScreen() {
       const name = (p.name || "").toLowerCase();
       const phone = (p.phone || "").toLowerCase();
       const via = (p.bookedViaPhone || "").toLowerCase();
+      const mrn = (p.mrn || "").toLowerCase();
       const rel = (p.relationship || "").toLowerCase();
       return (
         name.includes(needle) ||
         phone.includes(needle) ||
         via.includes(needle) ||
+        mrn.includes(needle) ||
         rel.includes(needle)
       );
     });
@@ -100,7 +102,7 @@ export default function PatientsScreen() {
         <TextInput
           value={q}
           onChangeText={setQ}
-          placeholder="Search name or phone"
+          placeholder="Search name, phone, or MRN"
           placeholderTextColor={colors.inkFaint}
           style={styles.search}
           autoCorrect={false}
@@ -137,6 +139,9 @@ export default function PatientsScreen() {
                     <Text style={styles.name}>
                       {p.name || formatPhoneDisplay(p.phone)}
                     </Text>
+                    {p.mrn?.trim() ? (
+                      <Text style={styles.meta}>MRN {p.mrn.trim()}</Text>
+                    ) : null}
                     {p.relationship?.trim() ? (
                       <Text style={styles.meta}>{p.relationship.trim()}</Text>
                     ) : null}

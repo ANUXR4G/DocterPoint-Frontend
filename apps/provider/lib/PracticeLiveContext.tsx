@@ -16,6 +16,7 @@ import {
   fetchPracticePatients,
 } from "@/lib/procto";
 import { addDays, type BookingRow, type PracticePatient, ymd } from "@/lib/types";
+import { practiceDateIso } from "@/lib/practiceTime";
 
 type PracticeLiveValue = {
   bookings: BookingRow[];
@@ -40,7 +41,7 @@ const PracticeLiveContext = createContext<PracticeLiveValue | null>(null);
 
 function bookingDayKey(b: BookingRow): string {
   if (b.sessionDate) return String(b.sessionDate).slice(0, 10);
-  if (b.slotStart) return ymd(new Date(b.slotStart));
+  if (b.slotStart) return practiceDateIso(b.slotStart) ?? "";
   return "";
 }
 

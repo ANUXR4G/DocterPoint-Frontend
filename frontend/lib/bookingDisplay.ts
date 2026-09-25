@@ -1,4 +1,9 @@
 import type { ProctoBooking } from "@/lib/services/procto"
+import {
+  formatPracticeDate,
+  formatPracticeDateTime,
+  PRACTICE_TIMEZONE,
+} from "@/lib/practiceTime"
 
 /** Statuses that still represent an upcoming / active clinic visit. */
 export const ACTIVE_BOOKING_STATUSES = new Set([
@@ -26,7 +31,8 @@ export function bookingWhenMs(booking: ProctoBooking): number {
   if (session) {
     const d = new Date(session)
     if (!Number.isNaN(d.getTime())) {
-      d.setHours(12, 0, 0, 0)
+      // Midday UTC avoids date-boundary drift when only a calendar day is known.
+      d.setUTCHours(12, 0, 0, 0)
       return d.getTime()
     }
   }
@@ -58,7 +64,8 @@ export function formatBookingWhenDetailed(booking: ProctoBooking): string {
 
   if (mode === "TOKEN_BASED" && token != null) {
     const day = session
-      ? new Date(session).toLocaleDateString(undefined, {
+      ? new Date(session).toLocaleDateString("en-US", {
+          timeZone: PRACTICE_TIMEZONE,
           weekday: "short",
           day: "numeric",
           month: "short",
@@ -69,24 +76,29 @@ export function formatBookingWhenDetailed(booking: ProctoBooking): string {
   }
 
   if (slot) {
-    return new Date(slot).toLocaleString(undefined, {
+    return new Date(slot).toLocaleString("en-US", {
+      timeZone: PRACTICE_TIMEZONE,
       weekday: "short",
       day: "numeric",
       month: "short",
       year: "numeric",
-      hour: "2-digit",
+      hour: "numeric",
       minute: "2-digit",
+      hour12: true,
     })
   }
 
   if (session) {
-    return new Date(session).toLocaleDateString(undefined, {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    })
+    return formatPracticeDate(session)
   }
 
+  return "—"
+}
+
+export function formatBookingWhenShort(booking: ProctoBooking): string {
+  const slot = booking.slotStart ?? booking.slot_start
+  if (slot) return formatPracticeDateTime(slot)
+  const session = booking.sessionDate ?? booking.session_date
+  if (session) return formatPracticeDate(session)
   return "—"
 }

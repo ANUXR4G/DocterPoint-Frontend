@@ -11,17 +11,10 @@ import {
   bookingStatusTone,
   formatBookingStatus,
 } from "@/lib/bookingStatusTone"
+import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
 
 function formatWhen(booking: ProctoBooking) {
-  const token = booking.tokenNumber ?? booking.token_number
-  const session = booking.sessionDate ?? booking.session_date
-  const slot = booking.slotStart ?? booking.slot_start
-  if (booking.mode === "TOKEN_BASED" && token) {
-    const day = session ? new Date(session).toLocaleDateString() : ""
-    return `Token #${token} on ${day}`
-  }
-  if (slot) return new Date(slot).toLocaleString()
-  return "—"
+  return formatBookingWhenDetailed(booking)
 }
 
 /** Prefer street address over generic branch labels like "Main Clinic". */

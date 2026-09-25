@@ -23,6 +23,11 @@ import CareChatPanel from "@/components/ui/procto/CareChatPanel"
 import { getSessionUserId } from "@/lib/sessionUser"
 import { patchBookingFields } from "@/lib/liveBooking"
 import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
+import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
+import {
+  formatPracticeDate,
+  formatPracticeDateTime,
+} from "@/lib/practiceTime"
 
 type Medicine = { name: string; amount?: string; times?: string[] }
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
@@ -295,33 +300,17 @@ export default function PatientVisitPage() {
     booking.status === "ACCEPTED" ||
     booking.status === "CONFIRMED"
 
-  const slot =
-    booking.slotStart
-      ? new Date(booking.slotStart).toLocaleString([], {
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : booking.tokenNumber != null
-        ? `Token #${booking.tokenNumber}`
-        : "—"
+  const slot = booking.slotStart
+    ? formatBookingWhenDetailed(booking as any)
+    : booking.tokenNumber != null
+      ? `Token #${booking.tokenNumber}`
+      : "—"
 
   const bookedOn = booking.createdAt ?? booking.created_at
   const appointmentDate = booking.slotStart
-    ? new Date(booking.slotStart).toLocaleDateString([], {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+    ? formatPracticeDate(booking.slotStart)
     : booking.sessionDate
-      ? new Date(booking.sessionDate).toLocaleDateString([], {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })
+      ? formatPracticeDate(booking.sessionDate)
       : "—"
 
   const disease =
@@ -452,15 +441,7 @@ export default function PatientVisitPage() {
             Booked on
           </p>
           <p className="mt-1 text-sm font-bold leading-snug text-slate-900 dark:text-white">
-            {bookedOn
-              ? new Date(bookedOn).toLocaleString([], {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "—"}
+            {bookedOn ? formatPracticeDateTime(bookedOn) : "—"}
           </p>
         </div>
       </div>

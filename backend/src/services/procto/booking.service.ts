@@ -15,6 +15,8 @@ import {
   hasExtraSlotsForDay,
   isDateWithinValidity,
   parseLocalDate,
+  practiceWeekday,
+  formatPracticeDateTime,
   resolveProviderBookingMode,
   sameLocalSlot,
   schedulesForActiveMode,
@@ -203,7 +205,7 @@ export const BookingService = {
       throw new AppError(400, "mode is required (TIME_BASED or TOKEN_BASED).");
     }
 
-    const dayOfWeek = date.getDay();
+    const dayOfWeek = practiceWeekday(date);
     const dayStart = startOfLocalDay(date);
     const dayEnd = endOfLocalDay(date);
 
@@ -479,6 +481,24 @@ export const BookingService = {
     if (normalized === BookingStatus.IN_PROGRESS) {
       void NotificationService.enqueueQueueAlert(bookingId).catch(() => undefined);
     }
+    if (normalized === BookingStatus.WAITING) {
+      void NotificationService.enqueueClinicStatusChange(
+        bookingId,
+        "WAITING",
+      ).catch(() => undefined);
+    }
+    if (normalized === BookingStatus.NO_SHOW) {
+      void NotificationService.enqueueClinicStatusChange(
+        bookingId,
+        "NO_SHOW",
+      ).catch(() => undefined);
+    }
+    if (normalized === BookingStatus.COMPLETED) {
+      void NotificationService.enqueueClinicStatusChange(
+        bookingId,
+        "COMPLETED",
+      ).catch(() => undefined);
+    }
 
     void broadcastProctoEvent(
       existing.practiceId,
@@ -542,8 +562,14 @@ export const BookingService = {
 
     const oldWhen =
       existing.mode === ScheduleMode.TOKEN_BASED
-        ? `Token #${existing.tokenNumber ?? "?"} on ${existing.sessionDate?.toISOString().slice(0, 10) ?? "?"}`
-        : existing.slotStart?.toLocaleString() ?? "";
+        ? `Token #${existing.tokenNumber ?? "?"} on ${
+            existing.sessionDate
+              ? formatLocalDate(existing.sessionDate)
+              : "?"
+          }`
+        : existing.slotStart
+          ? formatPracticeDateTime(existing.slotStart)
+          : "";
 
     let date: Date;
     if (existing.mode === ScheduleMode.TOKEN_BASED) {
@@ -561,7 +587,7 @@ export const BookingService = {
       throw new AppError(400, "invalid booking date.");
     }
 
-    const dayOfWeek = date.getDay();
+    const dayOfWeek = practiceWeekday(date);
     const dayStart = startOfLocalDay(date);
     const dayEnd = endOfLocalDay(date);
 
@@ -766,10 +792,26 @@ export const BookingService = {
     if (nextStatus === BookingStatus.CANCELED) {
       void NotificationService.enqueueCancellation(bookingId).catch(() => undefined);
     }
+    if (nextStatus === BookingStatus.WAITING) {
+      void NotificationService.enqueueClinicStatusChange(
+        bookingId,
+        "WAITING",
+      ).catch(() => undefined);
+    }
+    if (nextStatus === BookingStatus.NO_SHOW) {
+      void NotificationService.enqueueClinicStatusChange(
+        bookingId,
+        "NO_SHOW",
+      ).catch(() => undefined);
+    }
     if (nextStatus === BookingStatus.COMPLETED) {
       void NotificationService.enqueueVisitSummary(bookingId).catch((err) =>
         console.warn("visit summary notification failed (non-fatal):", err),
       );
+      void NotificationService.enqueueClinicStatusChange(
+        bookingId,
+        "COMPLETED",
+      ).catch(() => undefined);
     } else if (medicinesChanged && hasMedicines) {
       // Mid-visit prescription save → patient WhatsApp (finish uses VISIT_SUMMARY).
       void NotificationService.enqueuePrescriptionUpdate(bookingId).catch((err) =>
@@ -843,6 +885,7 @@ export const BookingService = {
               imgSrc: true,
               patient: {
                 select: {
+                  mrn: true,
                   dateOfBirth: true,
                   contactNumber: true,
                   emergencyNumber: true,
@@ -869,6 +912,7 @@ export const BookingService = {
           imgSrc: true,
           patient: {
             select: {
+              mrn: true,
               dateOfBirth: true,
               contactNumber: true,
               emergencyNumber: true,
@@ -907,6 +951,7 @@ export const BookingService = {
             age: ageFromDob(linked.patient?.dateOfBirth),
             contactNumber: linked.patient?.contactNumber ?? null,
             emergencyNumber: linked.patient?.emergencyNumber ?? null,
+            mrn: linked.patient?.mrn ?? null,
           }
         : {
             id: null,
@@ -920,6 +965,7 @@ export const BookingService = {
             age: null,
             contactNumber: booking.patientPhone,
             emergencyNumber: null,
+            mrn: null,
           },
     };
   },
@@ -1142,6 +1188,7 @@ export const BookingService = {
               imgSrc: true,
               patient: {
                 select: {
+                  mrn: true,
                   dateOfBirth: true,
                   contactNumber: true,
                   emergencyNumber: true,
@@ -1169,6 +1216,7 @@ export const BookingService = {
               imgSrc: true,
               patient: {
                 select: {
+                  mrn: true,
                   dateOfBirth: true,
                   contactNumber: true,
                   emergencyNumber: true,
@@ -1224,6 +1272,7 @@ export const BookingService = {
               age: ageFromDob(dateOfBirth),
               contactNumber: linked.patient?.contactNumber ?? null,
               emergencyNumber: linked.patient?.emergencyNumber ?? null,
+              mrn: linked.patient?.mrn ?? null,
             }
           : {
               id: null,
@@ -1237,6 +1286,7 @@ export const BookingService = {
               age: null,
               contactNumber: b.patientPhone,
               emergencyNumber: null,
+              mrn: null,
             },
       };
     });
@@ -1253,7 +1303,7 @@ export const BookingService = {
       throw new AppError(400, "invalid date");
     }
 
-    const dayOfWeek = date.getDay();
+    const dayOfWeek = practiceWeekday(date);
     const dayStart = startOfLocalDay(date);
     const dayEnd = endOfLocalDay(date);
 
