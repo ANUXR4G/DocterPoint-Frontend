@@ -1397,7 +1397,7 @@ html.dark body {
   }
 
   .blue-scroll:hover::-webkit-scrollbar-thumb {
-    @apply rounded-sm bg-[--primary-blue];
+    @apply rounded-sm bg-[var(--primary-blue)];
   }
 
   [data-tooltip]::after {
