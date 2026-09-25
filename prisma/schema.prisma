@@ -37,6 +37,8 @@ model User {
 
 model Patient {
   id              String @id @db.Uuid
+  /** Globally unique Medical Record Number, e.g. MR00000001 */
+  mrn             String @unique @map("mrn") @db.VarChar(32)
   profession      String?
   dateOfBirth     String? @map("date_of_birth")
   contactNumber   String? @map("contact_number")

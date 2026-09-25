@@ -336,6 +336,7 @@ async function main() {
       address: null,
       patient: {
         create: {
+          mrn: "MR00000001",
           profession: null,
           dateOfBirth: "1988-03-15",
           contactNumber: "9999973601",

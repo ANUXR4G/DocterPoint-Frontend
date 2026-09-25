@@ -10,7 +10,7 @@ import { prisma } from "../../db/prisma.js";
 import { publicWebOrigin } from "../../config/index.js";
 import { BookingService } from "./booking.service.js";
 import { PatientService } from "../patient.js";
-import { BotPrompts } from "./whatsapp.templates.js";
+import { BotPrompts, firstGivenName } from "./whatsapp.templates.js";
 import {
   askPreferredLanguage,
   languageSetAck,
@@ -35,7 +35,7 @@ import {
   type BotIntent,
   type NluSlots,
 } from "./whatsapp.nlu.js";
-import { formatLocalDate } from "./slotEngine.js";
+import { formatLocalDate, formatPracticeDateTime, formatPracticeTime, parseLocalDate, practiceWeekday } from "./slotEngine.js";
 import { buildCalendarInvite, bookingReferenceId } from "./bookingCalendar.js";
 import {
   parseFamilyDobAndId,
@@ -270,13 +270,12 @@ function withDoctorList(
 /** Next N clinic working days (skips Sundays — same default as suggestDefaultDate). */
 function nextWorkingDayIsos(count = 7, from: Date = new Date()): string[] {
   const out: string[] = [];
-  const start = new Date(from);
-  start.setHours(12, 0, 0, 0);
+  let cursor = parseLocalDate(formatLocalDate(from));
   for (let i = 0; i < 28 && out.length < count; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    if (d.getDay() === 0) continue;
-    out.push(formatLocalDate(d));
+    if (practiceWeekday(cursor) !== 0) {
+      out.push(formatLocalDate(cursor));
+    }
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
   }
   return out;
 }
@@ -680,6 +679,11 @@ function formatBookingDateLabel(isoDate: string): string {
   });
 }
 
+/** WhatsApp slot times — always 12-hour in clinic timezone (e.g. 3:50 PM, not 15:50). */
+function formatSlotTimeLabel(d: Date): string {
+  return formatPracticeTime(d);
+}
+
 function formatBookingDateTimeLabel(opts: {
   date: string;
   slotStart?: string | null;
@@ -699,12 +703,7 @@ function formatBookingDateTimeLabel(opts: {
   if (opts.slotStart) {
     const t = new Date(opts.slotStart);
     if (!Number.isNaN(t.getTime())) {
-      const timePart = t.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-      return `${datePart} at ${timePart}`;
+      return `${datePart} at ${formatSlotTimeLabel(t)}`;
     }
   }
   if (opts.timeLabel?.trim()) {
@@ -936,6 +935,7 @@ async function startReportAttachFlow(opts: {
 
 async function finishBranchFGeneralDocument(
   convId: string,
+  practiceId: string,
   state: ConversationState,
   patientPhone: string,
   lang: WaLang,
@@ -954,6 +954,7 @@ async function finishBranchFGeneralDocument(
     patientPhone,
     doc,
     lang,
+    practiceId,
   });
   await saveState(convId, {
     ...idleState(state),
@@ -1510,8 +1511,9 @@ function withWhomButtons(
   selfName: string | null,
   lang: WaLang,
 ): OrchestratorResult {
-  const selfTitle = selfName?.trim()
-    ? `Self · ${selfName.trim()}`.slice(0, 20)
+  const short = firstGivenName(selfName);
+  const selfTitle = short
+    ? `Self · ${short}`.slice(0, 20)
     : lang === "hi"
       ? "स्वयं"
       : "Self";
@@ -1747,7 +1749,8 @@ function bookingWhenLabel(b: {
   if (b.mode === ScheduleMode.TOKEN_BASED) {
     return `Token #${b.tokenNumber ?? "?"} on ${b.sessionDate?.toISOString().slice(0, 10) ?? "?"}`;
   }
-  return b.slotStart?.toLocaleString() ?? "scheduled time";
+  if (!b.slotStart) return "scheduled time";
+  return formatPracticeDateTime(b.slotStart);
 }
 
 /** Tell the doctor in care chat that the patient cancelled (with optional reason). */
@@ -2435,30 +2438,28 @@ async function suggestDefaultDate(
   providerId: string,
   locationId: string,
 ): Promise<string> {
-  const start = new Date();
+  let cursor = parseLocalDate(formatLocalDate(new Date()));
   for (let i = 0; i < 14; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    if (d.getDay() === 0) continue; // skip Sunday by default
-    const dateStr = formatLocalDate(d);
-    try {
-      const avail = await BookingService.getAvailability(
-        practice.id,
-        providerId,
-        locationId,
-        dateStr,
-      );
-      const open =
-        avail.timeSlots.some((s) => s?.available) ||
-        avail.tokenSessions.some((s) => s?.available);
-      if (open) return dateStr;
-    } catch {
-      /* try next day */
+    if (practiceWeekday(cursor) !== 0) {
+      const dateStr = formatLocalDate(cursor);
+      try {
+        const avail = await BookingService.getAvailability(
+          practice.id,
+          providerId,
+          locationId,
+          dateStr,
+        );
+        const open =
+          avail.timeSlots.some((s) => s?.available) ||
+          avail.tokenSessions.some((s) => s?.available);
+        if (open) return dateStr;
+      } catch {
+        /* try next day */
+      }
     }
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
   }
-  const t = new Date();
-  t.setDate(t.getDate() + 1);
-  return formatLocalDate(t);
+  return formatLocalDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
 }
 
 /** Keep booking date step alive and suggest another day. */
@@ -2644,10 +2645,7 @@ async function handleAwaitingDate(
 
     const slotChoices = open.map((s) => ({
       start: s.start.toISOString(),
-      label: s.start.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+      label: formatSlotTimeLabel(s.start),
     }));
     await saveState(convId, {
       ...state,
@@ -2967,10 +2965,7 @@ async function continueAfterMode(
   });
   if (preferredIdx != null) {
     const picked = open[preferredIdx]!;
-    const label = picked.start.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const label = formatSlotTimeLabel(picked.start);
     return presentBookingConfirm(
       convId,
       practice,
@@ -2980,10 +2975,7 @@ async function continueAfterMode(
         slotStart: picked.start.toISOString(),
         slotChoices: open.map((s) => ({
           start: s.start.toISOString(),
-          label: s.start.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
+          label: formatSlotTimeLabel(s.start),
         })),
       },
       {
@@ -2997,10 +2989,7 @@ async function continueAfterMode(
   // Auto-confirm if only one slot remains
   if (open.length === 1) {
     const only = open[0]!;
-    const label = only.start.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const label = formatSlotTimeLabel(only.start);
     return presentBookingConfirm(
       convId,
       practice,
@@ -3020,7 +3009,7 @@ async function continueAfterMode(
 
   const slotChoices = open.map((s) => ({
     start: s.start.toISOString(),
-    label: s.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    label: formatSlotTimeLabel(s.start),
   }));
 
   await saveState(convId, {
@@ -3432,7 +3421,12 @@ async function applyIdScanToRegister(
 async function startFamilyMemberFlow(
   convId: string,
   prev: ConversationState = {},
-  opts?: { afterRegister?: "book"; pendingBookSlots?: NluSlots },
+  opts?: {
+    afterRegister?: "book";
+    pendingBookSlots?: NluSlots;
+    /** Primary WhatsApp user display name — shown as "already registered". */
+    alreadyRegisteredAs?: string | null;
+  },
 ): Promise<OrchestratorResult> {
   const lang = resolveLang(prev.preferredLanguage);
   await saveState(convId, {
@@ -3450,7 +3444,9 @@ async function startFamilyMemberFlow(
     regRelationship: null,
     regNationalId: null,
   });
-  return { reply: BotPrompts.askRegisterFamilyName(lang) };
+  return {
+    reply: BotPrompts.askRegisterFamilyName(lang, opts?.alreadyRegisteredAs),
+  };
 }
 
 async function startRegisterFlow(
@@ -3461,8 +3457,10 @@ async function startRegisterFlow(
   const lang = resolveLang(prev.preferredLanguage);
   const existing = await PatientService.findByPhone(patientPhone);
   if (existing) {
-    // Menu "Register family member" → Branch C directly.
-    return startFamilyMemberFlow(convId, prev);
+    // Menu "Register" while already registered → Branch C (family) with notice.
+    return startFamilyMemberFlow(convId, prev, {
+      alreadyRegisteredAs: existing.name || "",
+    });
   }
   await saveState(convId, {
     ...keepPrefs(prev),
@@ -3484,7 +3482,7 @@ async function ensureRegisteredThenBook(
   const self = profiles.find((p) => p.isSelf) ?? null;
   const patientChoices = profiles.map((p) => ({
     id: p.id,
-    label: p.isSelf ? `Self · ${p.name}` : p.name,
+    label: p.isSelf ? `Self · ${firstGivenName(p.name) || p.name}` : p.name,
     isSelf: p.isSelf,
   }));
 
@@ -3515,10 +3513,12 @@ async function startFamilyRegisterForBook(
   convId: string,
   slots: NluSlots,
   prev: ConversationState,
+  alreadyRegisteredAs?: string | null,
 ): Promise<OrchestratorResult> {
   return startFamilyMemberFlow(convId, prev, {
     afterRegister: "book",
     pendingBookSlots: slots,
+    alreadyRegisteredAs,
   });
 }
 
@@ -4157,13 +4157,25 @@ async function runOrchestratorCore(input: {
       );
 
     if (wantGeneral) {
-      return finishBranchFGeneralDocument(convId, state, patientPhone, lang);
+      return finishBranchFGeneralDocument(
+        convId,
+        practice.id,
+        state,
+        patientPhone,
+        lang,
+      );
     }
 
     if (wantAppt) {
       const upcoming = await listUpcomingBookings(practice.id, patientPhone);
       if (!upcoming.length) {
-        return finishBranchFGeneralDocument(convId, state, patientPhone, lang);
+        return finishBranchFGeneralDocument(
+          convId,
+          practice.id,
+          state,
+          patientPhone,
+          lang,
+        );
       }
       if (upcoming.length === 1) {
         return finishBranchFBookingDocument(
@@ -4407,7 +4419,13 @@ async function runOrchestratorCore(input: {
       state.regNationalId = null;
       state.step = "awaiting_register_name";
       await saveState(convId, state);
-      return { reply: BotPrompts.askRegisterFamilyName(lang) };
+      const primary = await PatientService.findByPhone(patientPhone);
+      return {
+        reply: BotPrompts.askRegisterFamilyName(
+          lang,
+          primary?.name || "",
+        ),
+      };
     }
     if (isNegative(text)) {
       await saveState(convId, idleState(state));
@@ -4674,7 +4692,11 @@ async function runOrchestratorCore(input: {
 
     // Family member / dependent
     if (!familyChoices.length) {
-      return startFamilyRegisterForBook(convId, nextSlots, state);
+      const selfName =
+        selfChoice?.label.replace(/^Self\s*[·.\-:]+\s*/i, "").trim() ||
+        (await PatientService.findByPhone(patientPhone))?.name ||
+        "";
+      return startFamilyRegisterForBook(convId, nextSlots, state, selfName);
     }
     if (familyChoices.length === 1) {
       const only = familyChoices[0]!;

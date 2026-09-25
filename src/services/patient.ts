@@ -12,6 +12,7 @@ import { AppError } from "../core/response.js";
 import { noneExcluded } from "../core/utils.js";
 import { normalizeGender, requireGender } from "../core/gender.js";
 import { ageFromDob, normalizeDateOfBirth } from "../core/dob.js";
+import { allocatePatientMrn } from "../core/patientMrn.js";
 import {
   saveAadharCardImage,
   saveProfilePhotoImage,
@@ -89,6 +90,7 @@ export class PatientService {
       aadharNumber: patient!.aadharNumber,
       panNumber: patient!.panNumber,
       aadharCardSrc: patient!.aadharCardSrc,
+      mrn: patient!.mrn,
     });
 
     await setCachedJson(redisKey, patientInfoData);
@@ -550,6 +552,8 @@ export class PatientService {
       `wa-reg-${phone}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     );
 
+    const mrn = await allocatePatientMrn();
+
     const user = await prisma.user.create({
       data: {
         email,
@@ -562,6 +566,7 @@ export class PatientService {
         createdBy: "whatsapp_bot",
         patient: {
           create: {
+            mrn,
             contactNumber,
             dateOfBirth,
             ...(relationship ? { relationship } : {}),
@@ -579,6 +584,7 @@ export class PatientService {
       phone,
       dateOfBirth,
       age,
+      mrn: user.patient?.mrn ?? mrn,
       relationship: user.patient?.relationship ?? relationship,
     };
   }

@@ -1,5 +1,6 @@
 import { NotificationType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import { formatPracticeDateTime, formatLocalDate } from "./slotEngine.js";
 import { enqueueNotificationEvent } from "../../workers/notificationQueue.js";
 
 export type NotifyOpts = {
@@ -66,9 +67,13 @@ function whenFields(booking: {
     sessionDate: booking.sessionDate?.toISOString().slice(0, 10),
     whenLabel:
       booking.mode === "TOKEN_BASED"
-        ? `Token #${booking.tokenNumber ?? "?"} on ${booking.sessionDate?.toISOString().slice(0, 10) ?? "?"}`
+        ? `Token #${booking.tokenNumber ?? "?"} on ${
+            booking.sessionDate
+              ? formatLocalDate(booking.sessionDate)
+              : "?"
+          }`
         : booking.slotStart
-          ? booking.slotStart.toLocaleString()
+          ? formatPracticeDateTime(booking.slotStart)
           : "scheduled time",
   };
 }
@@ -314,7 +319,16 @@ export const NotificationService = {
     const booking = await loadBooking(bookingId);
     if (!booking) return null;
 
-    return createAndEnqueue({
+    const base = {
+      practiceName: booking.practice.name,
+      providerName: booking.provider?.name ?? "",
+      patientName: booking.patientName ?? "Patient",
+      patientPhone: booking.patientPhone,
+      reason: reason ?? "",
+      ...whenFields(booking),
+    };
+
+    await createAndEnqueue({
       practiceId: booking.practiceId,
       bookingId: booking.id,
       type: NotificationType.RESCHEDULE,
@@ -322,11 +336,26 @@ export const NotificationService = {
         to: booking.patientPhone,
         templateKey: "OVERRIDE_IMPACT",
         recipientRole: "patient",
-        practiceName: booking.practice.name,
-        reason: reason ?? "",
-        ...whenFields(booking),
+        ...base,
       },
     });
+
+    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
+    if (clinicTo) {
+      await createAndEnqueue({
+        practiceId: booking.practiceId,
+        bookingId: booking.id,
+        type: NotificationType.RESCHEDULE,
+        payload: {
+          to: clinicTo,
+          templateKey: "CLINIC_OVERRIDE",
+          recipientRole: "clinic",
+          ...base,
+        },
+      });
+    }
+
+    return true;
   },
 
   async enqueueQueueAlert(bookingId: string) {
@@ -450,6 +479,85 @@ export const NotificationService = {
         practiceName: booking.practice.name,
         providerName: booking.provider?.name ?? "",
         medicinesPreview,
+        ...whenFields(booking),
+      },
+    });
+  },
+
+  /**
+   * Clinic inbox (+ WA text) for status changes that lack a dedicated CLINIC_* Meta template.
+   * Covers WAITING / NO_SHOW / COMPLETED so every queue change reaches the doctor.
+   */
+  async enqueueClinicStatusChange(
+    bookingId: string,
+    status: "WAITING" | "NO_SHOW" | "COMPLETED",
+  ) {
+    const booking = await loadBooking(bookingId);
+    if (!booking) return null;
+
+    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
+    if (!clinicTo) return null;
+
+    const templateKey =
+      status === "WAITING"
+        ? "CLINIC_WAITING"
+        : status === "NO_SHOW"
+          ? "CLINIC_NO_SHOW"
+          : "CLINIC_COMPLETED";
+
+    return createAndEnqueue({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.QUEUE_ALERT,
+      payload: {
+        to: clinicTo,
+        templateKey,
+        recipientRole: "clinic",
+        practiceName: booking.practice.name,
+        providerName: booking.provider?.name ?? "",
+        patientName: booking.patientName ?? "Patient",
+        patientPhone: booking.patientPhone,
+        statusLabel:
+          status === "WAITING"
+            ? "arrived / waiting"
+            : status === "NO_SHOW"
+              ? "no-show"
+              : "completed",
+        ...whenFields(booking),
+      },
+    });
+  },
+
+  /**
+   * Clinic inbox when a patient shares a visit or general document via WhatsApp.
+   * `bookingId` anchors the NotificationEvent (required by schema).
+   */
+  async enqueueClinicDocumentAttached(
+    bookingId: string,
+    docName: string,
+    opts?: { kind?: "visit" | "general" },
+  ) {
+    const booking = await loadBooking(bookingId);
+    if (!booking) return null;
+
+    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
+    if (!clinicTo) return null;
+
+    const kind = opts?.kind === "general" ? "general" : "visit";
+    return createAndEnqueue({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.QUEUE_ALERT,
+      payload: {
+        to: clinicTo,
+        templateKey: "CLINIC_DOCUMENT",
+        recipientRole: "clinic",
+        practiceName: booking.practice.name,
+        providerName: booking.provider?.name ?? "",
+        patientName: booking.patientName ?? "Patient",
+        patientPhone: booking.patientPhone,
+        docName: String(docName || "Document").trim() || "Document",
+        docKind: kind,
         ...whenFields(booking),
       },
     });
@@ -602,6 +710,11 @@ function notificationTitle(
     CLINIC_RESCHEDULE: "Booking rescheduled (clinic alert)",
     QUEUE_ALERT: "Queue alert (patient)",
     CLINIC_QUEUE_ALERT: "Queue alert (clinic)",
+    CLINIC_WAITING: "Patient arrived / waiting",
+    CLINIC_NO_SHOW: "Patient marked no-show",
+    CLINIC_COMPLETED: "Visit completed",
+    CLINIC_DOCUMENT: "Patient document shared",
+    CLINIC_OVERRIDE: "Schedule override (clinic alert)",
     VISIT_SUMMARY: "Visit summary sent",
     PRESCRIPTION_UPDATE: "Prescription update sent",
     OVERRIDE_IMPACT: "Schedule change notice",
@@ -625,9 +738,9 @@ function notificationSummary(
   const when =
     String(payload.whenLabel || "").trim() ||
     (booking?.slotStart
-      ? booking.slotStart.toLocaleString()
+      ? formatPracticeDateTime(booking.slotStart)
       : booking?.sessionDate
-        ? booking.sessionDate.toISOString().slice(0, 10)
+        ? formatLocalDate(booking.sessionDate)
         : "");
   const role = String(payload.recipientRole || "patient");
   const parts = [

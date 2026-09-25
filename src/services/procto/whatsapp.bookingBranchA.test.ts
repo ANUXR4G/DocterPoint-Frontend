@@ -7,7 +7,7 @@ describe("Branch A booking prompts", () => {
   it("askBookWhom offers Self with name and Family member", () => {
     const reply = BotPrompts.askBookWhom("Anurag Nanda", "en");
     assert.match(reply, /Whom is this appointment for/i);
-    assert.match(reply, /Self \(\*Anurag Nanda\*\)/);
+    assert.match(reply, /Self \(\*Anurag\*\)/);
     assert.match(reply, /Family member \/ dependent/i);
   });
 

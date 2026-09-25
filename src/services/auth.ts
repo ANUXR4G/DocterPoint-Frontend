@@ -13,6 +13,7 @@ import { settings, frontendBaseUrl } from "../config/index.js";
 import { assertValidTimeRange, minutesOf } from "./procto/slotEngine.js";
 import { requireGender } from "../core/gender.js";
 import { normalizeDateOfBirth, ageFromDob } from "../core/dob.js";
+import { allocatePatientMrn } from "../core/patientMrn.js";
 
 type AuthRole = "user" | "doctor" | "admin";
 
@@ -119,6 +120,7 @@ export class AuthService {
           "Date of birth is required (use DD/MM/YYYY or YYYY-MM-DD).",
         );
       }
+      const mrn = await allocatePatientMrn();
       user = await prisma.user.create({
         data: {
           email: credentials.email,
@@ -128,7 +130,7 @@ export class AuthService {
           phone,
           gender,
           createdBy: "self_attempted",
-          patient: { create: { dateOfBirth } },
+          patient: { create: { mrn, dateOfBirth } },
         },
         include: { patient: true },
       });
@@ -316,7 +318,7 @@ export class AuthService {
           imgSrc,
           role: "user",
           createdBy: "self_attempted",
-          patient: { create: {} },
+          patient: { create: { mrn: await allocatePatientMrn() } },
         },
       });
 

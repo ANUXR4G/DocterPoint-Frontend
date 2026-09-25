@@ -8,6 +8,7 @@ import { prisma } from "../db/prisma.js";
 import { settings } from "../config/index.js";
 import { AppError, ResponseHandler } from "../core/response.js";
 import { generateHash, getUserToken, setTokenCookies } from "../core/security.js";
+import { allocatePatientMrn } from "../core/patientMrn.js";
 import { getRedis } from "../db/redis.js";
 import { sendWhatsAppText } from "./procto/whatsapp.client.js";
 
@@ -289,7 +290,10 @@ export class PhoneOtpAuthService {
           phone,
           createdBy: "phone_otp",
           patient: {
-            create: { contactNumber: phone },
+            create: {
+              mrn: await allocatePatientMrn(),
+              contactNumber: phone,
+            },
           },
         },
         include: { patient: true },
@@ -309,7 +313,12 @@ export class PhoneOtpAuthService {
                       : phone,
                 },
               }
-            : { create: { contactNumber: phone } },
+            : {
+                create: {
+                  mrn: await allocatePatientMrn(),
+                  contactNumber: phone,
+                },
+              },
         },
       });
     }
