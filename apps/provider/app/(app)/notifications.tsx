@@ -27,6 +27,23 @@ import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
 
 const STATUS_FILTERS = ["ALL", "SENT", "PENDING", "FAILED", "SKIPPED"] as const;
 
+function statusLabel(status: string) {
+  switch ((status || "").toUpperCase()) {
+    case "ALL":
+      return "All";
+    case "SENT":
+      return "Sent";
+    case "PENDING":
+      return "Pending";
+    case "FAILED":
+      return "Exited";
+    case "SKIPPED":
+      return "Inbox only";
+    default:
+      return status ? status.charAt(0) + status.slice(1).toLowerCase() : status;
+  }
+}
+
 export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -105,7 +122,7 @@ async function dismiss(id: string) {
         {STATUS_FILTERS.map((s) => (
           <Chip
             key={s}
-            label={s === "ALL" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}
+            label={statusLabel(s)}
             active={status === s}
             onPress={() => setStatus(s)}
           />
@@ -116,7 +133,7 @@ async function dismiss(id: string) {
         <Text style={styles.count}>{total} open</Text>
         <Text style={styles.count}>{sentCount} sent</Text>
         <Text style={styles.count}>{pendingCount} pending</Text>
-        <Text style={styles.count}>{failedCount} failed</Text>
+        <Text style={styles.count}>{failedCount} exited</Text>
       </View>
 
       <ErrorText text={error} />
@@ -134,7 +151,7 @@ async function dismiss(id: string) {
             <Text style={styles.title}>{n.title}</Text>
             <Text style={styles.summary}>{n.summary}</Text>
             <Text style={styles.meta}>
-              {n.status}
+              {statusLabel(n.status)}
               {" · "}
               {n.recipientRole === "clinic" ? "Clinic" : "Patient"}
               {" · "}

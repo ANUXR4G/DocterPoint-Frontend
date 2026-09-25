@@ -1,6 +1,5 @@
 "use client"
 
-import { format, startOfToday } from "date-fns"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { CoolKid } from "@/components"
@@ -25,6 +24,7 @@ import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
   formatPracticeTime,
+  practiceTodayIso,
 } from "@/lib/practiceTime"
 
 type QueueBooking = ProctoBooking & {
@@ -111,8 +111,7 @@ export default function DoctorQueue({
   initialProviderId?: string
   allowStatusControl?: boolean
 } = {}) {
-  const [today] = useState(() => startOfToday())
-  const [date] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date] = useState(() => practiceTodayIso())
   const {
     ready,
     hydrated,
@@ -273,7 +272,7 @@ export default function DoctorQueue({
       <div className={emptyShell}>
         <CoolKid className="mb-4 h-28 w-28 opacity-80" />
         <p className="text-sm font-medium opacity-80">
-          No visits scheduled for {format(today, "MMM d, yyyy")}.
+          No visits scheduled for {formatPracticeDate(date)}.
         </p>
         <Link
           href={practiceTabHref("calendar")}
@@ -296,7 +295,7 @@ export default function DoctorQueue({
           <span className="font-semibold text-neutral-900 dark:text-white">
             {activeCount}
           </span>{" "}
-          active · {format(today, "EEE, MMM d")}
+          active · {formatPracticeDate(date)}
         </p>
         {error ? (
           <p className="text-xs font-medium text-red-600 dark:text-red-300">

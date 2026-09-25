@@ -6,6 +6,7 @@ import {
   menuNumberShortcut,
   stepUsesLlm,
 } from "./whatsapp.nlu.js";
+import { resolveBranchFDocTarget } from "./whatsapp.visitDocs.js";
 
 describe("Branch F attach document", () => {
   it("menu option 6 maps to report/attach", () => {
@@ -32,26 +33,74 @@ describe("Branch F attach document", () => {
 
   it("confirm copy says Document received and saved to your record", () => {
     const visit = BotPrompts.visitDocAttached({
-      name: "lab.pdf",
+      name: "Lab.pdf",
       count: 1,
-      max: 5,
-      whenLabel: "Tomorrow 10:00",
+      whenLabel: "tomorrow 10:00 AM",
       lang: "en",
     });
     assert.match(visit, /Document received and saved to your record/i);
 
     const general = BotPrompts.documentSavedGeneral({
-      name: "insurance.jpg",
+      name: "ID.pdf",
       lang: "en",
     });
     assert.match(general, /Document received and saved to your record/i);
     assert.match(general, /general document/i);
+    assert.match(general, /not linked to any appointment/i);
   });
 
   it("structured Branch F steps skip LLM", () => {
     assert.equal(stepUsesLlm("awaiting_document_upload"), false);
     assert.equal(stepUsesLlm("awaiting_document_link"), false);
     assert.equal(stepUsesLlm("awaiting_report_booking"), false);
+  });
+});
+
+describe("Branch F General Document never auto-attaches to a visit", () => {
+  it("with one open booking and no preferred id → ask_link (not attach)", () => {
+    assert.equal(
+      resolveBranchFDocTarget({
+        preferredBookingId: null,
+        openBookingIds: ["booking-1"],
+      }),
+      "ask_link",
+    );
+  });
+
+  it("with two open bookings and no preferred id → ask_link", () => {
+    assert.equal(
+      resolveBranchFDocTarget({
+        openBookingIds: ["a", "b"],
+      }),
+      "ask_link",
+    );
+  });
+
+  it("with no open bookings → general (patient record only)", () => {
+    assert.equal(
+      resolveBranchFDocTarget({
+        preferredBookingId: "stale-id",
+        openBookingIds: [],
+      }),
+      "general",
+    );
+  });
+
+  it("preferred id must be an open booking to attach; stale id asks instead", () => {
+    assert.equal(
+      resolveBranchFDocTarget({
+        preferredBookingId: "open-1",
+        openBookingIds: ["open-1", "open-2"],
+      }),
+      "attach_preferred",
+    );
+    assert.equal(
+      resolveBranchFDocTarget({
+        preferredBookingId: "closed-old",
+        openBookingIds: ["open-1"],
+      }),
+      "ask_link",
+    );
   });
 });
 

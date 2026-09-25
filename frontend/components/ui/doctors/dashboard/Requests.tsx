@@ -2,28 +2,27 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { format, startOfToday } from "date-fns"
 import { type ProctoBooking } from "@/lib/services/procto"
 import {
   filterBookingsByDate,
   usePracticeDashboard,
 } from "@/contexts/PracticeDashboardContext"
+import { practiceTodayIso } from "@/lib/practiceTime"
 
 /** Today's clinic bookings sidebar (Procto) — replaces legacy appointment requests. */
 export default function Requests() {
-  const [today] = useState(() => startOfToday())
   const { ready, hydrated, loading, bookings: allBookings } = usePracticeDashboard()
   const showLoading = (!ready && loading) || (ready && !hydrated)
 
   const bookings = useMemo(() => {
-    const date = format(today, "yyyy-MM-dd")
+    const date = practiceTodayIso()
     return filterBookingsByDate(allBookings, date)
       .filter((b) => {
         const s = (b.status || "").toUpperCase()
         return s !== "CANCELED" && s !== "COMPLETED" && s !== "NO_SHOW"
       })
       .slice(0, 8) as ProctoBooking[]
-  }, [allBookings, today])
+  }, [allBookings])
 
   if (showLoading) {
     return (

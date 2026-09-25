@@ -147,6 +147,33 @@ async function createAndEnqueue(data: {
   }
 }
 
+/**
+ * Always write a clinic inbox row. WhatsApp send is optional — if there is no
+ * clinic phone, the worker marks the event SKIPPED (in-app only) so status /
+ * docs / support still appear on Notifications.
+ */
+async function enqueueClinicInbox(data: {
+  practiceId: string;
+  bookingId: string;
+  type: NotificationType;
+  templateKey: string;
+  payload: Record<string, unknown>;
+}) {
+  const clinicTo = await resolveClinicNotifyPhone(data.practiceId);
+  return createAndEnqueue({
+    practiceId: data.practiceId,
+    bookingId: data.bookingId,
+    type: data.type,
+    payload: {
+      ...data.payload,
+      to: clinicTo || "",
+      templateKey: data.templateKey,
+      recipientRole: "clinic",
+      inAppOnly: !clinicTo,
+    },
+  });
+}
+
 /** Queues WhatsApp notifications via BullMQ worker. Never blocks HTTP. */
 export const NotificationService = {
   async enqueueConfirmation(bookingId: string, opts?: NotifyOpts) {
@@ -177,20 +204,13 @@ export const NotificationService = {
       });
     }
 
-    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
-    if (clinicTo) {
-      await createAndEnqueue({
-        practiceId: booking.practiceId,
-        bookingId: booking.id,
-        type: NotificationType.BOOKING_CONFIRMATION,
-        payload: {
-          to: clinicTo,
-          templateKey: "CLINIC_NEW_BOOKING",
-          recipientRole: "clinic",
-          ...base,
-        },
-      });
-    }
+    await enqueueClinicInbox({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.BOOKING_CONFIRMATION,
+      templateKey: "CLINIC_NEW_BOOKING",
+      payload: { ...base },
+    });
 
     return true;
   },
@@ -221,20 +241,13 @@ export const NotificationService = {
       });
     }
 
-    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
-    if (clinicTo) {
-      await createAndEnqueue({
-        practiceId: booking.practiceId,
-        bookingId: booking.id,
-        type: NotificationType.CANCELLATION,
-        payload: {
-          to: clinicTo,
-          templateKey: "CLINIC_CANCEL",
-          recipientRole: "clinic",
-          ...base,
-        },
-      });
-    }
+    await enqueueClinicInbox({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.CANCELLATION,
+      templateKey: "CLINIC_CANCEL",
+      payload: { ...base },
+    });
 
     return true;
   },
@@ -294,20 +307,13 @@ export const NotificationService = {
       });
     }
 
-    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
-    if (clinicTo) {
-      await createAndEnqueue({
-        practiceId: booking.practiceId,
-        bookingId: booking.id,
-        type: NotificationType.RESCHEDULE,
-        payload: {
-          to: clinicTo,
-          templateKey: "CLINIC_RESCHEDULE",
-          recipientRole: "clinic",
-          ...base,
-        },
-      });
-    }
+    await enqueueClinicInbox({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.RESCHEDULE,
+      templateKey: "CLINIC_RESCHEDULE",
+      payload: { ...base },
+    });
 
     return true;
   },
@@ -340,20 +346,13 @@ export const NotificationService = {
       },
     });
 
-    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
-    if (clinicTo) {
-      await createAndEnqueue({
-        practiceId: booking.practiceId,
-        bookingId: booking.id,
-        type: NotificationType.RESCHEDULE,
-        payload: {
-          to: clinicTo,
-          templateKey: "CLINIC_OVERRIDE",
-          recipientRole: "clinic",
-          ...base,
-        },
-      });
-    }
+    await enqueueClinicInbox({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.RESCHEDULE,
+      templateKey: "CLINIC_OVERRIDE",
+      payload: { ...base },
+    });
 
     return true;
   },
@@ -381,20 +380,13 @@ export const NotificationService = {
       },
     });
 
-    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
-    if (clinicTo) {
-      await createAndEnqueue({
-        practiceId: booking.practiceId,
-        bookingId: booking.id,
-        type: NotificationType.QUEUE_ALERT,
-        payload: {
-          to: clinicTo,
-          templateKey: "CLINIC_QUEUE_ALERT",
-          recipientRole: "clinic",
-          ...base,
-        },
-      });
-    }
+    await enqueueClinicInbox({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.QUEUE_ALERT,
+      templateKey: "CLINIC_QUEUE_ALERT",
+      payload: { ...base },
+    });
 
     return true;
   },
@@ -495,9 +487,6 @@ export const NotificationService = {
     const booking = await loadBooking(bookingId);
     if (!booking) return null;
 
-    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
-    if (!clinicTo) return null;
-
     const templateKey =
       status === "WAITING"
         ? "CLINIC_WAITING"
@@ -505,14 +494,12 @@ export const NotificationService = {
           ? "CLINIC_NO_SHOW"
           : "CLINIC_COMPLETED";
 
-    return createAndEnqueue({
+    return enqueueClinicInbox({
       practiceId: booking.practiceId,
       bookingId: booking.id,
       type: NotificationType.QUEUE_ALERT,
+      templateKey,
       payload: {
-        to: clinicTo,
-        templateKey,
-        recipientRole: "clinic",
         practiceName: booking.practice.name,
         providerName: booking.provider?.name ?? "",
         patientName: booking.patientName ?? "Patient",
@@ -540,24 +527,65 @@ export const NotificationService = {
     const booking = await loadBooking(bookingId);
     if (!booking) return null;
 
-    const clinicTo = await resolveClinicNotifyPhone(booking.practiceId);
-    if (!clinicTo) return null;
-
     const kind = opts?.kind === "general" ? "general" : "visit";
-    return createAndEnqueue({
+    return enqueueClinicInbox({
       practiceId: booking.practiceId,
       bookingId: booking.id,
       type: NotificationType.QUEUE_ALERT,
+      templateKey: "CLINIC_DOCUMENT",
       payload: {
-        to: clinicTo,
-        templateKey: "CLINIC_DOCUMENT",
-        recipientRole: "clinic",
         practiceName: booking.practice.name,
         providerName: booking.provider?.name ?? "",
         patientName: booking.patientName ?? "Patient",
         patientPhone: booking.patientPhone,
         docName: String(docName || "Document").trim() || "Document",
         docKind: kind,
+        ...whenFields(booking),
+      },
+    });
+  },
+
+  /**
+   * Clinic inbox when a patient taps Talk to Support / Agent on WhatsApp.
+   * Anchors to the patient's latest practice booking when one exists.
+   */
+  async enqueueClinicSupportRequest(opts: {
+    practiceId: string;
+    patientPhone: string;
+    patientName?: string | null;
+  }) {
+    const digits = String(opts.patientPhone || "")
+      .replace(/\D/g, "")
+      .slice(-10);
+    if (!digits) return null;
+
+    const bookingRow = await prisma.practiceBooking.findFirst({
+      where: {
+        practiceId: opts.practiceId,
+        patientPhone: { endsWith: digits },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!bookingRow) return null;
+
+    const booking = await loadBooking(bookingRow.id);
+    if (!booking) return null;
+
+    return enqueueClinicInbox({
+      practiceId: opts.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.QUEUE_ALERT,
+      templateKey: "CLINIC_SUPPORT",
+      payload: {
+        practiceName: booking.practice.name,
+        providerName: booking.provider?.name ?? "",
+        patientName:
+          opts.patientName?.trim() ||
+          booking.patientName ||
+          "Patient",
+        patientPhone: booking.patientPhone,
+        supportLabel: "Talk to Support / Agent",
         ...whenFields(booking),
       },
     });
@@ -715,6 +743,7 @@ function notificationTitle(
     CLINIC_COMPLETED: "Visit completed",
     CLINIC_DOCUMENT: "Patient document shared",
     CLINIC_OVERRIDE: "Schedule override (clinic alert)",
+    CLINIC_SUPPORT: "Support request",
     VISIT_SUMMARY: "Visit summary sent",
     PRESCRIPTION_UPDATE: "Prescription update sent",
     OVERRIDE_IMPACT: "Schedule change notice",
@@ -743,9 +772,21 @@ function notificationSummary(
         ? formatLocalDate(booking.sessionDate)
         : "");
   const role = String(payload.recipientRole || "patient");
+  const key = String(payload.templateKey || "");
+  const extra =
+    key === "CLINIC_DOCUMENT"
+      ? String(payload.docName || "").trim() || null
+      : key === "CLINIC_WAITING" ||
+          key === "CLINIC_NO_SHOW" ||
+          key === "CLINIC_COMPLETED"
+        ? String(payload.statusLabel || "").trim() || null
+        : key === "CLINIC_SUPPORT"
+          ? "Open Support to chat"
+          : null;
   const parts = [
     role === "clinic" ? "To clinic" : `To ${patient}`,
     when ? when : null,
+    extra,
   ].filter(Boolean);
   return parts.join(" · ");
 }

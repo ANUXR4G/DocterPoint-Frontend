@@ -292,20 +292,6 @@ export default function VisitPage() {
     await persistVisit(next, documents, { successMessage: "Medicine removed." })
   }
 
-  async function removeDocument(idx: number) {
-    if (
-      !bookingId ||
-      String(booking?.status || "").toUpperCase() === "COMPLETED"
-    )
-      return
-    const nextDocs = documents.filter((_, i) => i !== idx)
-    setDocuments(nextDocs)
-    setMessage("")
-    await persistVisit(medicines, nextDocs, {
-      successMessage: "Document removed.",
-    })
-  }
-
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ""
@@ -674,15 +660,6 @@ export default function VisitPage() {
                       {d.name || "View document"}
                     </span>
                   </a>
-                  {!isCompleted ? (
-                    <button
-                      type="button"
-                      onClick={() => void removeDocument(idx)}
-                      className="shrink-0 text-xs font-medium text-red-600 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  ) : null}
                 </li>
               ))}
             </ul>

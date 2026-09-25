@@ -19,6 +19,7 @@ import { isAdminNavActive } from "@/components/ui/admin/AdminPortalLinks"
 import { cookies } from "@/utils/cookies"
 import { navRoleFromContext, dashboardBrandLabel } from "@/lib/providerPortal"
 import { useAdminSupportUnread } from "@/hooks/useAdminSupportUnread"
+import { usePracticeOpenNotifications } from "@/hooks/usePracticeOpenNotifications"
 
 type Props = {
   role: string | null
@@ -88,6 +89,15 @@ export default function Menu({ role, logout }: Props) {
 
   const { overview, support } = splitNav(navRole, { hideDoctorsNav })
   const { unreadTotal: supportUnread } = useAdminSupportUnread(navRole === "admin")
+  const { openCount: notificationOpen } = usePracticeOpenNotifications(
+    navRole === "doctor" || navRole === "clinic",
+  )
+
+  function navBadgeCount(name: string) {
+    if (name === "Support" && supportUnread > 0) return supportUnread
+    if (name === "Notifications" && notificationOpen > 0) return notificationOpen
+    return 0
+  }
 
   const router = useRouter()
 
@@ -126,6 +136,7 @@ export default function Menu({ role, logout }: Props) {
             </span>
             {overview.map(({ name, icon, dest }, idx) => {
               const active = navActiveFn(pathname, dest, currentTab)
+              const badge = navBadgeCount(name)
               return (
                 <Link
                   href={dest ?? "#"}
@@ -133,17 +144,29 @@ export default function Menu({ role, logout }: Props) {
                   className={navLinkClass(active)}
                   key={`menu_upper_link_${idx}`}
                 >
-                  <Icon
-                    name={icon}
-                    className="size-5 shrink-0"
-                    pathClassName={
-                      active
-                        ? "stroke-slate-900 dark:stroke-white"
-                        : "stroke-slate-400 dark:stroke-slate-500"
-                    }
-                  />
-                  <span className="text-[13px] font-semibold tracking-[-0.1px]">
-                    {name}
+                  <div className="relative shrink-0">
+                    <Icon
+                      name={icon}
+                      className="size-5"
+                      pathClassName={
+                        active
+                          ? "stroke-slate-900 dark:stroke-white"
+                          : "stroke-slate-400 dark:stroke-slate-500"
+                      }
+                    />
+                    {badge > 0 ? (
+                      <span className="absolute -right-2 -top-2 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="flex flex-1 items-center gap-2 text-[13px] font-semibold tracking-[-0.1px]">
+                    <span>{name}</span>
+                    {badge > 0 ? (
+                      <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    ) : null}
                   </span>
                 </Link>
               )
@@ -158,8 +181,7 @@ export default function Menu({ role, logout }: Props) {
               const isLogout = name === "Logout"
               const isHelp = name === "Help"
               const isActive = navActiveFn(pathname, dest, currentTab)
-              const badge =
-                name === "Support" && supportUnread > 0 ? supportUnread : 0
+              const badge = navBadgeCount(name)
 
               return (
                 <button

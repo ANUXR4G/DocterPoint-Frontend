@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import { ScheduleMode } from "@prisma/client";
 import {
   countBookingsForSlot,
+  filterWaBookableSlotChoices,
   formatPracticeTime,
+  generateTimeSlots,
   isSlotStartBookable,
   parseLocalDate,
   TIME_SLOT_CAPACITY,
@@ -30,6 +32,15 @@ describe("isSlotStartBookable", () => {
     assert.equal(isSlotStartBookable("2026-09-25T06:10:00.000Z", now), false);
   });
 
+  it("at 10:01 AM clinic time, 10:00 AM is not bookable", () => {
+    const now = zonedDateTime("2026-09-26", "10:01").getTime();
+    const tenAm = zonedDateTime("2026-09-26", "10:00");
+    const tenThirty = zonedDateTime("2026-09-26", "10:30");
+    assert.equal(formatPracticeTime(tenAm), "10:00 AM");
+    assert.equal(isSlotStartBookable(tenAm, now), false);
+    assert.equal(isSlotStartBookable(tenThirty, now), true);
+  });
+
   it("accepts future starts", () => {
     const now = Date.parse("2026-09-25T06:10:00.000Z");
     assert.equal(isSlotStartBookable("2026-09-25T06:10:01.000Z", now), true);
@@ -42,6 +53,104 @@ describe("isSlotStartBookable", () => {
   it("rejects invalid input", () => {
     assert.equal(isSlotStartBookable(null), false);
     assert.equal(isSlotStartBookable("not-a-date"), false);
+  });
+});
+
+describe("generateTimeSlots omits past starts", () => {
+  it("does not list 10:00 AM when clinic clock is 10:01 AM", () => {
+    const day = parseLocalDate("2026-09-26");
+    const nowMs = zonedDateTime("2026-09-26", "10:01").getTime();
+    const schedule = {
+      mode: ScheduleMode.TIME_BASED,
+      dayOfWeek: 6,
+      startTime: "09:00",
+      endTime: "12:00",
+      slotIntervalMin: 30,
+      maxPerSlot: 1,
+      breakStartTime: null,
+      breakEndTime: null,
+    } as any;
+
+    const slots = generateTimeSlots(schedule, day, [], [], nowMs);
+    const labels = slots.map((s) => formatPracticeTime(s.start));
+    assert.equal(labels.includes("10:00 AM"), false);
+    assert.ok(labels.includes("10:30 AM"));
+    assert.ok(labels.includes("11:00 AM"));
+    assert.equal(labels.includes("9:00 AM"), false);
+    assert.equal(labels.includes("9:30 AM"), false);
+    for (const s of slots) {
+      assert.equal(isSlotStartBookable(s.start, nowMs), true);
+    }
+  });
+
+  it("WA-style button filter drops past starts from a stale choice list", () => {
+    const nowMs = zonedDateTime("2026-09-26", "10:01").getTime();
+    const stale = [
+      {
+        start: zonedDateTime("2026-09-26", "10:00").toISOString(),
+        label: "10:00 AM",
+      },
+      {
+        start: zonedDateTime("2026-09-26", "10:30").toISOString(),
+        label: "10:30 AM",
+      },
+      {
+        start: zonedDateTime("2026-09-26", "11:00").toISOString(),
+        label: "11:00 AM",
+      },
+    ];
+    const buttons = filterWaBookableSlotChoices(stale, nowMs).map((c) => c.label);
+    assert.deepEqual(buttons, ["10:30 AM", "11:00 AM"]);
+    assert.equal(buttons.includes("10:00 AM"), false);
+  });
+});
+
+describe("WA past-slot buttons — confirmed 1000 times", () => {
+  it("never emits a past or exact-now start as a button across 1000 clock ticks", () => {
+    const day = parseLocalDate("2026-09-26");
+    const schedule = {
+      mode: ScheduleMode.TIME_BASED,
+      dayOfWeek: 6,
+      startTime: "09:00",
+      endTime: "18:00",
+      slotIntervalMin: 15,
+      maxPerSlot: 1,
+      breakStartTime: null,
+      breakEndTime: null,
+    } as any;
+
+    const dayStart = zonedDateTime("2026-09-26", "09:00").getTime();
+    let confirmed = 0;
+    for (let i = 0; i < 1000; i++) {
+      const nowMs = dayStart + i * 15_000;
+      const slots = generateTimeSlots(schedule, day, [], [], nowMs);
+
+      const stale: Array<{ start: string; label: string }> = [];
+      for (let m = 9 * 60; m <= 17 * 60 + 30; m += 30) {
+        const hh = String(Math.floor(m / 60)).padStart(2, "0");
+        const mm = String(m % 60).padStart(2, "0");
+        const start = zonedDateTime("2026-09-26", `${hh}:${mm}`);
+        stale.push({
+          start: start.toISOString(),
+          label: formatPracticeTime(start),
+        });
+      }
+
+      const buttons = filterWaBookableSlotChoices(stale, nowMs);
+      for (const b of buttons) {
+        assert.equal(
+          isSlotStartBookable(b.start, nowMs),
+          true,
+          `iteration ${i}: button ${b.label} must be bookable at now`,
+        );
+      }
+      for (const s of slots) {
+        assert.ok(s.start.getTime() > nowMs, `iteration ${i}: generator past`);
+        assert.equal(isSlotStartBookable(s.start, nowMs), true);
+      }
+      confirmed += 1;
+    }
+    assert.equal(confirmed, 1000);
   });
 });
 

@@ -333,7 +333,6 @@ export const BotPrompts = {
   visitDocAttached(opts: {
     name: string;
     count: number;
-    max: number;
     whenLabel: string;
     lang?: WaLang;
   }): string {
@@ -341,11 +340,11 @@ export const BotPrompts = {
       opts.lang,
       `✅ Document received and saved to your record.\n` +
         `File: *${opts.name}* · Visit: ${opts.whenLabel}\n` +
-        `Your doctor can open it in GlucoGuide. Files on this visit: ${opts.count}/${opts.max}.\n` +
+        `Your doctor can open it in GlucoGuide. Files on this visit: ${opts.count}.\n` +
         `Reply *Menu* anytime for more options.`,
       `✅ दस्तावेज़ मिल गया और आपके रिकॉर्ड में सेव हो गया।\n` +
         `फ़ाइल: *${opts.name}* · विज़िट: ${opts.whenLabel}\n` +
-        `डॉक्टर इसे GlucoGuide में देख सकते हैं। इस विज़िट पर फ़ाइलें: ${opts.count}/${opts.max}।\n` +
+        `डॉक्टर इसे GlucoGuide में देख सकते हैं। इस विज़िट पर फ़ाइलें: ${opts.count}।\n` +
         `और विकल्पों के लिए कभी भी *Menu* लिखें।`,
     );
   },
@@ -355,10 +354,10 @@ export const BotPrompts = {
     return L(
       opts.lang,
       `✅ Document received and saved to your record.\n` +
-        `File: *${opts.name}* (general document).\n` +
+        `File: *${opts.name}* (general document — not linked to any appointment).\n` +
         `Reply *Menu* anytime for more options.`,
       `✅ दस्तावेज़ मिल गया और आपके रिकॉर्ड में सेव हो गया।\n` +
-        `फ़ाइल: *${opts.name}* (सामान्य दस्तावेज़)।\n` +
+        `फ़ाइल: *${opts.name}* (सामान्य दस्तावेज़ — किसी अपॉइंटमेंट से नहीं जुड़ा)।\n` +
         `और विकल्पों के लिए कभी भी *Menu* लिखें।`,
     );
   },
@@ -397,8 +396,8 @@ export const BotPrompts = {
     const lines = opts.docs.map((n, i) => `${i + 1}. ${n}`).join("\n");
     return L(
       opts.lang,
-      `Files on your visit (${opts.whenLabel}):\n${lines}\n\nSend another photo/PDF to add more (max 5).`,
-      `आपकी विज़िट (${opts.whenLabel}) की फ़ाइलें:\n${lines}\n\nऔर जोड़ने के लिए फ़ोटो/PDF भेजें (अधिकतम 5)।`,
+      `Files on your visit (${opts.whenLabel}):\n${lines}\n\nSend another photo/PDF to add more.`,
+      `आपकी विज़िट (${opts.whenLabel}) की फ़ाइलें:\n${lines}\n\nऔर जोड़ने के लिए फ़ोटो/PDF भेजें।`,
     );
   },
 
@@ -1592,6 +1591,12 @@ export function renderNotificationTemplate(
         : "visit document";
     return withOptOut(
       `${patient} shared a ${kind} via WhatsApp: ${docName} (${practice}).`,
+      str(payload, "recipientRole"),
+    );
+  }
+  if (templateKey === "CLINIC_SUPPORT") {
+    return withOptOut(
+      `Support request from ${patient} via WhatsApp at ${practice}. Open Support to chat.`,
       str(payload, "recipientRole"),
     );
   }

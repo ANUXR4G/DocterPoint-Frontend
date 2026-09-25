@@ -35,7 +35,7 @@ import {
   type BotIntent,
   type NluSlots,
 } from "./whatsapp.nlu.js";
-import { formatLocalDate, formatPracticeDateTime, formatPracticeTime, isSlotStartBookable, parseLocalDate, practiceWeekday } from "./slotEngine.js";
+import { formatLocalDate, formatPracticeDateTime, formatPracticeTime, filterWaBookableSlotChoices, isSlotStartBookable, parseLocalDate, practiceWeekday } from "./slotEngine.js";
 import { buildCalendarInvite, bookingReferenceId } from "./bookingCalendar.js";
 import {
   parseFamilyDobAndId,
@@ -381,13 +381,19 @@ function repromptHintForStep(state: ConversationState, lang: WaLang): string {
     case "awaiting_date":
       return BotPrompts.askDate(lang);
     case "awaiting_slot":
+    case "awaiting_reschedule_slot": {
+      const open = bookableSlotChoices(state.slotChoices ?? []);
+      if (!open.length) {
+        return BotPrompts.noSlots(lang);
+      }
       return BotPrompts.askSlot(
-        (state.slotChoices ?? []).map((s, i) => ({
+        open.map((s, i) => ({
           index: i + 1,
           label: s.label,
         })),
         lang,
       );
+    }
     case "awaiting_confirm":
       return state.pendingSummary
         ? BotPrompts.bookingSummary(
@@ -693,6 +699,18 @@ async function notifyClinicOfSupportRequest(opts: {
   });
   if (!patient) return;
 
+  const { NotificationService } = await import("./notification.service.js");
+  void NotificationService.enqueueClinicSupportRequest({
+    practiceId: opts.practiceId,
+    patientPhone: opts.patientPhone,
+    patientName: patient.name,
+  }).catch((err) => {
+    console.warn(
+      "[whatsapp] support NotificationEvent failed:",
+      err instanceof Error ? err.message : err,
+    );
+  });
+
   const staff = await prisma.practiceMember.findMany({
     where: {
       practiceId: opts.practiceId,
@@ -775,18 +793,21 @@ function formatSlotTimeLabel(d: Date): string {
 }
 
 /** Drop past / unavailable slots so WA never offers a time that cannot be booked. */
-function bookableTimeSlots<T extends { start: Date; available?: boolean }>(
+function bookableTimeSlots<T extends { start: Date | string; available?: boolean }>(
   slots: T[],
+  nowMs: number = Date.now(),
 ): T[] {
-  const now = Date.now();
   return slots.filter(
-    (s) => s.available !== false && isSlotStartBookable(s.start, now),
+    (s) => s.available !== false && isSlotStartBookable(s.start, nowMs),
   );
 }
 
-function bookableSlotChoices<T extends { start: string }>(choices: T[]): T[] {
-  const now = Date.now();
-  return choices.filter((c) => isSlotStartBookable(c.start, now));
+/** Stored WA slotChoices — strip any start that is already past (clock moved). */
+function bookableSlotChoices<T extends { start: string }>(
+  choices: T[],
+  nowMs: number = Date.now(),
+): T[] {
+  return filterWaBookableSlotChoices(choices, nowMs);
 }
 
 function formatBookingDateTimeLabel(opts: {
@@ -1064,6 +1085,7 @@ async function finishBranchFGeneralDocument(
   await saveState(convId, {
     ...idleState(state),
     pendingDoc: null,
+    lastBookingId: undefined,
     failedTurns: 0,
   });
   return withMainMenu(result.reply);
@@ -1535,16 +1557,20 @@ function withModeButtons(
   return { reply, ...(buttons.length ? { replyButtons: buttons } : {}) };
 }
 
-/** ≤3 slots → reply buttons; more → interactive list. No “reply with number”. */
+/**
+ * ≤3 slots → reply buttons; more → interactive list.
+ * Always omits past starts so a clock tick never leaves a dead time as a button.
+ */
 function withSlotPicker(
   reply: string,
-  choices: Array<{ label: string }>,
+  choices: Array<{ label: string; start?: string }>,
 ): OrchestratorResult {
-  if (!choices.length) return { reply };
-  if (choices.length <= 3) {
+  const open = filterWaBookableSlotChoices(choices, Date.now());
+  if (!open.length) return { reply };
+  if (open.length <= 3) {
     return {
       reply,
-      replyButtons: choices.map((c, i) => ({
+      replyButtons: open.map((c, i) => ({
         id: `slot:${i + 1}`,
         title: c.label.slice(0, 20),
       })),
@@ -1552,7 +1578,7 @@ function withSlotPicker(
   }
   return {
     reply,
-    slotList: choices.map((c, i) => ({
+    slotList: open.map((c, i) => ({
       index: i + 1,
       label: c.label,
     })),
@@ -3014,6 +3040,91 @@ async function askModeForDay(
   );
 }
 
+/**
+ * Live-refresh time buttons from availability so past clock times never reappear.
+ * Used after idle Continue, stale taps, or when stored slotChoices all went past.
+ */
+async function refreshTimeSlotPicker(
+  convId: string,
+  practice: PracticeCtx,
+  state: ConversationState,
+  opts?: {
+    prefix?: string;
+    step?: "awaiting_slot" | "awaiting_reschedule_slot";
+  },
+): Promise<OrchestratorResult> {
+  const lang = resolveLang(state.preferredLanguage);
+  const locationId = state.locationId;
+  const providerId = state.providerId;
+  const date = state.date;
+  const step =
+    opts?.step ??
+    (state.rescheduleBookingId ? "awaiting_reschedule_slot" : "awaiting_slot");
+
+  if (!locationId || !providerId || !date) {
+    await saveState(convId, {
+      ...state,
+      step: "awaiting_date",
+      slotChoices: undefined,
+      slotStart: undefined,
+    });
+    return withDateButtons(
+      (opts?.prefix ? `${opts.prefix}\n` : "") + BotPrompts.askDate(lang),
+    );
+  }
+
+  const availability = await BookingService.getAvailability(
+    practice.id,
+    providerId,
+    locationId,
+    date,
+  );
+  const open = bookableTimeSlots(availability.timeSlots).slice(0, 12);
+  if (!open.length) {
+    if (step === "awaiting_reschedule_slot") {
+      await saveState(convId, {
+        ...state,
+        step: "awaiting_date",
+        slotChoices: undefined,
+        slotStart: undefined,
+      });
+      return withDateButtons(
+        (opts?.prefix ? `${opts.prefix}\n` : "") + BotPrompts.askDate(lang),
+      );
+    }
+    return reaskDateNoSlots(convId, practice, {
+      ...state,
+      slotChoices: undefined,
+      slotStart: undefined,
+    });
+  }
+
+  const slotChoices = open.map((s) => ({
+    start: (s.start instanceof Date ? s.start : new Date(s.start)).toISOString(),
+    label: formatSlotTimeLabel(
+      s.start instanceof Date ? s.start : new Date(s.start),
+    ),
+  }));
+
+  await saveState(convId, {
+    ...state,
+    step,
+    mode: ScheduleMode.TIME_BASED,
+    slotChoices,
+    slotStart: undefined,
+    failedTurns: 0,
+  });
+
+  const body = BotPrompts.askSlot(
+    slotChoices.map((s, i) => ({ index: i + 1, label: s.label })),
+    lang,
+  );
+  return withSlotPicker(
+    opts?.prefix ? `${opts.prefix}\n\n${body}` : body,
+    slotChoices,
+  );
+}
+
 async function continueAfterMode(
   convId: string,
   practice: PracticeCtx,
@@ -4256,6 +4367,17 @@ async function runOrchestratorCore(input: {
         ...state,
         idleReminderSentAt: undefined,
       });
+      // Re-fetch live slots so past times never come back as buttons after a wait
+      if (
+        state.step === "awaiting_slot" ||
+        state.step === "awaiting_reschedule_slot"
+      ) {
+        const refreshed = await refreshTimeSlotPicker(convId, practice, state, {
+          prefix: BotPrompts.idleContinueAck(lang),
+          step: state.step,
+        });
+        return refreshed;
+      }
       return {
         reply:
           BotPrompts.idleContinueAck(lang) +
@@ -5467,14 +5589,16 @@ async function runOrchestratorCore(input: {
   }
 
   if (state.step === "awaiting_slot") {
-    const choices = bookableSlotChoices(state.slotChoices ?? []);
+    const lang = resolveLang(state.preferredLanguage);
+    const rawChoices = state.slotChoices ?? [];
+    const choices = bookableSlotChoices(rawChoices);
     if (!choices.length) {
-      return continueAfterMode(convId, practice, {
+      return refreshTimeSlotPicker(convId, practice, {
         ...state,
         slotStart: undefined,
         slotChoices: undefined,
         mode: ScheduleMode.TIME_BASED,
-      });
+      }, { step: "awaiting_slot" });
     }
     let idx = parseSlotChoiceIndex(text, nlu.slots.slotIndex);
     // Voice / free text: "10 am" or "morning" instead of tapping a list row
@@ -5490,12 +5614,27 @@ async function runOrchestratorCore(input: {
         timeText: state.preferredTimeText,
       });
       if (preferredIdx != null) idx = preferredIdx + 1;
-    }
-    const choice =
-      idx !== null && idx >= 1 && idx <= choices.length
-        ? choices[idx - 1]
-        : null;
-    if (!choice) {
+      // preferredIdx is against filtered `choices` / open — use choices below
+      if (idx != null) {
+        const choice = choices[idx - 1];
+        if (choice && isSlotStartBookable(choice.start)) {
+          state.slotStart = choice.start;
+          state.slotChoices = choices;
+          state.step = "awaiting_confirm";
+          return presentBookingConfirm(convId, practice, state, {
+            date: state.date!,
+            slotStart: choice.start,
+            timeLabel: choice.label,
+          });
+        }
+      }
+      // Stale list may still show past times — refresh live buttons
+      if (choices.length < rawChoices.length) {
+        return refreshTimeSlotPicker(convId, practice, state, {
+          prefix: BotPrompts.slotPast(lang),
+          step: "awaiting_slot",
+        });
+      }
       return withSlotPicker(
         BotPrompts.askSlot(
           choices.map((s, i) => ({ index: i + 1, label: s.label })),
@@ -5504,19 +5643,38 @@ async function runOrchestratorCore(input: {
         choices,
       );
     }
-    if (!isSlotStartBookable(choice.start)) {
+
+    // Tap uses index from the message that was sent (rawChoices). Reject past starts.
+    const tapped =
+      idx >= 1 && idx <= rawChoices.length ? rawChoices[idx - 1] : null;
+    if (tapped && !isSlotStartBookable(tapped.start)) {
+      return refreshTimeSlotPicker(convId, practice, state, {
+        prefix: BotPrompts.slotPast(lang),
+        step: "awaiting_slot",
+      });
+    }
+    const choice =
+      tapped && isSlotStartBookable(tapped.start)
+        ? tapped
+        : idx >= 1 && idx <= choices.length
+          ? choices[idx - 1]
+          : null;
+    if (!choice || !isSlotStartBookable(choice.start)) {
+      if (choices.length < rawChoices.length) {
+        return refreshTimeSlotPicker(convId, practice, state, {
+          step: "awaiting_slot",
+        });
+      }
       return withSlotPicker(
-        BotPrompts.slotPast(lang) +
-          "\n" +
-          BotPrompts.askSlot(
-            choices.map((s, i) => ({ index: i + 1, label: s.label })),
-            lang,
-          ),
+        BotPrompts.askSlot(
+          choices.map((s, i) => ({ index: i + 1, label: s.label })),
+          lang,
+        ),
         choices,
       );
     }
     state.slotStart = choice.start;
-    state.slotChoices = choices;
+    state.slotChoices = bookableSlotChoices(rawChoices);
     state.step = "awaiting_confirm";
     return presentBookingConfirm(convId, practice, state, {
       date: state.date!,
@@ -5694,10 +5852,14 @@ async function runOrchestratorCore(input: {
   }
 
   if (state.step === "awaiting_reschedule_slot") {
-    const choices = bookableSlotChoices(state.slotChoices ?? []);
+    const lang = resolveLang(state.preferredLanguage);
+    const rawChoices = state.slotChoices ?? [];
+    const choices = bookableSlotChoices(rawChoices);
     if (!choices.length) {
-      await saveState(convId, { ...state, step: "awaiting_date", slotChoices: undefined });
-      return withDateButtons(BotPrompts.slotPast(lang) + "\n" + BotPrompts.askDate(lang));
+      return refreshTimeSlotPicker(convId, practice, state, {
+        prefix: BotPrompts.slotPast(lang),
+        step: "awaiting_reschedule_slot",
+      });
     }
     let idx = parseSlotChoiceIndex(text, nlu.slots.slotIndex);
     if (idx == null) {
@@ -5712,12 +5874,34 @@ async function runOrchestratorCore(input: {
         timeText: state.preferredTimeText,
       });
       if (preferredIdx != null) idx = preferredIdx + 1;
-    }
-    const choice =
-      idx !== null && idx >= 1 && idx <= choices.length
-        ? choices[idx - 1]
-        : null;
-    if (!choice || !state.rescheduleBookingId) {
+      if (idx != null && state.rescheduleBookingId) {
+        const choice = choices[idx - 1];
+        if (choice && isSlotStartBookable(choice.start)) {
+          try {
+            const updated = await BookingService.reschedule(
+              state.rescheduleBookingId,
+              {
+                slotStart: choice.start,
+                phone: patientPhone,
+                skipPatientNotification: true,
+              },
+            );
+            await saveState(convId, idleState(state));
+            return rescheduleSuccessReply(updated, lang);
+          } catch (err) {
+            await saveState(convId, idleState(state));
+            return {
+              reply: err instanceof Error ? err.message : "Could not reschedule.",
+            };
+          }
+        }
+      }
+      if (choices.length < rawChoices.length) {
+        return refreshTimeSlotPicker(convId, practice, state, {
+          prefix: BotPrompts.slotPast(lang),
+          step: "awaiting_reschedule_slot",
+        });
+      }
       return withSlotPicker(
         BotPrompts.askSlot(
           choices.map((s, i) => ({ index: i + 1, label: s.label })),
@@ -5726,14 +5910,32 @@ async function runOrchestratorCore(input: {
         choices,
       );
     }
-    if (!isSlotStartBookable(choice.start)) {
+
+    const tapped =
+      idx >= 1 && idx <= rawChoices.length ? rawChoices[idx - 1] : null;
+    if (tapped && !isSlotStartBookable(tapped.start)) {
+      return refreshTimeSlotPicker(convId, practice, state, {
+        prefix: BotPrompts.slotPast(lang),
+        step: "awaiting_reschedule_slot",
+      });
+    }
+    const choice =
+      tapped && isSlotStartBookable(tapped.start)
+        ? tapped
+        : idx >= 1 && idx <= choices.length
+          ? choices[idx - 1]
+          : null;
+    if (!choice || !state.rescheduleBookingId || !isSlotStartBookable(choice.start)) {
+      if (choices.length < rawChoices.length) {
+        return refreshTimeSlotPicker(convId, practice, state, {
+          step: "awaiting_reschedule_slot",
+        });
+      }
       return withSlotPicker(
-        BotPrompts.slotPast(lang) +
-          "\n" +
-          BotPrompts.askSlot(
-            choices.map((s, i) => ({ index: i + 1, label: s.label })),
-            lang,
-          ),
+        BotPrompts.askSlot(
+          choices.map((s, i) => ({ index: i + 1, label: s.label })),
+          lang,
+        ),
         choices,
       );
     }

@@ -128,6 +128,7 @@ export function parseTimeOnDate(date: Date, timeStr: string): Date {
 
 /**
  * Time-slot bookings must start strictly after "now".
+ * Example: at 10:01 AM clinic time, a 10:00 AM slot is not bookable and must not be listed.
  * Used by the slot generator, create/reschedule, and WhatsApp confirm.
  */
 export function isSlotStartBookable(
@@ -137,6 +138,28 @@ export function isSlotStartBookable(
   if (start == null) return false;
   const t = start instanceof Date ? start.getTime() : new Date(start).getTime();
   return Number.isFinite(t) && t > nowMs;
+}
+
+/**
+ * WhatsApp slot buttons / list rows — drop any start that is not strictly after now.
+ * This is the final gate before replyButtons / slotList are built.
+ */
+export function filterWaBookableSlotChoices<
+  T extends { start?: string | Date | null; label?: string },
+>(choices: T[], nowMs: number = Date.now()): Array<T & { start: string }> {
+  const out: Array<T & { start: string }> = [];
+  for (const c of choices) {
+    if (c.start == null) continue;
+    const startStr =
+      typeof c.start === "string"
+        ? c.start
+        : c.start instanceof Date
+          ? c.start.toISOString()
+          : String(c.start);
+    if (!isSlotStartBookable(startStr, nowMs)) continue;
+    out.push({ ...c, start: startStr });
+  }
+  return out;
 }
 
 /** Parse YYYY-MM-DD as clinic calendar day (midnight in PRACTICE_TIMEZONE). */
@@ -289,6 +312,7 @@ export function generateTimeSlots(
   date: Date,
   bookings: PracticeBooking[],
   overrides: ScheduleOverride[] = [],
+  nowMs: number = Date.now(),
 ): TimeSlot[] {
   if (schedule.mode !== ScheduleMode.TIME_BASED || !schedule.startTime || !schedule.endTime) {
     return [];
@@ -299,7 +323,6 @@ export function generateTimeSlots(
   const capacity = TIME_SLOT_CAPACITY;
   const dayStart = parseTimeOnDate(date, schedule.startTime);
   const dayEnd = parseTimeOnDate(date, schedule.endTime);
-  const now = Date.now();
   const slots: TimeSlot[] = [];
 
   let cursor = new Date(dayStart);
@@ -310,14 +333,14 @@ export function generateTimeSlots(
     // Skip break interval and overrides; past slots are not bookable
     const inBreak = overlapsBreak(schedule, cursor, slotEnd);
     const blocked = isBlockedByOverride(overrides, cursor, slotEnd);
-    const isPast = !isSlotStartBookable(cursor, now);
+    const isPast = !isSlotStartBookable(cursor, nowMs);
 
     const booked = countBookingsForSlot(bookings, cursor);
 
     const available = !inBreak && !blocked && !isPast && booked < capacity;
 
-    // Omit break windows entirely so UI doesn't show dead slots
-    if (!inBreak) {
+    // Omit break windows and past clock times entirely so WA / UI never list them
+    if (!inBreak && !isPast) {
       slots.push({
         start: new Date(cursor),
         end: slotEnd,
@@ -340,9 +363,9 @@ export function generateExtraSlotsFromOverrides(
   bookings: PracticeBooking[],
   slotIntervalMin: number,
   _maxPerSlot: number,
+  nowMs: number = Date.now(),
 ): TimeSlot[] {
   const interval = Math.max(5, slotIntervalMin || 15);
-  const now = Date.now();
   const capacity = TIME_SLOT_CAPACITY;
   const slots: TimeSlot[] = [];
 
@@ -366,13 +389,16 @@ export function generateExtraSlotsFromOverrides(
 
       const booked = countBookingsForSlot(bookings, cursor);
 
-      slots.push({
-        start: new Date(cursor),
-        end: slotEnd,
-        booked,
-        capacity,
-        available: isSlotStartBookable(cursor, now) && booked < capacity,
-      });
+      // Never list past EXTRA_SLOT starts (same as regular hours)
+      if (isSlotStartBookable(cursor, nowMs)) {
+        slots.push({
+          start: new Date(cursor),
+          end: slotEnd,
+          booked,
+          capacity,
+          available: booked < capacity,
+        });
+      }
 
       cursor = slotEnd;
     }
@@ -428,6 +454,7 @@ export function timeSlotsForProviderDay(
   date: Date,
   bookings: PracticeBooking[],
   overrides: ScheduleOverride[] = [],
+  nowMs: number = Date.now(),
 ): TimeSlot[] {
   const activeSchedules = schedulesForActiveMode(schedules);
   const daySchedules = activeSchedules.filter(
@@ -438,7 +465,7 @@ export function timeSlotsForProviderDay(
   const maxPerSlot = daySchedules[0]?.maxPerSlot ?? template?.maxPerSlot ?? 1;
 
   const base = daySchedules.flatMap((s) =>
-    generateTimeSlots(s, date, bookings, overrides),
+    generateTimeSlots(s, date, bookings, overrides, nowMs),
   );
   const extra = generateExtraSlotsFromOverrides(
     overrides,
@@ -446,6 +473,7 @@ export function timeSlotsForProviderDay(
     bookings,
     interval,
     maxPerSlot,
+    nowMs,
   );
   return mergeTimeSlots(base, extra);
 }

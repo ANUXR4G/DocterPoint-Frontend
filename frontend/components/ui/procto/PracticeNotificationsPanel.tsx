@@ -8,8 +8,27 @@ import {
   type PracticeNotification,
 } from "@/lib/services/procto"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
+import { emitPracticeNotificationsChanged } from "@/hooks/usePracticeOpenNotifications"
 
 const STATUS_FILTERS = ["ALL", "SENT", "PENDING", "FAILED", "SKIPPED"] as const
+
+/** Soft labels for send status — avoid alarming "Failed" in the clinic inbox. */
+function statusLabel(status: string) {
+  switch ((status || "").toUpperCase()) {
+    case "ALL":
+      return "All"
+    case "SENT":
+      return "Sent"
+    case "PENDING":
+      return "Pending"
+    case "FAILED":
+      return "Exited"
+    case "SKIPPED":
+      return "Inbox only"
+    default:
+      return status ? status.charAt(0) + status.slice(1).toLowerCase() : status
+  }
+}
 
 function statusBadgeClass(status: string) {
   switch ((status || "").toUpperCase()) {
@@ -213,6 +232,7 @@ export default function PracticeNotificationsPanel() {
       return
     }
     setError("")
+    emitPracticeNotificationsChanged()
   }
 
   if (!practiceId) {
@@ -297,7 +317,7 @@ export default function PracticeNotificationsPanel() {
                   : "border border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300"
               }`}
             >
-              {s === "ALL" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}
+              {statusLabel(s)}
             </button>
           ))}
         </div>
@@ -326,7 +346,7 @@ export default function PracticeNotificationsPanel() {
             {pendingCount} pending
           </span>
           <span className="rounded-full bg-rose-100 px-2.5 py-1 text-rose-900 dark:bg-rose-950/50 dark:text-rose-100">
-            {failedCount} failed
+            {failedCount} exited
           </span>
         </div>
       </div>
@@ -356,7 +376,7 @@ export default function PracticeNotificationsPanel() {
         <p className="text-sm text-neutral-500">Loading notifications…</p>
       ) : items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700">
-          No open notifications. New booking alerts will appear here.
+          No open notifications. Booking, queue, document, and support alerts will appear here.
         </p>
       ) : (
         <ul
@@ -391,7 +411,7 @@ export default function PracticeNotificationsPanel() {
                     <span
                       className={`rounded-full px-2 py-0.5 font-semibold ${statusBadgeClass(n.status)}`}
                     >
-                      {n.status}
+                      {statusLabel(n.status)}
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 font-semibold ${roleBadgeClass(n.recipientRole)}`}

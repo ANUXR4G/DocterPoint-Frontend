@@ -30,8 +30,6 @@ import {
 import { NotificationService } from "./notification.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 
-const MAX_BOOKING_DOCUMENTS = 5;
-
 const BOOKING_STATUSES = new Set<string>(Object.values(BookingStatus));
 const BOOKING_CHANNELS = new Set<string>(Object.values(BookingChannel));
 
@@ -121,8 +119,7 @@ function normalizeBookingDocuments(
       url: String(d.url || "").trim(),
       uploadedAt: d.uploadedAt || new Date().toISOString(),
     }))
-    .filter((d) => d.url.length > 0)
-    .slice(0, MAX_BOOKING_DOCUMENTS);
+    .filter((d) => d.url.length > 0);
 }
 
 export const BookingService = {
