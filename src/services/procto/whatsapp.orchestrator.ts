@@ -175,6 +175,9 @@ export type ConversationState = {
   waOptOut?: boolean;
   failedTurns?: number;
   handedOff?: boolean;
+  /** Branch D — when patient tapped Talk to Support / Agent. */
+  supportRequestedAt?: string;
+  supportLabel?: string;
   /**
    * Branch E — collecting the message body (appointment-scoped or Admin route).
    */
@@ -586,7 +589,7 @@ async function applyGlobalKeywordHijack(opts: {
     );
   }
   if (hijack === "agent") {
-    return transferToAgent(convId, practice, cleared, lang);
+    return transferToAgent(convId, practice, cleared, lang, patientPhone);
   }
   if (hijack === "book") {
     return ensureRegisteredThenBook(
@@ -621,20 +624,24 @@ function syntheticDependentPhone(primaryPhone: string, name: string): string {
 
 /**
  * Branch D — Talk to Support / Agent.
- * Sets Agent Transfer state, parks the bot, and notifies LiveChat (inbox).
+ * Sets Agent Transfer state, parks the bot, and notifies clinic Activity inbox.
  */
 async function transferToAgent(
   convId: string,
   practice: PracticeCtx,
   state: ConversationState,
   lang: WaLang,
+  patientPhone: string,
 ): Promise<OrchestratorResult> {
+  const nowIso = new Date().toISOString();
   const next: ConversationState = {
     ...idleState(state),
     step: "agent_transfer",
     handedOff: true,
     postBookingCare: false,
     failedTurns: 0,
+    supportRequestedAt: nowIso,
+    supportLabel: "Talk to Support / Agent",
   };
   await saveState(convId, next);
   const updated = await prisma.whatsAppConversation.update({
@@ -650,9 +657,92 @@ async function transferToAgent(
       patient_phone: updated.patientPhone,
       updated_at: updated.updatedAt.toISOString(),
       agent_transfer: true,
+      support_requested_at: nowIso,
+      support_label: "Talk to Support / Agent",
     },
   }).catch(() => undefined);
+
+  void notifyClinicOfSupportRequest({
+    practiceId: practice.id,
+    patientPhone,
+  }).catch((err) => {
+    console.warn(
+      "[whatsapp] support Activity notify failed:",
+      err instanceof Error ? err.message : err,
+    );
+  });
+
   return { reply: BotPrompts.agentTransferConnecting(lang) };
+}
+
+/** Care-chat ping so Activity / doctor inbox can show the support request. */
+async function notifyClinicOfSupportRequest(opts: {
+  practiceId: string;
+  patientPhone: string;
+}) {
+  const digits = normalizePhone(opts.patientPhone);
+  const patient = await prisma.user.findFirst({
+    where: {
+      role: "user",
+      OR: [
+        { phone: { endsWith: digits } },
+        { patient: { is: { contactNumber: { endsWith: digits } } } },
+      ],
+    },
+    select: { id: true, name: true },
+  });
+  if (!patient) return;
+
+  const staff = await prisma.practiceMember.findMany({
+    where: {
+      practiceId: opts.practiceId,
+      isActive: true,
+      role: { in: ["PRACTICE_OWNER", "PRACTICE_ADMIN", "DOCTOR"] },
+    },
+    select: { userId: true },
+    take: 8,
+  });
+  if (!staff.length) return;
+
+  const content =
+    `🆘 Support request via WhatsApp from *${patient.name || "Patient"}* ` +
+    `(…${digits.slice(-4)}). Open Activity to take over the chat.`;
+
+  const { uuidToBase64 } = await import("../../core/security.js");
+  const { socketManager } = await import("../../core/socket.js");
+
+  for (const member of staff) {
+    const created = await prisma.message.create({
+      data: {
+        content,
+        type: "direct",
+        senderId: patient.id,
+        receiverId: member.userId,
+        isSeen: false,
+      },
+    });
+    const payload: Record<string, unknown> = {
+      id: uuidToBase64(created.id),
+      sender_id: uuidToBase64(created.senderId),
+      content: created.content,
+      is_seen: created.isSeen,
+      type: created.type,
+      created_at: created.createdAt,
+      idUuid: created.id,
+      senderId: created.senderId,
+      receiverId: created.receiverId,
+      receiver_id: uuidToBase64(created.receiverId!),
+      support_request: true,
+    };
+    await socketManager.sendPrivateMsg(
+      `${uuidToBase64(member.userId)}_CHAT`,
+      payload,
+    );
+    await socketManager.sendPrivateMsg(
+      `${uuidToBase64(patient.id)}_CHAT`,
+      payload,
+    );
+  }
 }
 function withBookingConfirmButtons(
   reply: string,
@@ -4342,7 +4432,7 @@ async function runOrchestratorCore(input: {
   }
 
   if (menuIntent === "human") {
-    return transferToAgent(convId, practice, state, lang);
+    return transferToAgent(convId, practice, state, lang, patientPhone);
   }
 
   if (menuIntent) {
@@ -4948,7 +5038,8 @@ async function runOrchestratorCore(input: {
     );
   }
 
-  const escalate = async () => transferToAgent(convId, practice, state, lang);
+  const escalate = async () =>
+    transferToAgent(convId, practice, state, lang, patientPhone);
 
   if (looksClinical(text) || wantsHuman(text) || nlu.intent === "human") {
     return escalate();
@@ -5749,7 +5840,7 @@ async function runOrchestratorCore(input: {
 
   const fails = (state.failedTurns ?? 0) + 1;
   if (fails >= 2) {
-    return transferToAgent(convId, practice, state, lang);
+    return transferToAgent(convId, practice, state, lang, patientPhone);
   }
   await saveState(convId, { ...state, failedTurns: fails });
   {

@@ -639,7 +639,7 @@ export const PracticeService = {
 
   async listConversations(practiceId: string, actorUserId: string) {
     await this.assertMember(practiceId, actorUserId);
-    return prisma.whatsAppConversation.findMany({
+    const rows = await prisma.whatsAppConversation.findMany({
       where: { practiceId },
       orderBy: { updatedAt: "desc" },
       take: 100,
@@ -650,6 +650,28 @@ export const PracticeService = {
         updatedAt: true,
         state: true,
       },
+    });
+    return rows.map((r) => {
+      const state =
+        r.state && typeof r.state === "object" && !Array.isArray(r.state)
+          ? (r.state as Record<string, unknown>)
+          : {};
+      return {
+        id: r.id,
+        patientPhone: r.patientPhone,
+        status: r.status,
+        updatedAt: r.updatedAt,
+        supportRequestedAt:
+          typeof state.supportRequestedAt === "string"
+            ? state.supportRequestedAt
+            : null,
+        supportLabel:
+          typeof state.supportLabel === "string" ? state.supportLabel : null,
+        agentTransfer:
+          state.step === "agent_transfer" ||
+          state.handedOff === true ||
+          r.status === "handed_off",
+      };
     });
   },
 
