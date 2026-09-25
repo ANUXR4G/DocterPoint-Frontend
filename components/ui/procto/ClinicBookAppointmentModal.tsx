@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import PopupModal from "@/components/modals/Modal"
 import { proctoService } from "@/lib/services/procto"
-import { formatPracticeTime } from "@/lib/practiceTime"
+import { formatPracticeTime, practiceTodayIso } from "@/lib/practiceTime"
 import {
   usePracticeDashboard,
   type PracticeMembership,
@@ -31,11 +31,9 @@ type Availability = {
   configuredModes?: string[]
 }
 
-function toDateInputValue(d: Date) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  return `${y}-${m}-${day}`
+function isFutureSlotStart(start: string): boolean {
+  const t = new Date(start).getTime()
+  return Number.isFinite(t) && t > Date.now()
 }
 
 function doctorsFromMembership(m: PracticeMembership | undefined) {
@@ -96,7 +94,7 @@ export default function ClinicBookAppointmentModal({
 
   const [providerId, setProviderId] = useState("")
   const [locationId, setLocationId] = useState("")
-  const [date, setDate] = useState(() => toDateInputValue(new Date()))
+  const [date, setDate] = useState(() => practiceTodayIso())
   const [mode, setMode] = useState<"TIME_BASED" | "TOKEN_BASED">("TIME_BASED")
   const [availability, setAvailability] = useState<Availability | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
@@ -160,7 +158,10 @@ export default function ClinicBookAppointmentModal({
   }, [open, practiceId, providerId, locationId, date])
 
   const openSlots = useMemo(
-    () => (availability?.timeSlots || []).filter((s) => s.available),
+    () =>
+      (availability?.timeSlots || []).filter(
+        (s) => s.available && isFutureSlotStart(s.start),
+      ),
     [availability],
   )
   const tokenSession = availability?.tokenSessions?.[0]
@@ -181,6 +182,15 @@ export default function ClinicBookAppointmentModal({
     }
     if (mode === "TIME_BASED" && !selectedSlot) {
       setMessage("Select an available time slot.")
+      return
+    }
+    if (
+      mode === "TIME_BASED" &&
+      selectedSlot &&
+      !isFutureSlotStart(selectedSlot)
+    ) {
+      setMessage("That time has already passed. Pick a later slot.")
+      setSelectedSlot(null)
       return
     }
     if (mode === "TOKEN_BASED" && !tokenSession?.available) {
@@ -303,7 +313,7 @@ export default function ClinicBookAppointmentModal({
             type="date"
             className={fieldClass}
             value={date}
-            min={toDateInputValue(new Date())}
+            min={practiceTodayIso()}
             onChange={(e) => setDate(e.target.value)}
           />
         </label>

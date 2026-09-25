@@ -17,6 +17,7 @@ import {
   practiceTabHref,
   type PracticeTab,
 } from "@/lib/doctorPracticeTabs";
+import { formatPracticeTime } from "@/lib/practiceTime";
 
 type Tab = PracticeTab;
 
@@ -1097,8 +1098,7 @@ function DoctorSchedulePanel({
           <h3 className="mb-3 font-semibold">Time slots</h3>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(6.25rem,1fr))] gap-2">
             {calendar?.timeSlots.map((s) => {
-              const start = new Date(s.start)
-              const label = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`
+              const label = formatPracticeTime(s.start)
               const filled = s.booked > 0
               return (
                 <div
