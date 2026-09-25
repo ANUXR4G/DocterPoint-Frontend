@@ -848,6 +848,9 @@ export const WhatsAppService = {
         const isPostBooking = result.menuList.some((row) =>
           row.id.startsWith("post:"),
         );
+        const optionCount = result.menuList.length;
+        const optionRange =
+          optionCount <= 1 ? "1" : `1–${optionCount}`;
         // Language-switch acks must not be silent if the interactive list fails
         // or truncates — send the full text first, then the Menu list.
         // Do NOT force text+list for every "Main menu" (doubles Meta latency).
@@ -873,13 +876,15 @@ export const WhatsAppService = {
             body: sendTextFirst
               ? isPostBooking
                 ? "What would you like to do?"
-                : "Tap an option (1–9):"
-              : result.reply.split("\n").slice(0, 6).join("\n").slice(0, 400) ||
+                : `Tap an option (${optionRange}):`
+              : result.reply.split("\n").slice(0, 8).join("\n").slice(0, 400) ||
                 (isPostBooking
                   ? "What would you like to do?"
-                  : "Tap an option (1–9):"),
+                  : `Tap an option (${optionRange}):`),
             buttonLabel: "Menu",
-            sectionTitle: isPostBooking ? "Choose one" : "1–9 Options",
+            sectionTitle: isPostBooking
+              ? "Choose one"
+              : `${optionRange} Options`,
             rows: result.menuList.map((row) => ({
               id: row.id,
               title: row.title.slice(0, 24),
