@@ -383,84 +383,84 @@ export default function VisitPage() {
 
   return (
     <div
-      className={`dashboard-page-wide space-y-5 ${isCompleted ? "pb-8" : "pb-28"}`}
+      className={`dashboard-page-wide !mt-0 space-y-4 ${isCompleted ? "pb-8" : "pb-28"}`}
     >
-      {/* duplicate status in nav is enough — banner also shows status */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <button
-            type="button"
-            onClick={() => router.push("/doctor/queue")}
-            className="text-blue-600 hover:text-blue-700 dark:text-sky-400"
-          >
-            ← Queue
-          </button>
-          <Link
-            href="/doctor/calendar"
-            className="text-blue-600 hover:text-blue-700 dark:text-sky-400"
-          >
-            Calendar
-          </Link>
-          <Link
-            href={practiceTabHref("patients")}
-            className="text-blue-600 hover:text-blue-700 dark:text-sky-400"
-          >
-            Patients
-          </Link>
-        </div>
+      {/* Customer identity first — sticky at top of scroll */}
+      <div className="sticky top-0 z-20 -mx-4 bg-[color-mix(in_srgb,var(--solune-canvas)_94%,transparent)] px-4 pb-1.5 pt-0 backdrop-blur-md xs:-mx-5 xs:px-5 md:-mx-6 md:px-6 dark:bg-[color-mix(in_srgb,#0f172a_94%,transparent)]">
+        <section
+          className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none"
+          aria-label={`Patient ${patientName}`}
+        >
+          <div className="bg-[color-mix(in_srgb,var(--theme-primary)_12%,transparent)] px-3 py-2.5 sm:px-5 sm:py-3 dark:bg-[color-mix(in_srgb,var(--theme-primary)_18%,var(--solune-surface))]">
+            <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => router.push("/doctor/queue")}
+                className="font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400"
+              >
+                ← Queue
+              </button>
+              <Link
+                href="/doctor/calendar"
+                className="font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400"
+              >
+                Calendar
+              </Link>
+              <Link
+                href={practiceTabHref("patients")}
+                className="font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400"
+              >
+                Patients
+              </Link>
+            </div>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex min-w-0 items-start gap-3">
+                <PatientAvatar
+                  name={patientName}
+                  imgSrc={p?.imgSrc}
+                  size="lg"
+                />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-primary)] opacity-90 dark:opacity-100">
+                    Appointment · {appointmentDate} · {slotLabel}
+                  </p>
+                  <h1 className="mt-0.5 break-words text-xl font-bold leading-tight tracking-tight text-neutral-900 sm:text-2xl dark:text-white">
+                    {patientName}
+                  </h1>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-medium text-neutral-700 dark:text-slate-300">
+                    <span>{phone}</span>
+                    <span className="opacity-40" aria-hidden>
+                      ·
+                    </span>
+                    <span>
+                      Age {ageFromDob(p?.dateOfBirth)}
+                      {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${bookingStatusClass(booking.status)}`}
+              >
+                {bookingStatusLabel(booking.status)}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {isCompleted ? (
+          <p className="mt-2 text-sm text-green-700 dark:text-green-300">
+            Visit completed. Details are under{" "}
+            <Link href={practiceTabHref("patients")} className="underline">
+              Patients
+            </Link>
+            .
+          </p>
+        ) : null}
       </div>
 
-      {isCompleted ? (
-        <p className="text-sm text-green-700 dark:text-green-300">
-          Visit completed. Details are under{" "}
-          <Link href={practiceTabHref("patients")} className="underline">
-            Patients
-          </Link>
-          .
-        </p>
-      ) : null}
-
-      {/* Patient name banner — all visit identity details in one strip */}
-      <section
-        className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none"
-        aria-label={`Patient ${patientName}`}
-      >
-        <div className="bg-[color-mix(in_srgb,var(--theme-primary)_12%,transparent)] px-5 py-6 sm:px-8 dark:bg-[color-mix(in_srgb,var(--theme-primary)_18%,var(--solune-surface))]">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex min-w-0 items-start gap-4">
-              <PatientAvatar
-                name={patientName}
-                imgSrc={p?.imgSrc}
-                size="lg"
-              />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--theme-primary)] opacity-90 dark:opacity-100">
-                  Appointment · {appointmentDate} · {slotLabel}
-                </p>
-                <h1 className="mt-1 break-words text-3xl font-bold leading-tight tracking-tight text-neutral-900 sm:text-4xl dark:text-white">
-                  {patientName}
-                </h1>
-                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-neutral-700 dark:text-slate-300">
-                  <span>{phone}</span>
-                  <span className="opacity-40" aria-hidden>
-                    ·
-                  </span>
-                  <span>
-                    Age {ageFromDob(p?.dateOfBirth)}
-                    {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
-                  </span>
-                </p>
-              </div>
-            </div>
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${bookingStatusClass(booking.status)}`}
-            >
-              {bookingStatusLabel(booking.status)}
-            </span>
-          </div>
-        </div>
-
-        <dl className="grid gap-x-4 gap-y-3 border-t border-neutral-200 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8 dark:border-white/10">
+      <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
+        <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
           <Fact label="Date of birth" value={dash(p?.dateOfBirth)} />
           <Fact label="Age" value={ageFromDob(p?.dateOfBirth)} />
           <Fact label="Gender" value={dash(p?.gender)} />
@@ -726,10 +726,12 @@ export default function VisitPage() {
 
       {/* Sticky actions — in page flow, not a portal that fights layouts */}
       {!isCompleted ? (
-        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-neutral-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:left-[72px] xl:left-60 dark:border-neutral-700 dark:bg-neutral-950/95">
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-neutral-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md md:left-[72px] xl:left-60 dark:border-[var(--solune-border-strong)] dark:bg-[color-mix(in_srgb,var(--solune-surface)_92%,transparent)]">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
-            <p className="hidden text-sm opacity-70 sm:block">
-              <span className="font-medium opacity-100">{patientName}</span>
+            <p className="hidden text-sm text-neutral-600 sm:block dark:text-slate-300">
+              <span className="font-medium text-neutral-900 dark:text-white">
+                {patientName}
+              </span>
               {" · "}
               {slotLabel}
             </p>
@@ -737,8 +739,16 @@ export default function VisitPage() {
               <button
                 type="button"
                 disabled={saving}
+                onClick={() => router.push("/doctor/queue")}
+                className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 disabled:opacity-50 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-elevated)] dark:text-slate-100 dark:hover:bg-[var(--solune-surface-muted)]"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={saving}
                 onClick={() => void save()}
-                className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900"
+                className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 disabled:opacity-50 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-elevated)] dark:text-slate-100 dark:hover:bg-[var(--solune-surface-muted)]"
               >
                 {saving ? "Saving…" : "Save"}
               </button>
@@ -746,7 +756,7 @@ export default function VisitPage() {
                 type="button"
                 disabled={saving}
                 onClick={() => void save("COMPLETED")}
-                className="rounded-xl border border-green-500 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 disabled:opacity-50 dark:bg-green-950/40 dark:text-green-200"
+                className="rounded-xl border border-green-500/60 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 disabled:opacity-50 dark:border-green-400/30 dark:bg-[color-mix(in_srgb,theme(colors.green.500)_18%,var(--solune-surface))] dark:text-green-200"
               >
                 {saving ? (
                   <span className="inline-flex items-center gap-2">
