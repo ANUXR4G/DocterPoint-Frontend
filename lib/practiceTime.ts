@@ -97,6 +97,11 @@ export function formatPracticeDate(
   })
 }
 
+/** YYYY-MM-DD for "today" in clinic timezone. */
+export function practiceTodayIso(): string {
+  return practiceDateIso(new Date()) || new Date().toISOString().slice(0, 10)
+}
+
 /** Hour 0–23 in clinic timezone (for calendar hour rows). */
 export function practiceHour(input: Date | string): number {
   const d = input instanceof Date ? input : new Date(input)

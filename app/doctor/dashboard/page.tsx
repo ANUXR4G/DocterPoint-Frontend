@@ -50,7 +50,10 @@ export default function DoctorDashboard() {
         actionBelow
         action={
           <>
-            <Link href="/doctor/appointments" className="dashboard-btn-primary">
+            <Link href="/doctor/activity" className="dashboard-btn-primary">
+              Activity
+            </Link>
+            <Link href="/doctor/appointments" className="dashboard-btn-secondary">
               Appointments
             </Link>
             <Link href="/doctor/patients" className="dashboard-btn-secondary">
