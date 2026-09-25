@@ -478,38 +478,44 @@ export const NotificationService = {
       ...(statusFilter ? { status: statusFilter } : {}),
     };
 
-    const [items, total, pendingCount, failedCount, sentCount] =
-      await Promise.all([
-        prisma.notificationEvent.findMany({
-          where,
-          take,
-          skip,
-          orderBy: { createdAt: "desc" },
-          include: {
-            booking: {
-              select: {
-                id: true,
-                patientPhone: true,
-                patientName: true,
-                status: true,
-                slotStart: true,
-                sessionDate: true,
-                providerId: true,
-              },
+    // One groupBy for badge counts instead of 3 separate count queries.
+    const [items, total, statusGroups] = await Promise.all([
+      prisma.notificationEvent.findMany({
+        where,
+        take,
+        skip,
+        orderBy: { createdAt: "desc" },
+        include: {
+          booking: {
+            select: {
+              id: true,
+              patientPhone: true,
+              patientName: true,
+              status: true,
+              slotStart: true,
+              sessionDate: true,
+              providerId: true,
             },
           },
-        }),
-        prisma.notificationEvent.count({ where }),
-        prisma.notificationEvent.count({
-          where: { practiceId, dismissedAt: null, status: "PENDING" },
-        }),
-        prisma.notificationEvent.count({
-          where: { practiceId, dismissedAt: null, status: "FAILED" },
-        }),
-        prisma.notificationEvent.count({
-          where: { practiceId, dismissedAt: null, status: "SENT" },
-        }),
-      ]);
+        },
+      }),
+      prisma.notificationEvent.count({ where }),
+      prisma.notificationEvent.groupBy({
+        by: ["status"],
+        where: { practiceId, dismissedAt: null },
+        _count: { _all: true },
+      }),
+    ]);
+
+    let pendingCount = 0;
+    let failedCount = 0;
+    let sentCount = 0;
+    for (const row of statusGroups) {
+      const n = row._count._all;
+      if (row.status === "PENDING") pendingCount = n;
+      else if (row.status === "FAILED") failedCount = n;
+      else if (row.status === "SENT") sentCount = n;
+    }
 
     return {
       total,

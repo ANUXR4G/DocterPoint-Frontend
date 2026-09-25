@@ -343,6 +343,7 @@ export class PatientService {
       name: string;
       phone: string;
       isSelf: boolean;
+      relationship?: string | null;
     }>
   > {
     const digits = whatsappPhone.replace(/\D/g, "");
@@ -370,6 +371,7 @@ export class PatientService {
       name: string;
       phone: string;
       isSelf: boolean;
+      relationship?: string | null;
     }> = [];
 
     for (const u of users) {
@@ -379,11 +381,18 @@ export class PatientService {
       const isSelf =
         phoneDigits === digits ||
         (phoneDigits.length >= 10 && phoneDigits.slice(-10) === last10);
+      const relationship = u.patient?.relationship?.trim() || null;
+      const baseName =
+        (u.name || "").trim() || (isSelf ? "You" : "Family member");
       rows.push({
         id: u.id,
-        name: (u.name || "").trim() || (isSelf ? "You" : "Family member"),
+        name:
+          !isSelf && relationship
+            ? `${baseName} · ${relationship}`
+            : baseName,
         phone: phoneDigits || digits,
         isSelf,
+        relationship,
       });
     }
 
@@ -408,6 +417,10 @@ export class PatientService {
     dateOfBirth?: string | null;
     email?: string | null;
     address?: string | null;
+    /** Spouse / Child / Parent / … for dependents. */
+    relationship?: string | null;
+    /** Emirates ID / Aadhaar / National ID. */
+    nationalId?: string | null;
   }) {
     // Keep full WhatsApp MSISDN (e.g. 9715… / 9198…) — do not strip to last 10 / force +91.
     const phone = data.phone.replace(/\D/g, "");
@@ -499,7 +512,18 @@ export class PatientService {
       }
     }
 
-    const gender = requireGender(data.gender);
+    // Dependents (Branch C) may omit gender — default to others.
+    // Primary self-registration still requires an explicit gender.
+    let gender = normalizeGender(data.gender);
+    if (!gender) {
+      if (data.relationship?.trim()) {
+        gender = "others";
+      } else {
+        gender = requireGender(data.gender);
+      }
+    }
+    const relationship = data.relationship?.trim().slice(0, 64) || null;
+    const nationalId = data.nationalId?.replace(/\s+/g, "").slice(0, 32) || null;
 
     // Random password for schema only — patients authenticate via phone OTP.
     const hashedPassword = await generateHash(
@@ -520,6 +544,8 @@ export class PatientService {
           create: {
             contactNumber,
             dateOfBirth: data.dateOfBirth?.trim() || null,
+            ...(relationship ? { relationship } : {}),
+            ...(nationalId ? { aadharNumber: nationalId } : {}),
           },
         },
       },
@@ -531,6 +557,7 @@ export class PatientService {
       name: user.name,
       email: user.email,
       phone,
+      relationship: user.patient?.relationship ?? relationship,
     };
   }
 }

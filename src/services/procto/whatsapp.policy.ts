@@ -30,7 +30,7 @@ function looksLikeBotMenu(reply: string): boolean {
     /\*(REGISTER|BOOK|DOCTORS|STATUS|FAQ|RESCHEDULE|CANCEL|REPORT|MY DOCS|LANGUAGE)\*/i.test(
       reply,
     ) ||
-    /\bWelcome to\b|\bमें आपका स्वागत है\b|\bHow can I help you\b|\bमैं कैसे मदद करूँ\b|\bTap \*Menu\*|नीचे \*Menu\*/i.test(
+    /\bWelcome to\b|\bWelcome back\b|\bमें आपका स्वागत है\b|\bवापसी पर स्वागत\b|\bHow can I assist you\b|\bHow can I help you\b|\bमैं आपकी कैसे मदद करूँ\b|\bमैं कैसे मदद करूँ\b|\bTap \*Menu\*|नीचे \*Menu\*|\*Main menu\*|\*मुख्य मेनू\*/i.test(
       reply,
     )
   );
@@ -201,13 +201,12 @@ export function faqReply(
   return null;
 }
 
+/** Branch D — Talk to Support / Agent. */
 export function escalateReply(lang?: WaLang): string {
   return L(
     lang,
-    "I can help with *BOOK*, *STATUS*, *DOCTORS*, *CANCEL*, or *RESCHEDULE*.\n" +
-      "For medical questions, please ask the doctor at your visit.",
-    "मैं *BOOK*, *STATUS*, *DOCTORS*, *CANCEL*, या *RESCHEDULE* में मदद कर सकता/सकती हूँ।\n" +
-      "मेडिकल सवालों के लिए अपनी विज़िट पर डॉक्टर से पूछें।",
+    "Connecting you to an agent... A team member will reply shortly.",
+    "आपको एक एजेंट से जोड़ा जा रहा है... टीम सदस्य जल्द जवाब देगा।",
   );
 }
 

@@ -5,10 +5,42 @@ import { socketManager } from "../core/socket.js";
 export function looksLikeBotCommand(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
-  if (/^(?:menu|post|booking|slot|date|mode|patient):/i.test(t)) return true;
+
+  // Structured interactive ids (list / button payloads)
+  if (
+    /^(?:menu|post|booking|slot|date|mode|patient|provider|lang|reg_email_)/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/^(?:yes|no)$/i.test(t)) return true;
+
   // Bare menu digits / emoji keycaps (WhatsApp list taps often arrive as "1")
   if (/^[1-9]$/.test(t)) return true;
   if (/^[1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣]$/u.test(t.trim())) return true;
+
+  // Numbered list titles: "3 · New booking", "1 · Book"
+  if (/^[1-9]\s*[·.•\-–—)]\s*\S+/u.test(t)) return true;
+
+  // Known button / list titles (display text when Meta sends title instead of id)
+  if (
+    /^(main\s*menu|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back)$/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+
+  // Short acknowledgements / typos that are never useful for the doctor
+  if (
+    /^(ok|okay|k|kk|ya|yep|yup|nah|nope|thanks|thank\s*you|thx|hi+|hello|hey|hola|yo|boat|you|test|hmm+|hii+|he+y+)$/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+
   if (
     /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info|message|msg|new\s+book)\b/.test(
       t,
@@ -22,6 +54,26 @@ export function looksLikeBotCommand(text: string): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * True for system care-chat notices doctors should always see
+ * (cancel alerts, visit-doc attachments).
+ */
+export function isCareChatSystemNotice(text: string): boolean {
+  const t = text.trim();
+  return (
+    t.startsWith("❌") ||
+    t.startsWith("📎") ||
+    /^cancelled via whatsapp/i.test(t) ||
+    /^attached a visit document/i.test(t)
+  );
+}
+
+/** Hide bot menu noise already stored in Message rows. */
+export function shouldHideFromCareChat(text: string): boolean {
+  if (isCareChatSystemNotice(text)) return false;
+  return looksLikeBotCommand(text);
 }
 
 /** Same shape as ChatService.serializedMsg so portal/apps accept the socket event. */

@@ -208,14 +208,27 @@ export function setupWebSockets(server: Server): void {
           if (parts[0] === "procto" && parts[1]) {
             const practiceId = parts[1];
             const payload = requireTokenPayload(request, url);
-            const member = await prisma.practiceMember.findUnique({
-              where: {
-                practiceId_userId: {
-                  practiceId,
-                  userId: payload.sub,
+            let member: { isActive: boolean } | null = null;
+            try {
+              member = await prisma.practiceMember.findUnique({
+                where: {
+                  practiceId_userId: {
+                    practiceId,
+                    userId: payload.sub,
+                  },
                 },
-              },
-            });
+                select: { isActive: true },
+              });
+            } catch (dbErr) {
+              // Pool blips / unreachable DB — do not treat as auth failure.
+              console.error("[ws/procto] membership check failed", dbErr);
+              try {
+                ws.close(1013, "try again later");
+              } catch {
+                /* ignore */
+              }
+              return;
+            }
             if (!member?.isActive) {
               closeUnauthorized(ws, 4403);
               return;

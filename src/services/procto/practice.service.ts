@@ -2050,10 +2050,8 @@ export const PracticeService = {
       providerId,
     );
 
-    // Keep plan feature matrix in sync (queueAnalytics on all paid plans).
-    const { NumberPoolService } = await import("./numberPool.service.js");
-    await NumberPoolService.ensureDefaultPlans();
-
+    // Do not call ensureDefaultPlans() here — it is a seed/admin path and
+    // was adding multi-second latency to every dashboard chart load.
     const {
       assertFeature,
       getPracticeEntitlement,

@@ -41,9 +41,14 @@ model Patient {
   dateOfBirth     String? @map("date_of_birth")
   contactNumber   String? @map("contact_number")
   emergencyNumber String? @map("emergency_number")
-  aadharNumber    String? @map("aadhar_number") @db.VarChar(12)
+  /** Aadhaar / Emirates ID / other national ID (digits or formatted). */
+  aadharNumber    String? @map("aadhar_number") @db.VarChar(32)
   panNumber       String? @map("pan_number") @db.VarChar(10)
   aadharCardSrc   String? @map("aadhar_card_src")
+  /** WhatsApp / portal general documents (lab, insurance, ID photos) not tied to a visit. */
+  documents       Json?   @map("documents")
+  /** Relationship to the WhatsApp primary (Spouse, Child, Parent, …). */
+  relationship    String? @map("relationship") @db.VarChar(64)
 
   user          User           @relation(fields: [id], references: [id], onDelete: Cascade)
   healthRecords HealthRecord[]

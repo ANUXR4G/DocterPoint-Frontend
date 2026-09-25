@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import {
   downloadWhatsAppMedia,
   isSttConfigured,
+  sendWhatsAppDocument,
   sendWhatsAppInteractiveButtons,
   sendWhatsAppInteractiveList,
   sendWhatsAppText,
@@ -508,6 +509,7 @@ export const WhatsAppService = {
           inActiveRegisterStep,
           isIdRegistrationCaption,
           isVisitDocumentMime,
+          receiveWhatsAppBranchFDocument,
         } = await import("./whatsapp.visitDocs.js");
 
         const media = await downloadWhatsAppMedia(mediaId);
@@ -525,14 +527,16 @@ export const WhatsAppService = {
           patientPhoneEarly,
         );
         const activelyRegistering = inActiveRegisterStep(earlyState.step);
-        const awaitingReport = earlyState.step === "awaiting_report";
+        const awaitingDocUpload =
+          earlyState.step === "awaiting_document_upload" ||
+          earlyState.step === "awaiting_report";
         const reportCaption = /^(report|reports|document|attach|lab)/i.test(
           caption.trim(),
         );
 
         const preferIdOcr =
           !alreadyRegistered &&
-          !awaitingReport &&
+          !awaitingDocUpload &&
           !reportCaption &&
           (activelyRegistering || isIdRegistrationCaption(caption));
 
@@ -541,12 +545,11 @@ export const WhatsAppService = {
           buffer: media.buffer,
         });
 
-        // Visit report path: PDFs/images for open visits. Prefer this whenever
-        // the patient chose Report, captioned a report, or is not mid-register.
+        // Branch F / visit report path
         const tryVisitDoc =
           looksLikeVisitFile &&
           !preferIdOcr &&
-          (awaitingReport ||
+          (awaitingDocUpload ||
             reportCaption ||
             media.mimeType.toLowerCase().includes("pdf") ||
             /\.pdf$/i.test(filename) ||
@@ -558,6 +561,74 @@ export const WhatsAppService = {
             BotPrompts.visitDocProcessing(langEarly),
             item.phoneNumberId,
           );
+
+          // Branch F (Menu → Attach, or post-booking Yes): upload-first flow.
+          if (awaitingDocUpload || reportCaption) {
+            const branchF = await receiveWhatsAppBranchFDocument({
+              practiceId: practiceEarly.id,
+              patientPhone: patientPhoneEarly,
+              buffer: media.buffer,
+              mimeType: media.mimeType,
+              filename: filename || undefined,
+              caption: caption || undefined,
+              lang: langEarly,
+              preferredBookingId: earlyState.lastBookingId || null,
+            });
+
+            if (branchF.nextStep === "awaiting_document_link" && branchF.pendingDoc) {
+              await prisma.whatsAppConversation.update({
+                where: { id: convEarly.id },
+                data: {
+                  state: {
+                    ...earlyState,
+                    step: "awaiting_document_link",
+                    pendingDoc: branchF.pendingDoc,
+                    idleReminderSentAt: undefined,
+                  },
+                },
+              });
+              const btnSent = await sendWhatsAppInteractiveButtons(
+                item.from,
+                {
+                  body: branchF.reply,
+                  buttons: [
+                    { id: "doc:appointment", title: "Select Appointment" },
+                    { id: "doc:general", title: "General Document" },
+                  ],
+                },
+                item.phoneNumberId,
+              );
+              if (!btnSent.ok) {
+                await sendWhatsAppText(
+                  item.from,
+                  `${branchF.reply}\n\nReply *Select Appointment* or *General Document*.`,
+                  item.phoneNumberId,
+                );
+              }
+              continue;
+            }
+
+            await prisma.whatsAppConversation.update({
+              where: { id: convEarly.id },
+              data: {
+                state: {
+                  ...earlyState,
+                  step: "idle",
+                  pendingDoc: null,
+                  lastBookingId:
+                    branchF.bookingId || earlyState.lastBookingId,
+                  idleReminderSentAt: undefined,
+                },
+              },
+            });
+            await sendWhatsAppText(
+              item.from,
+              branchF.reply,
+              item.phoneNumberId,
+            );
+            continue;
+          }
+
           const attached = await attachWhatsAppVisitDocument({
             practiceId: practiceEarly.id,
             patientPhone: patientPhoneEarly,
@@ -570,19 +641,18 @@ export const WhatsAppService = {
           });
 
           if (attached.attached) {
-            if (awaitingReport) {
-              await prisma.whatsAppConversation.update({
-                where: { id: convEarly.id },
-                data: {
-                  state: {
-                    ...earlyState,
-                    step: "idle",
-                    lastBookingId: attached.bookingId || earlyState.lastBookingId,
-                    idleReminderSentAt: undefined,
-                  },
+            await prisma.whatsAppConversation.update({
+              where: { id: convEarly.id },
+              data: {
+                state: {
+                  ...earlyState,
+                  step: "idle",
+                  lastBookingId: attached.bookingId || earlyState.lastBookingId,
+                  pendingDoc: null,
+                  idleReminderSentAt: undefined,
                 },
-              });
-            }
+              },
+            });
             await sendWhatsAppText(
               item.from,
               attached.reply,
@@ -591,24 +661,11 @@ export const WhatsAppService = {
             continue;
           }
 
-          // Clear awaiting_report so they aren't stuck after a failed attach
-          if (awaitingReport) {
-            await prisma.whatsAppConversation.update({
-              where: { id: convEarly.id },
-              data: {
-                state: {
-                  ...earlyState,
-                  step: "idle",
-                  idleReminderSentAt: undefined,
-                },
-              },
-            });
-          }
-
           const midBookingFlow =
             Boolean(earlyState.step) &&
             earlyState.step !== "idle" &&
             earlyState.step !== "awaiting_report" &&
+            earlyState.step !== "awaiting_document_upload" &&
             !activelyRegistering;
           if (midBookingFlow) {
             await sendWhatsAppText(
@@ -620,7 +677,7 @@ export const WhatsAppService = {
           }
 
           // Registered / Report flow: always show visit-doc outcome (no OCR).
-          if (alreadyRegistered || awaitingReport || reportCaption) {
+          if (alreadyRegistered || reportCaption) {
             await sendWhatsAppText(
               item.from,
               attached.reply,
@@ -756,6 +813,7 @@ export const WhatsAppService = {
         messageType,
         transcribedText,
         idScan,
+        fromInteractive: buttonOrInteractive,
       });
 
       // Clinic doctor pick: prefer tappable WhatsApp list (falls back to text).
@@ -976,6 +1034,35 @@ export const WhatsAppService = {
         }
       }
 
+      // Department / specialty pick (Branch A)
+      if (result.specialtyList && result.specialtyList.length > 0) {
+        const listSent = await sendWhatsAppInteractiveList(
+          item.from,
+          {
+            header: "Choose a department",
+            body:
+              result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
+              "Pick a specialty:",
+            buttonLabel: "Departments",
+            sectionTitle: "Available departments",
+            rows: result.specialtyList.map((s) => ({
+              id: `specialty:${s.index}`,
+              title: s.label.slice(0, 24),
+              description: (s.description || "Department").slice(0, 72),
+            })),
+          },
+          item.phoneNumberId,
+        );
+        if (listSent.ok && !listSent.simulated) {
+          continue;
+        }
+        if (!listSent.ok) {
+          console.warn(
+            `[WhatsApp] specialty list interactive failed: ${listSent.error}`,
+          );
+        }
+      }
+
       // Who-to-book-for (yourself / family) when 4+ profiles
       if (result.patientList && result.patientList.length > 0) {
         const listSent = await sendWhatsAppInteractiveList(
@@ -1006,15 +1093,51 @@ export const WhatsAppService = {
       }
 
       if (result.replyButtons && result.replyButtons.length > 0) {
+        // Long confirmation + calendar links exceed Meta's 1024-char button body —
+        // send full text first, then short Yes/No for attach / confirm chips.
+        const longConfirm = Boolean(result.calendarInvite?.icsContent);
+        if (longConfirm) {
+          const textSent = await sendWhatsAppText(
+            item.from,
+            result.reply,
+            item.phoneNumberId,
+          );
+          if (!textSent.ok) {
+            console.warn(
+              `[WhatsApp] confirm text-first failed: ${textSent.error}`,
+            );
+          }
+        }
+        const buttonBody = longConfirm
+          ? result.reply.split(/\n\n/).slice(-1)[0]?.slice(0, 1024) ||
+            "Would you like to send a report?"
+          : result.reply.slice(0, 1024);
         const btnSent = await sendWhatsAppInteractiveButtons(
           item.from,
           {
-            body: result.reply.slice(0, 1024),
+            body: buttonBody,
             buttons: result.replyButtons,
           },
           item.phoneNumberId,
         );
         if (btnSent.ok && !btnSent.simulated) {
+          if (result.calendarInvite?.icsContent) {
+            const docSent = await sendWhatsAppDocument(
+              item.from,
+              {
+                filename: result.calendarInvite.icsFilename || "appointment.ics",
+                mimeType: "text/calendar",
+                buffer: Buffer.from(result.calendarInvite.icsContent, "utf8"),
+                caption: result.calendarInvite.caption,
+              },
+              item.phoneNumberId,
+            );
+            if (!docSent.ok) {
+              console.warn(
+                `[WhatsApp] calendar .ics document failed: ${docSent.error}`,
+              );
+            }
+          }
           continue;
         }
         if (!btnSent.ok) {
@@ -1040,6 +1163,24 @@ export const WhatsAppService = {
           `[WhatsApp] SIMULATED send (missing token/phoneId) to=${item.from} — patient will not see reply`,
         );
       }
+
+      if (result.calendarInvite?.icsContent) {
+        const docSent = await sendWhatsAppDocument(
+          item.from,
+          {
+            filename: result.calendarInvite.icsFilename || "appointment.ics",
+            mimeType: "text/calendar",
+            buffer: Buffer.from(result.calendarInvite.icsContent, "utf8"),
+            caption: result.calendarInvite.caption,
+          },
+          item.phoneNumberId,
+        );
+        if (!docSent.ok) {
+          console.warn(
+            `[WhatsApp] calendar .ics document failed: ${docSent.error}`,
+          );
+        }
+      }
     }
   },
 
@@ -1051,6 +1192,8 @@ export const WhatsAppService = {
     messageType?: "text" | "audio" | "image";
     transcribedText?: string;
     idScan?: IdScanFields;
+    /** List/button taps must never land in doctor care chat. */
+    fromInteractive?: boolean;
   }): Promise<{
     reply: string;
     doctorList?: Array<{
@@ -1064,8 +1207,14 @@ export const WhatsAppService = {
     slotList?: Array<{ index: number; label: string }>;
     bookingList?: Array<{ index: number; label: string; description?: string }>;
     patientList?: Array<{ index: number; label: string; description?: string }>;
+    specialtyList?: Array<{ index: number; label: string; description?: string }>;
     menuList?: Array<{ id: string; title: string; description?: string }>;
     textBeforeMenu?: boolean;
+    calendarInvite?: {
+      icsFilename: string;
+      icsContent: string;
+      caption?: string;
+    };
   }> {
     const practice = await this.resolvePracticeByNumber(
       payload.to,
@@ -1142,8 +1291,16 @@ export const WhatsAppService = {
 
     // Mirror patient WhatsApp text into care chat (portal + apps).
     // Menu digits / BOOK / list taps skip this entirely (zero care-chat DB).
+    // Branch E collects the message in the orchestrator (pins to booking / Admin).
     try {
-      if (!looksLikeBotCommand(text)) {
+      const branchECollecting =
+        state.step === "awaiting_message_doctor_text" ||
+        state.step === "awaiting_message_doctor_booking";
+      if (
+        !payload.fromInteractive &&
+        !looksLikeBotCommand(text) &&
+        !branchECollecting
+      ) {
         const care = await ingestWhatsAppPatientReply({
           practiceId: practice.id,
           patientPhone,
