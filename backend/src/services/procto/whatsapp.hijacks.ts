@@ -27,7 +27,7 @@ export function parseGlobalKeywordHijack(text: string): GlobalHijack | null {
 
   // Structured interactive payloads — never treat as keyword hijacks.
   if (
-    /^(?:menu|post|booking|slot|date|mode|patient|provider|lang|rel|doc|cancel|confirm|reg_email_|idle|continue|nlu):/i.test(
+    /^(?:menu|post|booking|slot|date|mode|patient|provider|lang|rel|doc|cancel|confirm|reg_email_|idle|continue|nlu|whom|specialty|manage):/i.test(
       raw,
     )
   ) {
