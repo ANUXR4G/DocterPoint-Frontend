@@ -558,8 +558,9 @@ export const WhatsAppService = {
           );
 
           // Branch F: Menu → Attach, post-booking Yes, or registered idle drop.
-          // Registered patients with 2+ open visits must get Select Appointment
-          // (never silent attach via lastBookingId).
+          // Always offer Select Appointment | General Document when visits exist
+          // (never silent-attach to the only open booking). preferredBookingId
+          // only when the patient already picked a visit this turn.
           const useBranchF =
             awaitingDocUpload ||
             reportCaption ||
@@ -574,7 +575,9 @@ export const WhatsAppService = {
               filename: filename || undefined,
               caption: caption || undefined,
               lang: langEarly,
-              preferredBookingId: earlyState.lastBookingId || null,
+              preferredBookingId: awaitingDocUpload
+                ? earlyState.lastBookingId || null
+                : null,
             });
 
             if (branchF.nextStep === "awaiting_document_link" && branchF.pendingDoc) {

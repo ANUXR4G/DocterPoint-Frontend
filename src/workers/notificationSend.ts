@@ -22,11 +22,31 @@ export async function processNotificationEvent(notificationId: string): Promise<
   }
 
   const payload = (event.payload ?? {}) as Record<string, unknown>;
-  const to = String(payload.to ?? event.booking.patientPhone);
+  const recipientRole = String(payload.recipientRole ?? "patient");
+  const toRaw = String(payload.to ?? "").trim();
+  const to =
+    toRaw ||
+    (recipientRole === "clinic" ? "" : String(event.booking.patientPhone || ""));
   const templateKey = String(
     payload.templateKey ?? event.type ?? "BOOKING_CONFIRMATION",
   );
-  const recipientRole = String(payload.recipientRole ?? "patient");
+
+  // Clinic inbox-only rows (no practice/doctor WA number) stay visible in-app.
+  if (recipientRole === "clinic" && !to.replace(/\D/g, "")) {
+    await prisma.notificationEvent.update({
+      where: { id: event.id },
+      data: {
+        status: "SKIPPED",
+        sentAt: new Date(),
+        payload: {
+          ...payload,
+          inAppOnly: true,
+          error: "no clinic WhatsApp number — inbox only",
+        },
+      },
+    });
+    return { skipped: true, reason: "in_app_only" };
+  }
 
   if (recipientRole !== "clinic") {
     const conv = await prisma.whatsAppConversation.findFirst({

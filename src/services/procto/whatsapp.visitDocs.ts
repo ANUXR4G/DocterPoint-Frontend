@@ -14,7 +14,6 @@ import { formatPracticeDateTime } from "./slotEngine.js";
 
 const CLOUD_NAME = "dwhlynqj3";
 const UPLOAD_PRESET = "gluco-guide-users";
-const MAX_BOOKING_DOCUMENTS = 5;
 const MAX_BYTES = 10 * 1024 * 1024;
 
 const OPEN_STATUSES: BookingStatus[] = [
@@ -234,11 +233,8 @@ function readDocuments(raw: unknown): VisitDocItem[] {
         uploadedAt: row.uploadedAt || new Date().toISOString(),
       };
     })
-    .filter((d) => d.url.length > 0)
-    .slice(0, MAX_BOOKING_DOCUMENTS);
+    .filter((d) => d.url.length > 0);
 }
-
-const MAX_PATIENT_DOCUMENTS = 20;
 
 async function attachDocItemToBooking(
   booking: {
@@ -256,14 +252,7 @@ async function attachDocItemToBooking(
   lang?: WaLang,
 ): Promise<{ reply: string; attached: boolean; bookingId: string }> {
   const existing = readDocuments(booking.documents);
-  if (existing.length >= MAX_BOOKING_DOCUMENTS) {
-    return {
-      attached: false,
-      bookingId: booking.id,
-      reply: BotPrompts.visitDocLimitReached(MAX_BOOKING_DOCUMENTS, lang),
-    };
-  }
-  const nextDocs = [...existing, doc].slice(0, MAX_BOOKING_DOCUMENTS);
+  const nextDocs = [...existing, doc];
   const noteLine = `[WhatsApp] Patient attached: ${doc.name}`;
   const prevNotes = booking.notes?.trim() || "";
   const nextNotes = prevNotes.includes(noteLine)
@@ -326,7 +315,6 @@ async function attachDocItemToBooking(
     reply: BotPrompts.visitDocAttached({
       name: doc.name,
       count: nextDocs.length,
-      max: MAX_BOOKING_DOCUMENTS,
       whenLabel: booking.slotStart
         ? formatVisitWhenLabel(booking.slotStart)
         : booking.sessionDate
@@ -337,7 +325,11 @@ async function attachDocItemToBooking(
   };
 }
 
-/** Branch F — save uploaded doc onto the patient record (general). */
+/** Branch F — save uploaded doc onto the patient record (general).
+ * Never writes PracticeBooking.documents — General Document stays unlinked
+ * from appointments. Clinic inbox may still use a booking id only as a
+ * notification schema anchor (docKind: "general").
+ */
 export async function attachWhatsAppPatientDocument(opts: {
   patientPhone: string;
   doc: VisitDocItem;
@@ -372,14 +364,8 @@ export async function attachWhatsAppPatientDocument(opts: {
     };
   }
 
-  const existing = readDocuments(patient.documents).slice(0, MAX_PATIENT_DOCUMENTS);
-  if (existing.length >= MAX_PATIENT_DOCUMENTS) {
-    return {
-      attached: false,
-      reply: BotPrompts.visitDocLimitReached(MAX_PATIENT_DOCUMENTS, opts.lang),
-    };
-  }
-  const nextDocs = [...existing, opts.doc].slice(0, MAX_PATIENT_DOCUMENTS);
+  const existing = readDocuments(patient.documents);
+  const nextDocs = [...existing, opts.doc];
   await prisma.patient.update({
     where: { id: patientId },
     data: { documents: nextDocs as unknown as Prisma.InputJsonValue },
@@ -461,6 +447,24 @@ export type BranchFUploadResult = {
 };
 
 /**
+ * Where a Branch F upload should land.
+ * General Document is never auto-tied to a visit — only an explicit preferred
+ * open booking id (patient already chose Select Appointment / post-booking Yes)
+ * may attach to PracticeBooking.documents.
+ */
+export function resolveBranchFDocTarget(opts: {
+  preferredBookingId?: string | null;
+  openBookingIds: string[];
+}): "attach_preferred" | "general" | "ask_link" {
+  const preferred = opts.preferredBookingId?.trim() || null;
+  if (preferred && opts.openBookingIds.includes(preferred)) {
+    return "attach_preferred";
+  }
+  if (opts.openBookingIds.length === 0) return "general";
+  return "ask_link";
+}
+
+/**
  * Branch F — upload file, then either save immediately or ask to link.
  */
 export async function receiveWhatsAppBranchFDocument(opts: {
@@ -528,25 +532,14 @@ export async function receiveWhatsAppBranchFDocument(opts: {
     opts.patientPhone,
     { patientIds, take: 5 },
   );
+  const openIds = open.map((b) => b.id);
+  const target = resolveBranchFDocTarget({
+    preferredBookingId: opts.preferredBookingId,
+    openBookingIds: openIds,
+  });
 
-  // Single open visit (or preferred with none listed): attach immediately.
-  // With 2+ open bookings, never skip the picker — lastBookingId is often stale.
-  if (open.length === 1) {
-    const result = await attachPendingDocToBooking({
-      practiceId: opts.practiceId,
-      patientPhone: opts.patientPhone,
-      bookingId: open[0]!.id,
-      doc,
-      lang,
-    });
-    return {
-      reply: result.reply,
-      attached: result.attached,
-      bookingId: result.bookingId,
-    };
-  }
-
-  if (opts.preferredBookingId && open.length === 0) {
+  // Explicit open visit already chosen — attach to that booking only.
+  if (target === "attach_preferred" && opts.preferredBookingId) {
     const result = await attachPendingDocToBooking({
       practiceId: opts.practiceId,
       patientPhone: opts.patientPhone,
@@ -561,7 +554,8 @@ export async function receiveWhatsAppBranchFDocument(opts: {
     };
   }
 
-  if (!open.length) {
+  // No open appointments → patient-level general document only (never a visit).
+  if (target === "general") {
     const general = await attachWhatsAppPatientDocument({
       patientPhone: opts.patientPhone,
       doc,
@@ -591,7 +585,8 @@ export async function receiveWhatsAppBranchFDocument(opts: {
     return { attached: true, reply: general.reply };
   }
 
-  // Branch F: ask whether to link to an appointment.
+  // 1+ open visits: always ask Select Appointment | General Document.
+  // General Document must never auto-attach to a visit (even when only one).
   return {
     attached: false,
     reply: BotPrompts.askLinkDocumentToAppointment(lang),
@@ -628,7 +623,7 @@ async function notifyDoctorCareChat(opts: {
 
   const content =
     `📎 Attached a visit document via WhatsApp: *${opts.docName}* ` +
-    `(${opts.docCount}/${MAX_BOOKING_DOCUMENTS}). Open the visit to view.`;
+    `(${opts.docCount} file${opts.docCount === 1 ? "" : "s"} on this visit). Open the visit to view.`;
 
   const created = await prisma.message.create({
     data: {
@@ -707,12 +702,6 @@ export async function attachWhatsAppVisitDocument(opts: {
   }
 
   const existing = readDocuments(booking.documents);
-  if (existing.length >= MAX_BOOKING_DOCUMENTS) {
-    return {
-      attached: false,
-      reply: BotPrompts.visitDocLimitReached(MAX_BOOKING_DOCUMENTS, lang),
-    };
-  }
 
   // Normalize octet-stream PDFs so Cloudinary / storage treat them correctly
   let mimeType = opts.mimeType;
@@ -762,7 +751,7 @@ export async function attachWhatsAppVisitDocument(opts: {
     url: uploaded.url,
     uploadedAt: new Date().toISOString(),
   };
-  const nextDocs = [...existing, doc].slice(0, MAX_BOOKING_DOCUMENTS);
+  const nextDocs = [...existing, doc];
   const noteLine = `[WhatsApp] Patient attached: ${doc.name}`;
   const prevNotes = booking.notes?.trim() || "";
   const nextNotes = prevNotes.includes(noteLine)
@@ -825,7 +814,6 @@ export async function attachWhatsAppVisitDocument(opts: {
     reply: BotPrompts.visitDocAttached({
       name: doc.name,
       count: nextDocs.length,
-      max: MAX_BOOKING_DOCUMENTS,
       whenLabel: booking.slotStart
         ? formatVisitWhenLabel(booking.slotStart)
         : booking.sessionDate

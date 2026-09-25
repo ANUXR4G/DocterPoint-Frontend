@@ -19,6 +19,7 @@ import {
   schedulesForActiveMode,
   startOfLocalDay,
   timeSlotsForProviderDay,
+  zonedDateTime,
 } from "./slotEngine.js";
 import { last10Digits, normalizeGender } from "../../core/gender.js";
 import { ageFromDob } from "../../core/dob.js";
@@ -64,8 +65,7 @@ function readPatientGeneralDocuments(raw: unknown): Array<{
         uploadedAt: row.uploadedAt || new Date().toISOString(),
       };
     })
-    .filter((d) => d.url.length > 0)
-    .slice(0, 20);
+    .filter((d) => d.url.length > 0);
 }
 
 type OnboardDoctorInput = {
@@ -2251,60 +2251,87 @@ export const PracticeService = {
     };
 
     const today = new Date();
-    const currentYear = today.getFullYear();
+    const todayIso = formatLocalDate(today);
+    const [yearStr, monthStr] = todayIso.split("-");
+    const currentYear = Number(yearStr);
+    const currentMonth = Number(monthStr); // 1–12 in practice TZ
     let buckets: Bucket[] = [];
 
+    const shiftIso = (iso: string, days: number) => {
+      const [y, m, d] = iso.split("-").map(Number);
+      const utc = new Date(Date.UTC(y, m - 1, d + days));
+      return utc.toISOString().slice(0, 10);
+    };
+
     if (normalized === "day") {
-      const dayStart = startOfLocalDay(today);
       buckets = Array.from({ length: 24 }, (_, h) => {
-        const start = new Date(dayStart);
-        start.setHours(h, 0, 0, 0);
-        const end = new Date(start);
-        end.setHours(h + 1, 0, 0, 0);
-        end.setMilliseconds(-1);
+        const hh = String(h).padStart(2, "0");
+        const start = zonedDateTime(todayIso, `${hh}:00`);
+        const end =
+          h < 23
+            ? new Date(
+                zonedDateTime(
+                  todayIso,
+                  `${String(h + 1).padStart(2, "0")}:00`,
+                ).getTime() - 1,
+              )
+            : endOfLocalDay(parseLocalDate(todayIso));
         return {
-          label: `${String(h).padStart(2, "0")}:00`,
+          label: `${hh}:00`,
           start,
           end,
         };
       });
     } else if (normalized === "week") {
-      const startOfWeek = startOfLocalDay(today);
-      startOfWeek.setDate(today.getDate() - ((today.getDay() + 7) % 7));
+      const weekStartIso = shiftIso(todayIso, -practiceWeekday(today));
       buckets = Array.from({ length: 7 }, (_, i) => {
-        const start = new Date(startOfWeek);
-        start.setDate(startOfWeek.getDate() + i);
+        const dayIso = shiftIso(weekStartIso, i);
+        const start = parseLocalDate(dayIso);
         const end = endOfLocalDay(start);
         return {
-          label: start.toLocaleDateString("en-US", { weekday: "long" }),
+          label: start.toLocaleDateString("en-US", {
+            weekday: "long",
+            timeZone: PRACTICE_TIMEZONE,
+          }),
           start,
           end,
         };
       });
     } else if (normalized === "month") {
       const daysInMonth = new Date(
-        currentYear,
-        today.getMonth() + 1,
-        0,
-      ).getDate();
+        Date.UTC(currentYear, currentMonth, 0),
+      ).getUTCDate();
       buckets = Array.from({ length: daysInMonth }, (_, i) => {
-        const start = new Date(currentYear, today.getMonth(), i + 1);
+        const dayIso = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`;
+        const start = parseLocalDate(dayIso);
         return {
           label: String(i + 1),
-          start: startOfLocalDay(start),
+          start,
           end: endOfLocalDay(start),
         };
       });
     } else {
       buckets = Array.from({ length: 12 }, (_, i) => {
-        const start = new Date(currentYear, i, 1);
-        const end = endOfLocalDay(new Date(currentYear, i + 1, 0));
+        const month = i + 1;
+        const startIso = `${currentYear}-${String(month).padStart(2, "0")}-01`;
+        const start = parseLocalDate(startIso);
+        const lastDay = new Date(Date.UTC(currentYear, month, 0)).getUTCDate();
+        const endIso = `${currentYear}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+        const end = endOfLocalDay(parseLocalDate(endIso));
+        const prevStartIso = `${currentYear - 1}-${String(month).padStart(2, "0")}-01`;
+        const prevLast = new Date(
+          Date.UTC(currentYear - 1, month, 0),
+        ).getUTCDate();
+        const prevEndIso = `${currentYear - 1}-${String(month).padStart(2, "0")}-${String(prevLast).padStart(2, "0")}`;
         return {
-          label: start.toLocaleDateString("en-US", { month: "long" }),
-          start: startOfLocalDay(start),
+          label: start.toLocaleDateString("en-US", {
+            month: "long",
+            timeZone: PRACTICE_TIMEZONE,
+          }),
+          start,
           end,
-          prevStart: startOfLocalDay(new Date(currentYear - 1, i, 1)),
-          prevEnd: endOfLocalDay(new Date(currentYear - 1, i + 1, 0)),
+          prevStart: parseLocalDate(prevStartIso),
+          prevEnd: endOfLocalDay(parseLocalDate(prevEndIso)),
         };
       });
     }
