@@ -46,8 +46,14 @@ function nextVisitLabel(booking: ProctoBooking | undefined) {
 }
 
 export default function Dashboard() {
-  const { bookings, loading, ready, error: loadError, refresh } =
-    usePatientDashboard()
+  const {
+    bookings,
+    loading,
+    ready,
+    liveConnected,
+    error: loadError,
+    refresh,
+  } = usePatientDashboard()
   const showLoading = !ready && loading
 
   const upcoming = useMemo(
@@ -84,6 +90,20 @@ export default function Dashboard() {
         actionBelow
         action={
           <>
+            <span
+              className={`inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold ${
+                liveConnected
+                  ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                  : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+              }`}
+              title={
+                liveConnected
+                  ? "Live updates connected"
+                  : "Connecting live updates…"
+              }
+            >
+              {liveConnected ? "Live" : "Connecting…"}
+            </span>
             <Link href="/practices" className="dashboard-btn-primary">
               Find a clinic
             </Link>
@@ -213,7 +233,7 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          {loading && upcoming.length === 0 ? (
+          {showLoading ? (
             <p className="text-sm text-slate-500">Loading visits…</p>
           ) : loadError ? null : upcoming.length === 0 ? (
             <div className="dashboard-panel flex min-h-[12rem] flex-col items-center justify-center border-dashed text-center">

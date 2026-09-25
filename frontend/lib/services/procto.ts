@@ -1,50 +1,37 @@
 import { cookies } from "@/utils/cookies";
-import { firey } from "@/utils";
+import { ensureAccessToken } from "@/lib/accessToken";
 
-const base =
-  process.env.NEXT_PUBLIC_API ?? "http://localhost:3000/api/v1";
+/** Same-origin in the browser — avoids localhost vs 127.0.0.1 cookie/WS splits. */
+function apiBase() {
+  if (typeof window !== "undefined") return "/api/v1";
+  return process.env.NEXT_PUBLIC_API ?? "http://127.0.0.1:3000/api/v1";
+}
 
-let refreshPromise: Promise<string | null> | null = null;
 let invalidateMyPracticesCacheImpl: (() => void) | null = null;
 
-async function ensureAccessToken(): Promise<string> {
-  const access = cookies.getCookie("access_token");
-  if (access) {
-    try {
-      if (firey.getTokenDuration(access) >= Date.now() / 1000) return access;
-    } catch {
-      /* refresh below */
+const PROCTO_FETCH_TIMEOUT_MS = 12_000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = PROCTO_FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const external = init.signal;
+  if (external) {
+    if (external.aborted) controller.abort();
+    else {
+      external.addEventListener("abort", () => controller.abort(), {
+        once: true,
+      });
     }
   }
-
-  const refresh = cookies.getCookie("refresh_token");
-  if (!refresh) return access || "";
-
-  if (refreshPromise) return (await refreshPromise) || access || "";
-
-  refreshPromise = (async () => {
-    try {
-      const response = await fetch(`${base}/auth/token/refresh`, {
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${refresh}`,
-        },
-      });
-      if (response.status === 429 || response.status >= 500) {
-        return cookies.getCookie("access_token") || refresh;
-      }
-      if (!response.ok) return null;
-      await response.json().catch(() => null);
-      return cookies.getCookie("access_token") || refresh;
-    } catch {
-      return cookies.getCookie("access_token") || refresh;
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-
-  return (await refreshPromise) || access || "";
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function proctoFetch(path: string, init?: RequestInit) {
@@ -55,34 +42,43 @@ async function proctoFetch(path: string, init?: RequestInit) {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${base}${path}`, {
-    credentials: "include",
-    ...init,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(`${apiBase()}${path}`, {
+      credentials: "include",
+      ...init,
+      headers,
+    });
+  } catch {
+    return { status: "unsuccessful", message: "Service unavailable" };
+  }
 
   // One retry after forced refresh on 401
   if (res.status === 401 && cookies.getCookie("refresh_token")) {
-    refreshPromise = null;
+    cookies.deleteCookie("access_token");
     const retryToken = await ensureAccessToken();
     if (retryToken) {
-      const retry = await fetch(`${base}${path}`, {
-        credentials: "include",
-        ...init,
-        headers: { ...headers, Authorization: `Bearer ${retryToken}` },
-      });
-      const text = await retry.text();
-      if (
-        !retry.ok ||
-        text.trim().startsWith("<!") ||
-        text.trim().startsWith("<html")
-      ) {
-        return { status: "unsuccessful", message: "Service unavailable" };
-      }
       try {
-        return JSON.parse(text);
+        const retry = await fetchWithTimeout(`${apiBase()}${path}`, {
+          credentials: "include",
+          ...init,
+          headers: { ...headers, Authorization: `Bearer ${retryToken}` },
+        });
+        const text = await retry.text();
+        if (
+          !retry.ok ||
+          text.trim().startsWith("<!") ||
+          text.trim().startsWith("<html")
+        ) {
+          return { status: "unsuccessful", message: "Service unavailable" };
+        }
+        try {
+          return JSON.parse(text);
+        } catch {
+          return { status: "unsuccessful", message: "Invalid API response" };
+        }
       } catch {
-        return { status: "unsuccessful", message: "Invalid API response" };
+        return { status: "unsuccessful", message: "Service unavailable" };
       }
     }
   }
@@ -162,13 +158,25 @@ export const proctoService = {
     return () => {
       const now = Date.now();
       if (cached && now - cached.at < TTL_MS) return cached.promise;
-      const promise = proctoFetch("/procto/practices/mine").then((res) => {
-        if (res?.status !== "successful") {
+      const promise = proctoFetch("/procto/practices/mine")
+        .then((res) => {
+          if (res?.status !== "successful") {
+            cached = null;
+          }
+          return res;
+        })
+        .catch((err) => {
           cached = null;
-        }
-        return res;
-      });
+          throw err;
+        });
+      // Only keep a resolved successful cache; drop in-flight on next miss
+      // after TTL so a hung/slow first call cannot pin the UI.
       cached = { at: now, promise };
+      void promise.finally(() => {
+        if (cached?.promise === promise) {
+          /* keep until TTL; unsuccessful already nulled above */
+        }
+      });
       return promise;
     };
   })(),

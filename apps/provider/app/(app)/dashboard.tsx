@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -22,13 +22,8 @@ import {
 import {
   usePractice,
   usePracticeLabel,
-  selfProviderScope,
 } from "@/lib/practiceContext";
-import {
-  fetchPracticeBookings,
-  fetchPracticePatients,
-} from "@/lib/procto";
-import type { BookingRow, PracticePatient } from "@/lib/types";
+import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { ymd } from "@/lib/types";
 import { colors, dashOrder, space, type DashTone } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
@@ -47,42 +42,23 @@ type QuickLink = {
 export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { practiceId, membership, memberships } = usePractice();
+  const { membership, memberships } = usePractice();
   const label = usePracticeLabel(membership);
-  const selfProviderId = selfProviderScope(membership);
+  const {
+    patients,
+    liveConnected,
+    error: liveError,
+    refresh,
+    bookingsOnDate,
+  } = usePracticeLive();
   const [today] = useState(() => ymd(new Date()));
-  const [bookings, setBookings] = useState<BookingRow[]>([]);
-  const [patients, setPatients] = useState<PracticePatient[]>([]);
-  const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const bookings = bookingsOnDate(today);
+  const error = liveError || "";
 
   const isClinicAdmin =
     membership?.role === "PRACTICE_OWNER" ||
     membership?.role === "PRACTICE_ADMIN";
-
-  const load = useCallback(async () => {
-    if (!practiceId) return;
-    const [bRes, pRes] = await Promise.all([
-      fetchPracticeBookings(practiceId, {
-        date: today,
-        providerId: selfProviderId,
-      }),
-      fetchPracticePatients(practiceId),
-    ]);
-    if (bRes.status === "successful") {
-      setBookings((bRes.data as BookingRow[]) ?? []);
-      setError("");
-    } else {
-      setError(bRes.message || "Could not load today's bookings");
-    }
-    if (pRes.status === "successful") {
-      setPatients((pRes.data as PracticePatient[]) ?? []);
-    }
-  }, [practiceId, today, selfProviderId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const openQueue = useMemo(() => {
     const statuses = bookings.map((b) => b.status);
@@ -163,7 +139,7 @@ export default function DashboardScreen() {
             refreshing={refreshing}
             onRefresh={async () => {
               setRefreshing(true);
-              await load();
+              await refresh({ soft: true, force: true });
               setRefreshing(false);
             }}
             tintColor={colors.brand}
@@ -175,6 +151,10 @@ export default function DashboardScreen() {
           title="Today at a glance"
           subtitle={`${membership?.practice.name ?? "Practice"} · ${label}`}
         />
+
+        <View style={styles.chips}>
+          <Chip label={liveConnected ? "Live" : "Connecting…"} />
+        </View>
 
         {memberships.length > 1 ? (
           <Text style={styles.switchHint}>

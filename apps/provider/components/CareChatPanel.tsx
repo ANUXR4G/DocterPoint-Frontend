@@ -16,6 +16,7 @@ import {
   sendCareMessage,
   type CareChatMessage,
 } from "@/lib/chat";
+import { shouldHideFromCareChat } from "@/lib/careChatFilter";
 import { colors, radii, space } from "@/lib/theme";
 
 type Props = {
@@ -49,7 +50,7 @@ export function CareChatPanel({
         if (!opts?.soft) setError(res.error);
         return;
       }
-      setMessages(res.messages);
+      setMessages(res.messages.filter((m) => !shouldHideFromCareChat(m.content)));
     },
     [selfUserId, peerUserId],
   );
@@ -79,6 +80,7 @@ export function CareChatPanel({
     onEvent: (event) => {
       const msg = normalizeMsg(event as Record<string, unknown>);
       if (msg.type !== "direct" || !msg.id || !msg.content) return;
+      if (shouldHideFromCareChat(msg.content)) return;
       const involvesPeer =
         msg.senderId === peerUserId ||
         msg.receiverId === peerUserId ||

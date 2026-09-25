@@ -10,6 +10,70 @@ import { prisma } from "../../db/prisma.js";
 
 const router = Router();
 
+/**
+ * Public .ics download — UUID is the capability token.
+ * Used by WhatsApp confirmation links (phones open this URL).
+ */
+router.get(
+  "/:bookingId/calendar.ics",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const bookingId = param(req.params.bookingId);
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          bookingId,
+        )
+      ) {
+        return ResponseHandler.unsuccessful(res, 400, "Invalid booking id.");
+      }
+      const booking = await prisma.practiceBooking.findUnique({
+        where: { id: bookingId },
+        include: {
+          practice: { select: { name: true } },
+          location: {
+            select: {
+              name: true,
+              address: true,
+              city: true,
+              geometry: true,
+            },
+          },
+        },
+      });
+      if (!booking) {
+        return ResponseHandler.unsuccessful(res, 404, "Booking not found.");
+      }
+      const provider = await prisma.user.findUnique({
+        where: { id: booking.providerId },
+        select: { name: true },
+      });
+      const { buildIcsContent, bookingReferenceId } = await import(
+        "../../services/procto/bookingCalendar.js"
+      );
+      const ics = buildIcsContent({
+        id: booking.id,
+        mode: booking.mode,
+        slotStart: booking.slotStart,
+        sessionDate: booking.sessionDate,
+        tokenNumber: booking.tokenNumber,
+        patientName: booking.patientName,
+        practiceName: booking.practice.name,
+        providerName: provider?.name,
+        location: booking.location ?? {},
+      });
+      const filename = `appointment-${bookingReferenceId(booking.id)}.ics`;
+      res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
+      return res.status(200).send(ics);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get("/availability", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { practiceId, providerId, locationId, date } = req.query;

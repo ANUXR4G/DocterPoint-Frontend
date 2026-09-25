@@ -13,6 +13,7 @@ import {
   PracticeProvider,
   pickProviderId,
 } from "@/lib/practiceContext";
+import { PracticeLiveProvider } from "@/lib/PracticeLiveContext";
 import { fetchMyPractices } from "@/lib/procto";
 import type { PracticeMembership } from "@/lib/types";
 import { colors, radii, space } from "@/lib/theme";
@@ -121,6 +122,7 @@ export default function AppLayout() {
 
   return (
     <PracticeProvider value={value}>
+      <PracticeLiveProvider>
       <SafeAreaView
         style={{ flex: 1, backgroundColor: colors.paper }}
         edges={["top", "left", "right"]}
@@ -198,6 +200,7 @@ export default function AppLayout() {
         </Tabs>
         <GlucoBotFab />
       </SafeAreaView>
+      </PracticeLiveProvider>
     </PracticeProvider>
   );
 }

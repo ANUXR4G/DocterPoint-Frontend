@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
-import { getToken, getApiUrl } from "@/lib/api";
+import { ensureAccessToken, getApiUrl } from "@/lib/api";
 
 export type LiveEvent =
   | {
@@ -25,20 +25,28 @@ type Options = {
   path: string | null;
   onEvent: (event: LiveEvent) => void;
   onReconnect?: () => void;
+  onOpen?: () => void;
+  onClose?: () => void;
   enabled?: boolean;
 };
 
-/** Silent live socket — no UI errors; debounced reconnect notify. */
+/** Silent live socket — no UI errors; refreshes access token before connect. */
 export function useLiveSocket({
   path,
   onEvent,
   onReconnect,
+  onOpen,
+  onClose,
   enabled = true,
 }: Options) {
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
   const reconnectRef = useRef(onReconnect);
   reconnectRef.current = onReconnect;
+  const openRef = useRef(onOpen);
+  openRef.current = onOpen;
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
 
   useEffect(() => {
     if (!enabled || !path) return;
@@ -49,6 +57,7 @@ export function useLiveSocket({
     let closed = false;
     let attempt = 0;
     let everOpened = false;
+    let connectGen = 0;
     let appSub: { remove: () => void } | null = null;
 
     function scheduleReconnectNotify() {
@@ -56,6 +65,18 @@ export function useLiveSocket({
       reconnectNotifyTimer = setTimeout(() => {
         reconnectRef.current?.();
       }, 400);
+    }
+
+    function scheduleRetry() {
+      if (closed) return;
+      attempt += 1;
+      const delay =
+        attempt <= 6
+          ? 400
+          : Math.min(15_000, 1500 * 2 ** Math.min(attempt - 6, 4));
+      retryTimer = setTimeout(() => {
+        void connect();
+      }, delay);
     }
 
     async function connect() {
@@ -68,28 +89,24 @@ export function useLiveSocket({
         return;
       }
 
-      const token = await getToken();
+      const gen = ++connectGen;
+      const token = await ensureAccessToken();
+      if (closed || gen !== connectGen) return;
+
       if (!token) {
-        attempt += 1;
-        const delay = Math.min(15_000, 1500 * 2 ** Math.min(attempt, 4));
-        retryTimer = setTimeout(() => {
-          void connect();
-        }, delay);
+        scheduleRetry();
         return;
       }
 
       try {
         ws = new WebSocket(buildWsUrl(path!, token));
       } catch {
-        attempt += 1;
-        const delay = Math.min(30_000, 1000 * 2 ** attempt);
-        retryTimer = setTimeout(() => {
-          void connect();
-        }, delay);
+        scheduleRetry();
         return;
       }
 
       ws.onopen = () => {
+        openRef.current?.();
         if (everOpened) scheduleReconnectNotify();
         everOpened = true;
         attempt = 0;
@@ -109,11 +126,8 @@ export function useLiveSocket({
 
       ws.onclose = () => {
         if (closed) return;
-        const delay = Math.min(30_000, 1000 * 2 ** attempt);
-        attempt += 1;
-        retryTimer = setTimeout(() => {
-          void connect();
-        }, delay);
+        closeRef.current?.();
+        scheduleRetry();
       };
     }
 
@@ -128,6 +142,7 @@ export function useLiveSocket({
 
     return () => {
       closed = true;
+      connectGen += 1;
       appSub?.remove();
       if (retryTimer) clearTimeout(retryTimer);
       if (reconnectNotifyTimer) clearTimeout(reconnectNotifyTimer);
@@ -144,10 +159,14 @@ export function useProctoLiveSocket(
   practiceId: string | null,
   onEvent: (event: LiveEvent) => void,
   onReconnect?: () => void,
+  onOpen?: () => void,
+  onClose?: () => void,
 ) {
   useLiveSocket({
     path: practiceId ? `/api/v1/ws/procto/${practiceId}` : null,
     onEvent,
     onReconnect,
+    onOpen,
+    onClose,
   });
 }

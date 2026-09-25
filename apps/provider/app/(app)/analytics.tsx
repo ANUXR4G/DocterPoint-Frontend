@@ -14,7 +14,7 @@ import { usePractice } from "@/lib/practiceContext";
 import { fetchPracticeAnalytics } from "@/lib/procto";
 import { colors, dash, dashOrder, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
+import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
 
 type Period = "week" | "month" | "day";
 
@@ -95,15 +95,10 @@ export default function AnalyticsScreen() {
     void load();
   }, [load]);
 
-  useProctoLiveSocket(
-    practiceId,
-    () => {
-      void load({ silent: true });
-    },
-    () => {
-      void load({ silent: true });
-    },
-  );
+  usePracticeLiveRefresh(() => void load({ silent: true }), {
+    bookings: false,
+    ops: true,
+  });
 
   const buckets = useMemo(() => {
     if (!raw || typeof raw !== "object") return [];

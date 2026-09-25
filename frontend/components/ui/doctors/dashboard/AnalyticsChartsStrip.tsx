@@ -13,8 +13,14 @@ import { TypeAnalyticsParam } from "@/types"
 /** Chart.js strip — loaded separately so dashboards don't pay chart cost up front. */
 export function AnalyticsChartsStrip() {
   const [period, setPeriod] = useState<TypeAnalyticsParam>("week")
-  const { patientMetrics, appointmentMetrics, planLocked, isLoading } =
-    useAnalytics(period)
+  const {
+    patientMetrics,
+    appointmentMetrics,
+    planLocked,
+    isLoading,
+    errorMessage,
+    practiceId,
+  } = useAnalytics(period)
 
   const male = patientMetrics.reduce((s, m) => s + m.male, 0)
   const female = patientMetrics.reduce((s, m) => s + m.female, 0)
@@ -48,7 +54,23 @@ export function AnalyticsChartsStrip() {
           appointment totals above are live from your clinic.
         </p>
       ) : isLoading ? (
-        <p className="text-sm text-neutral-500">Loading charts…</p>
+        <div
+          role="status"
+          className="dashboard-grid-3 animate-pulse"
+          aria-label="Loading charts"
+        >
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="min-h-[14rem] rounded-2xl bg-slate-100 dark:bg-white/5"
+            />
+          ))}
+        </div>
+      ) : errorMessage && !patientMetrics.length ? (
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-center text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+          {errorMessage}
+          {!practiceId ? " Link a practice to see charts." : ""}
+        </p>
       ) : (
         <div className="dashboard-grid-3">
           <div className="dashboard-panel dashboard-panel-chart">

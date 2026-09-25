@@ -1,4 +1,5 @@
 import { socketManager } from "../../core/socket.js";
+import { prisma } from "../../db/prisma.js";
 
 export type ProctoLiveEvent =
   | { event: "booking_created"; booking: Record<string, unknown> }
@@ -62,6 +63,34 @@ export function serializeBooking(booking: {
   };
 }
 
+async function resolvePatientUserId(
+  patientId?: string | null,
+  payload?: ProctoLiveEvent,
+): Promise<string | null> {
+  if (patientId) return patientId;
+  if (!payload || !("booking" in payload) || !payload.booking) return null;
+  const raw =
+    payload.booking.patient_phone ?? payload.booking.patientPhone ?? "";
+  const digits = String(raw).replace(/\D/g, "").slice(-10);
+  if (digits.length !== 10) return null;
+  try {
+    const user = await prisma.user.findFirst({
+      where: {
+        role: "user",
+        OR: [
+          { phone: { endsWith: digits } },
+          { patient: { contactNumber: { endsWith: digits } } },
+        ],
+      },
+      select: { id: true },
+    });
+    return user?.id ?? null;
+  } catch (err) {
+    console.warn("[procto] patient room resolve failed (non-fatal):", err);
+    return null;
+  }
+}
+
 export async function broadcastProctoEvent(
   practiceId: string,
   payload: ProctoLiveEvent,
@@ -69,8 +98,9 @@ export async function broadcastProctoEvent(
 ): Promise<void> {
   const body = JSON.stringify(payload);
   await socketManager.broadcastToRoom(proctoRoomId(practiceId), body);
-  if (patientId) {
-    await socketManager.broadcastToRoom(patientRoomId(patientId), body);
+  const targetUserId = await resolvePatientUserId(patientId, payload);
+  if (targetUserId) {
+    await socketManager.broadcastToRoom(patientRoomId(targetUserId), body);
   }
 }
 

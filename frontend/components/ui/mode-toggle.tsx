@@ -35,7 +35,7 @@ export function ModeToggle({ className }: { className?: string }) {
       title={`${LABELS[active]} · click for ${LABELS[upcoming]}`}
       onClick={() => changeTheme(upcoming)}
       className={cn(
-        "relative z-50 inline-flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-white/90 text-neutral-900 shadow-sm transition-colors dark:border-white/15 dark:bg-slate-800/90 dark:text-white",
+        "relative z-50 inline-flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200/80 bg-white/70 text-neutral-900 shadow-sm transition-colors dark:border-white/10 dark:bg-[#0f172a]/90 dark:text-white",
         "hover:bg-black/5 dark:hover:bg-white/10",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40",
         className,

@@ -302,7 +302,7 @@ export default function PatientRegisterForm({
                   className={`min-h-11 rounded-xl border px-1.5 text-xs font-semibold transition sm:min-h-12 sm:px-2 sm:text-sm ${
                     profile.gender === g.value
                       ? "border-[#0099ff] bg-[#0099ff]/10 text-neutral-900 dark:text-white"
-                      : "border-neutral-200 text-neutral-500 dark:border-[#333] dark:text-[#999]"
+                      : "border-slate-200 text-slate-500 dark:border-white/10 dark:text-slate-400"
                   }`}
                 >
                   {g.label}

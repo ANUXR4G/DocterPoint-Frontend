@@ -19,7 +19,7 @@ import {
   SectionTitle,
 } from "@/components/ui";
 import { api } from "@/lib/api";
-import { usePatientLiveSocket } from "@/hooks/useLiveSocket";
+import { usePatientLive } from "@/lib/PatientLiveContext";
 import { patchBookingFields } from "@/lib/liveBooking";
 import { getSessionUserId } from "@/lib/sessionUser";
 import { colors, radii, space } from "@/lib/theme";
@@ -42,69 +42,59 @@ function statusTone(status: string) {
 export default function BookingDetailScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const router = useRouter();
+  const { bookings: sharedBookings, liveConnected } = usePatientLive();
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selfUserId, setSelfUserId] = useState<string | null>(null);
 
-  const load = useCallback(
-    async (opts?: { soft?: boolean }) => {
-      if (!bookingId) return;
-      const soft = Boolean(opts?.soft);
-      if (!soft) {
-        setLoading(true);
-        setError("");
-      }
-      const [res, uid] = await Promise.all([
-        api<BookingDetail>(`/procto/bookings/${bookingId}`),
-        getSessionUserId(),
-      ]);
-      setSelfUserId(uid);
-      if (!soft) setLoading(false);
-      if (res.status !== "successful" || !res.data) {
-        if (!soft) {
-          setError(res.message || "Visit not found.");
-          setBooking(null);
-        }
-        return;
-      }
-      setBooking(res.data);
-    },
-    [bookingId],
-  );
+  const fromShared = sharedBookings.find((b) => b.id === bookingId) ?? null;
+
+  const load = useCallback(async (opts?: { soft?: boolean }) => {
+    if (!bookingId) return;
+    const soft = Boolean(opts?.soft);
+    if (!soft) {
+      setLoading(true);
+      setError("");
+    }
+    const [res, uid] = await Promise.all([
+      api<BookingDetail>(`/procto/bookings/${bookingId}`),
+      getSessionUserId(),
+    ]);
+    setSelfUserId(uid);
+    if (!soft) setLoading(false);
+    if (res.status !== "successful" || !res.data) {
+      if (!soft) setError(res.message || "Visit not found.");
+      return;
+    }
+    setBooking(res.data);
+  }, [bookingId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  usePatientLiveSocket(
-    true,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return;
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined;
-      if (!incoming?.id || String(incoming.id) !== String(bookingId)) return;
-      setBooking((prev) => {
-        if (!prev) return prev;
-        return patchBookingFields(prev, incoming);
-      });
-    },
-    () => void load({ soft: true }),
-  );
+  useEffect(() => {
+    if (!fromShared) return;
+    setBooking((prev) => {
+      if (!prev) return fromShared as BookingDetail;
+      return patchBookingFields(
+        prev,
+        fromShared as unknown as Record<string, unknown>,
+      );
+    });
+  }, [fromShared]);
 
-  if (loading && !booking) return <Loading />;
+  useEffect(() => {
+    if (!liveConnected) return;
+    void load({ soft: true });
+  }, [liveConnected, load]);
 
-  if (!booking) {
+  const display = booking ?? (fromShared as BookingDetail | null);
+
+  if (loading && !display) return <Loading />;
+
+  if (!display) {
     return (
       <Screen>
         <View style={styles.content}>
@@ -117,17 +107,18 @@ export default function BookingDetailScreen() {
     );
   }
 
-  const tone = statusTone(booking.status);
-  const isCompleted = booking.status === "COMPLETED";
-  const practiceId = booking.practiceId ?? booking.practice?.id ?? null;
-  const canReview = isCompleted && booking.reviewEligibility?.canReview === true;
+  const tone = statusTone(display.status);
+  const isCompleted = display.status === "COMPLETED";
+  const practiceId = display.practiceId ?? display.practice?.id ?? null;
+  const canReview =
+    isCompleted && display.reviewEligibility?.canReview === true;
   const alreadyReviewed =
-    isCompleted && booking.reviewEligibility?.alreadyReviewed === true;
-  const medicines = Array.isArray(booking.medicines) ? booking.medicines : [];
-  const documents = Array.isArray(booking.documents) ? booking.documents : [];
+    isCompleted && display.reviewEligibility?.alreadyReviewed === true;
+  const medicines = Array.isArray(display.medicines) ? display.medicines : [];
+  const documents = Array.isArray(display.documents) ? display.documents : [];
   const showVisitSummary =
     isCompleted ||
-    Boolean(booking.doctorRemarks?.trim()) ||
+    Boolean(display.doctorRemarks?.trim()) ||
     medicines.length > 0 ||
     documents.length > 0;
 
@@ -139,13 +130,17 @@ export default function BookingDetailScreen() {
         </Pressable>
 
         <PageTitle
-          title={booking.practice?.name || "Clinic visit"}
-          subtitle={bookingWhen(booking)}
+          title={display.practice?.name || "Clinic visit"}
+          subtitle={
+            liveConnected
+              ? `${bookingWhen(display)} · Live`
+              : bookingWhen(display)
+          }
         />
 
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
           <Text style={[styles.statusText, { color: tone.text }]}>
-            {(booking.status || "").replace(/_/g, " ")}
+            {(display.status || "").replace(/_/g, " ")}
           </Text>
         </View>
 
@@ -157,18 +152,18 @@ export default function BookingDetailScreen() {
 
         <Panel style={styles.panel}>
           <SectionTitle>Visit details</SectionTitle>
-          <Detail label="Doctor" value={booking.provider?.name || "—"} />
+          <Detail label="Doctor" value={display.provider?.name || "—"} />
           <Detail
             label="Location"
             value={
-              booking.location
-                ? `${booking.location.name}, ${booking.location.city}`
+              display.location
+                ? `${display.location.name}, ${display.location.city}`
                 : "—"
             }
           />
           <Detail
             label="Reason"
-            value={booking.disease || booking.consultationType || "—"}
+            value={display.disease || display.consultationType || "—"}
           />
         </Panel>
 
@@ -176,8 +171,8 @@ export default function BookingDetailScreen() {
           <>
             <Panel style={styles.panel}>
               <SectionTitle>Doctor remarks</SectionTitle>
-              {booking.doctorRemarks?.trim() ? (
-                <Text style={styles.body}>{booking.doctorRemarks}</Text>
+              {display.doctorRemarks?.trim() ? (
+                <Text style={styles.body}>{display.doctorRemarks}</Text>
               ) : (
                 <Text style={styles.muted}>No remarks from the doctor yet.</Text>
               )}
@@ -222,13 +217,13 @@ export default function BookingDetailScreen() {
           </>
         ) : null}
 
-        {selfUserId && booking.provider?.id ? (
+        {selfUserId && display.provider?.id ? (
           <CareChatPanel
             selfUserId={selfUserId}
-            peerUserId={booking.provider.id}
+            peerUserId={display.provider.id}
             peerName={
-              booking.provider.name
-                ? `Dr. ${booking.provider.name}`
+              display.provider.name
+                ? `Dr. ${display.provider.name}`
                 : "Doctor"
             }
             subtitle="Doctor messages also arrive on WhatsApp. Do not use this for emergencies."
@@ -246,9 +241,9 @@ export default function BookingDetailScreen() {
             ) : canReview ? (
               <PracticeReviewForm
                 practiceId={practiceId}
-                bookingId={booking.id}
-                defaultAuthorName={booking.patientName ?? ""}
-                providerName={booking.provider?.name}
+                bookingId={display.id}
+                defaultAuthorName={display.patientName ?? ""}
+                providerName={display.provider?.name}
                 onSubmitted={() => void load()}
               />
             ) : (

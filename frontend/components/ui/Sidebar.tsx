@@ -42,7 +42,7 @@ function navLinkClass(active: boolean) {
   return [
     "relative flex w-full items-center rounded-2xl px-2 py-1 transition-all duration-200 xl:px-3",
     active
-      ? "bg-sky-100 text-slate-900 shadow-sm dark:bg-blue-500/15 dark:text-white"
+      ? "bg-sky-100 text-slate-900 shadow-sm dark:bg-blue-500/20 dark:text-white"
       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-white",
   ].join(" ")
 }
@@ -91,9 +91,9 @@ export default function Sidebar({ role, logout }: Props) {
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-50 hidden h-screen w-[72px] flex-col border-r border-slate-100 bg-sky-50/95 backdrop-blur-sm md:flex xl:w-60 xl:px-3 xl:pt-5 dark:border-white/10 dark:bg-slate-900/95">
-      <Background name="half-box-pattern" className="hidden opacity-10 dark:xl:block" />
-      <div className="mb-5 hidden items-center gap-2.5 px-2 xl:flex">
+    <aside className="fixed left-0 top-0 z-50 hidden h-screen w-[72px] flex-col border-r border-slate-100/60 bg-sky-50/95 backdrop-blur-sm md:flex xl:w-60 xl:px-3 xl:pt-5 dark:border-white/5 dark:bg-[#0f172a] dark:backdrop-blur-none">
+      <Background name="half-box-pattern" className="pointer-events-none absolute inset-0 hidden opacity-[0.04] dark:xl:block" />
+      <div className="relative z-[1] mb-5 hidden items-center gap-2.5 px-2 xl:flex">
         <div className="flex size-9 items-center justify-center rounded-2xl bg-blue-600 text-white dark:bg-blue-500">
           <Icon className="h-5 w-5" name="gluco-guide" />
         </div>
@@ -101,13 +101,13 @@ export default function Sidebar({ role, logout }: Props) {
           <h3 className="text-[15px] font-semibold tracking-[-0.3px] text-slate-900 dark:text-white">
             GlucoGuide
           </h3>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-500">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-400">
             {dashboardBrandLabel(navRole)}
           </p>
         </div>
       </div>
 
-      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden py-4">
+      <div className="relative z-[1] flex h-full min-h-0 w-full flex-col overflow-hidden py-4">
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto no-scrollbar xl:gap-1 xl:show-scrollbar xl:custom-scroll">
           <span className="mb-1 hidden px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-400 xl:block">
             Overview

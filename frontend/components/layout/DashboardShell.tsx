@@ -50,15 +50,14 @@ export default function DashboardShell({
       <Suspense fallback={null}>
         <Sidebar role={role} logout={handleLogout} />
       </Suspense>
-      <div className="dashboard-app-canvas relative z-10 min-h-screen p-2 sm:p-3 md:pl-[calc(72px+0.75rem)] md:pr-3 md:pt-3 md:pb-3 xl:pl-[calc(240px+1rem)] xl:pr-4 xl:pt-4 xl:pb-4">
-        <div className="dashboard-frame flex min-h-[calc(100vh-1rem)] w-full flex-col overflow-hidden rounded-[28px] border border-slate-100/90 bg-white shadow-[0_24px_64px_-32px_rgba(37,99,235,0.22)] dark:border-white/10 dark:bg-[#0f172a] sm:min-h-[calc(100vh-1.5rem)] md:min-h-[calc(100vh-1.5rem)]">
-          <Header role={role} embedded />
-          <main
-            className={`dashboard-main flex-1 overflow-y-auto px-4 py-5 text-[var(--solune-ink)] xs:px-5 md:px-6 dark:text-slate-100 ${className}`}
-          >
-            {children}
-          </main>
-        </div>
+      <div className="dashboard-app-canvas relative z-10 flex min-h-screen flex-col md:pl-[72px] xl:pl-60">
+        {/* Floating top bar — no frame / border / fill */}
+        <Header role={role} embedded />
+        <main
+          className={`dashboard-main flex-1 overflow-y-auto px-4 pb-8 pt-6 text-[var(--solune-ink)] xs:px-5 sm:pt-8 md:px-6 dark:text-slate-100 ${className}`}
+        >
+          {children}
+        </main>
       </div>
       <AnimatePresence>
         {showMenu && (

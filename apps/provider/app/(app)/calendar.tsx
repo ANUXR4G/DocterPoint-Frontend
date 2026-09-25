@@ -32,8 +32,7 @@ import {
 } from "@/lib/calendarDates";
 import { colors, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
-import { applyLiveBookingEvent } from "@/lib/liveBooking";
+import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -89,39 +88,7 @@ export default function CalendarScreen() {
     };
   }, [load]);
 
-  useProctoLiveSocket(
-    practiceId,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return;
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined;
-      setRows((prev) => {
-        const { next, needsRefresh } = applyLiveBookingEvent(
-          prev,
-          String(event.event),
-          incoming,
-        );
-        if (needsRefresh) scheduleSoftRefresh();
-        if (!selfProviderId) return next;
-        return next.filter(
-          (b) =>
-            b.provider?.id === selfProviderId ||
-            (b as { providerId?: string }).providerId === selfProviderId,
-        );
-      });
-    },
-    () => scheduleSoftRefresh(),
-  );
+  usePracticeLiveRefresh(() => scheduleSoftRefresh());
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();

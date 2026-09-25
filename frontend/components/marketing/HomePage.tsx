@@ -316,7 +316,7 @@ export default function HomePage() {
           <div className="dashboard-frame mx-auto w-full max-w-[1400px] overflow-hidden rounded-[28px] border border-slate-100/90 bg-white shadow-[0_24px_64px_-32px_rgba(37,99,235,0.22)] dark:border-white/10 dark:bg-slate-900">
             <main className="text-slate-900 dark:text-slate-100">
               {/* Hero — full viewport */}
-              <section className="dashboard-hero relative flex h-screen min-h-[600px] flex-col overflow-hidden !rounded-none !border-0 !shadow-none pt-20 sm:pt-24">
+              <section className="dashboard-hero relative flex h-screen min-h-[600px] flex-col overflow-hidden !rounded-none !border-0 !shadow-none pt-24 sm:pt-28">
                 <div aria-hidden className="dashboard-hero-glow" />
                 <div className="relative mx-auto flex flex-1 w-full max-w-6xl items-center px-4 sm:px-6 lg:px-8">
                   <div className="grid w-full items-center gap-8 lg:grid-cols-2 lg:gap-12">

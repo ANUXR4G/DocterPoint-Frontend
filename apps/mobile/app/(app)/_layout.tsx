@@ -8,6 +8,7 @@ import {
 } from "@/components/mobile/FloatingDock";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { getToken } from "@/lib/api";
+import { PatientLiveProvider } from "@/lib/PatientLiveContext";
 import { onSessionExpired } from "@/lib/sessionEvents";
 import { colors } from "@/lib/theme";
 
@@ -40,6 +41,7 @@ export default function AppLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
+      <PatientLiveProvider>
       <Tabs
         tabBar={(props) => <FloatingDock {...(props as FloatingDockProps)} />}
         screenOptions={{
@@ -131,6 +133,7 @@ export default function AppLayout() {
         />
       </Tabs>
       <GlucoBotFab />
+      </PatientLiveProvider>
     </View>
   );
 }

@@ -19,7 +19,7 @@ import {
 import { DAY_LABELS, type OverrideRow, type ScheduleRow } from "@/lib/types";
 import { colors, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
+import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
 
 const TYPES = [
   { value: "BLOCK_DAY", label: "Block day" },
@@ -65,17 +65,12 @@ export default function ScheduleScreen() {
     void load();
   }, [load]);
 
-  useProctoLiveSocket(
-    practiceId,
-    () => {
-      void load();
-    },
-    () => {
-      void load();
-    },
-  );
+  usePracticeLiveRefresh(() => void load(), {
+    bookings: false,
+    ops: true,
+  });
 
-  function beginEdit(s: ScheduleRow) {
+function beginEdit(s: ScheduleRow) {
     setEditId(s.id);
     if (s.mode === "TOKEN_BASED") {
       setEditStart(s.sessionStart || "");

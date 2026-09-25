@@ -437,6 +437,11 @@ export function exactMenuIntent(text: string): BotIntent | null {
     another_booking: "book",
     book_again: "book",
     book_new: "book",
+    book_new_appointment: "book",
+    new_appointment: "book",
+    view_manage_existing_bookings: "status",
+    view_manage_bookings: "status",
+    manage_existing_bookings: "status",
     cancel: "cancel",
     cancle: "cancel",
     cancell: "cancel",
@@ -445,12 +450,29 @@ export function exactMenuIntent(text: string): BotIntent | null {
     register: "register",
     signup: "register",
     sign_up: "register",
+    family: "register",
+    family_member: "register",
+    add_family: "register",
+    register_family: "register",
+    register_family_member: "register",
+    register_family_member_dependant: "register",
+    register_family_member_dependent: "register",
+    family_member_dependant: "register",
+    dependant: "register",
+    dependent: "register",
     doctors: "doctors",
     doctor: "doctors",
     docters: "doctors",
     providers: "doctors",
-    help: "help",
+    help: "human",
+    agent: "human",
+    human: "human",
+    support: "human",
+    talk_to_support: "human",
+    talk_to_agent: "human",
+    talk_to_support_agent: "human",
     menu: "help",
+    main: "help",
     main_menu: "help",
     mainmenu: "help",
     show_menu: "help",
@@ -459,6 +481,9 @@ export function exactMenuIntent(text: string): BotIntent | null {
     back_to_menu: "help",
     faq: "faq",
     info: "faq",
+    my_bookings: "status",
+    view_bookings: "status",
+    manage_bookings: "status",
     report: "report",
     reports: "report",
     attach_report: "report",
@@ -475,6 +500,7 @@ export function exactMenuIntent(text: string): BotIntent | null {
     my_doc: "my_docs",
     documents: "my_docs",
     message_doctor: "message_doctor",
+    message_to_doctor: "message_doctor",
     message: "message_doctor",
     message_your_doctor: "message_doctor",
     msg_doctor: "message_doctor",
@@ -482,13 +508,14 @@ export function exactMenuIntent(text: string): BotIntent | null {
     doctor_chat: "message_doctor",
     talk_doctor: "message_doctor",
   };
-  return aliases[t] ?? aliases[raw.replace(/\s+/g, "_")] ?? null;
+  const slashNorm = t.replace(/\//g, "").replace(/_+/g, "_");
+  return aliases[t] ?? aliases[slashNorm] ?? aliases[raw.replace(/\s+/g, "_")] ?? null;
 }
 
 /**
  * Number shortcuts from the HELP / welcome menu (idle only).
  * Do NOT use during doctor/slot/date pick — those use the same digits.
- * 8 = language change (handled by caller, not a BotIntent).
+ * Legacy menu:* ids (doctors/faq/…) still map for older clients.
  */
 export type MenuShortcut = BotIntent | "language";
 
@@ -505,38 +532,43 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
     const key = listPick[1]!.toLowerCase();
     const map: Record<string, MenuShortcut> = {
       book: "book",
-      doctors: "doctors",
+      bookings: "status",
       status: "status",
+      family: "register",
       register: "register",
+      support: "human",
+      human: "human",
+      agent: "human",
+      message_doctor: "message_doctor",
+      message: "message_doctor",
+      report: "report",
+      document: "report",
+      attach: "report",
+      // Legacy 1–9 menu ids (still honour taps from older sessions)
+      doctors: "doctors",
       faq: "faq",
       cancel: "cancel",
       reschedule: "reschedule",
       language: "language",
       lang: "language",
-      report: "report",
       help: "help",
       menu: "help",
-      message_doctor: "message_doctor",
-      message: "message_doctor",
       new_book: "book",
     };
     return map[key] ?? null;
   }
 
   // "1", "1.", "1)", "1️⃣", "option 1"
-  const m = raw.match(/^(?:option\s*)?([1-9])(?:\s*[.)]?)?$/i);
+  const m = raw.match(/^(?:option\s*)?([1-6])(?:\s*[.)]?)?$/i);
   if (!m) return null;
   const n = Number(m[1]);
   const map: Record<number, MenuShortcut> = {
     1: "book",
-    2: "doctors",
-    3: "status",
-    4: "register",
-    5: "faq",
-    6: "cancel",
-    7: "reschedule",
-    8: "language",
-    9: "report",
+    2: "status",
+    3: "register",
+    4: "human",
+    5: "message_doctor",
+    6: "report",
   };
   return map[n] ?? null;
 }
@@ -646,15 +678,14 @@ function parseIntentRegex(text: string): BotIntent {
   if (/^(no|n|nope|cancel that|nevermind|never mind|नहीं|ना)$/i.test(t) || t === "नहीं")
     return "confirm_no";
   if (
-    /^(help|menu|main\s*menu|\?|hi|hello|hey|start|नमस्ते|हेल्प)$/i.test(t) ||
-    t === "मदद" ||
+    /^(menu|main\s*menu|\?|hi|hello|hey|start|नमस्ते|मेनू|मुख्य\s*मेनू)$/i.test(t) ||
     t === "मेनू" ||
     t === "मुख्य मेनू"
   ) {
     return "help";
   }
   if (
-    /^(human|agent|staff)$/i.test(t) ||
+    /^(help|agent|human|staff|हेल्प|मदद)$/i.test(t) ||
     /\b(talk to (a )?(human|person|doctor|receptionist)|real person|human please)\b/.test(
       t,
     ) ||
@@ -674,9 +705,10 @@ function parseIntentRegex(text: string): BotIntent {
     /^(report|reports|send\s*report|attach(\s+report)?|lab\s*report|prescription|rx)$/i.test(
       t,
     ) ||
-    /\b(send|attach|upload)\s+(a\s+)?(report|document|lab|prescription|pdf)\b/.test(
+    /\b(send|attach|upload)\s+(my\s+|the\s+|a\s+)?(lab\s+)?(report|document|prescription|pdf)\b/.test(
       t,
     ) ||
+    /\b(lab\s+report|send\s+.*\s+(to\s+)?(my\s+)?doctor)\b/.test(t) ||
     /रिपोर्ट|दस्तावेज भेज|फ़ाइल भेज/.test(text)
   ) {
     return "report";
@@ -821,7 +853,9 @@ REGISTER means create a patient account (sign up / new patient / रजिस्
 DOCTORS means list doctors/providers at the clinic (doctor list / डॉक्टर). Accept misspellings like DOCTERS, DOKORS, DOCATORS.
 BOOK means book an appointment (बुक / अपॉइंटमेंट). Accept common typos (BOK, BOOOK, APPOINTMNET). Prefer book when they mention a date/time for a visit.
 Prefer a command intent over unknown when the message is clearly a mistyped menu word.
-"main menu", "menu", "help", "मेनू" → intent help (show the menu). Never treat those as a booking date.`;
+"main menu", "menu", "मेनू" → intent help (show the menu).
+"help", "agent", "support" → intent human (talk to support / agent).
+Never treat menu/main as a booking date.`;
 
 /** Keep WhatsApp snappy — abort slow NLU and fall back to regex. */
 const NLU_LLM_TIMEOUT_MS = Number(process.env.NLU_LLM_TIMEOUT_MS || 600);
@@ -963,6 +997,63 @@ export async function parseUtterance(
   };
 }
 
+/**
+ * True when freeform NLU extracted a bookable date/time worth confirming
+ * ("Need to book tomorrow at 3pm") instead of a bare BOOK keyword.
+ */
+export function shouldConfirmNluBook(text: string, slots: NluSlots): boolean {
+  const t = text.trim();
+  if (!t || /^(book|booking|bok)$/i.test(t)) return false;
+  return Boolean(
+    slots.date ||
+      slots.preferredHour != null ||
+      slots.preferredMinute != null ||
+      slots.preferredPeriod ||
+      (slots.timeText && slots.timeText.trim()),
+  );
+}
+
+/** Human-readable summary for NLU book confirmation. */
+export function formatNluBookConfirmSummary(slots: NluSlots): string {
+  const parts: string[] = [];
+  if (slots.date) {
+    const d = new Date(`${slots.date}T12:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      parts.push(
+        d.toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+      );
+    } else {
+      parts.push(slots.date);
+    }
+  } else if (slots.rawDateText?.trim()) {
+    parts.push(slots.rawDateText.trim());
+  }
+
+  let timePart: string | null = null;
+  if (slots.preferredHour != null) {
+    const h24 = slots.preferredHour;
+    const min = slots.preferredMinute ?? 0;
+    const ampm = h24 >= 12 ? "PM" : "AM";
+    const h12 = ((h24 + 11) % 12) + 1;
+    timePart = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+  } else if (slots.timeText?.trim()) {
+    timePart = slots.timeText.trim();
+  } else if (slots.preferredPeriod) {
+    timePart = slots.preferredPeriod;
+  }
+
+  if (parts.length && timePart) return `${parts[0]} at ${timePart}`;
+  if (timePart) return timePart;
+  if (parts.length) return parts[0]!;
+  if (slots.providerName?.trim()) return `a visit with ${slots.providerName.trim()}`;
+  return "an upcoming slot";
+}
+
 /** Steps where the reply is a pick-list / yes-no / raw name-date — skip LLM. */
 export function stepUsesLlm(step?: string): boolean {
   if (!step || step === "idle") return true;
@@ -976,20 +1067,32 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_cancel_reason",
     "awaiting_reschedule_booking",
     "awaiting_reschedule_slot",
+    "awaiting_manage_booking",
+    "awaiting_manage_action",
     "awaiting_message_doctor_booking",
+    "awaiting_message_doctor_text",
+    "awaiting_book_whom",
     "awaiting_book_patient",
+    "awaiting_specialty",
     "awaiting_register_name",
+    "awaiting_register_dob",
     "awaiting_register_gender",
     "awaiting_register_email_opt",
     "awaiting_register_email",
     "awaiting_register_family_opt",
     "awaiting_register_family_phone",
+    "awaiting_register_relationship",
+    "awaiting_register_family_details",
     "awaiting_register_confirm",
     "awaiting_date",
     "awaiting_language",
     "awaiting_attach_offer",
     "awaiting_report_booking",
     "awaiting_report",
+    "awaiting_document_upload",
+    "awaiting_document_link",
+    "awaiting_nlu_book_confirm",
+    "agent_transfer",
   ]);
   return !structured.has(step);
 }
@@ -1014,13 +1117,17 @@ export function shouldUseLlmForMessage(
     "awaiting_register_gender",
     "awaiting_register_email_opt",
     "awaiting_register_family_opt",
+    "awaiting_register_relationship",
+    "awaiting_register_family_details",
   ]);
   if (step && confirmish.has(step)) return false;
   const t = text.trim();
   if (/^(yes|y|no|n|male|female|others?|today|tomorrow)$/i.test(t)) {
     return false;
   }
-  if (/^(date:|slot:|provider:|reg_email_)/i.test(t)) return false;
+  if (/^(date:|slot:|provider:|reg_email_|confirm:|whom:|specialty:|manage:|cancel:|booking:|rel:)/i.test(t)) {
+    return false;
+  }
   // Multi-word speech → LLM; also short but content-rich ("kal 10am")
   if (t.split(/\s+/).length >= 2) return true;
   if (parseSpokenTime(t).preferredHour != null) return true;

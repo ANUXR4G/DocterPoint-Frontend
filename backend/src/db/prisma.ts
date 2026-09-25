@@ -1,10 +1,26 @@
 import { PrismaClient } from "@prisma/client";
 import { databaseUrl } from "../config/index.js";
 
+/** Cap Prisma connections against Supabase session pooler (EMAXCONNSESSION). */
+function withPoolLimits(url: string): string {
+  try {
+    const u = new URL(url);
+    if (!u.searchParams.has("connection_limit")) {
+      u.searchParams.set("connection_limit", "5");
+    }
+    if (!u.searchParams.has("pool_timeout")) {
+      u.searchParams.set("pool_timeout", "10");
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 export const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: databaseUrl,
+      url: withPoolLimits(databaseUrl),
     },
   },
 });

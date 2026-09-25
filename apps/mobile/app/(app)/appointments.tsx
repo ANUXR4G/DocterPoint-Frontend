@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   RefreshControl,
@@ -17,17 +17,14 @@ import {
   PageTitle,
   Screen,
 } from "@/components/ui";
-import { usePatientLiveSocket } from "@/hooks/useLiveSocket";
 import { AnimatedView, PressableScale } from "@/lib/motion";
-import { api, getApiUrl } from "@/lib/api";
-import { getCachedBookings, setCachedBookings } from "@/lib/dataCache";
-import { applyLiveBookingEvent } from "@/lib/liveBooking";
+import { api } from "@/lib/api";
+import { usePatientLive } from "@/lib/PatientLiveContext";
 import { colors, shadows, radii, space } from "@/lib/theme";
 import {
   bookingWhen,
   isPastStatus,
   isUpcomingStatus,
-  type ProctoBooking,
 } from "@/lib/types";
 
 function statusTone(status: string) {
@@ -47,95 +44,24 @@ type ViewMode = "list" | "calendar";
 
 export default function AppointmentsScreen() {
   const router = useRouter();
+  const {
+    bookings: items,
+    loading,
+    liveConnected,
+    error: liveError,
+    refresh,
+  } = usePatientLive();
   const [view, setView] = useState<ViewMode>("list");
   const [scope, setScope] = useState<"upcoming" | "past" | "all">("upcoming");
-  const [items, setItems] = useState<ProctoBooking[]>(
-    () => getCachedBookings() ?? [],
-  );
-  const [loading, setLoading] = useState(() => !getCachedBookings());
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const softRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadGen = useRef(0);
-
-  function scheduleSoftRefresh() {
-    if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current);
-    softRefreshTimer.current = setTimeout(() => {
-      void load({ soft: true });
-    }, 250);
-  }
-
-  async function load(opts?: { soft?: boolean; force?: boolean }) {
-    const soft = Boolean(opts?.soft);
-    const force = Boolean(opts?.force);
-
-    if (!force && soft) {
-      const cached = getCachedBookings();
-      if (cached) {
-        setItems(cached);
-        setLoading(false);
-        return;
-      }
-    }
-
-    const gen = ++loadGen.current;
-    if (!soft) setLoading(true);
-    if (!soft) setError("");
-    const res = await api<ProctoBooking[]>("/procto/bookings/mine");
-    if (gen !== loadGen.current) return;
-    if (!soft) setLoading(false);
-    setRefreshing(false);
-    if (res.status !== "successful") {
-      if (!soft) {
-        setError(
-          `${res.message || "Failed to load visits"} (API: ${getApiUrl()})`,
-        );
-      }
-      return;
-    }
-    const next = Array.isArray(res.data) ? res.data : [];
-    setItems(next);
-    setCachedBookings(next);
-  }
+  const displayError = error || liveError || "";
 
   useFocusEffect(
     useCallback(() => {
-      void load({ soft: true });
-      return () => {
-        if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current);
-      };
-    }, []),
-  );
-
-  usePatientLiveSocket(
-    true,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return;
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined;
-      setItems((prev) => {
-        const { next, needsRefresh } = applyLiveBookingEvent(
-          prev,
-          String(event.event),
-          incoming,
-        );
-        setCachedBookings(next);
-        if (needsRefresh) scheduleSoftRefresh();
-        return next;
-      });
-    },
-    () => scheduleSoftRefresh(),
+      void refresh({ soft: true });
+    }, [refresh]),
   );
 
   const filtered = items.filter((b) => {
@@ -161,7 +87,7 @@ export default function AppointmentsScreen() {
             setError(res.message || "Cancel failed");
             return;
           }
-          await load({ soft: true });
+          await refresh({ soft: true, force: true });
         },
       },
     ]);
@@ -179,7 +105,9 @@ export default function AppointmentsScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              void load({ soft: true, force: true });
+              void refresh({ soft: true, force: true }).finally(() =>
+                setRefreshing(false),
+              );
             }}
             tintColor={colors.brand}
           />
@@ -188,7 +116,11 @@ export default function AppointmentsScreen() {
         <PageTitle
           eyebrow="Schedule"
           title="My visits"
-          subtitle="Switch between list and calendar. Bookings from web and WhatsApp show here."
+          subtitle={
+            liveConnected
+              ? "Live updates on · list and calendar stay in sync with the clinic."
+              : "Connecting live… · bookings from web and WhatsApp show here."
+          }
         />
 
         <View style={styles.viewSwitch}>
@@ -204,7 +136,7 @@ export default function AppointmentsScreen() {
           />
         </View>
 
-        <ErrorText text={error} />
+        <ErrorText text={displayError} />
 
         {view === "calendar" ? (
           <CareCalendar

@@ -223,7 +223,7 @@ function AuthPortalBody({
 
       <div
         className={cn(
-          "overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-lg shadow-blue-600/5 transition-[padding] duration-300 dark:border-white/10 dark:bg-slate-900/80 dark:shadow-none",
+          "overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-lg shadow-blue-600/5 transition-[padding] duration-300 dark:border-white/10 dark:bg-slate-900 dark:shadow-none",
           compactLayout
             ? "mt-2 flex min-h-0 flex-1 flex-col p-3 sm:p-4 lg:p-5"
             : "mt-4 p-4 sm:mt-6 sm:p-6 md:p-8",

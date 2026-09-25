@@ -6,12 +6,17 @@ import { PressableScale } from "@/lib/motion";
 import { colors, radii, space } from "@/lib/theme";
 
 type Props = {
-  title?: string;
-  showProfile?: boolean;
-};
+  title?: string
+  showProfile?: boolean
+  liveConnected?: boolean
+}
 
-export function MobileHomeHeader({ title, showProfile = true }: Props) {
-  const insets = useSafeAreaInsets();
+export function MobileHomeHeader({
+  title,
+  showProfile = true,
+  liveConnected,
+}: Props) {
+  const insets = useSafeAreaInsets()
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + 6 }]}>
@@ -22,7 +27,13 @@ export function MobileHomeHeader({ title, showProfile = true }: Props) {
           </View>
           <View>
             <Text style={styles.brand}>{title ?? "GlucoGuide"}</Text>
-            <Text style={styles.brandSub}>Premium care</Text>
+            <Text style={styles.brandSub}>
+              {liveConnected === undefined
+                ? "Premium care"
+                : liveConnected
+                  ? "Live updates on"
+                  : "Connecting live…"}
+            </Text>
           </View>
         </View>
         {showProfile ? (
@@ -34,7 +45,7 @@ export function MobileHomeHeader({ title, showProfile = true }: Props) {
         ) : null}
       </View>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({

@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { buildWsUrl, readAccessTokenFromCookie } from "@/lib/wsOrigin"
+import { buildWsUrl } from "@/lib/wsOrigin"
+import { ensureAccessToken } from "@/lib/accessToken"
 
 export type LiveEvent =
   | {
@@ -19,23 +20,31 @@ type Options = {
   path: string | null
   onEvent: (event: LiveEvent) => void
   onReconnect?: () => void
+  onOpen?: () => void
+  onClose?: () => void
   enabled?: boolean
 }
 
 /**
  * Shared live socket for dashboards (not Mira).
- * Silent retries; debounced reconnect notify; skips when no auth cookie.
+ * Silent retries; refreshes access token before each connect (same as REST).
  */
 export function useLiveSocket({
   path,
   onEvent,
   onReconnect,
+  onOpen,
+  onClose,
   enabled = true,
 }: Options) {
   const handlerRef = useRef(onEvent)
   handlerRef.current = onEvent
   const reconnectRef = useRef(onReconnect)
   reconnectRef.current = onReconnect
+  const openRef = useRef(onOpen)
+  openRef.current = onOpen
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
 
   useEffect(() => {
     if (!enabled || !path) return
@@ -46,6 +55,7 @@ export function useLiveSocket({
     let closed = false
     let attempt = 0
     let everOpened = false
+    let connectGen = 0
 
     function scheduleReconnectNotify() {
       if (reconnectNotifyTimer) clearTimeout(reconnectNotifyTimer)
@@ -54,7 +64,19 @@ export function useLiveSocket({
       }, 400)
     }
 
-    function connect() {
+    function scheduleRetry() {
+      if (closed) return
+      attempt += 1
+      const delay =
+        attempt <= 6
+          ? 400
+          : Math.min(15_000, 1500 * 2 ** Math.min(attempt - 6, 4))
+      retryTimer = setTimeout(() => {
+        void connect()
+      }, delay)
+    }
+
+    async function connect() {
       if (closed) return
       if (
         ws &&
@@ -64,24 +86,24 @@ export function useLiveSocket({
         return
       }
 
-      const token = readAccessTokenFromCookie()
+      const gen = ++connectGen
+      const token = await ensureAccessToken()
+      if (closed || gen !== connectGen) return
+
       if (!token) {
-        attempt += 1
-        const delay = Math.min(15_000, 1500 * 2 ** Math.min(attempt, 4))
-        retryTimer = setTimeout(connect, delay)
+        scheduleRetry()
         return
       }
 
       try {
         ws = new WebSocket(buildWsUrl(path!, token))
       } catch {
-        attempt += 1
-        const delay = Math.min(30_000, 1000 * 2 ** attempt)
-        retryTimer = setTimeout(connect, delay)
+        scheduleRetry()
         return
       }
 
       ws.onopen = () => {
+        openRef.current?.()
         if (everOpened) scheduleReconnectNotify()
         everOpened = true
         attempt = 0
@@ -100,25 +122,26 @@ export function useLiveSocket({
       }
 
       ws.onclose = () => {
+        // Skip intentional unmount — avoids Live badge flicker in Strict Mode.
         if (closed) return
-        const delay = Math.min(30_000, 1000 * 2 ** attempt)
-        attempt += 1
-        retryTimer = setTimeout(connect, delay)
+        closeRef.current?.()
+        scheduleRetry()
       }
     }
 
     function onVisibility() {
       if (document.visibilityState !== "visible" || closed) return
       if (!ws || ws.readyState === WebSocket.CLOSED) {
-        connect()
+        void connect()
       }
     }
 
-    connect()
+    void connect()
     document.addEventListener("visibilitychange", onVisibility)
 
     return () => {
       closed = true
+      connectGen += 1
       document.removeEventListener("visibilitychange", onVisibility)
       if (retryTimer) clearTimeout(retryTimer)
       if (reconnectNotifyTimer) clearTimeout(reconnectNotifyTimer)

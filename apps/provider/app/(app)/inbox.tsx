@@ -11,7 +11,7 @@ import { usePractice } from "@/lib/practiceContext";
 import { fetchConversations, setConversationStatus } from "@/lib/procto";
 import { colors, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
+import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
 
 type Conv = {
   id: string;
@@ -45,22 +45,12 @@ export default function InboxScreen() {
     void load();
   }, [load]);
 
-  useProctoLiveSocket(
-    practiceId,
-    (event) => {
-      if (
-        event &&
-        typeof event === "object" &&
-        "event" in event &&
-        event.event === "conversation_updated"
-      ) {
-        void load({ silent: true });
-      }
-    },
-    () => void load({ silent: true }),
-  );
+  usePracticeLiveRefresh(() => void load({ silent: true }), {
+    bookings: false,
+    conversations: true,
+  });
 
-  async function setStatus(
+async function setStatus(
     id: string,
     status: "bot_active" | "handed_off" | "closed",
   ) {

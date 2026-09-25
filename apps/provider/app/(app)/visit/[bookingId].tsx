@@ -30,8 +30,7 @@ import {
   updateVisit,
 } from "@/lib/procto";
 import { getSessionUserId } from "@/lib/sessionUser";
-import { usePractice } from "@/lib/practiceContext";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
+import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { patchBookingFields } from "@/lib/liveBooking";
 import {
   nextActions,
@@ -66,7 +65,10 @@ export default function VisitScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { practiceId } = usePractice();
+  const {
+    bookings: sharedBookings,
+    bookingTick,
+  } = usePracticeLive();
   const [booking, setBooking] = useState<BookingRow | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -108,37 +110,24 @@ export default function VisitScreen() {
     void getSessionUserId().then(setSelfId);
   }, [load]);
 
-  useProctoLiveSocket(
-    practiceId,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return;
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined;
-      if (!incoming?.id || String(incoming.id) !== String(bookingId)) return;
-      setBooking((prev) =>
-        prev ? patchBookingFields(prev, incoming) : prev,
+
+  const fromShared = sharedBookings.find((b) => b.id === bookingId) ?? null;
+
+  useEffect(() => {
+    if (!fromShared) return;
+    setBooking((prev) => {
+      if (!prev) return fromShared;
+      return patchBookingFields(
+        prev,
+        fromShared as unknown as Record<string, unknown>,
       );
-      if (
-        incoming.doctor_remarks !== undefined ||
-        incoming.doctorRemarks !== undefined ||
-        incoming.medicines !== undefined ||
-        incoming.documents !== undefined
-      ) {
-        void load({ silent: true });
-      }
-    },
-    () => void load({ silent: true }),
-  );
+    });
+  }, [fromShared]);
+
+  useEffect(() => {
+    if (bookingTick === 0) return;
+    void load({ silent: true });
+  }, [bookingTick, load]);
 
   const completed =
     String(booking?.status || "").toUpperCase() === "COMPLETED";

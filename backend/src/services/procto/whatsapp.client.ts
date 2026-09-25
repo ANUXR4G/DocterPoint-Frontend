@@ -308,6 +308,95 @@ export async function sendWhatsAppInteractiveButtons(
 }
 
 /**
+ * Upload bytes then send as a WhatsApp document (e.g. appointment .ics).
+ * Media upload uses the phone-number-id media endpoint.
+ */
+export async function sendWhatsAppDocument(
+  to: string,
+  opts: {
+    filename: string;
+    mimeType: string;
+    buffer: Buffer;
+    caption?: string;
+  },
+  phoneNumberId?: string,
+): Promise<WhatsAppSendResult> {
+  const token = settings.whatsappAccessToken;
+  const phoneId = phoneNumberId ?? settings.whatsappPhoneNumberId;
+
+  if (!token || !phoneId) {
+    console.log(
+      `[WhatsApp document simulated] → ${to}: ${opts.filename} (${opts.buffer.length} bytes)`,
+    );
+    return { ok: true, simulated: true };
+  }
+
+  try {
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", opts.mimeType);
+    form.append(
+      "file",
+      new Blob([new Uint8Array(opts.buffer)], { type: opts.mimeType }),
+      opts.filename,
+    );
+
+    const uploadRes = await fetch(
+      `https://graph.facebook.com/${settings.whatsappApiVersion}/${phoneId}/media`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      },
+    );
+    const uploadData = (await uploadRes.json()) as {
+      id?: string;
+      error?: { message: string };
+    };
+    if (!uploadRes.ok || !uploadData.id) {
+      return {
+        ok: false,
+        error: uploadData.error?.message ?? uploadRes.statusText,
+      };
+    }
+
+    const url = `https://graph.facebook.com/${settings.whatsappApiVersion}/${phoneId}/messages`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: formatE164(to),
+        type: "document",
+        document: {
+          id: uploadData.id,
+          filename: opts.filename.slice(0, 240),
+          ...(opts.caption?.trim()
+            ? { caption: opts.caption.trim().slice(0, 1024) }
+            : {}),
+        },
+      }),
+    });
+    const data = (await res.json()) as {
+      messages?: { id: string }[];
+      error?: { message: string };
+    };
+    if (!res.ok) {
+      return { ok: false, error: data.error?.message ?? res.statusText };
+    }
+    return { ok: true, messageId: data.messages?.[0]?.id };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "document send failed",
+    };
+  }
+}
+
+/**
  * Prefer Meta template for proactive utility alerts; fall back to free-form
  * only when simulated / template not approved yet (dev) or send fails.
  */

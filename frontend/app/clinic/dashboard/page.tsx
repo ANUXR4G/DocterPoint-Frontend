@@ -19,7 +19,7 @@ import {
 } from "@/contexts/PracticeDashboardContext"
 
 const fieldClass =
-  "w-full rounded-xl border border-neutral-300 bg-transparent px-3 py-2.5 text-sm outline-none transition focus:border-[var(--theme-primary)] dark:border-neutral-600"
+  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--theme-primary)] dark:border-white/15 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-slate-500"
 
 function OnboardBanner() {
   const searchParams = useSearchParams()
@@ -83,7 +83,7 @@ const OPS_LINKS = [
 ] as const
 
 function ClinicOpsHub() {
-  const { memberships, bookings: allBookings, ready } = usePracticeDashboard()
+  const { memberships, bookings: allBookings } = usePracticeDashboard()
   const [canManage, setCanManage] = useState(false)
   const [doctors, setDoctors] = useState<DoctorSnap[]>([])
   const [doctorCount, setDoctorCount] = useState(0)
@@ -219,9 +219,9 @@ function ClinicOpsHub() {
   }, [memberships, allBookings])
 
   useEffect(() => {
-    if (!ready) return
+    if (!memberships.length) return
     void loadRoster()
-  }, [loadRoster, ready])
+  }, [loadRoster, memberships.length])
 
   useEffect(() => {
     function openFromHash() {
@@ -287,12 +287,14 @@ function ClinicOpsHub() {
         {chips.map((c) => (
           <div
             key={c.label}
-            className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900/40"
+            className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 dark:border-white/10 dark:bg-[var(--solune-surface)]"
           >
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               {c.label}
             </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums">{c.value}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
+              {c.value}
+            </p>
           </div>
         ))}
       </div>
@@ -302,29 +304,29 @@ function ClinicOpsHub() {
           <Link
             key={l.href}
             href={l.href}
-            className="rounded-2xl border border-neutral-200 bg-white p-4 transition hover:border-[var(--theme-primary)] dark:border-neutral-700 dark:bg-neutral-900/40"
+            className="rounded-2xl border border-slate-200/80 bg-white p-4 transition hover:border-[var(--theme-primary)] dark:border-white/10 dark:bg-[var(--solune-surface)] dark:hover:border-blue-500/40"
           >
-            <p className="font-semibold text-neutral-900 dark:text-white">
+            <p className="font-semibold text-slate-900 dark:text-white">
               {l.title}
             </p>
-            <p className="mt-1 text-sm text-neutral-500">{l.body}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{l.body}</p>
           </Link>
         ))}
       </div>
 
       <div
         id="add-doctor"
-        className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-700"
+        className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-[var(--solune-surface)]"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-800/50">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
           <div>
-            <h2 className="text-sm font-semibold">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
               Doctors today
-              <span className="ml-2 text-xs font-medium text-neutral-500">
+              <span className="ml-2 text-xs font-medium text-slate-500 dark:text-slate-400">
                 ({doctorCount})
               </span>
             </h2>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Waiting room and visit counts by doctor
             </p>
           </div>
@@ -344,15 +346,15 @@ function ClinicOpsHub() {
         </div>
 
         {doctors.length > 0 ? (
-          <ul className="divide-y divide-neutral-200 dark:divide-neutral-700">
+          <ul className="divide-y divide-slate-200/80 dark:divide-white/10">
             {doctors.map((d) => (
               <li
                 key={d.id}
                 className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
               >
                 <div className="min-w-0">
-                  <p className="font-medium">{d.name}</p>
-                  <p className="text-xs text-neutral-500">
+                  <p className="font-medium text-slate-900 dark:text-white">{d.name}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Waiting {d.waiting} · In appt {d.inAppointment} · Booked{" "}
                     {d.booked} · Done {d.completed}
                   </p>
@@ -366,7 +368,7 @@ function ClinicOpsHub() {
                   </Link>
                   <Link
                     href={`/clinic/queue?doctor=${encodeURIComponent(d.id)}`}
-                    className="text-xs font-semibold text-neutral-600 hover:underline dark:text-neutral-300"
+                    className="text-xs font-semibold text-slate-600 hover:underline dark:text-slate-300"
                   >
                     Queue
                   </Link>
@@ -375,15 +377,15 @@ function ClinicOpsHub() {
             ))}
           </ul>
         ) : (
-          <p className="px-4 py-6 text-sm text-neutral-500">
+          <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
             No doctors on the roster yet. Add one below to open the clinic queue.
           </p>
         )}
 
         {canManage && showAddForm ? (
-          <div className="border-t border-neutral-200 bg-white px-4 py-4 dark:border-neutral-700 dark:bg-neutral-900/40">
-            <p className="text-sm font-semibold">Add a doctor to this clinic</p>
-            <p className="mt-1 text-xs text-neutral-500">
+          <div className="border-t border-slate-200/80 bg-slate-50/80 px-4 py-4 dark:border-white/10 dark:bg-white/[0.03]">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">Add a doctor to this clinic</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               They sign in at{" "}
               <strong>Doctor Login</strong> with the email and password you set.
               They manage their own queue, schedule, and visits; the clinic
@@ -484,6 +486,8 @@ function ClinicOpsHub() {
 }
 
 export default function ClinicDashboard() {
+  const { liveConnected } = usePracticeDashboard()
+
   return (
     <div className="dashboard-page-wide">
       <Suspense fallback={null}>
@@ -497,6 +501,20 @@ export default function ClinicDashboard() {
         actionBelow
         action={
           <>
+            <span
+              className={`inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold ${
+                liveConnected
+                  ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                  : "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+              }`}
+              title={
+                liveConnected
+                  ? "Live updates connected"
+                  : "Connecting live updates…"
+              }
+            >
+              {liveConnected ? "Live" : "Connecting…"}
+            </span>
             <a href="#add-doctor" className="dashboard-btn-primary">
               Add doctor
             </a>

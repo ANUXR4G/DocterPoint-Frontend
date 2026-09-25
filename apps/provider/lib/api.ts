@@ -101,6 +101,31 @@ async function tryRefreshAccessToken(): Promise<boolean> {
   }
 }
 
+function jwtExpSeconds(token: string): number {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return 0;
+    const padded =
+      part.replace(/-/g, "+").replace(/_/g, "/") +
+      "===".slice((part.length + 3) % 4);
+    const json = JSON.parse(globalThis.atob(padded)) as { exp?: number };
+    return typeof json.exp === "number" ? json.exp : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Fresh access JWT for REST + WebSocket (refresh when expired). */
+export async function ensureAccessToken(): Promise<string | null> {
+  const access = await getToken();
+  if (access && jwtExpSeconds(access) >= Date.now() / 1000 + 30) {
+    return access;
+  }
+  const ok = await tryRefreshAccessToken();
+  if (ok) return getToken();
+  return access;
+}
+
 export async function api<T = unknown>(
   path: string,
   init?: RequestInit,

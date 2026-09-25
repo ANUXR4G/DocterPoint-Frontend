@@ -8,6 +8,7 @@
  */
 import { prisma } from "../../db/prisma.js";
 import {
+  sendWhatsAppInteractiveButtons,
   sendWhatsAppInteractiveList,
   sendWhatsAppText,
 } from "./whatsapp.client.js";
@@ -42,6 +43,7 @@ export function decideIdleTimeoutAction(
 function isActiveAwaitingReply(state: ConversationState): boolean {
   if (state.waOptOut) return false;
   if (state.handedOff && !state.postBookingCare) return false;
+  if (state.step === "agent_transfer") return false;
   const step = state.step;
   return Boolean(step && step !== "idle");
 }
@@ -54,30 +56,35 @@ function activityAgeMs(state: ConversationState, now: number): number | null {
 }
 
 const MAIN_MENU_ROWS = [
-  { id: "menu:book", title: "1 · Book", description: "Doctor → date → slot" },
-  { id: "menu:doctors", title: "2 · Doctors", description: "See doctor list" },
-  { id: "menu:status", title: "3 · Status", description: "Upcoming visits" },
   {
-    id: "menu:register",
-    title: "4 · Register",
-    description: "Create patient profile",
-  },
-  { id: "menu:faq", title: "5 · FAQ", description: "Hours & location" },
-  { id: "menu:cancel", title: "6 · Cancel", description: "Cancel a visit" },
-  {
-    id: "menu:reschedule",
-    title: "7 · Reschedule",
-    description: "Change date/time",
+    id: "menu:book",
+    title: "1 · Book appt",
+    description: "Book a new appointment",
   },
   {
-    id: "menu:language",
-    title: "8 · Language",
-    description: "English / हिंदी",
+    id: "menu:bookings",
+    title: "2 · My bookings",
+    description: "View or manage visits",
+  },
+  {
+    id: "menu:family",
+    title: "3 · Add family",
+    description: "Register a dependant",
+  },
+  {
+    id: "menu:support",
+    title: "4 · Support",
+    description: "Talk to an agent",
+  },
+  {
+    id: "menu:message_doctor",
+    title: "5 · Msg doctor",
+    description: "Message your doctor",
   },
   {
     id: "menu:report",
-    title: "9 · Attach doc",
-    description: "Send report to doctor",
+    title: "6 · Attach doc",
+    description: "Send a report to doctor",
   },
 ];
 
@@ -99,12 +106,25 @@ async function sendReminder(
   lang: WaLang,
   phoneNumberId?: string,
 ): Promise<boolean> {
-  const sent = await sendWhatsAppText(
+  const body = BotPrompts.idleReminder(lang);
+  const btnSent = await sendWhatsAppInteractiveButtons(
     to,
-    BotPrompts.idleReminder(lang),
+    {
+      body,
+      buttons: [
+        { id: "continue:flow", title: "Continue" },
+        { id: "idle:main", title: "Main Menu" },
+      ],
+    },
     phoneNumberId,
   );
-  return sent.ok;
+  if (btnSent.ok && !btnSent.simulated) return true;
+  const textSent = await sendWhatsAppText(
+    to,
+    `${body}\n\nReply *Continue* or *Main Menu*.`,
+    phoneNumberId,
+  );
+  return textSent.ok;
 }
 
 async function sendChatClosed(

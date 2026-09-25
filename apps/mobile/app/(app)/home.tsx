@@ -15,68 +15,47 @@ import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { SearchBar } from "@/components/mobile/SearchBar";
 import { SpecialtyRow } from "@/components/mobile/SpecialtyRow";
 import { ErrorText, Loading, PrimaryButton, Screen } from "@/components/ui";
-import { usePatientLiveSocket } from "@/hooks/useLiveSocket";
 import { AnimatedView, PressableScale } from "@/lib/motion";
 import { api, getApiUrl } from "@/lib/api";
 import { getUpcomingBookings } from "@/lib/bookingStats";
 import {
-  getCachedBookings,
   getCachedPractices,
-  setCachedBookings,
   setCachedPractices,
 } from "@/lib/dataCache";
-import { applyLiveBookingEvent } from "@/lib/liveBooking";
+import { usePatientLive } from "@/lib/PatientLiveContext";
 import { colors, shadows, radii, space, type } from "@/lib/theme";
 import {
   bookingWhen,
   type PracticeListItem,
-  type ProctoBooking,
 } from "@/lib/types";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const {
+    bookings,
+    liveConnected,
+    loading: bookingsLoading,
+    error: bookingsError,
+    refresh: refreshBookings,
+  } = usePatientLive();
   const [search, setSearch] = useState("");
   const [specialty, setSpecialty] = useState<string | undefined>();
   const [practices, setPractices] = useState<PracticeListItem[]>(
     () => getCachedPractices() ?? [],
   );
-  const [bookings, setBookings] = useState<ProctoBooking[]>(
-    () => getCachedBookings() ?? [],
-  );
-  const [loading, setLoading] = useState(
-    () => !getCachedPractices() && !getCachedBookings(),
-  );
+  const [loading, setLoading] = useState(() => !getCachedPractices());
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const hasData = practices.length > 0 || bookings.length > 0;
-  const softRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadGen = useRef(0);
 
-  function scheduleSoftRefresh() {
-    if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current);
-    softRefreshTimer.current = setTimeout(() => {
-      void load({ soft: true, bookingsOnly: true });
-    }, 250);
-  }
-
-  async function load(opts?: {
-    soft?: boolean;
-    bookingsOnly?: boolean;
-    force?: boolean;
-  }) {
+  async function loadPractices(opts?: { soft?: boolean; force?: boolean }) {
     const soft = Boolean(opts?.soft);
-    const bookingsOnly = Boolean(opts?.bookingsOnly);
     const force = Boolean(opts?.force);
 
     if (!force && soft) {
-      const cachedB = getCachedBookings();
       const cachedP = getCachedPractices();
-      if (bookingsOnly && cachedB) {
-        setBookings(cachedB);
-        return;
-      }
-      if (!bookingsOnly && cachedB && cachedP) {
-        setBookings(cachedB);
+      if (cachedP) {
         setPractices(cachedP);
         setLoading(false);
         return;
@@ -87,90 +66,31 @@ export default function HomeScreen() {
     if (!soft) setLoading(true);
     if (!soft) setError("");
 
-    if (!force && (bookingsOnly || (soft && practices.length > 0))) {
-      const bookRes = await api<ProctoBooking[]>("/procto/bookings/mine");
-      if (gen !== loadGen.current) return;
-      if (bookRes.status === "successful" && Array.isArray(bookRes.data)) {
-        setBookings(bookRes.data);
-        setCachedBookings(bookRes.data);
-      } else if (!soft) {
-        setError(
-          `${bookRes.message || "Could not load visits"} (API: ${getApiUrl()})`,
-        );
-      }
-      if (!soft) setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    const [pracRes, bookRes] = await Promise.all([
-      api<PracticeListItem[]>("/procto/practices"),
-      api<ProctoBooking[]>("/procto/bookings/mine"),
-    ]);
+    const pracRes = await api<PracticeListItem[]>("/procto/practices");
     if (gen !== loadGen.current) return;
 
-    const failures: string[] = [];
     if (pracRes.status === "successful" && Array.isArray(pracRes.data)) {
       setPractices(pracRes.data);
       setCachedPractices(pracRes.data);
     } else if (!soft) {
-      failures.push(pracRes.message || "Could not load clinics");
-    }
-    if (bookRes.status === "successful" && Array.isArray(bookRes.data)) {
-      setBookings(bookRes.data);
-      setCachedBookings(bookRes.data);
-    } else if (!soft) {
-      failures.push(bookRes.message || "Could not load visits");
-    }
-    if (!soft && failures.length) {
-      setError(`${failures[0]} (API: ${getApiUrl()})`);
+      setError(
+        `${pracRes.message || "Could not load clinics"} (API: ${getApiUrl()})`,
+      );
     }
     if (!soft) setLoading(false);
-    setRefreshing(false);
   }
 
   useFocusEffect(
     useCallback(() => {
-      void load({ soft: true });
-      return () => {
-        if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current);
-      };
-    }, []),
-  );
-
-  usePatientLiveSocket(
-    true,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return;
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined;
-      setBookings((prev) => {
-        const { next, needsRefresh } = applyLiveBookingEvent(
-          prev,
-          String(event.event),
-          incoming,
-        );
-        setCachedBookings(next);
-        if (needsRefresh) scheduleSoftRefresh();
-        return next;
-      });
-    },
-    () => scheduleSoftRefresh(),
+      void loadPractices({ soft: true });
+      void refreshBookings({ soft: true });
+    }, [refreshBookings]),
   );
 
   const featured = practices[0];
   const upcoming = useMemo(() => getUpcomingBookings(bookings), [bookings]);
   const nextVisit = upcoming[0];
+  const displayError = error || bookingsError || "";
 
   function goSearch(q?: string) {
     const term = (q ?? specialty ?? search).trim();
@@ -189,7 +109,7 @@ export default function HomeScreen() {
   return (
     <Screen style={styles.screen}>
       <PremiumAtmosphere />
-      <MobileHomeHeader />
+      <MobileHomeHeader liveConnected={liveConnected} />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -198,25 +118,32 @@ export default function HomeScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              void load({ soft: true, force: true });
+              void Promise.all([
+                loadPractices({ soft: true, force: true }),
+                refreshBookings({ soft: true, force: true }),
+              ]).finally(() => setRefreshing(false));
             }}
             tintColor={colors.brand}
           />
         }
       >
-        {error ? (
+        {displayError ? (
           <AnimatedView from="fade" style={styles.errorCard}>
-            <ErrorText text={error} />
+            <ErrorText text={displayError} />
             <View style={{ marginTop: space.md }}>
               <PrimaryButton
                 label="Retry"
-                onPress={() => void load()}
-                busy={loading}
+                onPress={() => {
+                  void loadPractices();
+                  void refreshBookings();
+                }}
+                busy={loading || bookingsLoading}
               />
             </View>
           </AnimatedView>
         ) : null}
         <AnimatedView from="up" delay={40} style={styles.heroCard}>
+
           <Text style={styles.heroEyebrow}>GlucoGuide Care</Text>
           <Text style={styles.heroTitle}>
             Exceptional care,{"\n"}booked in moments

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { format, startOfToday } from "date-fns"
 import { months } from "@/lib/dummy/calender"
 import { AnalyticMetrics, TypeAnalytics, TypeAnalyticsParam } from "@/types"
@@ -29,6 +29,7 @@ export function useAnalytics(
 ): {
   data?: TypeAnalytics
   isLoading: boolean
+  isRefreshing: boolean
   errorMessage: string | null
   planLocked: boolean
   totalPatients: number
@@ -51,8 +52,6 @@ export function useAnalytics(
 } {
   const [totalAppointments, setTotalAppointments] = useState(0)
   const [totalPatients, setTotalPatients] = useState(0)
-  const [practiceId, setPracticeId] = useState<string | null>(null)
-  const [practiceName, setPracticeName] = useState("")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [planLocked, setPlanLocked] = useState(false)
 
@@ -70,31 +69,35 @@ export function useAnalytics(
         }
         const m = res.data[0] as {
           practice?: { id: string; name: string }
+          practiceId?: string
         }
-        return m?.practice ?? null
+        const id =
+          proctoService.resolvePracticeId(m) ?? m?.practice?.id ?? null
+        if (!id) return null
+        return { id, name: m?.practice?.name ?? "" }
       },
     },
   )
 
+  const practiceId = practiceFromShell ?? mine?.id ?? null
+  const practiceName = practiceFromShell
+    ? (dash?.practiceName ?? "")
+    : (mine?.name ?? "")
+
   useEffect(() => {
-    if (practiceFromShell) {
-      setPracticeId(practiceFromShell)
-      setPracticeName(dash?.practiceName ?? "")
-      return
+    if (!practiceId) {
+      setErrorMessage(null)
+      setPlanLocked(false)
+      setTotalPatients(0)
+      setTotalAppointments(0)
     }
-    if (!mine) {
-      setPracticeId(null)
-      setPracticeName("")
-      return
-    }
-    setPracticeId(mine.id)
-    setPracticeName(mine.name)
-  }, [practiceFromShell, dash?.practiceName, mine])
+  }, [practiceId])
 
   const today = startOfToday()
   const currentCurrentMonth = format(today, "MMMM")
 
-  const { data, isLoading: analyticsLoading } = useApi(
+  const { data, isLoading: analyticsLoading, isFetching: analyticsFetching } =
+    useApi(
     [`procto:practice:${practiceId}:analytics`, { param, providerId }],
     () => {
       if (!practiceId) throw new Error("No practice")
@@ -102,6 +105,10 @@ export function useAnalytics(
     },
     {
       enabled: !!practiceId,
+      staleTime: 60_000,
+      // Keep showing the last period/doctor charts while the new filter loads —
+      // otherwise every filter click (and live invalidate) flashes "Loading charts…".
+      keepPreviousData: true,
       select: (payload) => {
         if (payload?.status === "unsuccessful") {
           return {
@@ -229,23 +236,25 @@ export function useAnalytics(
         })()
       : undefined
 
-  const byDoctor =
-    data && typeof data === "object" && !("__error" in data)
-      ? ((
-          data as {
-            __byDoctor?: Array<{
-              providerId: string
-              name: string
-              bookings: number
-              waiting: number
-              inProgress: number
-              completed: number
-              canceled: number
-              noShow: number
-            }>
-          }
-        ).__byDoctor ?? [])
-      : []
+  const byDoctor = useMemo(() => {
+    if (!data || typeof data !== "object" || "__error" in data) return []
+    return (
+      (
+        data as {
+          __byDoctor?: Array<{
+            providerId: string
+            name: string
+            bookings: number
+            waiting: number
+            inProgress: number
+            completed: number
+            canceled: number
+            noShow: number
+          }>
+        }
+      ).__byDoctor ?? []
+    )
+  }, [data])
 
   const patientMetrics = analyticsData
     ? Object.entries(analyticsData)
@@ -281,11 +290,22 @@ export function useAnalytics(
         }))
     : []
 
+  const waitingForPractice = !practiceId
+    ? Boolean(mineLoading || (dash && !dash.practiceId && dash.loading))
+    : false
+
   return {
     data: analyticsData,
     byDoctor,
-    isLoading:
-      (dash ? !dash.ready : mineLoading) || analyticsLoading,
+    // Block only until practice id is known or the first series settles.
+    // Errors / empty payloads must leave loading so the UI is never stuck.
+    isLoading: waitingForPractice
+      ? true
+      : Boolean(practiceId) &&
+        analyticsLoading &&
+        !analyticsData &&
+        !errorMessage,
+    isRefreshing: Boolean(analyticsFetching && analyticsData),
     errorMessage,
     planLocked,
     totalPatients,

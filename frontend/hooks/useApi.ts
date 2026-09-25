@@ -33,7 +33,10 @@ export function useApi<
     },
     retry: false,
     ...options,
-    enabled: Boolean(token) && (options?.enabled ?? true),
+    // Do not wait on useToken() — proctoFetch/ensureAccessToken refresh
+    // cookies themselves. Gating on token left charts stuck on "Loading…"
+    // while a slow refresh hung useToken.
+    enabled: options?.enabled ?? true,
   })
 }
 

@@ -22,7 +22,7 @@ import {
 } from "@/lib/procto";
 import { colors, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
+import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
 
 const STATUS_FILTERS = ["ALL", "SENT", "PENDING", "FAILED", "SKIPPED"] as const;
 
@@ -67,23 +67,9 @@ export default function NotificationsScreen() {
     void load();
   }, [load]);
 
-  useProctoLiveSocket(
-    practiceId,
-    (event) => {
-      if (
-        event &&
-        typeof event === "object" &&
-        "event" in event &&
-        (event.event === "booking_created" ||
-          event.event === "booking_updated")
-      ) {
-        void load({ silent: true });
-      }
-    },
-    () => void load({ silent: true }),
-  );
+  usePracticeLiveRefresh(() => void load({ silent: true }));
 
-  async function dismiss(id: string) {
+async function dismiss(id: string) {
     if (!practiceId || dismissingId) return;
     setDismissingId(id);
     const prev = items;

@@ -222,6 +222,317 @@ function readDocuments(raw: unknown): VisitDocItem[] {
     .slice(0, MAX_BOOKING_DOCUMENTS);
 }
 
+const MAX_PATIENT_DOCUMENTS = 20;
+
+async function attachDocItemToBooking(
+  booking: {
+    id: string;
+    practiceId: string;
+    providerId: string;
+    patientId: string | null;
+    notes: string | null;
+    documents: unknown;
+    slotStart: Date | null;
+    sessionDate: Date | null;
+  },
+  doc: VisitDocItem,
+  patientPhone: string,
+  lang?: WaLang,
+): Promise<{ reply: string; attached: boolean; bookingId: string }> {
+  const existing = readDocuments(booking.documents);
+  if (existing.length >= MAX_BOOKING_DOCUMENTS) {
+    return {
+      attached: false,
+      bookingId: booking.id,
+      reply: BotPrompts.visitDocLimitReached(MAX_BOOKING_DOCUMENTS, lang),
+    };
+  }
+  const nextDocs = [...existing, doc].slice(0, MAX_BOOKING_DOCUMENTS);
+  const noteLine = `[WhatsApp] Patient attached: ${doc.name}`;
+  const prevNotes = booking.notes?.trim() || "";
+  const nextNotes = prevNotes.includes(noteLine)
+    ? prevNotes
+    : prevNotes
+      ? `${prevNotes}\n${noteLine}`
+      : noteLine;
+
+  const updated = await prisma.practiceBooking.update({
+    where: { id: booking.id },
+    data: {
+      documents: nextDocs as unknown as Prisma.InputJsonValue,
+      notes: nextNotes,
+    },
+  });
+
+  void broadcastProctoEvent(
+    booking.practiceId,
+    {
+      event: "booking_updated",
+      booking: serializeBooking(updated),
+    },
+    updated.patientId ?? booking.patientId,
+  ).catch(() => undefined);
+
+  void import("../opsSocket.js")
+    .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
+    .catch(() => undefined);
+
+  void notifyDoctorCareChat({
+    practiceId: booking.practiceId,
+    patientPhone,
+    providerId: booking.providerId,
+    patientId: booking.patientId,
+    docName: doc.name,
+    docCount: nextDocs.length,
+  }).catch((err) => {
+    console.warn(
+      "[WhatsApp visit-doc] care-chat notify failed:",
+      err instanceof Error ? err.message : err,
+    );
+  });
+
+  return {
+    attached: true,
+    bookingId: booking.id,
+    reply: BotPrompts.visitDocAttached({
+      name: doc.name,
+      count: nextDocs.length,
+      max: MAX_BOOKING_DOCUMENTS,
+      whenLabel: booking.slotStart
+        ? booking.slotStart.toLocaleString()
+        : booking.sessionDate
+          ? booking.sessionDate.toISOString().slice(0, 10)
+          : "your visit",
+      lang,
+    }),
+  };
+}
+
+/** Branch F — save uploaded doc onto the patient record (general). */
+export async function attachWhatsAppPatientDocument(opts: {
+  patientPhone: string;
+  doc: VisitDocItem;
+  lang?: WaLang;
+}): Promise<{ reply: string; attached: boolean }> {
+  const linked = await PatientService.listLinkedToWhatsApp(opts.patientPhone).catch(
+    () => [] as Array<{ id: string; isSelf?: boolean }>,
+  );
+  const self = linked.find((p) => p.isSelf) ?? linked[0];
+  let patientId: string | null = self?.id ?? null;
+  if (!patientId) {
+    const user = await PatientService.findByPhone(opts.patientPhone);
+    patientId = user?.patient?.id ?? null;
+  }
+  if (!patientId) {
+    return {
+      attached: false,
+      reply: BotPrompts.visitDocNoBooking(opts.lang),
+    };
+  }
+
+  const patient = await prisma.patient.findUnique({
+    where: { id: patientId },
+    select: { documents: true },
+  });
+  if (!patient) {
+    return {
+      attached: false,
+      reply: BotPrompts.visitDocUploadFailed(opts.lang),
+    };
+  }
+
+  const existing = readDocuments(patient.documents).slice(0, MAX_PATIENT_DOCUMENTS);
+  if (existing.length >= MAX_PATIENT_DOCUMENTS) {
+    return {
+      attached: false,
+      reply: BotPrompts.visitDocLimitReached(MAX_PATIENT_DOCUMENTS, opts.lang),
+    };
+  }
+  const nextDocs = [...existing, opts.doc].slice(0, MAX_PATIENT_DOCUMENTS);
+  await prisma.patient.update({
+    where: { id: patientId },
+    data: { documents: nextDocs as unknown as Prisma.InputJsonValue },
+  });
+
+  return {
+    attached: true,
+    reply: BotPrompts.documentSavedGeneral({
+      name: opts.doc.name,
+      lang: opts.lang,
+    }),
+  };
+}
+
+/** Persist a pending (already uploaded) doc onto a booking by id. */
+export async function attachPendingDocToBooking(opts: {
+  practiceId: string;
+  patientPhone: string;
+  bookingId: string;
+  doc: VisitDocItem;
+  lang?: WaLang;
+}): Promise<{ reply: string; attached: boolean; bookingId?: string }> {
+  const booking = await prisma.practiceBooking.findFirst({
+    where: {
+      id: opts.bookingId,
+      practiceId: opts.practiceId,
+      status: { in: OPEN_STATUSES },
+    },
+  });
+  if (!booking) {
+    return {
+      attached: false,
+      reply: BotPrompts.visitDocBookingClosed(opts.lang),
+    };
+  }
+  return attachDocItemToBooking(booking, opts.doc, opts.patientPhone, opts.lang);
+}
+
+export type BranchFUploadResult = {
+  reply: string;
+  /** True when the file is fully saved (booking or patient record). */
+  attached: boolean;
+  bookingId?: string;
+  /**
+   * When set, conversation should move to this step and keep pendingDoc.
+   * `awaiting_document_link` = ask Select Appointment | General Document
+   */
+  nextStep?: "awaiting_document_link" | "awaiting_report_booking";
+  pendingDoc?: VisitDocItem;
+  openBookingCount?: number;
+};
+
+/**
+ * Branch F — upload file, then either save immediately or ask to link.
+ */
+export async function receiveWhatsAppBranchFDocument(opts: {
+  practiceId: string;
+  patientPhone: string;
+  buffer: Buffer;
+  mimeType: string;
+  filename?: string;
+  caption?: string;
+  lang?: WaLang;
+  /** Post-booking path already chose a visit. */
+  preferredBookingId?: string | null;
+}): Promise<BranchFUploadResult> {
+  const lang = opts.lang;
+
+  let mimeType = opts.mimeType;
+  const looksPdf =
+    /\.pdf$/i.test(opts.filename || "") ||
+    (opts.buffer.length >= 5 &&
+      /%PDF-/i.test(opts.buffer.subarray(0, 1024).toString("latin1")));
+  if (looksPdf && !mimeType.toLowerCase().includes("pdf")) {
+    mimeType = "application/pdf";
+  }
+
+  if (
+    !isVisitDocumentMime(mimeType, {
+      filename: opts.filename,
+      buffer: opts.buffer,
+    })
+  ) {
+    return { attached: false, reply: BotPrompts.visitDocBadType(lang) };
+  }
+
+  let uploaded: { url: string; name: string };
+  try {
+    uploaded = await uploadBufferToCloudinary({
+      buffer: opts.buffer,
+      mimeType,
+      filename:
+        opts.caption?.trim() ||
+        opts.filename ||
+        `WhatsApp document ${Date.now()}`,
+    });
+  } catch (err) {
+    console.warn(
+      "[WhatsApp visit-doc] upload failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return { attached: false, reply: BotPrompts.visitDocUploadFailed(lang) };
+  }
+
+  const doc: VisitDocItem = {
+    name: uploaded.name,
+    url: uploaded.url,
+    uploadedAt: new Date().toISOString(),
+  };
+
+  const linked = await PatientService.listLinkedToWhatsApp(opts.patientPhone).catch(
+    () => [] as Array<{ id: string }>,
+  );
+  const patientIds = linked.map((p) => p.id);
+
+  // Post-booking / explicit booking: attach immediately.
+  if (opts.preferredBookingId) {
+    const result = await attachPendingDocToBooking({
+      practiceId: opts.practiceId,
+      patientPhone: opts.patientPhone,
+      bookingId: opts.preferredBookingId,
+      doc,
+      lang,
+    });
+    return {
+      reply: result.reply,
+      attached: result.attached,
+      bookingId: result.bookingId,
+    };
+  }
+
+  const open = await prisma.practiceBooking.findMany({
+    where: {
+      practiceId: opts.practiceId,
+      status: { in: OPEN_STATUSES },
+      OR: [
+        ...(patientIds.length ? [{ patientId: { in: patientIds } }] : []),
+        { patientPhone: { endsWith: last10(opts.patientPhone) } },
+        { patientPhone: opts.patientPhone },
+      ],
+    },
+    orderBy: [{ slotStart: "asc" }, { updatedAt: "desc" }],
+    take: 5,
+  });
+
+  if (!open.length) {
+    const general = await attachWhatsAppPatientDocument({
+      patientPhone: opts.patientPhone,
+      doc,
+      lang,
+    });
+    // If patient profile missing, still confirm after Cloudinary upload via Admin help.
+    if (!general.attached) {
+      try {
+        const user = await PatientService.findByPhone(opts.patientPhone);
+        if (user?.id) {
+          const { ChatService } = await import("../chat.js");
+          await ChatService.sendHelpMessage(
+            user.id,
+            `[WhatsApp · General document] ${doc.name}\n${doc.url}`,
+          );
+          return {
+            attached: true,
+            reply: BotPrompts.documentSavedGeneral({ name: doc.name, lang }),
+          };
+        }
+      } catch {
+        /* fall through */
+      }
+      return { attached: false, reply: general.reply };
+    }
+    return { attached: true, reply: general.reply };
+  }
+
+  // Branch F: ask whether to link to an appointment.
+  return {
+    attached: false,
+    reply: BotPrompts.askLinkDocumentToAppointment(lang),
+    nextStep: "awaiting_document_link",
+    pendingDoc: doc,
+    openBookingCount: open.length,
+  };
+}
+
 async function notifyDoctorCareChat(opts: {
   practiceId: string;
   patientPhone: string;
@@ -485,6 +796,8 @@ export function registerFlowStep(step?: string | null): boolean {
     step === "awaiting_register_email" ||
     step === "awaiting_register_family_opt" ||
     step === "awaiting_register_family_phone" ||
+    step === "awaiting_register_relationship" ||
+    step === "awaiting_register_family_details" ||
     step === "awaiting_register_confirm"
   );
 }
@@ -497,6 +810,8 @@ export function inActiveRegisterStep(step?: string | null): boolean {
     step === "awaiting_register_email" ||
     step === "awaiting_register_family_opt" ||
     step === "awaiting_register_family_phone" ||
+    step === "awaiting_register_relationship" ||
+    step === "awaiting_register_family_details" ||
     step === "awaiting_register_confirm"
   );
 }

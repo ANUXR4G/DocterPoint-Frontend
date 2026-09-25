@@ -5,28 +5,28 @@ import {
   menuNumberShortcut,
   postBookingNumberShortcut,
 } from "./whatsapp.nlu.js";
+import { BotPrompts } from "./whatsapp.templates.js";
 
 describe("menuNumberShortcut", () => {
-  it("maps 1–9 to help-menu actions", () => {
+  it("maps 1–6 to the six core main-menu actions", () => {
     assert.equal(menuNumberShortcut("1"), "book");
-    assert.equal(menuNumberShortcut("2"), "doctors");
-    assert.equal(menuNumberShortcut("3"), "status");
-    assert.equal(menuNumberShortcut("4"), "register");
-    assert.equal(menuNumberShortcut("5"), "faq");
-    assert.equal(menuNumberShortcut("6"), "cancel");
-    assert.equal(menuNumberShortcut("7"), "reschedule");
-    assert.equal(menuNumberShortcut("8"), "language");
-    assert.equal(menuNumberShortcut("9"), "report");
+    assert.equal(menuNumberShortcut("2"), "status");
+    assert.equal(menuNumberShortcut("3"), "register");
+    assert.equal(menuNumberShortcut("4"), "human");
+    assert.equal(menuNumberShortcut("5"), "message_doctor");
+    assert.equal(menuNumberShortcut("6"), "report");
   });
 
   it("accepts dotted / emoji-keycap forms", () => {
     assert.equal(menuNumberShortcut("1."), "book");
-    assert.equal(menuNumberShortcut("3)"), "status");
-    assert.equal(menuNumberShortcut("option 2"), "doctors");
+    assert.equal(menuNumberShortcut("3)"), "register");
+    assert.equal(menuNumberShortcut("option 2"), "status");
     assert.equal(menuNumberShortcut("1️⃣"), "book");
   });
 
-  it("ignores multi-digit and free text", () => {
+  it("ignores multi-digit, out-of-range, and free text", () => {
+    assert.equal(menuNumberShortcut("7"), null);
+    assert.equal(menuNumberShortcut("9"), null);
     assert.equal(menuNumberShortcut("10"), null);
     assert.equal(menuNumberShortcut("book"), null);
     assert.equal(menuNumberShortcut(""), null);
@@ -34,9 +34,14 @@ describe("menuNumberShortcut", () => {
 
   it("maps interactive menu list row ids", () => {
     assert.equal(menuNumberShortcut("menu:book"), "book");
+    assert.equal(menuNumberShortcut("menu:bookings"), "status");
+    assert.equal(menuNumberShortcut("menu:family"), "register");
+    assert.equal(menuNumberShortcut("menu:support"), "human");
+    assert.equal(menuNumberShortcut("menu:message_doctor"), "message_doctor");
+    assert.equal(menuNumberShortcut("menu:report"), "report");
+    // Legacy ids still work
     assert.equal(menuNumberShortcut("menu:doctors"), "doctors");
     assert.equal(menuNumberShortcut("menu:language"), "language");
-    assert.equal(menuNumberShortcut("menu:report"), "report");
     assert.equal(menuNumberShortcut("menu:help"), "help");
   });
 });
@@ -55,6 +60,18 @@ describe("exactMenuIntent", () => {
     assert.equal(exactMenuIntent("Message your doctor"), "message_doctor");
   });
 
+  it("maps six-option menu titles", () => {
+    assert.equal(exactMenuIntent("Book New Appointment"), "book");
+    assert.equal(exactMenuIntent("View / Manage Existing Bookings"), "status");
+    assert.equal(exactMenuIntent("My bookings"), "status");
+    assert.equal(exactMenuIntent("Register Family Member / Dependant"), "register");
+    assert.equal(exactMenuIntent("Add family"), "register");
+    assert.equal(exactMenuIntent("Talk to Support / Agent"), "human");
+    assert.equal(exactMenuIntent("Talk to agent"), "human");
+    assert.equal(exactMenuIntent("Message to Doctor"), "message_doctor");
+    assert.equal(exactMenuIntent("Attach Document"), "report");
+  });
+
   it("maps main menu / menu to help", () => {
     assert.equal(exactMenuIntent("menu"), "help");
     assert.equal(exactMenuIntent("Main menu"), "help");
@@ -64,13 +81,18 @@ describe("exactMenuIntent", () => {
     assert.equal(exactMenuIntent("main\u00a0menu"), "help");
   });
 
+  it("maps Help / Agent to human support", () => {
+    assert.equal(exactMenuIntent("Help"), "human");
+    assert.equal(exactMenuIntent("Agent"), "human");
+    assert.equal(exactMenuIntent("help"), "human");
+  });
+
   it("maps attach report phrases", () => {
     assert.equal(exactMenuIntent("report"), "report");
     assert.equal(exactMenuIntent("attach report"), "report");
     assert.equal(exactMenuIntent("attach document"), "report");
     assert.equal(exactMenuIntent("send report"), "report");
-    assert.equal(exactMenuIntent("9 · Report"), "report");
-    assert.equal(exactMenuIntent("9 · Attach doc"), "report");
+    assert.equal(exactMenuIntent("6 · Attach doc"), "report");
   });
 });
 
@@ -82,19 +104,26 @@ describe("postBookingNumberShortcut", () => {
     assert.equal(postBookingNumberShortcut("4"), "message_doctor");
     assert.equal(postBookingNumberShortcut("5"), "report");
     assert.equal(postBookingNumberShortcut("post:book"), "book");
-    assert.equal(postBookingNumberShortcut("post:new_book"), "book");
-    assert.equal(postBookingNumberShortcut("post:report"), "report");
+    assert.equal(postBookingNumberShortcut("post:message_doctor"), "message_doctor");
   });
 
   it("maps typed New booking / menu titles", () => {
     assert.equal(postBookingNumberShortcut("New booking"), "book");
     assert.equal(postBookingNumberShortcut("3 · New booking"), "book");
-    assert.equal(postBookingNumberShortcut("Reschedule"), "reschedule");
-    assert.equal(postBookingNumberShortcut("Cancel"), "cancel");
     assert.equal(postBookingNumberShortcut("Message doctor"), "message_doctor");
-    assert.equal(postBookingNumberShortcut("5 · Report"), "report");
-    assert.equal(postBookingNumberShortcut("5 · Attach doc"), "report");
-    assert.equal(postBookingNumberShortcut("Report"), "report");
-    assert.equal(postBookingNumberShortcut("Attach doc"), "report");
+  });
+});
+
+describe("BotPrompts.mainMenuOptions", () => {
+  it("lists the six core options", () => {
+    const reply = BotPrompts.mainMenuOptions("en");
+    assert.match(reply, /1 · Book New Appointment/);
+    assert.match(reply, /2 · View \/ Manage Existing Bookings/);
+    assert.match(reply, /3 · Register Family Member \/ Dependant/);
+    assert.match(reply, /4 · Talk to Support \/ Agent/);
+    assert.match(reply, /5 · Message to Doctor/);
+    assert.match(reply, /6 · Attach Document/);
+    assert.match(reply, /1–6/);
+    assert.doesNotMatch(reply, /9 ·/);
   });
 });

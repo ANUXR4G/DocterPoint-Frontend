@@ -40,72 +40,87 @@ function withOptOut(body: string, audience?: string): string {
 }
 
 export const BotPrompts = {
-  /** Numbered 1–9 options — always shown with the main menu. */
+  /** Numbered 1–6 options — always shown with the main interactive menu. */
   mainMenuOptions(lang?: WaLang): string {
     return L(
       lang,
       "*Main menu*\n" +
-        "1 · Book — doctor, date, slot\n" +
-        "2 · Doctors — see doctor list\n" +
-        "3 · Status — upcoming visits\n" +
-        "4 · Register — create patient profile\n" +
-        "5 · FAQ — clinic info & fees\n" +
-        "6 · Cancel — cancel a visit\n" +
-        "7 · Reschedule — change date/time\n" +
-        "8 · Language — English / हिंदी\n" +
-        "9 · Attach document — send a report to your doctor\n\n" +
-        "Reply with a *number* (1–9) or tap *Menu* below.",
+        "1 · Book New Appointment\n" +
+        "2 · View / Manage Existing Bookings\n" +
+        "3 · Register Family Member / Dependant\n" +
+        "4 · Talk to Support / Agent\n" +
+        "5 · Message to Doctor\n" +
+        "6 · Attach Document\n\n" +
+        "Reply with a *number* (1–6) or tap *Menu* below.",
       "*मुख्य मेनू*\n" +
-        "1 · बुक — डॉक्टर, तारीख, स्लॉट\n" +
-        "2 · डॉक्टर — सूची देखें\n" +
-        "3 · स्टेटस — आने वाली विज़िट\n" +
-        "4 · रजिस्टर — मरीज़ प्रोफ़ाइल\n" +
-        "5 · FAQ — क्लिनिक जानकारी व शुल्क\n" +
-        "6 · रद्द — विज़िट रद्द करें\n" +
-        "7 · रीशेड्यूल — तारीख/समय बदलें\n" +
-        "8 · भाषा — English / हिंदी\n" +
-        "9 · दस्तावेज़ भेजें — डॉक्टर को रिपोर्ट\n\n" +
-        "*संख्या* (1–9) लिखें या नीचे *Menu* दबाएँ।",
+        "1 · नई अपॉइंटमेंट बुक करें\n" +
+        "2 · बुकिंग देखें / मैनेज करें\n" +
+        "3 · परिवार सदस्य रजिस्टर करें\n" +
+        "4 · सपोर्ट / एजेंट से बात करें\n" +
+        "5 · डॉक्टर को संदेश\n" +
+        "6 · दस्तावेज़ भेजें\n\n" +
+        "*संख्या* (1–6) लिखें या नीचे *Menu* दबाएँ।",
     );
   },
 
+  /**
+   * Entry greeting after phone lookup.
+   * - `patientName` null/undefined → new number (clinic intro + menu)
+   * - string (incl. empty) → known patient in DB (welcome back + menu)
+   */
   welcome(
     practiceName: string,
     patientName?: string | null,
     lang?: WaLang,
   ): string {
-    const hello = patientName
-      ? L(lang, `Hi *${patientName}*!`, `नमस्ते *${patientName}*!`)
-      : L(lang, "Hi!", "नमस्ते!");
+    const known = patientName !== null && patientName !== undefined;
+    const name = known ? String(patientName).trim() : "";
+
+    if (known) {
+      return (
+        L(
+          lang,
+          name
+            ? `Welcome back, *${name}*! How can I assist you today?\n\n`
+            : `Welcome back! How can I assist you today?\n\n`,
+          name
+            ? `वापसी पर स्वागत है, *${name}*! आज मैं आपकी कैसे मदद करूँ?\n\n`
+            : `वापसी पर स्वागत है! आज मैं आपकी कैसे मदद करूँ?\n\n`,
+        ) + BotPrompts.mainMenuOptions(lang)
+      );
+    }
+
     return (
       L(
         lang,
-        `${hello} Welcome to *${practiceName}*.\n\n`,
-        `${hello} *${practiceName}* में आपका स्वागत है।\n\n`,
+        `Welcome to *${practiceName}*! I can help you schedule appointments, contact your doctor, attach documents, or manage your profile.\n\n`,
+        `*${practiceName}* में आपका स्वागत है! मैं अपॉइंटमेंट शेड्यूल करने, डॉक्टर से संपर्क, दस्तावेज़ भेजने, या प्रोफ़ाइल मैनेज करने में मदद कर सकता/सकती हूँ।\n\n`,
       ) + BotPrompts.mainMenuOptions(lang)
     );
   },
 
+  /** Same entry copy as welcome — used for Menu / HELP / hi when idle. */
   help(practiceName: string, patientName?: string | null, lang?: WaLang): string {
-    const hello = patientName
-      ? L(lang, `Hi *${patientName}*!`, `नमस्ते *${patientName}*!`)
-      : L(lang, "Hi!", "नमस्ते!");
-    return (
-      L(
-        lang,
-        `${hello} Here's how I can help at *${practiceName}*:\n\n`,
-        `${hello} *${practiceName}* पर मैं इस तरह मदद कर सकता/सकती हूँ:\n\n`,
-      ) + BotPrompts.mainMenuOptions(lang)
-    );
+    return BotPrompts.welcome(practiceName, patientName, lang);
   },
 
   needRegisterThenBook(lang?: WaLang): string {
     return L(
       lang,
-      "To book, we need a quick patient profile first.\n" +
-        "Send a clear *photo or PDF* of your *Aadhaar / PAN / ID* (JPG/PNG/PDF), or type your *full name*.",
-      "बुकिंग के लिए पहले छोटा मरीज़ प्रोफ़ाइल चाहिए।\n" +
-        "अपने *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* (JPG/PNG/PDF) भेजें, या अपना *पूरा नाम* लिखें।",
+      "To book for *yourself*, we need a quick patient profile first.\n" +
+        "Send a clear *photo or PDF* of your *Aadhaar / PAN / ID* (JPG/PNG/PDF), or type your *full name*, date of birth, and gender.",
+      "अपने लिए बुक करने हेतु पहले छोटा मरीज़ प्रोफ़ाइल चाहिए।\n" +
+        "अपने *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* भेजें, या *पूरा नाम*, जन्म तारीख और लिंग लिखें।",
+    );
+  },
+
+  needRegisterDependentThenBook(lang?: WaLang): string {
+    return L(
+      lang,
+      "To book for a *family member / dependent*, we need their profile first.\n" +
+        "Send a clear *photo or PDF* of their *Aadhaar / PAN / ID*, or type their *full name*, date of birth, and gender.",
+      "परिवार सदस्य / आश्रित के लिए बुक करने हेतु पहले उनकी प्रोफ़ाइल चाहिए।\n" +
+        "उनके *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* भेजें, या *पूरा नाम*, जन्म तारीख और लिंग लिखें।",
     );
   },
 
@@ -116,6 +131,16 @@ export const BotPrompts = {
         "Send a clear *photo or PDF* of your *Aadhaar / PAN / ID* (JPG/PNG/PDF), or type your *full name*.",
       "आइए आपका मरीज़ अकाउंट बनाते हैं।\n" +
         "अपने *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* (JPG/PNG/PDF) भेजें, या अपना *पूरा नाम* लिखें।",
+    );
+  },
+
+  askRegisterDob(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please enter your *Date of Birth* as DD/MM/YYYY.\n" +
+        "You may also include your *Emirates ID / National ID* in the same message.",
+      "कृपया अपनी *जन्म तारीख* DD/MM/YYYY में लिखें।\n" +
+        "उसी संदेश में *Emirates ID / National ID* भी लिख सकते हैं।",
     );
   },
 
@@ -306,14 +331,45 @@ export const BotPrompts = {
   }): string {
     return L(
       opts.lang,
-      `✅ Your report has been sent to the doctor.\n` +
+      `✅ Document received and saved to your record.\n` +
         `File: *${opts.name}* · Visit: ${opts.whenLabel}\n` +
-        `They can open it in GlucoGuide (dashboard + app). Files on this visit: ${opts.count}/${opts.max}.\n` +
+        `Your doctor can open it in GlucoGuide. Files on this visit: ${opts.count}/${opts.max}.\n` +
         `Reply *Menu* anytime for more options.`,
-      `✅ आपकी रिपोर्ट डॉक्टर को भेज दी गई है।\n` +
+      `✅ दस्तावेज़ मिल गया और आपके रिकॉर्ड में सेव हो गया।\n` +
         `फ़ाइल: *${opts.name}* · विज़िट: ${opts.whenLabel}\n` +
-        `डॉक्टर इसे GlucoGuide (डैशबोर्ड + ऐप) में देख सकते हैं। इस विज़िट पर फ़ाइलें: ${opts.count}/${opts.max}।\n` +
+        `डॉक्टर इसे GlucoGuide में देख सकते हैं। इस विज़िट पर फ़ाइलें: ${opts.count}/${opts.max}।\n` +
         `और विकल्पों के लिए कभी भी *Menu* लिखें।`,
+    );
+  },
+
+  /** Branch F — uploaded without linking to a visit. */
+  documentSavedGeneral(opts: { name: string; lang?: WaLang }): string {
+    return L(
+      opts.lang,
+      `✅ Document received and saved to your record.\n` +
+        `File: *${opts.name}* (general document).\n` +
+        `Reply *Menu* anytime for more options.`,
+      `✅ दस्तावेज़ मिल गया और आपके रिकॉर्ड में सेव हो गया।\n` +
+        `फ़ाइल: *${opts.name}* (सामान्य दस्तावेज़)।\n` +
+        `और विकल्पों के लिए कभी भी *Menu* लिखें।`,
+    );
+  },
+
+  /** Branch F — Prompt 1 */
+  askAttachDocumentUpload(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please upload or attach your document (e.g., Lab Report, Insurance Card, ID, PDF, or Photo).",
+      "कृपया अपना दस्तावेज़ अपलोड या अटैच करें (जैसे लैब रिपोर्ट, इंश्योरेंस कार्ड, ID, PDF, या फ़ोटो)।",
+    );
+  },
+
+  /** Branch F — after upload, when active appointments exist. */
+  askLinkDocumentToAppointment(lang?: WaLang): string {
+    return L(
+      lang,
+      "Would you like to link this document to an upcoming appointment?",
+      "क्या आप इस दस्तावेज़ को किसी आगामी अपॉइंटमेंट से जोड़ना चाहेंगे?",
     );
   },
 
@@ -386,19 +442,56 @@ export const BotPrompts = {
     return L(
       lang,
       `You're already registered${who}.\n` +
-        `Do you want to register a *family member*?\n` +
+        `Do you want to register a *family member / dependent*?\n` +
         `Tap *Yes* to add them, or *No* to go back.`,
       `आप पहले से रजिस्टर्ड हैं${who}।\n` +
-        `क्या आप किसी *परिवार के सदस्य* को रजिस्टर करना चाहते हैं?\n` +
+        `क्या आप किसी *परिवार सदस्य / आश्रित* को रजिस्टर करना चाहते हैं?\n` +
         `जोड़ने के लिए *Yes*, वापस जाने के लिए *No* दबाएँ।`,
     );
   },
 
+  /** Branch C — Prompt 1 */
   askRegisterFamilyName(lang?: WaLang): string {
     return L(
       lang,
-      "Send a clear *photo or PDF* of their *Aadhaar / PAN / ID*, or type the *family member's full name*.",
-      "उनके *आधार / पैन / ID* की साफ़ *फ़ोटो या PDF* भेजें, या *परिवार के सदस्य का पूरा नाम* लिखें।",
+      "Please enter the *full name* of the family member.",
+      "कृपया परिवार के सदस्य का *पूरा नाम* लिखें।",
+    );
+  },
+
+  /** Branch C — Prompt 2 */
+  askRegisterFamilyRelationship(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please select or type their *relationship* to you (e.g., Spouse, Child, Parent).",
+      "कृपया आपके साथ उनका *रिश्ता* चुनें या लिखें (जैसे पति/पत्नी, बच्चा, माता-पिता)।",
+    );
+  },
+
+  /** Branch C — Prompt 3 */
+  askRegisterFamilyDobAndId(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please enter their *Date of Birth* (DD/MM/YYYY) and *Emirates ID / National ID*.\n" +
+        "Example: `15/08/2015 784-1990-1234567-1`",
+      "कृपया उनकी *जन्म तारीख* (DD/MM/YYYY) और *Emirates ID / National ID* लिखें।\n" +
+        "उदाहरण: `15/08/2015 784-1990-1234567-1`",
+    );
+  },
+
+  askRegisterFamilyDobOnly(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please enter their *Date of Birth* as DD/MM/YYYY.",
+      "कृपया जन्म तारीख DD/MM/YYYY में लिखें।",
+    );
+  },
+
+  askRegisterFamilyIdOnly(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please enter their *Emirates ID / National ID*.",
+      "कृपया उनका *Emirates ID / National ID* लिखें।",
     );
   },
 
@@ -420,21 +513,28 @@ export const BotPrompts = {
     );
   },
 
-  familyRegistered(name: string, lang?: WaLang): string {
+  /** Branch C — success */
+  familyRegistered(name: string, lang?: WaLang, relationship?: string | null): string {
+    const rel = relationship?.trim();
+    const who = rel ? `*${name}* (${rel})` : `*${name}*`;
     return L(
       lang,
-      `✅ Family member *${name}* is registered.\n` +
-        `They can sign in with their mobile number. Tap *Menu* to book for them or yourself.`,
-      `✅ परिवार के सदस्य *${name}* रजिस्टर हो गए।\n` +
-        `वे अपने मोबाइल नंबर से साइन इन कर सकते हैं। बुकिंग के लिए *Menu* दबाएँ।`,
+      `✅ Family member added successfully!\n` +
+        `${who} is saved under your profile.\n` +
+        `Tap *Menu* to book for them or yourself.`,
+      `✅ परिवार सदस्य सफलतापूर्वक जोड़ दिया गया!\n` +
+        `${who} आपकी प्रोफ़ाइल में सेव है।\n` +
+        `बुकिंग के लिए *Menu* दबाएँ।`,
     );
   },
 
   askDate(lang?: WaLang): string {
     return L(
       lang,
-      "Which date?\nTap *Dates* below to choose.",
-      "कौन सी तारीख?\nचुनने के लिए नीचे *Dates* दबाएँ।",
+      "Which date works for you?\n" +
+        "Tap *Dates* below for *Today*, *Tomorrow*, or *Select Date*.",
+      "कौन सी तारीख ठीक रहेगी?\n" +
+        "नीचे *Dates* में *आज*, *कल*, या *Select Date* चुनें।",
     );
   },
 
@@ -613,15 +713,103 @@ export const BotPrompts = {
     );
   },
 
+  /**
+   * Branch A booking summary before confirm.
+   * Example:
+   * Appointment details:
+   * • Patient: Satheesh Kumar
+   * • Doctor: Dr. Priya Nair
+   * • Date & Time: Sept 28, 2026 at 11:00 AM
+   * • Location: Main Clinic, Abu Dhabi
+   */
+  bookingSummary(
+    details: {
+      patient: string;
+      doctor: string;
+      dateTime: string;
+      location: string;
+    },
+    lang?: WaLang,
+  ): string {
+    return L(
+      lang,
+      `*Appointment details*\n` +
+        `• Patient: ${details.patient}\n` +
+        `• Doctor: ${details.doctor}\n` +
+        `• Date & Time: ${details.dateTime}\n` +
+        `• Location: ${details.location}\n\n` +
+        `Tap a button below to continue.`,
+      `*अपॉइंटमेंट विवरण*\n` +
+        `• मरीज़: ${details.patient}\n` +
+        `• डॉक्टर: ${details.doctor}\n` +
+        `• तारीख और समय: ${details.dateTime}\n` +
+        `• स्थान: ${details.location}\n\n` +
+        `जारी रखने के लिए नीचे बटन दबाएँ।`,
+    );
+  },
+
   askConfirm(summary: string, lang?: WaLang): string {
-    return L(lang, summary, summary);
+    // Prefer full bookingSummary; keep this for legacy/re-prompt text.
+    if (/Appointment details|अपॉइंटमेंट विवरण/i.test(summary)) {
+      return summary;
+    }
+    return L(
+      lang,
+      `*Appointment details*\n${summary}\n\nTap a button below to continue.`,
+      `*अपॉइंटमेंट विवरण*\n${summary}\n\nजारी रखने के लिए नीचे बटन दबाएँ।`,
+    );
+  },
+
+  changeBookingDetails(lang?: WaLang): string {
+    return L(
+      lang,
+      "OK — let's update the appointment details.\nChoose again below.",
+      "ठीक है — अपॉइंटमेंट विवरण अपडेट करते हैं।\nनीचे फिर से चुनें।",
+    );
   },
 
   askCancelConfirm(summary: string, lang?: WaLang): string {
     return L(
       lang,
-      `Are you sure you want to cancel this booking?\n*${summary}*\n\nReply *Yes* to confirm, or *No* to keep it.`,
-      `क्या आप वाकई यह बुकिंग रद्द करना चाहते हैं?\n*${summary}*\n\nपुष्टि के लिए *Yes*, रखने के लिए *No* लिखें।`,
+      `Cancel this booking?\n*${summary}*\n\nTap *Confirm Cancel* to release the slot, or *Keep Booking* to leave it.`,
+      `यह बुकिंग रद्द करें?\n*${summary}*\n\nस्लॉट छोड़ने के लिए *Confirm Cancel*, रखने के लिए *Keep Booking* दबाएँ।`,
+    );
+  },
+
+  askManageBookingsPick(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    if (!options.length) {
+      return L(
+        lang,
+        "You have no upcoming appointments at this clinic.\nTap *Menu* → *Book* to schedule one.",
+        "इस क्लिनिक पर कोई आगामी अपॉइंटमेंट नहीं है।\nबुक करने के लिए *Menu* → *Book* दबाएँ।",
+      );
+    }
+    if (options.length === 1) {
+      return L(
+        lang,
+        `Your upcoming appointment:\n*${options[0]!.label}*`,
+        `आपकी आगामी अपॉइंटमेंट:\n*${options[0]!.label}*`,
+      );
+    }
+    return L(
+      lang,
+      `Your upcoming appointments (*${options.length}*):\n` +
+        options.map((o) => `${o.index}. ${o.label}`).join("\n") +
+        `\n\nTap a visit below to *reschedule* or *cancel*.`,
+      `आपकी आगामी अपॉइंटमेंट (*${options.length}*):\n` +
+        options.map((o) => `${o.index}. ${o.label}`).join("\n") +
+        `\n\n*रीशेड्यूल* या *रद्द* करने के लिए नीचे विज़िट चुनें।`,
+    );
+  },
+
+  askManageAction(summary: string, lang?: WaLang): string {
+    return L(
+      lang,
+      `Selected:\n*${summary}*\n\nWhat would you like to do?`,
+      `चयनित:\n*${summary}*\n\nआप क्या करना चाहेंगे?`,
     );
   },
 
@@ -665,6 +853,14 @@ export const BotPrompts = {
       lang,
       "Which booking should we reschedule? Choose below.",
       "किस बुकिंग का समय बदलें? नीचे चुनें।",
+    );
+  },
+
+  rescheduleAskDate(visitLabel: string, lang?: WaLang): string {
+    return L(
+      lang,
+      `Rescheduling:\n*${visitLabel}*\n\n${BotPrompts.askDate(lang)}`,
+      `रीशेड्यूल:\n*${visitLabel}*\n\n${BotPrompts.askDate(lang)}`,
     );
   },
 
@@ -741,8 +937,67 @@ export const BotPrompts = {
     }
     return L(
       lang,
-      "Who is this booking for?\nChoose *yourself* or a *family member* below.",
-      "यह बुकिंग किसके लिए है?\nनीचे *अपने लिए* या *परिवार के सदस्य* को चुनें।",
+      "Whom is this appointment for?\nChoose *Self* or a *family member / dependent* below.",
+      "यह अपॉइंटमेंट किसके लिए है?\nनीचे *स्वयं* या *परिवार सदस्य / आश्रित* चुनें।",
+    );
+  },
+
+  askBookFamilyPick(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    if (!options.length) {
+      return BotPrompts.needRegisterDependentThenBook(lang);
+    }
+    const lines = options.map((o) => `${o.index}. ${o.label}`).join("\n");
+    return L(
+      lang,
+      `Which *family member / dependent*?\n${lines}\n\nTap a profile below, or reply with a *number*.`,
+      `कौन सा *परिवार सदस्य / आश्रित*?\n${lines}\n\nनीचे प्रोफ़ाइल चुनें, या *संख्या* लिखें।`,
+    );
+  },
+
+  askBookWhom(selfName: string | null, lang?: WaLang): string {
+    const selfLabel = selfName?.trim()
+      ? L(lang, `Self (*${selfName.trim()}*)`, `स्वयं (*${selfName.trim()}*)`)
+      : L(lang, "Self", "स्वयं");
+    return L(
+      lang,
+      `Whom is this appointment for?\n` +
+        `• ${selfLabel}\n` +
+        `• Family member / dependent\n\n` +
+        `Tap a button below.`,
+      `यह अपॉइंटमेंट किसके लिए है?\n` +
+        `• ${selfLabel}\n` +
+        `• परिवार सदस्य / आश्रित\n\n` +
+        `नीचे बटन दबाएँ।`,
+    );
+  },
+
+  askSpecialty(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    if (!options.length) {
+      return L(
+        lang,
+        "No departments are available right now. Tap *Menu* for options.",
+        "अभी कोई विभाग उपलब्ध नहीं है। विकल्पों के लिए *Menu* दबाएँ।",
+      );
+    }
+    const lines = options.map((o) => `${o.index}. ${o.label}`).join("\n");
+    return L(
+      lang,
+      `Choose a *department / specialty*:\n${lines}\n\nReply with a *number*, or tap *Departments* below.`,
+      `*विभाग / विशेषता* चुनें:\n${lines}\n\n*संख्या* लिखें, या नीचे *Departments* दबाएँ।`,
+    );
+  },
+
+  specialtySelectedAskDoctor(specialty: string, lang?: WaLang): string {
+    return L(
+      lang,
+      `✅ *${specialty}* selected.\nChoose your doctor below.`,
+      `✅ *${specialty}* चुना गया।\nनीचे अपना डॉक्टर चुनें।`,
     );
   },
 
@@ -761,12 +1016,19 @@ export const BotPrompts = {
     );
   },
 
-  noBookingForMessageDoctor(lang?: WaLang): string {
+  /** Branch E — no active/recent visit: still collect message for Admin assignment. */
+  askMessageDoctorAdmin(lang?: WaLang): string {
     return L(
       lang,
-      "No active appointment found to message a doctor. Tap *Menu* → *Book* to schedule one.",
-      "डॉक्टर को संदेश के लिए कोई सक्रिय अपॉइंटमेंट नहीं मिली। बुक करने के लिए *Menu* → *Book*।",
+      "No active appointment found.\n" +
+        "Please type the *message* you'd like to send — an admin will assign a doctor.",
+      "कोई सक्रिय अपॉइंटमेंट नहीं मिली।\n" +
+        "कृपया अपना *संदेश* लिखें — एडमिन डॉक्टर असाइन करेगा।",
     );
+  },
+
+  noBookingForMessageDoctor(lang?: WaLang): string {
+    return BotPrompts.askMessageDoctorAdmin(lang);
   },
 
   fallback(lang?: WaLang): string {
@@ -825,12 +1087,29 @@ export const BotPrompts = {
     );
   },
 
-  /** Proactive nudge when the patient goes quiet mid-flow. */
+  /** Proactive nudge when the patient goes quiet mid-flow (>10 min). */
   idleReminder(lang?: WaLang): string {
     return L(
       lang,
-      "Are you still there? Reply to continue — this chat will close soon if there's no reply.",
-      "क्या आप अभी भी यहाँ हैं? जारी रखने के लिए जवाब दें — जवाब न आने पर यह चैट जल्द बंद हो जाएगी।",
+      "It looks like you stepped away. Tap *Continue* to finish or *Main Menu* to start over.",
+      "लगता है आप थोड़ी देर के लिए चले गए। जारी रखने के लिए *Continue*, या फिर से शुरू करने के लिए *Main Menu* दबाएँ।",
+    );
+  },
+
+  idleContinueAck(lang?: WaLang): string {
+    return L(
+      lang,
+      "Welcome back — let's continue where we left off.",
+      "वापस स्वागत है — जहाँ छोड़ा था वहाँ से जारी रखते हैं।",
+    );
+  },
+
+  /** NLU freeform booking confirmation. */
+  nluBookConfirm(summary: string, lang?: WaLang): string {
+    return L(
+      lang,
+      `Did you mean you want to book an appointment for *${summary}*?\n\nTap *Yes* to continue, or *No* to start over.`,
+      `क्या आप *${summary}* के लिए अपॉइंटमेंट बुक करना चाहते हैं?\n\nजारी रखने के लिए *Yes*, या फिर से शुरू करने के लिए *No* दबाएँ।`,
     );
   },
 
@@ -849,12 +1128,56 @@ export const BotPrompts = {
   },
 
   // Short in-session acks only — full UTILITY copy is Meta catalog (or skipped for WHATSAPP_AI).
-  bookingConfirmed(practiceName: string, detail: string, lang?: WaLang): string {
-    return L(
+  bookingConfirmed(
+    practiceName: string,
+    detail: string,
+    lang?: WaLang,
+    extras?: {
+      referenceId?: string | null;
+      googleCalendarUrl?: string | null;
+      mapsUrl?: string | null;
+      icsUrl?: string | null;
+    },
+  ): string {
+    const ref = extras?.referenceId?.trim();
+    const head = L(
       lang,
-      `✅ Booked at *${practiceName}*.\n${detail}`,
-      `✅ *${practiceName}* पर बुकिंग हो गई।\n${detail}`,
+      `✅ Booking confirmed at *${practiceName}*.\n` +
+        (ref ? `*Booking reference:* \`${ref}\`\n` : "") +
+        `${detail}`,
+      `✅ *${practiceName}* पर बुकिंग कन्फ़र्म हो गई।\n` +
+        (ref ? `*बुकिंग रेफ़रेंस:* \`${ref}\`\n` : "") +
+        `${detail}`,
     );
+    const links: string[] = [];
+    if (extras?.googleCalendarUrl) {
+      links.push(
+        L(
+          lang,
+          `📅 Add to Google Calendar:\n${extras.googleCalendarUrl}`,
+          `📅 Google Calendar में जोड़ें:\n${extras.googleCalendarUrl}`,
+        ),
+      );
+    }
+    if (extras?.icsUrl) {
+      links.push(
+        L(
+          lang,
+          `🗓 Download calendar file (.ics):\n${extras.icsUrl}`,
+          `🗓 कैलेंडर फ़ाइल (.ics) डाउनलोड:\n${extras.icsUrl}`,
+        ),
+      );
+    }
+    if (extras?.mapsUrl) {
+      links.push(
+        L(
+          lang,
+          `📍 Location on Google Maps:\n${extras.mapsUrl}`,
+          `📍 Google Maps पर स्थान:\n${extras.mapsUrl}`,
+        ),
+      );
+    }
+    return links.length ? `${head}\n\n${links.join("\n\n")}` : head;
   },
 
   askAttachDocument(lang?: WaLang): string {
@@ -868,15 +1191,7 @@ export const BotPrompts = {
   },
 
   askAttachDocumentNow(lang?: WaLang): string {
-    return L(
-      lang,
-      "Please send a *photo* or *PDF* of your report now.\n" +
-        "It goes to your doctor’s visit in GlucoGuide (web + app).\n\n" +
-        "Or reply *No* / *SKIP* to continue without a document.",
-      "कृपया अभी अपनी रिपोर्ट की *फ़ोटो* या *PDF* भेजें।\n" +
-        "यह डॉक्टर की GlucoGuide विज़िट (वेब + ऐप) पर जाएगी।\n\n" +
-        "बिना दस्तावेज़ के आगे बढ़ने के लिए *No* / *SKIP* लिखें।",
-    );
+    return BotPrompts.askAttachDocumentUpload(lang);
   },
 
   attachDocumentSkipped(lang?: WaLang): string {
@@ -937,24 +1252,39 @@ export const BotPrompts = {
     );
   },
 
+  /** Branch E — Prompt when an appointment (and doctor) is known. */
+  askMessageDoctorText(
+    doctorName?: string | null,
+    lang?: WaLang,
+  ): string {
+    const raw = (doctorName || "").trim();
+    const withDr =
+      !raw || /^your doctor$/i.test(raw)
+        ? "your doctor"
+        : /^dr\.?\s/i.test(raw)
+          ? raw
+          : `Dr. ${raw}`;
+    return L(
+      lang,
+      `Please type the message you'd like to send regarding your appointment with *${withDr}*.`,
+      `कृपया *${withDr}* के साथ अपनी अपॉइंटमेंट के बारे में जो संदेश भेजना चाहते हैं, लिखें।`,
+    );
+  },
+
+  /** @deprecated Prefer askMessageDoctorText — kept for older call sites. */
   messageDoctorHandoff(
     lang?: WaLang,
     opts?: { doctorName?: string | null; whenLabel?: string | null },
   ): string {
-    const doc = opts?.doctorName?.trim();
-    const when = opts?.whenLabel?.trim();
-    const who = doc
-      ? L(lang, ` your doctor *${doc}*`, ` अपने डॉक्टर *${doc}*`)
-      : L(lang, " your doctor", " अपने डॉक्टर");
-    const visit = when
-      ? L(lang, `\nVisit: *${when}*`, `\nविज़िट: *${when}*`)
-      : "";
+    return BotPrompts.askMessageDoctorText(opts?.doctorName, lang);
+  },
+
+  /** Branch E — delivery confirmation. */
+  messageDoctorDelivered(lang?: WaLang): string {
     return L(
       lang,
-      `Okay — write your message for${who} here.${visit}\n` +
-        `The clinic will see it in GlucoGuide. Reply *BOT* anytime for booking help.`,
-      `ठीक है —${who} के लिए अपना संदेश यहाँ लिखें।${visit}\n` +
-        `क्लिनिक इसे GlucoGuide में देखेगा। बुकिंग मदद के लिए कभी भी *BOT* लिखें।`,
+      "Your message has been delivered to the medical team.",
+      "आपका संदेश मेडिकल टीम तक पहुँचा दिया गया है।",
     );
   },
 
@@ -986,27 +1316,41 @@ export const BotPrompts = {
   canceledWithReason(
     reason: string | null,
     lang?: WaLang,
-    opts?: { hasMoreVisits?: boolean },
+    opts?: {
+      hasMoreVisits?: boolean;
+      referenceId?: string | null;
+      visitLabel?: string | null;
+    },
   ): string {
+    const ref = opts?.referenceId?.trim();
+    const visit = opts?.visitLabel?.trim();
+    const head = L(
+      lang,
+      `✅ *Cancellation receipt*\n` +
+        (ref ? `• Booking reference: \`${ref}\`\n` : "") +
+        (visit ? `• Visit: *${visit}*\n` : "") +
+        (reason
+          ? `• Reason shared with your doctor: *${reason}*\n`
+          : "") +
+        `Your slot has been released.`,
+      `✅ *रद्दीकरण रसीद*\n` +
+        (ref ? `• बुकिंग रेफ़रेंस: \`${ref}\`\n` : "") +
+        (visit ? `• विज़िट: *${visit}*\n` : "") +
+        (reason ? `• डॉक्टर को कारण: *${reason}*\n` : "") +
+        `आपका स्लॉट मुक्त कर दिया गया है।`,
+    );
     const more = opts?.hasMoreVisits
       ? L(
           lang,
-          "\nYou still have other visits — use the menu below.",
-          "\nआपकी और विज़िट हैं — नीचे मेनू देखें।",
+          "\n\nYou still have other visits — use the menu below.",
+          "\n\nआपकी और विज़िट हैं — नीचे मेनू देखें।",
         )
       : L(
           lang,
-          "\nTap *Menu* below for Book, Status, and more.",
-          "\nबुक, स्टेटस आदि के लिए नीचे *Menu* दबाएँ।",
+          "\n\nTap *Menu* below for Book, Status, and more.",
+          "\n\nबुक, स्टेटस आदि के लिए नीचे *Menu* दबाएँ।",
         );
-    if (reason) {
-      return L(
-        lang,
-        `✅ Cancelled.\nReason shared with your doctor: *${reason}*${more}`,
-        `✅ रद्द हो गई।\nडॉक्टर को कारण भेज दिया: *${reason}*${more}`,
-      );
-    }
-    return L(lang, `✅ Cancelled.${more}`, `✅ रद्द हो गई।${more}`);
+    return head + more;
   },
 
   keptBooking(lang?: WaLang): string {
@@ -1017,11 +1361,20 @@ export const BotPrompts = {
     );
   },
 
-  rescheduled(detail: string, lang?: WaLang): string {
+  rescheduled(
+    detail: string,
+    lang?: WaLang,
+    opts?: { referenceId?: string | null },
+  ): string {
+    const ref = opts?.referenceId?.trim();
     return L(
       lang,
-      `✅ New time set.\n${detail}`,
-      `✅ नया समय सेट।\n${detail}`,
+      `✅ *Reschedule confirmed*\n` +
+        (ref ? `• Booking reference: \`${ref}\`\n` : "") +
+        `• New time: ${detail}`,
+      `✅ *रीशेड्यूल कन्फ़र्म*\n` +
+        (ref ? `• बुकिंग रेफ़रेंस: \`${ref}\`\n` : "") +
+        `• नया समय: ${detail}`,
     );
   },
 
@@ -1094,13 +1447,23 @@ export const BotPrompts = {
     );
   },
 
+  /** Branch D — while chat is in Agent Transfer. */
   handedOffWait(lang?: WaLang): string {
     return L(
       lang,
-      "A clinic staff member may reply here.\n" +
-        "To use the assistant again, reply *BOOK*, *STATUS*, *DOCTORS*, or *BOT*.",
-      "क्लिनिक स्टाफ यहाँ जवाब दे सकता है।\n" +
-        "असिस्टेंट फिर से चलाने के लिए *BOOK*, *STATUS*, *DOCTORS*, या *BOT* लिखें।",
+      "You're connected to *support*. A team member will reply shortly.\n" +
+        "To use the assistant again, reply *Menu* or *BOT*.",
+      "आप *सपोर्ट* से जुड़े हैं। टीम सदस्य जल्द जवाब देगा।\n" +
+        "असिस्टेंट फिर से चलाने के लिए *Menu* या *BOT* लिखें।",
+    );
+  },
+
+  /** Branch D — initial handoff confirmation (same copy as escalateReply). */
+  agentTransferConnecting(lang?: WaLang): string {
+    return L(
+      lang,
+      "Connecting you to an agent... A team member will reply shortly.",
+      "आपको एक एजेंट से जोड़ा जा रहा है... टीम सदस्य जल्द जवाब देगा।",
     );
   },
 
@@ -1110,6 +1473,24 @@ export const BotPrompts = {
       lang,
       "Got it — your clinic can see this in the GlucoGuide portal and app. Reply *BOT* anytime for booking help.",
       "मिल गया — क्लिनिक इसे GlucoGuide पोर्टल और ऐप में देख सकता है। बुकिंग मदद के लिए कभी भी *BOT* लिखें।",
+    );
+  },
+
+  /** Global keyword — Exit / Cancel */
+  sessionEnded(lang?: WaLang): string {
+    return L(
+      lang,
+      "Session ended. Type 'Hi' anytime to start again.",
+      "सेशन समाप्त। फिर से शुरू करने के लिए कभी भी 'Hi' लिखें।",
+    );
+  },
+
+  /** Global keyword — CallBack */
+  callbackRequestLogged(lang?: WaLang): string {
+    return L(
+      lang,
+      "We have logged your callback request. An admin representative will call you shortly.",
+      "आपका कॉलबैक अनुरोध लॉग हो गया है। एडमिन प्रतिनिधि जल्द आपको कॉल करेगा।",
     );
   },
 };

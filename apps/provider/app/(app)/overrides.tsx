@@ -14,7 +14,7 @@ import { createOverride, fetchOverrides } from "@/lib/procto";
 import type { OverrideRow } from "@/lib/types";
 import { colors, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
+import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
 
 const TYPES = [
   { value: "BLOCK_DAY", label: "Block day" },
@@ -51,17 +51,12 @@ export default function OverridesScreen() {
     void load();
   }, [load]);
 
-  useProctoLiveSocket(
-    practiceId,
-    () => {
-      void load();
-    },
-    () => {
-      void load();
-    },
-  );
+  usePracticeLiveRefresh(() => void load(), {
+    bookings: false,
+    ops: true,
+  });
 
-  async function submit() {
+async function submit() {
     if (!practiceId || !providerId) {
       setError("No provider selected");
       return;

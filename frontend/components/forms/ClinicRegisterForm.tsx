@@ -166,7 +166,7 @@ export default function ClinicRegisterForm({
 
   return (
     <form className="mt-4 w-full min-w-0 text-left sm:mt-5" onSubmit={handleSubmit}>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         1. Document scan (optional)
       </p>
       <ProfessionalDocumentScan
@@ -174,7 +174,7 @@ export default function ClinicRegisterForm({
         onExtract={applyDocumentScan}
       />
 
-      <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         2. Clinic details
       </p>
       <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
@@ -256,22 +256,22 @@ export default function ClinicRegisterForm({
         />
       </div>
 
-      <div className="mt-6 rounded-xl border border-dashed border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-slate-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-slate-200">
+      <div className="mt-6 rounded-xl border border-dashed border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-slate-700 dark:border-white/15 dark:bg-slate-800/80 dark:text-slate-200">
         <p className="font-semibold text-slate-900 dark:text-white">
           Ready after registration
         </p>
-        <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+        <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
           Your clinic, location, fee, and 14-day trial start here. Then add
           doctor logins from the clinic dashboard — they sign in at Doctor Login
           under this clinic. Independently registered doctors cannot be linked.
         </p>
       </div>
 
-      <p className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <p className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         3. Choose a plan (starts as free trial)
       </p>
       {plansLoading ? (
-        <p className="text-sm text-neutral-500">Loading plans…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Loading plans…</p>
       ) : (
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {plans.map((plan) => {
@@ -283,12 +283,26 @@ export default function ClinicRegisterForm({
                   onClick={() => setSelectedPlanId(plan.id)}
                   className={`w-full rounded-xl border px-3 py-3 text-left transition ${
                     selected
-                      ? "border-blue-500 bg-blue-50 shadow-sm dark:border-sky-400 dark:bg-sky-950/40"
-                      : "border-neutral-200 hover:border-neutral-300 dark:border-[#333] dark:hover:border-[#555]"
+                      ? "border-[var(--theme-primary)] bg-[color-mix(in_srgb,var(--theme-primary)_12%,white)] shadow-sm dark:border-[var(--theme-primary)] dark:bg-[color-mix(in_srgb,var(--theme-primary)_22%,#1e293b)] dark:shadow-none"
+                      : "border-slate-200 bg-white hover:border-slate-300 dark:border-white/10 dark:bg-slate-800 dark:hover:border-white/20 dark:hover:bg-slate-800/90"
                   }`}
                 >
-                  <p className="text-sm font-semibold">{plan.name}</p>
-                  <p className="mt-0.5 text-xs text-neutral-500">
+                  <p
+                    className={`text-sm font-semibold ${
+                      selected
+                        ? "text-slate-900 dark:text-white"
+                        : "text-slate-900 dark:text-slate-100"
+                    }`}
+                  >
+                    {plan.name}
+                  </p>
+                  <p
+                    className={`mt-0.5 text-xs ${
+                      selected
+                        ? "text-slate-600 dark:text-slate-300"
+                        : "text-slate-500 dark:text-slate-400"
+                    }`}
+                  >
                     ₹{plan.priceMonthlyInr}/mo · 14-day trial
                   </p>
                 </button>

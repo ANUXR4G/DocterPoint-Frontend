@@ -193,6 +193,57 @@ html.dark body {
   background-color: #1c1c1c !important;
 }
 
+/*
+ * Doctor/clinic dashboard: override the pure-black remaps above so cards,
+ * tables, and panels use theme surfaces (#1e293b / elevated) instead of #141414.
+ */
+.dark .dashboard-app .dark\:bg-neutral-950,
+.dark .dashboard-app .dark\:bg-zinc-950,
+.dark .dashboard-app .dark\:bg-black,
+.dark .dashboard-app .dark\:bg-\[\#0f172a\],
+.dark .dashboard-app .dark\:bg-\[\#0f172a\]\/90 {
+  background-color: var(--solune-canvas) !important;
+}
+.dark .dashboard-app .dark\:bg-neutral-900,
+.dark .dashboard-app .dark\:bg-neutral-900\/40,
+.dark .dashboard-app .dark\:bg-neutral-900\/50,
+.dark .dashboard-app .dark\:bg-zinc-900,
+.dark .dashboard-app .dark\:bg-zinc-900\/60 {
+  background-color: var(--solune-surface) !important;
+}
+.dark .dashboard-app .dark\:bg-neutral-800,
+.dark .dashboard-app .dark\:bg-neutral-800\/80,
+.dark .dashboard-app .dark\:bg-zinc-800 {
+  background-color: var(--solune-elevated) !important;
+}
+.dark .dashboard-app .dark\:bg-neutral-700,
+.dark .dashboard-app .dark\:bg-neutral-700\/75,
+.dark .dashboard-app .dark\:bg-neutral-700\/60,
+.dark .dashboard-app .dark\:bg-zinc-700 {
+  background-color: var(--solune-surface-muted) !important;
+}
+.dark .dashboard-app .dark\:border-neutral-800,
+.dark .dashboard-app .dark\:border-r-neutral-800,
+.dark .dashboard-app .dark\:border-neutral-700,
+.dark .dashboard-app .dark\:border-neutral-600,
+.dark .dashboard-app .dark\:border-neutral-500,
+.dark .dashboard-app .dark\:border-white\/10,
+.dark .dashboard-app .dark\:border-white\/15 {
+  border-color: var(--solune-border-strong) !important;
+}
+.dark .dashboard-app .dark\:divide-neutral-700,
+.dark .dashboard-app .dark\:divide-neutral-500 {
+  border-color: var(--solune-border-strong) !important;
+}
+.dark .dashboard-app .dark\:hover\:bg-neutral-900:hover,
+.dark .dashboard-app .dark\:hover\:bg-neutral-800:hover,
+.dark .dashboard-app .dark\:hover\:bg-neutral-800\/80:hover,
+.dark .dashboard-app .dark\:hover\:bg-neutral-700:hover,
+.dark .dashboard-app .dark\:hover\:bg-neutral-700\/60:hover,
+.dark .dashboard-app .dark\:hover\:bg-neutral-50:hover {
+  background-color: var(--solune-elevated) !important;
+}
+
 .dark .dark\:from-emerald-400 {
   --tw-gradient-from: #72e6ff var(--tw-gradient-from-position);
   --tw-gradient-to: rgb(114 230 255 / 0) var(--tw-gradient-to-position);
@@ -348,68 +399,83 @@ html.dark body {
     box-shadow: 0 0 0 1px rgba(0, 153, 255, 0.35);
   }
 
-  /* Borderless fields inside dual search / combo bars (Find Care) */
-  .gg-public .gg-bare-input,
-  .gg-public input.gg-bare-input {
+  /* Borderless fields inside dual search / combo bars (Find Care).
+     Global — practices page uses AuthenticatedShell when signed in (no .gg-public). */
+  .gg-bare-input,
+  input.gg-bare-input {
     appearance: none;
     -webkit-appearance: none;
     border: 0 !important;
     border-radius: 0 !important;
-    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
     box-shadow: none !important;
     padding: 0 !important;
     margin: 0;
     min-height: 1.5rem;
     line-height: 1.4;
-    color: #171717;
-    -webkit-text-fill-color: #171717;
+    color: #0f172a;
+    -webkit-text-fill-color: #0f172a;
+    caret-color: #0f172a;
   }
-  .dark .gg-public .gg-bare-input,
-  .dark .gg-public input.gg-bare-input {
-    color: #ffffff;
-    -webkit-text-fill-color: #ffffff;
+  .dark .gg-bare-input,
+  .dark input.gg-bare-input {
+    color: #f1f5f9;
+    -webkit-text-fill-color: #f1f5f9;
+    caret-color: #f1f5f9;
   }
-  .gg-public .gg-bare-input:focus,
-  .gg-public input.gg-bare-input:focus {
+  .gg-bare-input:focus,
+  input.gg-bare-input:focus {
     outline: none !important;
     box-shadow: none !important;
   }
-  .gg-public .gg-bare-input::-webkit-search-decoration,
-  .gg-public .gg-bare-input::-webkit-search-cancel-button,
-  .gg-public .gg-bare-input::-webkit-search-results-button,
-  .gg-public .gg-bare-input::-webkit-search-results-decoration {
+  .gg-bare-input::-webkit-search-decoration,
+  .gg-bare-input::-webkit-search-cancel-button,
+  .gg-bare-input::-webkit-search-results-button,
+  .gg-bare-input::-webkit-search-results-decoration {
     -webkit-appearance: none;
     appearance: none;
   }
+  .gg-bare-input::placeholder,
+  input.gg-bare-input::placeholder {
+    color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+    opacity: 1;
+  }
+  .dark .gg-bare-input::placeholder,
+  .dark input.gg-bare-input::placeholder {
+    color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+  }
 
   /* Compact selects inside Fee / Sort pill filters */
-  .gg-public select.gg-bare-select,
-  .gg-public .gg-bare-select {
+  select.gg-bare-select,
+  .gg-bare-select {
     appearance: none;
     -webkit-appearance: none;
     border: 0 !important;
     border-radius: 0 !important;
-    background: transparent !important;
+    background-color: transparent !important;
     box-shadow: none !important;
     padding: 0 1.1rem 0 0 !important;
     margin: 0;
     min-height: 0;
     line-height: 1.25;
     font-weight: 600;
-    color: #171717;
+    color: #0f172a;
     cursor: pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
     background-repeat: no-repeat !important;
     background-position: right center !important;
     background-size: 12px !important;
   }
-  .dark .gg-public select.gg-bare-select,
-  .dark .gg-public .gg-bare-select {
-    color: #ffffff;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  .dark select.gg-bare-select,
+  .dark .gg-bare-select {
+    color: #f1f5f9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
   }
-  .gg-public select.gg-bare-select:focus,
-  .gg-public .gg-bare-select:focus {
+  select.gg-bare-select:focus,
+  .gg-bare-select:focus {
     outline: none !important;
     box-shadow: none !important;
   }
@@ -1514,14 +1580,38 @@ html.dark body {
 .bg-\[\#0099ff\]\/5,
 .bg-\[\#0099ff\]\/10,
 .bg-blue-50,
-.bg-sky-50,
-.bg-sky-50\/95 {
+html:not(.dark) .bg-sky-50,
+html:not(.dark) .bg-sky-50\/95 {
   background-color: color-mix(in srgb, var(--theme-primary) 10%, #ffffff) !important;
 }
 
-.bg-sky-100,
-.bg-blue-100 {
+html:not(.dark) .bg-sky-100,
+html:not(.dark) .bg-blue-100 {
   background-color: color-mix(in srgb, var(--theme-primary) 16%, #ffffff) !important;
+}
+
+/* Dashboard sidebar / soft surfaces — dark mode must stay dark */
+html.dark .bg-sky-50,
+html.dark .bg-sky-50\/95,
+html.dark .bg-sky-50\/98,
+html.dark .dark\:bg-slate-900\/80,
+html.dark .dark\:bg-slate-900\/95,
+html.dark .dark\:bg-slate-900\/98,
+html.dark .dark\:bg-slate-800\/80,
+html.dark .dark\:bg-slate-800\/90 {
+  background-color: #0f172a !important;
+}
+
+html.dark .bg-sky-100,
+html.dark .bg-blue-100,
+html.dark .dark\:bg-blue-500\/15,
+html.dark .dark\:bg-blue-500\/20 {
+  background-color: color-mix(in srgb, var(--theme-primary) 22%, transparent) !important;
+}
+
+html.dark aside .dark\:bg-\[\#0f172a\],
+html.dark .dark\:bg-\[\#0f172a\] {
+  background-color: #0f172a !important;
 }
 
 .dark .dark\:bg-blue-500 {
@@ -1749,6 +1839,17 @@ html.dark aside .text-slate-500 {
 
 html.dark aside .text-slate-900 {
   color: #f1f5f9 !important;
+}
+
+html.dark aside .stroke-slate-900,
+html.dark aside .dark\:stroke-white {
+  stroke: #f8fafc !important;
+}
+
+html.dark aside .stroke-slate-400,
+html.dark aside .stroke-slate-500,
+html.dark aside .dark\:stroke-slate-500 {
+  stroke: #94a3b8 !important;
 }
 
 html.dark input::placeholder,

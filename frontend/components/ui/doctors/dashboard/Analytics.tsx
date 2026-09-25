@@ -19,7 +19,18 @@ const AnalyticsChartsStrip = dynamic(
   {
     ssr: false,
     loading: () => (
-      <p className="text-sm text-neutral-500">Loading charts…</p>
+      <div
+        role="status"
+        className="dashboard-grid-3 animate-pulse"
+        aria-label="Loading charts"
+      >
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="min-h-[14rem] rounded-2xl bg-slate-100 dark:bg-white/5"
+          />
+        ))}
+      </div>
     ),
   },
 )

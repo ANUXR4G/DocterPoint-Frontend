@@ -7,6 +7,20 @@ import {
   bookingStatusLabel,
 } from "@/lib/bookingStatus"
 
+/**
+ * Keep these class strings in a component file so Tailwind's content scanner
+ * always emits the dark-mode status utilities (lib/ alone was not scanned).
+ */
+void [
+  "dark:bg-[#042f2e] dark:text-[#99f6e4] dark:border-[#2dd4bf]",
+  "dark:bg-violet-950/40 dark:text-violet-100 dark:border-[#a78bfa]",
+  "dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-700",
+  "dark:bg-green-950/40 dark:text-green-100 dark:border-green-700",
+  "dark:bg-red-950/40 dark:text-red-100 dark:border-red-700",
+  "dark:bg-neutral-700 dark:text-neutral-100 dark:border-neutral-500",
+  "dark:bg-neutral-800 dark:text-neutral-100 dark:border-neutral-600",
+]
+
 type Props = {
   status: string
   busy?: boolean

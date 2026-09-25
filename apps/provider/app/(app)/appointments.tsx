@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -17,12 +17,10 @@ import {
   SurfaceCard,
 } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
-import { selfProviderScope, usePractice } from "@/lib/practiceContext";
-import { fetchPracticeBookings, updateBookingStatus } from "@/lib/procto";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
-import { applyLiveBookingEvent } from "@/lib/liveBooking";
+import { isClinicAdminRole, usePractice } from "@/lib/practiceContext";
+import { usePracticeLive } from "@/lib/PracticeLiveContext";
+import { updateBookingStatus } from "@/lib/procto";
 import {
-  addDays,
   nextActions,
   whenLabel,
   type BookingRow,
@@ -32,10 +30,6 @@ import { colors, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
 
 type Scope = "all" | "upcoming" | "past" | "active" | "done";
-
-function addDaysYmd(base: Date, n: number) {
-  return ymd(addDays(base, n));
-}
 
 function isPast(b: BookingRow) {
   const s = String(b.status || "").toUpperCase();
@@ -75,98 +69,30 @@ function isActive(b: BookingRow) {
 export default function AppointmentsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { practiceId, membership } = usePractice();
-  const selfProviderId = selfProviderScope(membership);
-  const [rows, setRows] = useState<BookingRow[]>([]);
-  const [error, setError] = useState("");
+  const { membership } = usePractice();
+  const {
+    bookings: rows,
+    liveConnected,
+    error: liveError,
+    refresh,
+  } = usePracticeLive();
+  const isStaffOnly = !isClinicAdminRole(membership?.role);
+  const error = liveError || "";
+  const [localError, setLocalError] = useState("");
   const [scope, setScope] = useState<Scope>("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const range = useMemo(() => {
-    const today = new Date();
-    return {
-      from: addDaysYmd(today, -90),
-      to: addDaysYmd(today, 90),
-    };
-  }, []);
-
-  const load = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!practiceId) return;
-      // Clinic admins: practice-wide ±90 days. Staff doctors: own roster only.
-      const res = await fetchPracticeBookings(practiceId, {
-        from: range.from,
-        to: range.to,
-        providerId: selfProviderId,
-      });
-      setRefreshing(false);
-      if (res.status === "successful") {
-        setRows((res.data as BookingRow[]) ?? []);
-        if (!opts?.silent) setError("");
-      } else if (!opts?.silent) {
-        setError(res.message || "Could not load appointments");
-      }
-    },
-    [practiceId, range.from, range.to, selfProviderId],
-  );
-
-  function scheduleSoft() {
-    if (softTimer.current) clearTimeout(softTimer.current);
-    softTimer.current = setTimeout(() => void load({ silent: true }), 250);
-  }
-
-  useEffect(() => {
-    void load();
-    return () => {
-      if (softTimer.current) clearTimeout(softTimer.current);
-    };
-  }, [load]);
-
-  useProctoLiveSocket(
-    practiceId,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return;
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined;
-      setRows((prev) => {
-        const { next, needsRefresh } = applyLiveBookingEvent(
-          prev,
-          String(event.event),
-          incoming,
-        );
-        if (needsRefresh) scheduleSoft();
-        if (!selfProviderId) return next;
-        return next.filter(
-          (b) =>
-            b.provider?.id === selfProviderId ||
-            (b as { providerId?: string }).providerId === selfProviderId,
-        );
-      });
-    },
-    () => scheduleSoft(),
-  );
 
   async function setStatus(id: string, status: string) {
     setBusyId(id);
     const res = await updateBookingStatus(id, status);
     setBusyId(null);
     if (res.status !== "successful") {
-      setError(res.message || "Update failed");
+      setLocalError(res.message || "Update failed");
       return;
     }
-    await load({ silent: true });
+    setLocalError("");
+    await refresh({ soft: true, force: true });
   }
 
   const filtered = rows.filter((b) => {
@@ -198,7 +124,9 @@ export default function AppointmentsScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              void load();
+              void refresh({ soft: true, force: true }).finally(() =>
+                setRefreshing(false),
+              );
             }}
             tintColor={colors.brand}
           />
@@ -208,9 +136,13 @@ export default function AppointmentsScreen() {
           eyebrow={membership?.practice.name}
           title="Appointments"
           subtitle={
-            selfProviderId
-              ? `±90 days · your appointments only`
-              : `±90 days · clinic-wide list`
+            liveConnected
+              ? isStaffOnly
+                ? "Live · ±90 days · your appointments"
+                : "Live · ±90 days · clinic-wide list"
+              : isStaffOnly
+                ? "Connecting… · ±90 days · your appointments"
+                : "Connecting… · ±90 days · clinic-wide list"
           }
         />
 
@@ -233,7 +165,7 @@ export default function AppointmentsScreen() {
         ))}
       </View>
 
-      <ErrorText text={error} />
+      <ErrorText text={localError || error} />
 
       {filtered.length === 0 ? (
         <EmptyState text="No appointments in this range." />

@@ -422,10 +422,10 @@ export default function VisitPage() {
 
       {/* Patient name banner — all visit identity details in one strip */}
       <section
-        className="overflow-hidden rounded-2xl border border-neutral-200 bg-[var(--theme-surface,theme(colors.white))] shadow-sm dark:border-neutral-700"
+        className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none"
         aria-label={`Patient ${patientName}`}
       >
-        <div className="bg-[color-mix(in_srgb,var(--theme-primary)_12%,transparent)] px-5 py-6 sm:px-8 dark:bg-[color-mix(in_srgb,var(--theme-primary)_22%,transparent)]">
+        <div className="bg-[color-mix(in_srgb,var(--theme-primary)_12%,transparent)] px-5 py-6 sm:px-8 dark:bg-[color-mix(in_srgb,var(--theme-primary)_18%,var(--solune-surface))]">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
               <PatientAvatar
@@ -434,13 +434,13 @@ export default function VisitPage() {
                 size="lg"
               />
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--theme-primary)] opacity-90">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--theme-primary)] opacity-90 dark:opacity-100">
                   Appointment · {appointmentDate} · {slotLabel}
                 </p>
                 <h1 className="mt-1 break-words text-3xl font-bold leading-tight tracking-tight text-neutral-900 sm:text-4xl dark:text-white">
                   {patientName}
                 </h1>
-                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-neutral-700 dark:text-slate-300">
                   <span>{phone}</span>
                   <span className="opacity-40" aria-hidden>
                     ·
@@ -460,7 +460,7 @@ export default function VisitPage() {
           </div>
         </div>
 
-        <dl className="grid gap-x-4 gap-y-3 border-t border-neutral-200 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8 dark:border-neutral-700">
+        <dl className="grid gap-x-4 gap-y-3 border-t border-neutral-200 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8 dark:border-white/10">
           <Fact label="Date of birth" value={dash(p?.dateOfBirth)} />
           <Fact label="Age" value={ageFromDob(p?.dateOfBirth)} />
           <Fact label="Gender" value={dash(p?.gender)} />
@@ -493,10 +493,10 @@ export default function VisitPage() {
           ) : null}
           {booking.notes ? (
             <div className="sm:col-span-2 lg:col-span-3">
-              <dt className="text-xs opacity-50">
+              <dt className="text-xs font-medium text-neutral-500 dark:text-slate-400">
                 Patient problem &amp; AI brief
               </dt>
-              <dd className="mt-0.5 whitespace-pre-wrap leading-relaxed font-medium">
+              <dd className="mt-0.5 whitespace-pre-wrap leading-relaxed font-medium text-neutral-900 dark:text-slate-100">
                 {booking.notes}
               </dd>
             </div>
@@ -773,8 +773,12 @@ export default function VisitPage() {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs opacity-50">{label}</dt>
-      <dd className="mt-0.5 font-medium break-words">{value}</dd>
+      <dt className="text-xs font-medium text-neutral-500 dark:text-slate-400">
+        {label}
+      </dt>
+      <dd className="mt-0.5 break-words font-medium text-neutral-900 dark:text-slate-100">
+        {value}
+      </dd>
     </div>
   )
 }

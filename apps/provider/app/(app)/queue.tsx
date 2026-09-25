@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Image,
   RefreshControl,
@@ -21,10 +21,10 @@ import { PremiumAtmosphere, DashMetric } from "@/components/mobile/PremiumChrome
 import { resolveMediaUrl } from "@/lib/media";
 import {
   isClinicAdminRole,
-  selfProviderScope,
   usePractice,
 } from "@/lib/practiceContext";
-import { fetchPracticeBookings, updateBookingStatus } from "@/lib/procto";
+import { updateBookingStatus } from "@/lib/procto";
+import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import {
   nextActions,
   whenLabel,
@@ -33,8 +33,6 @@ import {
 } from "@/lib/types";
 import { colors, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
-import { applyLiveBookingEvent } from "@/lib/liveBooking";
 import {
   QUEUE_FILTER_KEYS,
   countQueueStatusFilters,
@@ -46,22 +44,27 @@ import {
 export default function QueueScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { practiceId, membership } = usePractice();
+  const { membership } = usePractice();
+  const {
+    liveConnected,
+    error: liveError,
+    refresh,
+    bookingsInRange,
+  } = usePracticeLive();
   const isClinicAdmin = isClinicAdminRole(membership?.role);
-  const selfProviderId = selfProviderScope(membership);
   const [today] = useState(() => ymd(new Date()));
   const rangeTo = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
     return ymd(d);
   }, []);
-  const [rows, setRows] = useState<BookingRow[]>([]);
-  const [error, setError] = useState("");
+  const rows = bookingsInRange(today, rangeTo);
+  const error = liveError || "";
+  const [localError, setLocalError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<QueueStatusFilter>("all");
   const [providerFilter, setProviderFilter] = useState<string>("all");
-  const softRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const doctors = useMemo(() => {
     if (!isClinicAdmin) return [];
@@ -77,82 +80,16 @@ export default function QueueScreen() {
     }
   }, [isClinicAdmin, membership?.userId]);
 
-  const load = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!practiceId) return;
-      // Today + next 7 days so upcoming demo bookings are visible on this board.
-      const res = await fetchPracticeBookings(practiceId, {
-        from: today,
-        to: rangeTo,
-        providerId: selfProviderId,
-      });
-      if (res.status === "successful") {
-        setRows((res.data as BookingRow[]) ?? []);
-        if (!opts?.silent) setError("");
-      } else if (!opts?.silent) {
-        setError(res.message || "Could not load appointments");
-      }
-    },
-    [practiceId, today, rangeTo, selfProviderId],
-  );
-
-  function scheduleSoftRefresh() {
-    if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current);
-    softRefreshTimer.current = setTimeout(() => {
-      void load({ silent: true });
-    }, 250);
-  }
-
-  useEffect(() => {
-    void load();
-    return () => {
-      if (softRefreshTimer.current) clearTimeout(softRefreshTimer.current);
-    };
-  }, [load]);
-
-  useProctoLiveSocket(
-    practiceId,
-    (event) => {
-      if (
-        !event ||
-        typeof event !== "object" ||
-        !("event" in event) ||
-        (event.event !== "booking_created" &&
-          event.event !== "booking_updated")
-      ) {
-        return;
-      }
-      const incoming =
-        "booking" in event
-          ? (event.booking as Record<string, unknown>)
-          : undefined;
-      setRows((prev) => {
-        const { next, needsRefresh } = applyLiveBookingEvent(
-          prev,
-          String(event.event),
-          incoming,
-        );
-        if (needsRefresh) scheduleSoftRefresh();
-        if (!selfProviderId) return next;
-        return next.filter(
-          (b) =>
-            b.provider?.id === selfProviderId ||
-            (b as { providerId?: string }).providerId === selfProviderId,
-        );
-      });
-    },
-    () => scheduleSoftRefresh(),
-  );
-
   async function setStatus(id: string, status: string) {
     setBusyId(id);
     const res = await updateBookingStatus(id, status);
     setBusyId(null);
     if (res.status !== "successful") {
-      setError(res.message || "Update failed");
+      setLocalError(res.message || "Update failed");
       return;
     }
-    await load();
+    setLocalError("");
+    await refresh({ soft: true, force: true });
   }
 
   const scoped = useMemo(() => {
@@ -197,7 +134,7 @@ export default function QueueScreen() {
             refreshing={refreshing}
             onRefresh={async () => {
               setRefreshing(true);
-              await load();
+              await refresh({ soft: true, force: true });
               setRefreshing(false);
             }}
             tintColor={colors.brand}
@@ -208,9 +145,13 @@ export default function QueueScreen() {
           eyebrow={membership?.practice.name}
           title="Today's queue"
           subtitle={
-            isClinicAdmin
-              ? `${today} → ${rangeTo} · clinic-wide board`
-              : `${today} → ${rangeTo} · your appointments`
+            liveConnected
+              ? isClinicAdmin
+                ? `${today} → ${rangeTo} · Live · clinic-wide`
+                : `${today} → ${rangeTo} · Live · your appointments`
+              : isClinicAdmin
+                ? `${today} → ${rangeTo} · Connecting…`
+                : `${today} → ${rangeTo} · Connecting…`
           }
         />
 
@@ -270,7 +211,7 @@ export default function QueueScreen() {
           ))}
         </View>
 
-        <ErrorText text={error} />
+        <ErrorText text={localError || error} />
 
         {filtered.length === 0 ? (
           <EmptyState text="No bookings in this filter for the next 7 days." />

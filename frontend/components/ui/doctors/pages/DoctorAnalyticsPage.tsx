@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient } from "react-query"
 import { useSearchParams } from "next/navigation"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
@@ -69,6 +69,7 @@ export default function DoctorAnalyticsPage({
     planLocked,
     byDoctor,
     isLoading,
+    isRefreshing,
     practiceId,
   } = useAnalytics(type, providerId || null)
 
@@ -100,14 +101,29 @@ export default function DoctorAnalyticsPage({
 
   const [doctorOptions, setDoctorOptions] = useState(rosterDoctors)
   useEffect(() => {
-    if (rosterDoctors.length) setDoctorOptions(rosterDoctors)
+    if (!rosterDoctors.length) return
+    setDoctorOptions((prev) => {
+      if (
+        prev.length === rosterDoctors.length &&
+        prev.every(
+          (d, i) =>
+            d.providerId === rosterDoctors[i]?.providerId &&
+            d.name === rosterDoctors[i]?.name,
+        )
+      ) {
+        return prev
+      }
+      return rosterDoctors
+    })
   }, [rosterDoctors])
 
   function softRefreshAnalytics() {
     if (!practiceId) return
-    void queryClient.invalidateQueries([
-      `procto:practice:${practiceId}:analytics`,
-    ])
+    // Refetch in place — do not remove cached series (avoids "Loading charts…").
+    void queryClient.refetchQueries(
+      [`procto:practice:${practiceId}:analytics`],
+      { active: true },
+    )
   }
 
   const bookingsLiveKey = useMemo(
@@ -115,7 +131,13 @@ export default function DoctorAnalyticsPage({
     [bookings],
   )
 
+  const liveReady = useRef(false)
   useEffect(() => {
+    if (!practiceId) return
+    if (!liveReady.current) {
+      liveReady.current = true
+      return
+    }
     softRefreshAnalytics()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on booking live updates
   }, [bookingsLiveKey, practiceId])
@@ -268,19 +290,25 @@ export default function DoctorAnalyticsPage({
       {planLocked ? null : isLoading ? (
         <p className="text-sm text-neutral-500">Loading charts…</p>
       ) : (
-        <DoctorAnalyticsChartPanel
-          period={type}
-          patientMetrics={patientMetrics}
-          appointmentMetrics={appointmentMetrics}
-          maleTotal={maleTotal}
-          femaleTotal={femaleTotal}
-          othersTotal={othersTotal}
-          unknownTotal={unknownTotal}
-          compareMale={compareMale}
-          compareFemale={compareFemale}
-          compareOthers={compareOthers}
-          compareUnknown={compareUnknown}
-        />
+        <div
+          className={
+            isRefreshing ? "opacity-70 transition-opacity" : "transition-opacity"
+          }
+        >
+          <DoctorAnalyticsChartPanel
+            period={type}
+            patientMetrics={patientMetrics}
+            appointmentMetrics={appointmentMetrics}
+            maleTotal={maleTotal}
+            femaleTotal={femaleTotal}
+            othersTotal={othersTotal}
+            unknownTotal={unknownTotal}
+            compareMale={compareMale}
+            compareFemale={compareFemale}
+            compareOthers={compareOthers}
+            compareUnknown={compareUnknown}
+          />
+        </div>
       )}
 
       {!planLocked && byDoctor.length > 0 ? (
