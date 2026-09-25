@@ -985,27 +985,29 @@ html.dark body {
     transform: scale(0.98);
   }
 
-  /* Don't force primary pill on mode tabs / text links */
+  /* Don't force primary pill on mode tabs / text links.
+     Use [class~="…"] — a bare .bg-transparent selector is rewritten by
+     Tailwind darkMode:"selector" into invalid `:where(...)button` CSS. */
   .gg-public .gg-card button[type="button"].bg-gg-pulse,
-  .gg-public .gg-card button[type="button"].bg-transparent {
+  .gg-public .gg-card button[type="button"][class~="bg-transparent"] {
     background-image: none !important;
     box-shadow: none !important;
     border-radius: 9999px !important;
   }
 
-  .gg-public .gg-card button[type="button"].bg-transparent {
+  .gg-public .gg-card button[type="button"][class~="bg-transparent"] {
     background-color: transparent !important;
     color: #737373 !important;
   }
-  .dark .gg-public .gg-card button[type="button"].bg-transparent {
+  .dark .gg-public .gg-card button[type="button"][class~="bg-transparent"] {
     color: #999999 !important;
   }
 
-  .gg-public .gg-card button[type="button"].bg-transparent:hover {
+  .gg-public .gg-card button[type="button"][class~="bg-transparent"]:hover {
     background-color: rgba(0, 0, 0, 0.06) !important;
     color: #171717 !important;
   }
-  .dark .gg-public .gg-card button[type="button"].bg-transparent:hover {
+  .dark .gg-public .gg-card button[type="button"][class~="bg-transparent"]:hover {
     background-color: rgba(255, 255, 255, 0.1) !important;
     color: #ffffff !important;
   }
