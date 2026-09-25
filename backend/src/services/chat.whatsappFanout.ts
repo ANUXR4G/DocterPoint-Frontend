@@ -173,6 +173,46 @@ async function resolveStaffToPatientContext(
   });
 
   if (!booking?.practice) {
+    // Fallback: open WhatsApp support thread at a practice this staff belongs to
+    // (Talk to Support before any booking exists).
+    if (practiceIds.length && patient.phone) {
+      const last10 = normalizePhone(
+        patient.patient?.contactNumber || patient.phone || "",
+      ).slice(-10);
+      if (last10.length === 10) {
+        const conv = await prisma.whatsAppConversation.findFirst({
+          where: {
+            practiceId: { in: practiceIds },
+            OR: [
+              { patientPhone: last10 },
+              { patientPhone: { endsWith: last10 } },
+            ],
+          },
+          orderBy: { updatedAt: "desc" },
+          select: {
+            practiceId: true,
+            patientPhone: true,
+            practice: { select: { id: true, name: true } },
+          },
+        });
+        if (conv?.practice) {
+          const phone = await resolveWhatsAppMsisdn(
+            conv.practiceId,
+            conv.patientPhone,
+            patient.patient?.contactNumber,
+            patient.phone,
+          );
+          if (phone.length >= 10) {
+            return {
+              practiceId: conv.practiceId,
+              practiceName: conv.practice.name,
+              providerName: staff.name || "Your clinic",
+              patientPhone: phone,
+            };
+          }
+        }
+      }
+    }
     console.warn(
       `[care-chat-wa] skip: no shared booking for staff=${staffUserId} patient=${patientUserId}`,
     );

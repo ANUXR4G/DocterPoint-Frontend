@@ -5,11 +5,11 @@ import { usePathname, useSearchParams } from "next/navigation"
 
 const LINKS = [
   { href: "/doctor/dashboard", label: "Dashboard" },
-  { href: "/doctor/activity", label: "Activity" },
   { href: "/doctor/queue", label: "Queue" },
   { href: "/doctor/notifications", label: "Notifications" },
   { href: "/doctor/appointments", label: "Appointments" },
   { href: "/doctor/patients", label: "Patients" },
+  { href: "/doctor/activity", label: "Support" },
   { href: "/doctor/calendar", label: "Calendar" },
   { href: "/doctor/analytics", label: "Analytics" },
   { href: "/doctor/subscription", label: "Subscription" },

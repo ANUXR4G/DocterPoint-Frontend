@@ -256,7 +256,7 @@ async function main() {
       slotIntervalMin: 30,
       startTime: "09:00",
       endTime: "12:00",
-      maxPerSlot: 2,
+      maxPerSlot: 1,
     },
     {
       dayOfWeek: 2,
@@ -264,7 +264,7 @@ async function main() {
       slotIntervalMin: 30,
       startTime: "09:00",
       endTime: "12:00",
-      maxPerSlot: 2,
+      maxPerSlot: 1,
     },
     {
       dayOfWeek: 3,
@@ -280,7 +280,7 @@ async function main() {
       slotIntervalMin: 30,
       startTime: "09:00",
       endTime: "12:00",
-      maxPerSlot: 2,
+      maxPerSlot: 1,
     },
     {
       dayOfWeek: 5,
@@ -288,7 +288,7 @@ async function main() {
       slotIntervalMin: 30,
       startTime: "09:00",
       endTime: "12:00",
-      maxPerSlot: 2,
+      maxPerSlot: 1,
     },
     {
       dayOfWeek: 6,
@@ -296,7 +296,7 @@ async function main() {
       slotIntervalMin: 30,
       startTime: "09:00",
       endTime: "13:00",
-      maxPerSlot: 2,
+      maxPerSlot: 1,
     },
   ] as const;
 

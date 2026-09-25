@@ -64,7 +64,12 @@ export async function assertCareChatAllowed(
     }),
     prisma.user.findUnique({
       where: { id: peerUserId },
-      select: { id: true, role: true },
+      select: {
+        id: true,
+        role: true,
+        phone: true,
+        patient: { select: { contactNumber: true } },
+      },
     }),
   ]);
   if (!actor || !peer) throw new AppError(404, "User not found.");
@@ -100,6 +105,26 @@ export async function assertCareChatAllowed(
       select: { id: true },
     });
     if (patientBooking) return;
+
+    // Support inbox: patient has an open WhatsApp thread at this practice
+    // (Talk to Support) even before/without a booking.
+    const phoneCandidates = [peer.phone, peer.patient?.contactNumber]
+      .map((p) => String(p || "").replace(/\D/g, ""))
+      .filter((d) => d.length >= 10);
+    const last10s = [...new Set(phoneCandidates.map((d) => d.slice(-10)))];
+    if (last10s.length) {
+      const wa = await prisma.whatsAppConversation.findFirst({
+        where: {
+          practiceId: { in: practiceIds },
+          OR: last10s.flatMap((last10) => [
+            { patientPhone: last10 },
+            { patientPhone: { endsWith: last10 } },
+          ]),
+        },
+        select: { id: true },
+      });
+      if (wa) return;
+    }
   }
 
   // Patient messaging any doctor in a practice they booked at

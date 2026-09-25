@@ -19,6 +19,7 @@ import {
   buildBookingReviewSnapshot,
   type BookingReviewSnapshot,
 } from "@/lib/bookingReview"
+import { practiceTodayIso, formatPracticeTime } from "@/lib/practiceTime"
 import {
   BOOKING_DOCUMENT_ACCEPT,
   MAX_BOOKING_DOCUMENTS,
@@ -75,6 +76,11 @@ function toDateInputValue(d: Date) {
   const m = String(d.getMonth() + 1).padStart(2, "0")
   const day = String(d.getDate()).padStart(2, "0")
   return `${y}-${m}-${day}`
+}
+
+function isFutureSlotStart(start: string): boolean {
+  const t = new Date(start).getTime()
+  return Number.isFinite(t) && t > Date.now()
 }
 
 function addDays(base: Date, days: number) {
@@ -250,7 +256,10 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
 
   const tokenSession = availability?.tokenSessions?.[0]
   const availableSlots = useMemo(
-    () => availability?.timeSlots?.filter((s) => s.available) ?? [],
+    () =>
+      availability?.timeSlots?.filter(
+        (s) => s.available && isFutureSlotStart(s.start),
+      ) ?? [],
     [availability],
   )
 
@@ -320,6 +329,15 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
       setMessage("Select a time slot.")
       return
     }
+    if (
+      mode === "TIME_BASED" &&
+      selectedSlot &&
+      !isFutureSlotStart(selectedSlot)
+    ) {
+      setMessage("That time has already passed. Pick a later slot.")
+      setSelectedSlot(null)
+      return
+    }
 
     setSubmitting(true)
     setMessage("")
@@ -356,7 +374,7 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
     )
   }
 
-  const minDate = toDateInputValue(new Date())
+  const minDate = practiceTodayIso()
   const maxDate = bookableUntil
 
   return (
@@ -455,8 +473,7 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
           {activeMode === "TIME_BASED" && (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-2">
               {availableSlots.map((s) => {
-                const start = new Date(s.start)
-                const label = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`
+                const label = formatPracticeTime(s.start)
                 const remaining = Math.max(0, s.capacity - s.booked)
                 return (
                   <button

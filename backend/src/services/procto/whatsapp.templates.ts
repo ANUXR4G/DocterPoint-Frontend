@@ -628,6 +628,14 @@ export const BotPrompts = {
     );
   },
 
+  slotPast(lang?: WaLang): string {
+    return L(
+      lang,
+      "That time has already passed. Please pick a later slot.",
+      "वह समय बीत चुका है। कृपया बाद का स्लॉट चुनें।",
+    );
+  },
+
   dateTooFar(lang?: WaLang): string {
     return L(
       lang,

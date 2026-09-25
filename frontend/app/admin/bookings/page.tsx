@@ -9,6 +9,7 @@ import AdminToolbar from "@/components/admin/AdminToolbar"
 import { AdminBadge, statusTone } from "@/components/admin/AdminBadge"
 import { adminService, type AdminBooking } from "@/lib/services/admin"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
+import { formatPracticeDateTime, formatPracticeDate } from "@/lib/practiceTime"
 
 const STATUS_FILTERS = [
   "",
@@ -120,15 +121,9 @@ export default function AdminBookingsPage() {
             key: "when",
             header: "When",
             cell: (b) => {
-              const when = b.slotStart || b.sessionDate
-              return when
-                ? new Date(when).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    hour: b.slotStart ? "2-digit" : undefined,
-                    minute: b.slotStart ? "2-digit" : undefined,
-                  })
-                : "—"
+              if (b.slotStart) return formatPracticeDateTime(b.slotStart)
+              if (b.sessionDate) return formatPracticeDate(b.sessionDate)
+              return "—"
             },
           },
           {

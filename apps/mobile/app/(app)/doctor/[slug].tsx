@@ -17,6 +17,7 @@ import { VoiceField } from "@/components/VoiceField";
 import { api } from "@/lib/api";
 import { practicePhotoUrl } from "@/lib/media";
 import { colors, radii, space } from "@/lib/theme";
+import { formatPracticeTime } from "@/lib/practiceTime";
 import type { PatientProfile, PracticeReview, ReviewSummary } from "@/lib/types";
 
 type PracticeDetail = {
@@ -334,10 +335,7 @@ export default function PracticeBookScreen() {
                     typeof s.start === "string"
                       ? s.start
                       : new Date(s.start).toISOString();
-                  const label = new Date(start).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  });
+                  const label = formatPracticeTime(start);
                   return (
                     <Chip
                       key={start}

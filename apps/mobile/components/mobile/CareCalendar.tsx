@@ -19,6 +19,7 @@ import {
 } from "@/lib/calendarDates";
 import { bookingWhenMs } from "@/lib/bookingStats";
 import { bookingWhen, type ProctoBooking } from "@/lib/types";
+import { formatPracticeTime } from "@/lib/practiceTime";
 import { colors, radii, shadows, space } from "@/lib/theme";
 
 type Props = {
@@ -40,10 +41,7 @@ function bookingDayKey(b: ProctoBooking): string | null {
 function timeLabel(b: ProctoBooking): string {
   const slot = b.slotStart ?? b.slot_start;
   if (slot) {
-    return new Date(slot).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatPracticeTime(slot);
   }
   const token = b.tokenNumber ?? b.token_number;
   if (token != null) return `#${token}`;

@@ -127,10 +127,10 @@ async function seedDefaultProviderSchedule(opts: {
     120,
     Math.max(5, Number(opts.slotDurationMins) || 15),
   );
-  const patientsPerSlot = Math.min(
-    50,
-    Math.max(1, Number(opts.patientsPerSlot) || 1),
-  );
+  const patientsPerSlot =
+    mode === ScheduleMode.TIME_BASED
+      ? 1
+      : Math.min(50, Math.max(1, Number(opts.patientsPerSlot) || 1));
   const breakStart = opts.breakStartTime?.trim() || "13:00";
   const breakEnd = opts.breakEndTime?.trim() || "14:00";
 
@@ -651,16 +651,63 @@ export const PracticeService = {
         state: true,
       },
     });
+
+    const phones = rows.map((r) => r.patientPhone.replace(/\D/g, ""));
+    const last10s = [
+      ...new Set(phones.map((p) => p.slice(-10)).filter((p) => p.length === 10)),
+    ];
+    const patients =
+      last10s.length === 0
+        ? []
+        : await prisma.user.findMany({
+            where: {
+              role: "user",
+              OR: last10s.flatMap((d) => [
+                { phone: d },
+                { phone: { endsWith: d } },
+                { patient: { is: { contactNumber: d } } },
+                { patient: { is: { contactNumber: { endsWith: d } } } },
+              ]),
+            },
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              patient: { select: { contactNumber: true } },
+            },
+            take: 200,
+          });
+
+    function matchPatient(waPhone: string) {
+      const digits = waPhone.replace(/\D/g, "");
+      const last10 = digits.slice(-10);
+      return (
+        patients.find((p) => {
+          const a = String(p.phone || "").replace(/\D/g, "");
+          const b = String(p.patient?.contactNumber || "").replace(/\D/g, "");
+          return (
+            a === digits ||
+            b === digits ||
+            a.endsWith(last10) ||
+            b.endsWith(last10)
+          );
+        }) ?? null
+      );
+    }
+
     return rows.map((r) => {
       const state =
         r.state && typeof r.state === "object" && !Array.isArray(r.state)
           ? (r.state as Record<string, unknown>)
           : {};
+      const patient = matchPatient(r.patientPhone);
       return {
         id: r.id,
         patientPhone: r.patientPhone,
         status: r.status,
         updatedAt: r.updatedAt,
+        patientUserId: patient?.id ?? null,
+        patientName: patient?.name?.trim() || null,
         supportRequestedAt:
           typeof state.supportRequestedAt === "string"
             ? state.supportRequestedAt
@@ -1451,7 +1498,7 @@ export const PracticeService = {
       slotIntervalMin: isTime ? (data.slotIntervalMin ?? 15) : null,
       startTime: isTime ? (data.startTime ?? null) : null,
       endTime: isTime ? (data.endTime ?? null) : null,
-      maxPerSlot: data.maxPerSlot ?? 1,
+      maxPerSlot: isTime ? 1 : Math.min(50, Math.max(1, data.maxPerSlot ?? 1)),
       sessionStart: !isTime ? (data.sessionStart ?? null) : null,
       sessionEnd: !isTime ? (data.sessionEnd ?? null) : null,
       maxTokens: !isTime ? (data.maxTokens ?? null) : null,
@@ -1994,7 +2041,9 @@ export const PracticeService = {
         : ScheduleMode.TIME_BASED;
     const isTime = mode === ScheduleMode.TIME_BASED;
     const slotMins = Math.min(120, Math.max(5, Number(data.slotDurationMins) || 15));
-    const patientsPerSlot = Math.min(50, Math.max(1, Number(data.patientsPerSlot) || 1));
+    const patientsPerSlot = isTime
+      ? 1
+      : Math.min(50, Math.max(1, Number(data.patientsPerSlot) || 1));
     const licenseNo = data.licenseNo?.trim();
     const name = data.name?.trim();
     const validity =

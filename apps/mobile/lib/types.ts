@@ -1,5 +1,7 @@
 /** Shared booking/practice types for GlucoGuide patient app. */
 
+import { formatPracticeDateTime } from "./practiceTime";
+
 export type ProctoBooking = {
   id: string;
   status: string;
@@ -100,10 +102,7 @@ export function bookingWhen(b: ProctoBooking): string {
     return `Token #${token}${day ? ` · ${day}` : ""}`;
   }
   if (slot) {
-    return new Date(slot).toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+    return formatPracticeDateTime(slot);
   }
   return "Scheduled";
 }
