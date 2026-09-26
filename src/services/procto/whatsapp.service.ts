@@ -529,18 +529,22 @@ export const WhatsAppService = {
           caption.trim(),
         );
 
+        // Prefer ID OCR whenever the bot is mid-register (self or family),
+        // or an unregistered user captions Aadhaar/PAN/ID. Without this,
+        // family-register PDFs were swallowed by the visit-doc path and
+        // never OCR'd.
         const preferIdOcr =
-          !alreadyRegistered &&
           !awaitingDocUpload &&
           !reportCaption &&
-          (activelyRegistering || isIdRegistrationCaption(caption));
+          (activelyRegistering ||
+            (!alreadyRegistered && isIdRegistrationCaption(caption)));
 
         const looksLikeVisitFile = isVisitDocumentMime(media.mimeType, {
           filename,
           buffer: media.buffer,
         });
 
-        // Branch F / visit report path
+        // Branch F / visit report path — never while preferIdOcr.
         const tryVisitDoc =
           looksLikeVisitFile &&
           !preferIdOcr &&
@@ -752,7 +756,7 @@ export const WhatsAppService = {
                 : "image/jpeg",
           });
           console.log(
-            `[WhatsApp OCR] from=${item.from} type=${idScan.documentType ?? "?"} name=${idScan.name ?? "—"}`,
+            `[WhatsApp OCR] from=${item.from} type=${idScan.documentType ?? "?"} name=${idScan.name ?? "—"} dob=${idScan.dateOfBirth ?? "—"} gender=${idScan.gender ?? "—"} aadhaar=${idScan.aadharNumber ? "yes" : "no"} pan=${idScan.panNumber ? "yes" : "no"}`,
           );
         } catch (err) {
           console.warn("[WhatsApp OCR]", err);
@@ -1267,14 +1271,21 @@ export const WhatsAppService = {
     // Mirror patient WhatsApp text into care chat (portal + apps).
     // Menu digits / BOOK / list taps skip this entirely (zero care-chat DB).
     // Branch E collects the message in the orchestrator (pins to booking / Admin).
+    // Registration / booking wizard replies (name, DOB, gender, slots…) must never
+    // land in care chat — even when the phone already has an older booking.
     try {
       const branchECollecting =
         state.step === "awaiting_message_doctor_text" ||
         state.step === "awaiting_message_doctor_booking";
+      const inBotWizard =
+        typeof state.step === "string" &&
+        state.step.startsWith("awaiting_") &&
+        !branchECollecting;
       if (
         !payload.fromInteractive &&
         !looksLikeBotCommand(text) &&
-        !branchECollecting
+        !branchECollecting &&
+        !inBotWizard
       ) {
         const care = await ingestWhatsAppPatientReply({
           practiceId: practice.id,

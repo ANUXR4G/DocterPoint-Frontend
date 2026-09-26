@@ -1600,6 +1600,19 @@ export function renderNotificationTemplate(
       str(payload, "recipientRole"),
     );
   }
+  if (templateKey === "CLINIC_MESSAGE") {
+    const via =
+      str(enriched, "messageChannel", "app") === "whatsapp"
+        ? "WhatsApp"
+        : "the app";
+    const preview = str(enriched, "messagePreview", "");
+    return withOptOut(
+      `${patient} sent a message via ${via} at ${practice}${
+        preview ? `: “${preview}”` : "."
+      }`,
+      str(payload, "recipientRole"),
+    );
+  }
   if (templateKey === "CLINIC_OVERRIDE") {
     const reason = str(enriched, "reason", "");
     return withOptOut(

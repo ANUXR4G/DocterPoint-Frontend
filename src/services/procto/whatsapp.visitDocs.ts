@@ -860,6 +860,7 @@ export function registerFlowStep(step?: string | null): boolean {
     !step ||
     step === "idle" ||
     step === "awaiting_register_name" ||
+    step === "awaiting_register_dob" ||
     step === "awaiting_register_gender" ||
     step === "awaiting_register_email_opt" ||
     step === "awaiting_register_email" ||
@@ -874,6 +875,7 @@ export function registerFlowStep(step?: string | null): boolean {
 export function inActiveRegisterStep(step?: string | null): boolean {
   return (
     step === "awaiting_register_name" ||
+    step === "awaiting_register_dob" ||
     step === "awaiting_register_gender" ||
     step === "awaiting_register_email_opt" ||
     step === "awaiting_register_email" ||

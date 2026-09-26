@@ -7,7 +7,7 @@ import { L, type WaLang } from "./whatsapp.i18n.js";
  * Do NOT match "lab report" / "test result" — those are visit-document intents.
  */
 const CLINICAL_RE =
-  /\b(diagnos(?:e|is|ed|ing)?|prescrib\w*|medication|dosage|symptom|fever|sugar\s*level|insulin|treatment for|therapy for|pain\s*in|chest\s*pain|suicide|overdose|what medicine|which medicine)\b/i;
+  /\b(diagnos(?:e|is|ed|ing)?|prescrib\w*|medication|dosage|symptom|fever|sugar\s*level|insulin|treatment for|therapy for|pain\s*in|chest\s*pain|headache|migraine|nausea|vomit\w*|dizz(?:y|iness)|bleeding|suicide|overdose|what medicine|which medicine)\b/i;
 
 /** Outbound: only block replies that look like giving medical advice. */
 const CLINICAL_ADVICE_OUT_RE =

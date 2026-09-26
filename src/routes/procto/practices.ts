@@ -108,12 +108,19 @@ router.get(
   requireAuth("schedule:read"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const data = await PracticeService.getSchedules(
+      const providerId = req.query.providerId as string | undefined;
+      const schedules = await PracticeService.getSchedules(
         param(req.params.practiceId),
-        req.query.providerId as string | undefined,
+        providerId,
         req.sessionUser!.id,
       );
-      return ResponseHandler.fetchSuccessful(res, "schedules fetched.", data);
+      const pendingModeChange = providerId
+        ? await PracticeService.getPendingModeChange(providerId)
+        : null;
+      return ResponseHandler.fetchSuccessful(res, "schedules fetched.", {
+        schedules,
+        pendingModeChange,
+      });
     } catch (error) {
       next(error);
     }
@@ -347,12 +354,14 @@ router.get(
       );
       const status =
         typeof req.query.status === "string" ? req.query.status : undefined;
+      const kind =
+        typeof req.query.kind === "string" ? req.query.kind : undefined;
       const take = req.query.take ? Number(req.query.take) : undefined;
       const skip = req.query.skip ? Number(req.query.skip) : undefined;
       const data = await NotificationService.listForPractice(
         param(req.params.practiceId),
         req.sessionUser!.id,
-        { status, take, skip },
+        { status, kind, take, skip },
       );
       return ResponseHandler.fetchSuccessful(
         res,

@@ -111,5 +111,11 @@ describe("Branch F button titles are bot commands (not care-chat)", () => {
     assert.equal(looksLikeBotCommand("General Document"), true);
     assert.equal(looksLikeBotCommand("doc:appointment"), true);
     assert.equal(looksLikeBotCommand("doc:general"), true);
+    // Registration / main-menu reply titles that previously leaked
+    assert.equal(looksLikeBotCommand("main"), true);
+    assert.equal(looksLikeBotCommand("Main Menu"), true);
+    assert.equal(looksLikeBotCommand("Female"), true);
+    assert.equal(looksLikeBotCommand("Male"), true);
+    assert.equal(looksLikeBotCommand("Others"), true);
   });
 });

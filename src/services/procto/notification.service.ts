@@ -147,10 +147,25 @@ async function createAndEnqueue(data: {
   }
 }
 
+/** One undismissed clinic row per booking for these keys (create + ACCEPTED both confirm). */
+const IDEMPOTENT_CLINIC_TEMPLATE_KEYS = new Set([
+  "CLINIC_NEW_BOOKING",
+  "CLINIC_CANCEL",
+  "CLINIC_RESCHEDULE",
+  "CLINIC_QUEUE_ALERT",
+  "CLINIC_WAITING",
+  "CLINIC_NO_SHOW",
+  "CLINIC_COMPLETED",
+]);
+
 /**
  * Always write a clinic inbox row. WhatsApp send is optional — if there is no
  * clinic phone, the worker marks the event SKIPPED (in-app only) so status /
  * docs / support still appear on Notifications.
+ *
+ * Idempotent for booking lifecycle keys while undismissed — create + ACCEPTED
+ * both call confirmation and must not double the badge / list. Messages and
+ * documents stay multi-row.
  */
 async function enqueueClinicInbox(data: {
   practiceId: string;
@@ -159,6 +174,25 @@ async function enqueueClinicInbox(data: {
   templateKey: string;
   payload: Record<string, unknown>;
 }) {
+  if (
+    data.bookingId &&
+    IDEMPOTENT_CLINIC_TEMPLATE_KEYS.has(data.templateKey)
+  ) {
+    const existing = await prisma.notificationEvent.findFirst({
+      where: {
+        practiceId: data.practiceId,
+        bookingId: data.bookingId,
+        dismissedAt: null,
+        AND: [
+          { payload: { path: ["recipientRole"], equals: "clinic" } },
+          { payload: { path: ["templateKey"], equals: data.templateKey } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) return existing;
+  }
+
   const clinicTo = await resolveClinicNotifyPhone(data.practiceId);
   return createAndEnqueue({
     practiceId: data.practiceId,
@@ -391,6 +425,31 @@ export const NotificationService = {
     return true;
   },
 
+  async enqueueClinicModeChange(opts: {
+    practiceId: string;
+    bookingId: string;
+    providerName?: string | null;
+    fromLabel: string;
+    toLabel: string;
+    effectiveDate: string;
+  }) {
+    return enqueueClinicInbox({
+      practiceId: opts.practiceId,
+      bookingId: opts.bookingId,
+      type: NotificationType.RESCHEDULE,
+      templateKey: "CLINIC_MODE_CHANGE",
+      payload: {
+        providerName: opts.providerName ?? "",
+        patientName: opts.providerName ?? "Doctor",
+        patientPhone: "",
+        fromLabel: opts.fromLabel,
+        toLabel: opts.toLabel,
+        effectiveDate: opts.effectiveDate,
+        reason: `Booking type changes to ${opts.toLabel} from ${opts.effectiveDate}`,
+      },
+    });
+  },
+
   /** Patient WhatsApp + app: visit remarks / medicines / documents after finish. */
   async enqueueVisitSummary(bookingId: string) {
     const booking = await loadBooking(bookingId);
@@ -592,13 +651,55 @@ export const NotificationService = {
   },
 
   /**
-   * Practice inbox: undismissed WhatsApp notification events for this clinic
-   * (patient + clinic recipients). Membership required.
+   * Clinic inbox when a patient messages the doctor (app care chat or WhatsApp).
+   */
+  async enqueueClinicPatientMessage(opts: {
+    practiceId: string;
+    bookingId: string;
+    messagePreview: string;
+    channel: "whatsapp" | "app";
+    patientName?: string | null;
+    patientPhone?: string | null;
+    providerName?: string | null;
+  }) {
+    const preview = String(opts.messagePreview || "").trim();
+    if (!preview) return null;
+    const booking = await loadBooking(opts.bookingId);
+    if (!booking || booking.practiceId !== opts.practiceId) return null;
+
+    return enqueueClinicInbox({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.QUEUE_ALERT,
+      templateKey: "CLINIC_MESSAGE",
+      payload: {
+        practiceName: booking.practice.name,
+        providerName:
+          opts.providerName?.trim() || booking.provider?.name || "",
+        patientName:
+          opts.patientName?.trim() || booking.patientName || "Patient",
+        patientPhone: opts.patientPhone?.trim() || booking.patientPhone,
+        messagePreview:
+          preview.length > 200 ? `${preview.slice(0, 199)}…` : preview,
+        messageChannel: opts.channel,
+        ...whenFields(booking),
+      },
+    });
+  },
+
+  /**
+   * Practice inbox: undismissed clinic-facing notification events only.
+   * Patient WhatsApp send rows are omitted so each event appears once.
    */
   async listForPractice(
     practiceId: string,
     actorUserId: string,
-    opts?: { status?: string; take?: number; skip?: number },
+    opts?: {
+      status?: string;
+      kind?: string;
+      take?: number;
+      skip?: number;
+    },
   ) {
     const { PracticeService } = await import("./practice.service.js");
     await PracticeService.assertMember(practiceId, actorUserId);
@@ -607,18 +708,31 @@ export const NotificationService = {
     const skip = opts?.skip ?? 0;
     const statusFilter =
       opts?.status && opts.status !== "ALL" ? opts.status.trim() : undefined;
+    const kindKeys = clinicInboxKindTemplateKeys(opts?.kind);
 
     const where = {
       practiceId,
-      dismissedAt: null,
+      dismissedAt: null as Date | null,
       ...(statusFilter ? { status: statusFilter } : {}),
+      AND: [
+        // Inbox is for the clinic — patient WhatsApp send audits are separate.
+        { payload: { path: ["recipientRole"], equals: "clinic" } },
+        ...(kindKeys?.length
+          ? [
+              {
+                OR: kindKeys.map((key) => ({
+                  payload: { path: ["templateKey"], equals: key },
+                })),
+              },
+            ]
+          : []),
+      ],
     };
 
-    // One groupBy for badge counts instead of 3 separate count queries.
-    const [items, total, statusGroups] = await Promise.all([
+    const [rawItems, totalRaw, statusGroups] = await Promise.all([
       prisma.notificationEvent.findMany({
         where,
-        take,
+        take: Math.min(take * 3, 150),
         skip,
         orderBy: { createdAt: "desc" },
         include: {
@@ -638,10 +752,45 @@ export const NotificationService = {
       prisma.notificationEvent.count({ where }),
       prisma.notificationEvent.groupBy({
         by: ["status"],
-        where: { practiceId, dismissedAt: null },
+        where,
         _count: { _all: true },
       }),
     ]);
+
+    // Collapse legacy duplicates (e.g. create + ACCEPTED both wrote CLINIC_NEW_BOOKING).
+    const seenLifecycle = new Set<string>();
+    const staleDuplicateIds: string[] = [];
+    const deduped = [];
+    for (const n of rawItems) {
+      const payload =
+        n.payload && typeof n.payload === "object"
+          ? (n.payload as Record<string, unknown>)
+          : {};
+      const templateKey = String(payload.templateKey || n.type);
+      if (
+        n.bookingId &&
+        IDEMPOTENT_CLINIC_TEMPLATE_KEYS.has(templateKey)
+      ) {
+        const sig = `${n.bookingId}|${templateKey}`;
+        if (seenLifecycle.has(sig)) {
+          staleDuplicateIds.push(n.id);
+          continue;
+        }
+        seenLifecycle.add(sig);
+      }
+      deduped.push(n);
+    }
+    if (staleDuplicateIds.length) {
+      void prisma.notificationEvent
+        .updateMany({
+          where: { id: { in: staleDuplicateIds } },
+          data: { dismissedAt: new Date() },
+        })
+        .catch(() => undefined);
+    }
+
+    const items = deduped.slice(0, take);
+    const total = Math.max(0, totalRaw - staleDuplicateIds.length);
 
     let pendingCount = 0;
     let failedCount = 0;
@@ -651,6 +800,19 @@ export const NotificationService = {
       if (row.status === "PENDING") pendingCount = n;
       else if (row.status === "FAILED") failedCount = n;
       else if (row.status === "SENT") sentCount = n;
+    }
+    if (staleDuplicateIds.length) {
+      const droppedStatuses = new Map(
+        rawItems
+          .filter((n) => staleDuplicateIds.includes(n.id))
+          .map((n) => [n.id, n.status]),
+      );
+      for (const status of droppedStatuses.values()) {
+        if (status === "PENDING") pendingCount = Math.max(0, pendingCount - 1);
+        else if (status === "FAILED")
+          failedCount = Math.max(0, failedCount - 1);
+        else if (status === "SENT") sentCount = Math.max(0, sentCount - 1);
+      }
     }
 
     return {
@@ -723,27 +885,56 @@ export const NotificationService = {
   },
 };
 
+function clinicInboxKindTemplateKeys(
+  kind?: string | null,
+): string[] | null {
+  const k = String(kind || "")
+    .trim()
+    .toLowerCase();
+  if (!k || k === "all") return null;
+  const map: Record<string, string[]> = {
+    appointments: [
+      "CLINIC_NEW_BOOKING",
+      "CLINIC_CANCEL",
+      "CLINIC_RESCHEDULE",
+    ],
+    messages: ["CLINIC_MESSAGE"],
+    documents: ["CLINIC_DOCUMENT"],
+    queue: [
+      "CLINIC_QUEUE_ALERT",
+      "CLINIC_WAITING",
+      "CLINIC_NO_SHOW",
+      "CLINIC_COMPLETED",
+    ],
+    support: ["CLINIC_SUPPORT"],
+    schedule: ["CLINIC_OVERRIDE", "OVERRIDE_IMPACT", "CLINIC_MODE_CHANGE"],
+  };
+  return map[k] ?? null;
+}
+
 function notificationTitle(
   payload: Record<string, unknown>,
   type: string,
 ): string {
   const key = String(payload.templateKey || type);
   const map: Record<string, string> = {
-    BOOKING_CONFIRMATION: "Booking confirmed (patient)",
-    CLINIC_NEW_BOOKING: "New booking (clinic alert)",
-    CANCELLATION: "Booking cancelled (patient)",
-    CLINIC_CANCEL: "Booking cancelled (clinic alert)",
+    BOOKING_CONFIRMATION: "Booking confirmed",
+    CLINIC_NEW_BOOKING: "New appointment",
+    CANCELLATION: "Booking cancelled",
+    CLINIC_CANCEL: "Booking cancelled",
     REMINDER: "Appointment reminder",
-    RESCHEDULE: "Booking rescheduled (patient)",
-    CLINIC_RESCHEDULE: "Booking rescheduled (clinic alert)",
-    QUEUE_ALERT: "Queue alert (patient)",
-    CLINIC_QUEUE_ALERT: "Queue alert (clinic)",
+    RESCHEDULE: "Booking rescheduled",
+    CLINIC_RESCHEDULE: "Booking rescheduled",
+    QUEUE_ALERT: "Queue update",
+    CLINIC_QUEUE_ALERT: "Patient called in",
     CLINIC_WAITING: "Patient arrived / waiting",
     CLINIC_NO_SHOW: "Patient marked no-show",
     CLINIC_COMPLETED: "Visit completed",
-    CLINIC_DOCUMENT: "Patient document shared",
-    CLINIC_OVERRIDE: "Schedule override (clinic alert)",
+    CLINIC_DOCUMENT: "Document uploaded",
+    CLINIC_OVERRIDE: "Schedule override",
+    CLINIC_MODE_CHANGE: "Booking type change",
     CLINIC_SUPPORT: "Support request",
+    CLINIC_MESSAGE: "New patient message",
     VISIT_SUMMARY: "Visit summary sent",
     PRESCRIPTION_UPDATE: "Prescription update sent",
     OVERRIDE_IMPACT: "Schedule change notice",
@@ -764,6 +955,9 @@ function notificationSummary(
     String(payload.patientName || booking?.patientName || "").trim() ||
     String(payload.patientPhone || booking?.patientPhone || "").trim() ||
     "Patient";
+  const phone = String(
+    payload.patientPhone || booking?.patientPhone || "",
+  ).trim();
   const when =
     String(payload.whenLabel || "").trim() ||
     (booking?.slotStart
@@ -771,22 +965,56 @@ function notificationSummary(
       : booking?.sessionDate
         ? formatLocalDate(booking.sessionDate)
         : "");
-  const role = String(payload.recipientRole || "patient");
+  const doctor = String(payload.providerName || "").trim();
+  const location = String(payload.location || "").trim();
+  const channel = String(payload.channel || "").trim();
   const key = String(payload.templateKey || "");
-  const extra =
-    key === "CLINIC_DOCUMENT"
-      ? String(payload.docName || "").trim() || null
-      : key === "CLINIC_WAITING" ||
-          key === "CLINIC_NO_SHOW" ||
-          key === "CLINIC_COMPLETED"
-        ? String(payload.statusLabel || "").trim() || null
-        : key === "CLINIC_SUPPORT"
-          ? "Open Support to chat"
-          : null;
+
+  const extras: string[] = [];
+  if (key === "CLINIC_DOCUMENT") {
+    const docName = String(payload.docName || "").trim() || "Document";
+    const kind =
+      String(payload.docKind || "visit") === "general"
+        ? "general"
+        : "visit";
+    extras.push(`${docName} (${kind})`);
+  } else if (
+    key === "CLINIC_WAITING" ||
+    key === "CLINIC_NO_SHOW" ||
+    key === "CLINIC_COMPLETED"
+  ) {
+    const statusLabel = String(payload.statusLabel || "").trim();
+    if (statusLabel) extras.push(statusLabel);
+  } else if (key === "CLINIC_SUPPORT") {
+    extras.push("Open Support to chat");
+  } else if (key === "CLINIC_MESSAGE") {
+    const via =
+      String(payload.messageChannel || "") === "whatsapp"
+        ? "via WhatsApp"
+        : "via app";
+    const preview = String(payload.messagePreview || "").trim();
+    extras.push(via);
+    if (preview) extras.push(`“${preview}”`);
+  } else if (key === "CLINIC_NEW_BOOKING" || key === "CLINIC_RESCHEDULE") {
+    if (channel) extras.push(channel.replace(/_/g, " ").toLowerCase());
+  } else if (key === "CLINIC_OVERRIDE") {
+    const reason = String(payload.reason || "").trim();
+    if (reason) extras.push(reason);
+  } else if (key === "CLINIC_MODE_CHANGE") {
+    const fromLabel = String(payload.fromLabel || "").trim();
+    const toLabel = String(payload.toLabel || "").trim();
+    const effectiveDate = String(payload.effectiveDate || "").trim();
+    if (fromLabel && toLabel) extras.push(`${fromLabel} → ${toLabel}`);
+    if (effectiveDate) extras.push(`applies ${effectiveDate}`);
+  }
+
   const parts = [
-    role === "clinic" ? "To clinic" : `To ${patient}`,
-    when ? when : null,
-    extra,
+    patient,
+    phone && phone !== patient ? phone : null,
+    doctor ? `Dr ${doctor.replace(/^dr\.?\s*/i, "")}` : null,
+    when || null,
+    location || null,
+    ...extras,
   ].filter(Boolean);
   return parts.join(" · ");
 }

@@ -227,6 +227,84 @@ export class ChatService {
         ),
       );
 
+    // Patient → doctor/staff: surface on practice Notifications tab.
+    void (async () => {
+      try {
+        const sender = await prisma.user.findUnique({
+          where: { id: senderId },
+          select: {
+            role: true,
+            name: true,
+            phone: true,
+            patient: { select: { contactNumber: true } },
+          },
+        });
+        if (sender?.role !== "user") return;
+
+        const booking = await prisma.practiceBooking.findFirst({
+          where: {
+            OR: [
+              { patientId: senderId, providerId: receiverId },
+              {
+                patientId: senderId,
+                practice: {
+                  members: {
+                    some: {
+                      userId: receiverId,
+                      isActive: true,
+                      role: {
+                        in: [
+                          "DOCTOR",
+                          "PRACTICE_OWNER",
+                          "PRACTICE_ADMIN",
+                          "RECEPTIONIST",
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          orderBy: [{ updatedAt: "desc" }],
+          select: {
+            id: true,
+            practiceId: true,
+            patientName: true,
+            patientPhone: true,
+            providerId: true,
+          },
+        });
+        if (!booking) return;
+
+        const provider = await prisma.user.findUnique({
+          where: { id: booking.providerId },
+          select: { name: true },
+        });
+
+        const { NotificationService } = await import(
+          "./procto/notification.service.js"
+        );
+        await NotificationService.enqueueClinicPatientMessage({
+          practiceId: booking.practiceId,
+          bookingId: booking.id,
+          messagePreview: trimmed,
+          channel: "app",
+          patientName: booking.patientName || sender.name,
+          patientPhone:
+            booking.patientPhone ||
+            sender.patient?.contactNumber ||
+            sender.phone,
+          providerName: provider?.name,
+        });
+      } catch (err) {
+        console.warn(
+          "[clinic-inbox] patient app message notify failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    })();
+
     return newDirectMsg;
   }
 
