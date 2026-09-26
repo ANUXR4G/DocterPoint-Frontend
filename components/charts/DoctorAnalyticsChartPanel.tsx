@@ -58,8 +58,8 @@ export default function DoctorAnalyticsChartPanel({
         </div>
       </div>
 
-      <div className="min-h-[300px] rounded-2xl border border-neutral-300 bg-neutral-100 p-4 dark:border-neutral-700 dark:bg-neutral-800 xl:col-span-3">
-        <div className="h-[260px]">
+      <div className="min-h-[340px] rounded-2xl border border-neutral-300 bg-neutral-100 p-4 dark:border-neutral-700 dark:bg-neutral-800 xl:col-span-3">
+        <div className="h-[300px]">
           <AppointmentTrendLineChart
             data={appointmentMetrics}
             active={period}

@@ -138,7 +138,12 @@ export default function DoctorAnalyticsPage({
       liveReady.current = true
       return
     }
-    softRefreshAnalytics()
+    // Debounce live booking spam — rapid WS patches were refetching analytics
+    // mid-flight and briefly flashing zeros / empty charts.
+    const timer = window.setTimeout(() => {
+      softRefreshAnalytics()
+    }, 900)
+    return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on booking live updates
   }, [bookingsLiveKey, practiceId])
 
@@ -212,7 +217,9 @@ export default function DoctorAnalyticsPage({
                 ? "Patients (this doctor)"
                 : "Total patients (this period)"}
             </p>
-            <p className="mt-2 text-3xl font-bold">{totalPatients}</p>
+            <p className="mt-2 text-3xl font-bold">
+              {isLoading && totalPatients === 0 ? "—" : totalPatients}
+            </p>
           </div>
           <div className="rounded-2xl border border-neutral-300 bg-neutral-100 p-5 dark:border-neutral-700 dark:bg-neutral-800">
             <p className="text-sm font-semibold text-blue-600 dark:text-cyan-400">
@@ -220,7 +227,9 @@ export default function DoctorAnalyticsPage({
                 ? "Bookings (this doctor)"
                 : "Total bookings (this period)"}
             </p>
-            <p className="mt-2 text-3xl font-bold">{totalAppointments}</p>
+            <p className="mt-2 text-3xl font-bold">
+              {isLoading && totalAppointments === 0 ? "—" : totalAppointments}
+            </p>
           </div>
         </div>
       ) : null}
@@ -288,7 +297,24 @@ export default function DoctorAnalyticsPage({
       ) : null}
 
       {planLocked ? null : isLoading ? (
-        <p className="text-sm text-neutral-500">Loading charts…</p>
+        <div
+          role="status"
+          className="grid grid-cols-1 gap-4 xl:grid-cols-3"
+          aria-label="Loading charts"
+        >
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className={`animate-pulse rounded-2xl bg-neutral-200/80 dark:bg-neutral-700/75 ${
+                i === 0 ? "min-h-[320px] xl:col-span-2" : "min-h-[320px]"
+              }`}
+            />
+          ))}
+        </div>
+      ) : errorMessage && !patientMetrics.length ? (
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-center text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+          {errorMessage}
+        </p>
       ) : (
         <div
           className={

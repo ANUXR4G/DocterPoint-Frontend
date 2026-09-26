@@ -11,7 +11,7 @@ export default function DoctorNotificationsPage() {
         compact
         eyebrow="Practice"
         title="Notifications"
-        subtitle="New appointments, messages, documents, queue changes, and support — tap a row to clear"
+        subtitle="Appointments, messages from patients, attachments, and messages to patients — live via WebSocket"
         action={
           <Link
             href="/doctor/queue"

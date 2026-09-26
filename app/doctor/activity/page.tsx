@@ -10,7 +10,7 @@ export default function DoctorActivityPage() {
       <DashboardPageHeader
         compact
         eyebrow="Practice"
-        title="Support"
+        title="Patient Support"
         subtitle="WhatsApp support chat — when a patient taps Talk to Support / Agent"
         action={
           <div className="flex flex-wrap gap-2">

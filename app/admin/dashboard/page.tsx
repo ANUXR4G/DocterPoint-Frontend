@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import AdminPageHeader from "@/components/admin/AdminPageHeader"
 import AdminShell from "@/components/admin/AdminShell"
 import AdminSection from "@/components/admin/AdminSection"
@@ -147,40 +147,73 @@ export default function AdminDashboardPage() {
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
+  const [chartsLoading, setChartsLoading] = useState(false)
   const [months, setMonths] = useState<3 | 6 | 12>(6)
+  const [dailyMonthOffset, setDailyMonthOffset] = useState<0 | -1>(0)
   const [growthSeries, setGrowthSeries] = useState(
     () => new Set(["New clinics", "New subscriptions"]),
   )
+  const [bookingSeries, setBookingSeries] = useState(
+    () => new Set(["Bookings", "New patients"]),
+  )
   const [subStatuses, setSubStatuses] = useState<Set<string>>(() => new Set())
+  const loadGen = useRef(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts?: { soft?: boolean }) => {
+    const gen = ++loadGen.current
+    if (opts?.soft) setChartsLoading(true)
+    else setLoading(true)
     setError("")
-    const [overviewRes, analyticsRes] = await Promise.all([
-      adminService.overview(),
-      adminService.analytics({ months }),
-    ])
-    if (overviewRes.status === "successful" && overviewRes.data) {
-      setOverview(overviewRes.data)
-    } else {
-      setError(overviewRes.message || "Failed to load overview. Sign in as admin.")
-    }
-    if (analyticsRes.status === "successful" && analyticsRes.data) {
-      setAnalytics(analyticsRes.data)
-      if (subStatuses.size === 0 && analyticsRes.data.subscriptionBreakdown.length) {
-        setSubStatuses(
-          new Set(analyticsRes.data.subscriptionBreakdown.map((s) => s.status)),
+    try {
+      const [overviewRes, analyticsRes] = await Promise.all([
+        adminService.overview(),
+        adminService.analytics({ months, dailyMonthOffset }),
+      ])
+      if (gen !== loadGen.current) return
+
+      if (overviewRes.status === "successful" && overviewRes.data) {
+        setOverview(overviewRes.data)
+      } else {
+        setError(
+          overviewRes.message || "Failed to load overview. Sign in as admin.",
         )
       }
+      if (analyticsRes.status === "successful" && analyticsRes.data) {
+        setAnalytics(analyticsRes.data)
+      } else if (analyticsRes.status === "unsuccessful") {
+        setError(
+          (prev) =>
+            prev ||
+            analyticsRes.message ||
+            "Failed to load analytics charts.",
+        )
+      }
+    } finally {
+      if (gen === loadGen.current) {
+        setLoading(false)
+        setChartsLoading(false)
+      }
     }
-    setLoading(false)
-  }, [months, subStatuses.size])
+  }, [months, dailyMonthOffset])
 
   useEffect(() => {
-    void load()
+    void load({ soft: Boolean(analytics) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only when load identity changes
   }, [load])
 
-  useAdminOpsSocket(true, () => void load(), () => void load())
+  // Seed subscription chips once when breakdown first arrives (do not re-fetch).
+  useEffect(() => {
+    if (subStatuses.size > 0) return
+    const rows = analytics?.subscriptionBreakdown ?? []
+    if (!rows.length) return
+    setSubStatuses(new Set(rows.map((s) => s.status)))
+  }, [analytics, subStatuses.size])
+
+  useAdminOpsSocket(
+    true,
+    () => void load({ soft: true }),
+    () => void load({ soft: true }),
+  )
 
   const pendingTotal = overview
     ? overview.pendingReviews + overview.pendingTemplates
@@ -192,6 +225,11 @@ export default function AdminDashboardPage() {
     () => analytics?.subscriptionBreakdown.map((s) => s.status) ?? [],
     [analytics],
   )
+
+  const growthFilterKey = [...growthSeries].sort().join("|")
+  const bookingFilterKey = [...bookingSeries].sort().join("|")
+  const subFilterKey = [...subStatuses].sort().join("|")
+  const chartDataKey = `${analytics?.months ?? months}-${analytics?.dailyMonthOffset ?? dailyMonthOffset}-${analytics?.dailyMonthLabel ?? ""}`
 
   return (
     <AdminShell wide>
@@ -245,6 +283,20 @@ export default function AdminDashboardPage() {
               </FilterChip>
             ))}
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Bookings chart
+            </span>
+            {["Bookings", "New patients"].map((key) => (
+              <FilterChip
+                key={key}
+                active={bookingSeries.has(key)}
+                onClick={() => setBookingSeries((s) => toggleInSet(s, key))}
+              >
+                {key}
+              </FilterChip>
+            ))}
+          </div>
           {allSubStatuses.length ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -270,7 +322,7 @@ export default function AdminDashboardPage() {
           value={analytics ? formatInr(analytics.revenueThisMonth) : "—"}
           hint="New subscription plan value added"
           change={analytics?.revenueChangePercent}
-          loading={loading}
+          loading={loading || chartsLoading}
           tone="blue"
           icon={<span className="text-lg">₹</span>}
         />
@@ -278,14 +330,14 @@ export default function AdminDashboardPage() {
           label="Last month"
           value={analytics ? formatInr(analytics.revenueLastMonth) : "—"}
           hint="New subscription revenue (prior month)"
-          loading={loading}
+          loading={loading || chartsLoading}
           tone="amber"
         />
         <AdminMetricCard
           label="Platform MRR"
           value={analytics ? formatInr(analytics.mrr) : "—"}
           hint={`${analytics?.activeSubscriptions ?? 0} billable subscriptions`}
-          loading={loading}
+          loading={loading || chartsLoading}
           tone="green"
         />
         <AdminMetricCard
@@ -297,6 +349,11 @@ export default function AdminDashboardPage() {
         />
       </div>
 
+      <div
+        className={`space-y-6 transition-opacity ${
+          chartsLoading ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
       <div className="dashboard-grid-2">
         <AdminSection
           title="Revenue trend"
@@ -304,7 +361,10 @@ export default function AdminDashboardPage() {
         >
           <div className="h-64 sm:h-72">
             {analytics ? (
-              <RevenueTrendChart analytics={analytics} />
+              <RevenueTrendChart
+                key={`rev-${chartDataKey}`}
+                analytics={analytics}
+              />
             ) : (
               <div className="h-full animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
             )}
@@ -315,6 +375,7 @@ export default function AdminDashboardPage() {
           <div className="mx-auto h-64 w-full max-w-xs sm:h-72">
             {analytics ? (
               <SubscriptionDoughnutChart
+                key={`sub-${chartDataKey}-${subFilterKey}`}
                 analytics={analytics}
                 visibleStatuses={subStatuses}
               />
@@ -331,7 +392,11 @@ export default function AdminDashboardPage() {
       >
         <div className="h-56 sm:h-64">
           {analytics ? (
-            <GrowthLineChart analytics={analytics} visibleSeries={growthSeries} />
+            <GrowthLineChart
+              key={`growth-${chartDataKey}-${growthFilterKey}`}
+              analytics={analytics}
+              visibleSeries={growthSeries}
+            />
           ) : (
             <div className="h-full animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
           )}
@@ -345,7 +410,11 @@ export default function AdminDashboardPage() {
         >
           <div className="h-64 sm:h-72">
             {analytics ? (
-              <BookingsTrendChart analytics={analytics} />
+              <BookingsTrendChart
+                key={`book-${chartDataKey}-${bookingFilterKey}`}
+                analytics={analytics}
+                visibleSeries={bookingSeries}
+              />
             ) : (
               <div className="h-full animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
             )}
@@ -357,7 +426,10 @@ export default function AdminDashboardPage() {
         >
           <div className="h-64 sm:h-72">
             {analytics ? (
-              <MonthComparisonChart analytics={analytics} />
+              <MonthComparisonChart
+                key={`cmp-${chartDataKey}`}
+                analytics={analytics}
+              />
             ) : (
               <div className="h-full animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
             )}
@@ -366,21 +438,42 @@ export default function AdminDashboardPage() {
       </div>
 
       <AdminSection
-        title="Daily bookings"
+        title="Daily bookings by status"
         description={
           analytics?.dailyMonthLabel
-            ? `Days in ${analytics.dailyMonthLabel}`
-            : "Bookings by day of month"
+            ? `Completed, cancelled, and rescheduled by date in ${analytics.dailyMonthLabel}`
+            : "Completed, cancelled, and rescheduled by date"
         }
       >
-        <div className="h-56 sm:h-64">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Month
+          </span>
+          <FilterChip
+            active={dailyMonthOffset === 0}
+            onClick={() => setDailyMonthOffset(0)}
+          >
+            This month
+          </FilterChip>
+          <FilterChip
+            active={dailyMonthOffset === -1}
+            onClick={() => setDailyMonthOffset(-1)}
+          >
+            Last month
+          </FilterChip>
+        </div>
+        <div className="h-72 sm:h-80">
           {analytics ? (
-            <DailyBookingsChart analytics={analytics} />
+            <DailyBookingsChart
+              key={`daily-${chartDataKey}`}
+              analytics={analytics}
+            />
           ) : (
             <div className="h-full animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
           )}
         </div>
       </AdminSection>
+      </div>
 
       {loading ? (
         <div className="dashboard-grid-4 animate-pulse">

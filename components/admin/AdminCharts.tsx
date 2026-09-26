@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -199,42 +200,172 @@ export function BookingsTrendChart({
 }
 
 export function DailyBookingsChart({ analytics }: Props) {
+  const rows = analytics.dailyBookings
+  const maxDay = rows.length || 1
+  const [range, setRange] = useState<{ start: number; end: number }>(() => ({
+    start: 1,
+    end: maxDay,
+  }))
+
+  useEffect(() => {
+    setRange({ start: 1, end: Math.max(1, rows.length) })
+  }, [analytics.dailyMonthLabel, rows.length])
+
+  const start = Math.min(range.start, range.end)
+  const end = Math.max(range.start, range.end)
+  const visible = rows.filter((d) => d.day >= start && d.day <= end)
+
+  const labels = visible.map((d) => {
+    if (d.date) {
+      const dt = new Date(`${d.date}T12:00:00`)
+      if (!Number.isNaN(dt.getTime())) {
+        return dt.toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+        })
+      }
+    }
+    return String(d.day)
+  })
+
   return (
-    <Line
-      data={{
-        labels: analytics.dailyBookings.map((d) => String(d.day)),
-        datasets: [
-          {
-            label: "Bookings",
-            data: analytics.dailyBookings.map((d) => d.count),
-            borderColor: "#8b5cf6",
-            backgroundColor: "rgba(139, 92, 246, 0.1)",
-            fill: true,
-            tension: 0.3,
-            pointRadius: 2,
-          },
-        ],
-      }}
-      options={{
-        ...baseOptions,
-        plugins: {
-          ...baseOptions.plugins,
-          legend: { display: false },
-        },
-        scales: {
-          x: {
-            grid: { display: false },
-            ticks: { color: tickColor, maxTicksLimit: 10 },
-            title: { display: true, text: "Day of month", color: tickColor },
-          },
-          y: {
-            beginAtZero: true,
-            ticks: { color: tickColor, precision: 0 },
-            grid: { color: gridColor },
-          },
-        },
-      }}
-    />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="min-h-0 flex-1">
+        <Line
+          data={{
+            labels,
+            datasets: [
+              {
+                label: "Completed",
+                data: visible.map((d) => d.completed ?? 0),
+                borderColor: "#10b981",
+                backgroundColor: "rgba(16, 185, 129, 0.12)",
+                tension: 0.35,
+                pointRadius: 3,
+                pointBackgroundColor: "#10b981",
+                fill: false,
+              },
+              {
+                label: "Cancelled",
+                data: visible.map((d) => d.cancelled ?? 0),
+                borderColor: "#ef4444",
+                backgroundColor: "rgba(239, 68, 68, 0.12)",
+                tension: 0.35,
+                pointRadius: 3,
+                pointBackgroundColor: "#ef4444",
+                fill: false,
+              },
+              {
+                label: "Rescheduled",
+                data: visible.map((d) => d.rescheduled ?? 0),
+                borderColor: "#f59e0b",
+                backgroundColor: "rgba(245, 158, 11, 0.12)",
+                tension: 0.35,
+                pointRadius: 3,
+                pointBackgroundColor: "#f59e0b",
+                fill: false,
+              },
+            ],
+          }}
+          options={{
+            ...baseOptions,
+            plugins: {
+              ...baseOptions.plugins,
+              legend: {
+                position: "bottom",
+                labels: { usePointStyle: true, color: tickColor, padding: 14 },
+              },
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: { color: tickColor, maxTicksLimit: 10 },
+                title: {
+                  display: true,
+                  text: "Date",
+                  color: tickColor,
+                },
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: tickColor, precision: 0 },
+                grid: { color: gridColor },
+              },
+            },
+          }}
+        />
+      </div>
+
+      <div className="shrink-0 space-y-2 border-t border-slate-200/80 pt-3 dark:border-white/10">
+        <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+          <span>
+            Showing{" "}
+            <span className="font-semibold text-slate-700 dark:text-slate-200">
+              day {start}
+            </span>{" "}
+            –{" "}
+            <span className="font-semibold text-slate-700 dark:text-slate-200">
+              day {end}
+            </span>
+            {analytics.dailyMonthLabel
+              ? ` · ${analytics.dailyMonthLabel}`
+              : null}
+          </span>
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+            onClick={() => setRange({ start: 1, end: maxDay })}
+          >
+            Reset
+          </button>
+        </div>
+        <div className="relative h-8">
+          <input
+            type="range"
+            min={1}
+            max={maxDay}
+            value={range.start}
+            aria-label="Start day"
+            className="pointer-events-none absolute inset-x-0 top-1/2 z-10 h-2 w-full -translate-y-1/2 appearance-none bg-transparent accent-blue-600 [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-20 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-blue-600"
+            onChange={(e) => {
+              const next = Number(e.target.value)
+              setRange((r) => ({
+                start: next,
+                end: Math.max(next, r.end),
+              }))
+            }}
+          />
+          <input
+            type="range"
+            min={1}
+            max={maxDay}
+            value={range.end}
+            aria-label="End day"
+            className="pointer-events-none absolute inset-x-0 top-1/2 z-20 h-2 w-full -translate-y-1/2 appearance-none bg-transparent accent-emerald-600 [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-30 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-600 [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-emerald-600"
+            onChange={(e) => {
+              const next = Number(e.target.value)
+              setRange((r) => ({
+                start: Math.min(r.start, next),
+                end: next,
+              }))
+            }}
+          />
+          <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-slate-200 dark:bg-slate-700">
+            <div
+              className="absolute h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500"
+              style={{
+                left: `${((start - 1) / Math.max(maxDay - 1, 1)) * 100}%`,
+                right: `${((maxDay - end) / Math.max(maxDay - 1, 1)) * 100}%`,
+              }}
+            />
+          </div>
+        </div>
+        <div className="flex justify-between text-[10px] font-medium uppercase tracking-wide text-slate-400">
+          <span>Day 1</span>
+          <span>Day {maxDay}</span>
+        </div>
+      </div>
+    </div>
   )
 }
 

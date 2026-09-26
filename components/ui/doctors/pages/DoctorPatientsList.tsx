@@ -2,6 +2,7 @@
 
 import { useMemo, useState, Fragment } from "react"
 import Link from "next/link"
+import { Paperclip } from "lucide-react"
 import { firey } from "@/utils"
 import {
   usePracticeDashboard,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/bookingStatus"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
+import PatientDocumentsModal from "@/components/ui/procto/PatientDocumentsModal"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { formatPracticeDateTime } from "@/lib/practiceTime"
 
@@ -51,32 +53,38 @@ function patientAttachments(p: PracticePatientRow): PatientAttachment[] {
   return Array.isArray(p.attachments) ? p.attachments.filter((d) => d?.url) : []
 }
 
-function AttachmentsCell({
+function AttachmentsIconButton({
   attachments,
-  compact = false,
+  patientName,
+  onOpen,
 }: {
   attachments: PatientAttachment[]
-  compact?: boolean
+  patientName?: string | null
+  onOpen: () => void
 }) {
-  if (!attachments.length) {
-    return <span className="opacity-40">—</span>
-  }
+  const count = attachments.length
+  const label = count
+    ? `View ${count} document${count === 1 ? "" : "s"} for ${patientName?.trim() || "patient"}`
+    : `No documents for ${patientName?.trim() || "patient"}`
   return (
-    <ul className={compact ? "space-y-1" : "max-w-[14rem] space-y-1"}>
-      {attachments.map((doc) => (
-        <li key={`${doc.url}-${doc.name}`}>
-          <a
-            href={doc.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block truncate text-xs font-semibold text-[var(--theme-primary)] hover:underline"
-            title={doc.name}
-          >
-            {doc.name}
-          </a>
-        </li>
-      ))}
-    </ul>
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={label}
+      title={label}
+      className={`relative inline-flex size-9 items-center justify-center rounded-xl border transition ${
+        count
+          ? "border-[var(--theme-primary)]/25 bg-[var(--theme-primary)]/10 text-[var(--theme-primary)] hover:bg-[var(--theme-primary)]/15"
+          : "border-neutral-200 bg-neutral-50 text-neutral-400 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800/60 dark:hover:bg-neutral-800"
+      }`}
+    >
+      <Paperclip className="size-4" aria-hidden />
+      {count > 0 ? (
+        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--theme-primary)] px-1 text-[10px] font-bold leading-none text-white">
+          {count > 9 ? "9+" : count}
+        </span>
+      ) : null}
+    </button>
   )
 }
 
@@ -130,6 +138,9 @@ export default function DoctorPatientsList() {
   const [query, setQuery] = useState("")
   const [expanded, setExpanded] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
+  const [docsPatient, setDocsPatient] = useState<PracticePatientRow | null>(
+    null,
+  )
 
   const showLoading = (!ready && loading) || (ready && !hydrated)
 
@@ -265,15 +276,22 @@ export default function DoctorPatientsList() {
                         </p>
                       </div>
                     </div>
-                    {p.lastStatus ? (
-                      <span
-                        className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${statusClass(p.lastStatus)}`}
-                      >
-                        {bookingStatusLabel(p.lastStatus)}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-xs opacity-50">—</span>
-                    )}
+                    <div className="flex shrink-0 items-center gap-2">
+                      <AttachmentsIconButton
+                        attachments={patientAttachments(p)}
+                        patientName={p.name}
+                        onOpen={() => setDocsPatient(p)}
+                      />
+                      {p.lastStatus ? (
+                        <span
+                          className={`rounded px-2 py-0.5 text-xs font-semibold ${statusClass(p.lastStatus)}`}
+                        >
+                          {bookingStatusLabel(p.lastStatus)}
+                        </span>
+                      ) : (
+                        <span className="text-xs opacity-50">—</span>
+                      )}
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -337,9 +355,10 @@ export default function DoctorPatientsList() {
                           Attachments
                         </p>
                         <div className="mt-1.5">
-                          <AttachmentsCell
+                          <AttachmentsIconButton
                             attachments={patientAttachments(p)}
-                            compact
+                            patientName={p.name}
+                            onOpen={() => setDocsPatient(p)}
                           />
                         </div>
                       </div>
@@ -408,7 +427,9 @@ export default function DoctorPatientsList() {
                   <th className="whitespace-nowrap px-4 py-3">Age</th>
                   <th className="whitespace-nowrap px-4 py-3">Gender</th>
                   <th className="whitespace-nowrap px-4 py-3">Visits</th>
-                  <th className="min-w-[10rem] px-4 py-3">Attachments</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-center">
+                    Attachments
+                  </th>
                   <th className="whitespace-nowrap px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Details</th>
                 </tr>
@@ -463,8 +484,12 @@ export default function DoctorPatientsList() {
                         <td className="whitespace-nowrap px-4 py-3">
                           {p.bookingCount}
                         </td>
-                        <td className="px-4 py-3 align-top">
-                          <AttachmentsCell attachments={patientAttachments(p)} />
+                        <td className="px-4 py-3 text-center align-middle">
+                          <AttachmentsIconButton
+                            attachments={patientAttachments(p)}
+                            patientName={p.name}
+                            onOpen={() => setDocsPatient(p)}
+                          />
                         </td>
                         <td className="px-4 py-3">
                           {p.lastStatus ? (
@@ -510,9 +535,10 @@ export default function DoctorPatientsList() {
                               <div className="sm:col-span-2">
                                 <p className="opacity-50">Attachments</p>
                                 <div className="mt-1">
-                                  <AttachmentsCell
+                                  <AttachmentsIconButton
                                     attachments={patientAttachments(p)}
-                                    compact
+                                    patientName={p.name}
+                                    onOpen={() => setDocsPatient(p)}
                                   />
                                 </div>
                               </div>
@@ -618,6 +644,13 @@ export default function DoctorPatientsList() {
             : "No clinic bookings yet. Patients appear here after they book."}
         </div>
       )}
+
+      <PatientDocumentsModal
+        open={Boolean(docsPatient)}
+        patientName={docsPatient?.name}
+        documents={docsPatient ? patientAttachments(docsPatient) : []}
+        onClose={() => setDocsPatient(null)}
+      />
     </>
   )
 }

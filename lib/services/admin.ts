@@ -56,7 +56,14 @@ export type AdminAnalytics = {
     patients: number
     practices: number
   }>
-  dailyBookings: Array<{ day: number; count: number }>
+  dailyBookings: Array<{
+    day: number
+    date?: string
+    count: number
+    completed?: number
+    cancelled?: number
+    rescheduled?: number
+  }>
   subscriptionBreakdown: Array<{ status: string; count: number }>
   comparison: {
     revenue: { thisMonth: number; lastMonth: number }

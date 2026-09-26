@@ -620,6 +620,10 @@ export type ProctoWsEvent =
   | {
       event: "conversation_updated";
       conversation: Record<string, unknown>;
+    }
+  | {
+      event: "notification_created";
+      notification: Record<string, unknown>;
     };
 
 /** Doctors linked to this clinic (PracticeMember), DOCTOR first; solo owner fallback. */
