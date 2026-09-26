@@ -154,11 +154,6 @@ export default function Menu({ role, logout }: Props) {
                           : "stroke-slate-400 dark:stroke-slate-500"
                       }
                     />
-                    {badge > 0 ? (
-                      <span className="absolute -right-2 -top-2 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-                        {badge > 99 ? "99+" : badge}
-                      </span>
-                    ) : null}
                   </div>
                   <span className="flex flex-1 items-center gap-2 text-[13px] font-semibold tracking-[-0.1px]">
                     <span>{name}</span>
@@ -210,11 +205,6 @@ export default function Menu({ role, logout }: Props) {
                       }
                       name={icon}
                     />
-                    {badge > 0 ? (
-                      <span className="absolute -right-2 -top-2 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-                        {badge > 99 ? "99+" : badge}
-                      </span>
-                    ) : null}
                   </div>
                   <span className="flex flex-1 items-center gap-2 text-[13px] font-semibold tracking-[-0.1px]">
                     <span>{name}</span>
