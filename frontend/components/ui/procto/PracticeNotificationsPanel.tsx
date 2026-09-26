@@ -14,12 +14,10 @@ const STATUS_FILTERS = ["ALL", "SENT", "PENDING", "FAILED", "SKIPPED"] as const
 
 const KIND_FILTERS = [
   { id: "ALL", label: "All types" },
-  { id: "appointments", label: "Appointments" },
-  { id: "messages", label: "Messages" },
-  { id: "documents", label: "Documents" },
-  { id: "queue", label: "Queue" },
-  { id: "support", label: "Support" },
-  { id: "schedule", label: "Schedule" },
+  { id: "appointments", label: "Appointments / Bookings" },
+  { id: "messages", label: "Messages from patient" },
+  { id: "documents", label: "Attachments" },
+  { id: "outbound", label: "Message to patient" },
 ] as const
 
 /** Soft labels for send status — avoid alarming "Failed" in the clinic inbox. */
@@ -224,9 +222,25 @@ export default function PracticeNotificationsPanel() {
 
   useEffect(() => {
     if (!practiceId) return
-    if (dash.bookingTick === 0 && dash.conversationTick === 0) return
-    void fetchList({ silent: true })
-  }, [practiceId, dash.bookingTick, dash.conversationTick, fetchList])
+    if (
+      dash.bookingTick === 0 &&
+      dash.conversationTick === 0 &&
+      dash.notificationTick === 0
+    ) {
+      return
+    }
+    // Debounce so booking_created + notification_created land before fetch.
+    const t = setTimeout(() => {
+      void fetchList({ silent: true })
+    }, 350)
+    return () => clearTimeout(t)
+  }, [
+    practiceId,
+    dash.bookingTick,
+    dash.conversationTick,
+    dash.notificationTick,
+    fetchList,
+  ])
 
   async function dismiss(id: string) {
     if (!practiceId || dismissingId) return
@@ -417,7 +431,8 @@ export default function PracticeNotificationsPanel() {
         <p className="text-sm text-neutral-500">Loading notifications…</p>
       ) : items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700">
-          No open notifications. New appointments, patient messages, documents, and queue updates will appear here.
+          No open notifications. Appointments, messages from patients,
+          attachments, and messages to patients will appear here.
         </p>
       ) : (
         <ul
@@ -457,7 +472,9 @@ export default function PracticeNotificationsPanel() {
                     <span
                       className={`rounded-full px-2 py-0.5 font-semibold ${roleBadgeClass(n.recipientRole)}`}
                     >
-                      {n.recipientRole === "clinic" ? "Clinic" : "Patient"}
+                      {n.recipientRole === "clinic"
+                        ? "Clinic alert"
+                        : "To patient"}
                     </span>
                     <span className="text-neutral-500">
                       via {n.channel}

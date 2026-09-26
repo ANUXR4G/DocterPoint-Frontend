@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { MessageCircle } from "lucide-react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
-import { proctoService } from "@/lib/services/procto"
+import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
   isTerminalVisitStatus,
   matchesQueueStatusFilter,
@@ -14,8 +15,43 @@ import { PatientNameHover } from "@/components/ui/procto/PatientBookingHover"
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import ClinicBookAppointmentModal from "@/components/ui/procto/ClinicBookAppointmentModal"
+import AppointmentChatModal from "@/components/ui/procto/AppointmentChatModal"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+
+function bookingPeerUserId(b: ProctoBooking): string | null {
+  const id = (b.patient?.id || b.patientId || "").trim()
+  return id || null
+}
+
+function ChatIconButton({
+  enabled,
+  patientName,
+  onOpen,
+}: {
+  enabled: boolean
+  patientName?: string | null
+  onOpen: () => void
+}) {
+  const label = enabled
+    ? `Chat with ${patientName?.trim() || "patient"}`
+    : "Chat unavailable — patient not linked to an account"
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onOpen}
+      className={`inline-flex size-9 items-center justify-center rounded-xl border transition ${
+        enabled
+          ? "border-[var(--theme-primary)]/30 bg-[var(--theme-primary)]/10 text-[var(--theme-primary)] hover:bg-[var(--theme-primary)]/20"
+          : "border-neutral-200 bg-neutral-50 text-neutral-400 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-500 dark:hover:bg-neutral-800"
+      }`}
+    >
+      <MessageCircle className="size-4" aria-hidden />
+    </button>
+  )
+}
 
 /** Clinic bookings from Procto — synced with backend queue/calendar. */
 export default function DoctorAppointmentsList({
@@ -37,6 +73,7 @@ export default function DoctorAppointmentsList({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionError, setActionError] = useState("")
   const [bookOpen, setBookOpen] = useState(false)
+  const [chatBooking, setChatBooking] = useState<ProctoBooking | null>(null)
 
   const showLoading = (!ready && loading) || (ready && !hydrated)
   const isClinic = portal === "clinic"
@@ -173,7 +210,7 @@ export default function DoctorAppointmentsList({
                 <p className="mt-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                   {formatBookingWhenDetailed(b)}
                 </p>
-                <div className="mt-3">
+                <div className="mt-3 flex items-center gap-2">
                   <BookingStatusControls
                     status={b.status || "SCHEDULED"}
                     busy={busyId === b.id}
@@ -181,6 +218,11 @@ export default function DoctorAppointmentsList({
                     showActionButtons={false}
                     ariaLabel={`Update status for ${b.patientName || "patient"}`}
                     onChange={(status) => void onStatus(b.id, status)}
+                  />
+                  <ChatIconButton
+                    enabled={Boolean(bookingPeerUserId(b))}
+                    patientName={b.patientName || b.patient?.name}
+                    onOpen={() => setChatBooking(b)}
                   />
                 </div>
                 <Link
@@ -201,6 +243,7 @@ export default function DoctorAppointmentsList({
                   <th className="px-4 py-3">MRN</th>
                   <th className="px-4 py-3">When</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Chat</th>
                   <th className="px-4 py-3 text-right">Visit</th>
                 </tr>
               </thead>
@@ -232,6 +275,13 @@ export default function DoctorAppointmentsList({
                         onChange={(status) => void onStatus(b.id, status)}
                       />
                     </td>
+                    <td className="px-4 py-3">
+                      <ChatIconButton
+                        enabled={Boolean(bookingPeerUserId(b))}
+                        patientName={b.patientName || b.patient?.name}
+                        onOpen={() => setChatBooking(b)}
+                      />
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <Link
                         href={`/doctor/queue/${b.id}`}
@@ -247,6 +297,15 @@ export default function DoctorAppointmentsList({
           </div>
         </>
       )}
+
+      <AppointmentChatModal
+        open={Boolean(chatBooking)}
+        patientName={
+          chatBooking?.patientName || chatBooking?.patient?.name || null
+        }
+        peerUserId={chatBooking ? bookingPeerUserId(chatBooking) : null}
+        onClose={() => setChatBooking(null)}
+      />
     </>
   )
 }

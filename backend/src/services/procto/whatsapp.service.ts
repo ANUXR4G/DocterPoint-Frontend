@@ -29,10 +29,59 @@ import {
   looksLikeBotCommand,
 } from "../chat.whatsappInbound.js";
 
+const MAIN_MENU_ROW = {
+  id: "menu:main",
+  title: "Main Menu",
+  description: "Back to all options",
+} as const;
+
+function hasMainMenuId(id: string): boolean {
+  return /^(menu:main|idle:main|menu:help)$/i.test(id);
+}
+
+/** Meta interactive lists allow ≤10 rows — append Main Menu when space remains. */
+function withMainMenuListRow<T extends { id: string; title: string; description?: string }>(
+  rows: T[],
+): Array<T | typeof MAIN_MENU_ROW> {
+  if (!rows.length) return rows;
+  if (rows.some((r) => hasMainMenuId(r.id))) return rows;
+  // Primary main menu already lists all actions — don't nest Main Menu again.
+  if (rows.some((r) => r.id === "menu:book") && rows.some((r) => r.id === "menu:bookings")) {
+    return rows;
+  }
+  if (rows.length >= 10) return rows;
+  return [...rows, { ...MAIN_MENU_ROW }];
+}
+
+/** Meta reply buttons allow ≤3 — append Main Menu when a slot is free. */
+function withMainMenuReplyButton(
+  buttons: Array<{ id: string; title: string }>,
+): Array<{ id: string; title: string }> {
+  if (!buttons.length) return buttons;
+  if (buttons.some((b) => hasMainMenuId(b.id))) return buttons;
+  if (buttons.length >= 3) return buttons;
+  return [...buttons, { id: MAIN_MENU_ROW.id, title: MAIN_MENU_ROW.title }];
+}
+
+/**
+ * When reply buttons are already at Meta's max (3) and lack Main Menu,
+ * send them as a list so we can add Main Menu as a 4th row.
+ */
+function replyButtonsAsListRows(
+  buttons: Array<{ id: string; title: string }>,
+): Array<{ id: string; title: string; description?: string }> {
+  const rows = buttons.map((b) => ({
+    id: b.id,
+    title: b.title.slice(0, 24),
+    description: "Choose an option",
+  }));
+  return withMainMenuListRow(rows);
+}
+
 /** Short TTL caches — WhatsApp traffic is bursty; avoid repeat DB on every tap. */
-const PRACTICE_RESOLVE_TTL_MS = 60_000;
-const STAFF_CHECK_TTL_MS = 60_000;
-const ENTITLEMENT_TTL_MS = 30_000;
+const PRACTICE_RESOLVE_TTL_MS = 180_000;
+const STAFF_CHECK_TTL_MS = 180_000;
+const ENTITLEMENT_TTL_MS = 120_000;
 
 const practiceResolveCache = new Map<
   string,
@@ -292,7 +341,8 @@ export async function isStaffOrClinicPhone(
     if (doctorUser || member) isStaff = true;
   }
 
-  if (!isStaff && practice.id) {
+  // Practice resolve already loads members — skip a second practice-scoped scan.
+  if (!isStaff && practice.id && !Array.isArray(practice.members)) {
     const practiceMembers = await prisma.practiceMember.findMany({
       where: {
         practiceId: practice.id,
@@ -348,11 +398,21 @@ export const WhatsAppService = {
 
   async getOrCreateConversation(practiceId: string, patientPhone: string) {
     const phone = normalizePhone(patientPhone);
-    return prisma.whatsAppConversation.upsert({
+    // Prefer read-only lookup — upsert always writes; returning patients are the hot path.
+    const existing = await prisma.whatsAppConversation.findUnique({
       where: { practiceId_patientPhone: { practiceId, patientPhone: phone } },
-      create: { practiceId, patientPhone: phone, state: {} },
-      update: {},
     });
+    if (existing) return existing;
+    try {
+      return await prisma.whatsAppConversation.create({
+        data: { practiceId, patientPhone: phone, state: {} },
+      });
+    } catch {
+      // Concurrent create race — re-read the winner.
+      return prisma.whatsAppConversation.findUniqueOrThrow({
+        where: { practiceId_patientPhone: { practiceId, patientPhone: phone } },
+      });
+    }
   },
 
   async processMetaWebhook(body: unknown): Promise<void> {
@@ -412,9 +472,9 @@ export const WhatsAppService = {
           continue;
         }
 
-        // Acknowledge quickly so the patient knows we heard them
+        // Acknowledge quickly so the patient knows we heard them (don't block STT).
         if (isSttConfigured()) {
-          await sendWhatsAppText(
+          void sendWhatsAppText(
             item.from,
             BotPrompts.voiceProcessing(),
             item.phoneNumberId,
@@ -603,10 +663,10 @@ export const WhatsAppService = {
                 item.from,
                 {
                   body: branchF.reply,
-                  buttons: [
+                  buttons: withMainMenuReplyButton([
                     { id: "doc:appointment", title: "Select Appointment" },
                     { id: "doc:general", title: "General Document" },
-                  ],
+                  ]),
                 },
                 item.phoneNumberId,
               );
@@ -820,15 +880,17 @@ export const WhatsAppService = {
                   "Select your doctor (with specialization):",
             buttonLabel: "Doctors",
             sectionTitle: "Available doctors",
-            rows: result.doctorList.map((d, i) => ({
-              id: `provider:${i + 1}`,
-              title: d.name.replace(/^Dr\.?\s*/i, "Dr ").slice(0, 24),
-              description: (
-                d.specialty ||
-                d.detail?.replace(/^Specialization:\s*/i, "") ||
-                "General"
-              ).slice(0, 72),
-            })),
+            rows: withMainMenuListRow(
+              result.doctorList.map((d, i) => ({
+                id: `provider:${i + 1}`,
+                title: d.name.replace(/^Dr\.?\s*/i, "Dr ").slice(0, 24),
+                description: (
+                  d.specialty ||
+                  d.detail?.replace(/^Specialization:\s*/i, "") ||
+                  "General"
+                ).slice(0, 72),
+              })),
+            ),
           },
           item.phoneNumberId,
         );
@@ -850,12 +912,65 @@ export const WhatsAppService = {
         // Simulated / Graph failure → send full text list so demos still work
       }
 
+      // Appointment / booking pickers FIRST — never let main menuList steal this turn.
+      if (result.bookingList && result.bookingList.length > 0) {
+        const isCancel = /cancel|रद्द/i.test(result.reply);
+        const isReport = /report|document|रिपोर्ट|दस्तावेज|attach/i.test(
+          result.reply,
+        );
+        const listSent = await sendWhatsAppInteractiveList(
+          item.from,
+          {
+            header: isCancel
+              ? "Cancel booking"
+              : isReport
+                ? "Attach to visit"
+                : "Choose a booking",
+            body:
+              result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
+              (isCancel
+                ? "Tap a booking to cancel it"
+                : isReport
+                  ? "Which visit should get the file?"
+                  : "Which appointment?"),
+            buttonLabel: "Appointments",
+            sectionTitle: "Your appointments",
+            rows: withMainMenuListRow(
+              result.bookingList.map((b) => ({
+                id: `booking:${b.index}`,
+                title: b.label.slice(0, 24),
+                description: (b.description || `Booking ${b.index}`).slice(
+                  0,
+                  72,
+                ),
+              })),
+            ),
+          },
+          item.phoneNumberId,
+        );
+        if (listSent.ok && !listSent.simulated) {
+          continue;
+        }
+        if (!listSent.ok) {
+          console.warn(
+            `[WhatsApp] booking list interactive failed: ${listSent.error}`,
+          );
+        }
+      }
+
       // Welcome / HELP / post-booking — tappable Menu list
       if (result.menuList && result.menuList.length > 0) {
         const isPostBooking = result.menuList.some((row) =>
           row.id.startsWith("post:"),
         );
-        const optionCount = result.menuList.length;
+        const menuRows = withMainMenuListRow(
+          result.menuList.map((row) => ({
+            id: row.id,
+            title: row.title.slice(0, 24),
+            description: row.description?.slice(0, 72),
+          })),
+        );
+        const optionCount = menuRows.length;
         const optionRange =
           optionCount <= 1 ? "1" : `1–${optionCount}`;
         // Language-switch acks must not be silent if the interactive list fails
@@ -892,11 +1007,7 @@ export const WhatsAppService = {
             sectionTitle: isPostBooking
               ? "Choose one"
               : `${optionRange} Options`,
-            rows: result.menuList.map((row) => ({
-              id: row.id,
-              title: row.title.slice(0, 24),
-              description: row.description?.slice(0, 72),
-            })),
+            rows: menuRows,
           },
           item.phoneNumberId,
         );
@@ -925,11 +1036,13 @@ export const WhatsAppService = {
               "Pick a working day:",
             buttonLabel: "Dates",
             sectionTitle: "Next 7 working days",
-            rows: result.dateList.map((d) => ({
-              id: `date:${d.iso}`,
-              title: d.label.slice(0, 24),
-              description: d.iso,
-            })),
+            rows: withMainMenuListRow(
+              result.dateList.map((d) => ({
+                id: `date:${d.iso}`,
+                title: d.label.slice(0, 24),
+                description: d.iso,
+              })),
+            ),
           },
           item.phoneNumberId,
         );
@@ -954,11 +1067,13 @@ export const WhatsAppService = {
               "Pick an available slot:",
             buttonLabel: "Slots",
             sectionTitle: "Open times",
-            rows: result.slotList.map((s) => ({
-              id: `slot:${s.index}`,
-              title: s.label.slice(0, 24),
-              description: `Option ${s.index}`,
-            })),
+            rows: withMainMenuListRow(
+              result.slotList.map((s) => ({
+                id: `slot:${s.index}`,
+                title: s.label.slice(0, 24),
+                description: `Option ${s.index}`,
+              })),
+            ),
           },
           item.phoneNumberId,
         );
@@ -968,47 +1083,6 @@ export const WhatsAppService = {
         if (!listSent.ok) {
           console.warn(
             `[WhatsApp] slot list interactive failed: ${listSent.error}`,
-          );
-        }
-      }
-
-      // Reschedule / cancel / message-doctor: pick which booking (list)
-      if (result.bookingList && result.bookingList.length > 0) {
-        const isCancel = /cancel|रद्द/i.test(result.reply);
-        const isReport = /report|document|रिपोर्ट|दस्तावेज|attach/i.test(
-          result.reply,
-        );
-        const listSent = await sendWhatsAppInteractiveList(
-          item.from,
-          {
-            header: isCancel
-              ? "Cancel booking"
-              : isReport
-                ? "Attach to visit"
-                : "Choose a booking",
-            body:
-              result.reply.split("\n").slice(0, 4).join("\n").slice(0, 400) ||
-              (isCancel
-                ? "Tap a booking to cancel it"
-                : isReport
-                  ? "Which visit should get the file?"
-                  : "Which appointment?"),
-            buttonLabel: "Bookings",
-            sectionTitle: "Your bookings",
-            rows: result.bookingList.map((b) => ({
-              id: `booking:${b.index}`,
-              title: b.label.slice(0, 24),
-              description: (b.description || `Booking ${b.index}`).slice(0, 72),
-            })),
-          },
-          item.phoneNumberId,
-        );
-        if (listSent.ok && !listSent.simulated) {
-          continue;
-        }
-        if (!listSent.ok) {
-          console.warn(
-            `[WhatsApp] booking list interactive failed: ${listSent.error}`,
           );
         }
       }
@@ -1024,11 +1098,13 @@ export const WhatsAppService = {
               "Pick a specialty:",
             buttonLabel: "Departments",
             sectionTitle: "Available departments",
-            rows: result.specialtyList.map((s) => ({
-              id: `specialty:${s.index}`,
-              title: s.label.slice(0, 24),
-              description: (s.description || "Department").slice(0, 72),
-            })),
+            rows: withMainMenuListRow(
+              result.specialtyList.map((s) => ({
+                id: `specialty:${s.index}`,
+                title: s.label.slice(0, 24),
+                description: (s.description || "Department").slice(0, 72),
+              })),
+            ),
           },
           item.phoneNumberId,
         );
@@ -1053,11 +1129,13 @@ export const WhatsAppService = {
               "Choose yourself or a family member",
             buttonLabel: "Profiles",
             sectionTitle: "Patient profiles",
-            rows: result.patientList.map((p) => ({
-              id: `patient:${p.index}`,
-              title: p.label.slice(0, 24),
-              description: (p.description || `Profile ${p.index}`).slice(0, 72),
-            })),
+            rows: withMainMenuListRow(
+              result.patientList.map((p) => ({
+                id: `patient:${p.index}`,
+                title: p.label.slice(0, 24),
+                description: (p.description || `Profile ${p.index}`).slice(0, 72),
+              })),
+            ),
           },
           item.phoneNumberId,
         );
@@ -1091,11 +1169,61 @@ export const WhatsAppService = {
           ? result.reply.split(/\n\n/).slice(-1)[0]?.slice(0, 1024) ||
             "Would you like to send a report?"
           : result.reply.slice(0, 1024);
+
+        const rawButtons = result.replyButtons.map((b) => ({
+          id: b.id,
+          title: b.title.slice(0, 20),
+        }));
+        const withMain = withMainMenuReplyButton(rawButtons);
+
+        // Already at Meta's 3-button cap without Main Menu → send as list + Main Menu.
+        if (
+          rawButtons.length >= 3 &&
+          !rawButtons.some((b) => hasMainMenuId(b.id))
+        ) {
+          const listSent = await sendWhatsAppInteractiveList(
+            item.from,
+            {
+              header: "Choose",
+              body: buttonBody.slice(0, 400) || "Pick an option:",
+              buttonLabel: "Options",
+              sectionTitle: "Available actions",
+              rows: replyButtonsAsListRows(rawButtons),
+            },
+            item.phoneNumberId,
+          );
+          if (listSent.ok && !listSent.simulated) {
+            if (result.calendarInvite?.icsContent) {
+              const docSent = await sendWhatsAppDocument(
+                item.from,
+                {
+                  filename:
+                    result.calendarInvite.icsFilename || "appointment.ics",
+                  mimeType: "text/calendar",
+                  buffer: Buffer.from(result.calendarInvite.icsContent, "utf8"),
+                },
+                item.phoneNumberId,
+              );
+              if (!docSent.ok) {
+                console.warn(
+                  `[WhatsApp] calendar .ics send failed: ${docSent.error}`,
+                );
+              }
+            }
+            continue;
+          }
+          if (!listSent.ok) {
+            console.warn(
+              `[WhatsApp] options list (from buttons) failed: ${listSent.error}`,
+            );
+          }
+        }
+
         const btnSent = await sendWhatsAppInteractiveButtons(
           item.from,
           {
             body: buttonBody,
-            buttons: result.replyButtons,
+            buttons: withMain,
           },
           item.phoneNumberId,
         );
@@ -1272,12 +1400,22 @@ export const WhatsAppService = {
     // Menu digits / BOOK / list taps skip this entirely (zero care-chat DB).
     // Branch E collects the message in the orchestrator (pins to booking / Admin).
     // Registration / booking wizard replies (name, DOB, gender, slots…) must never
-    // land in care chat — even when the phone already has an older booking.
+    // land in care chat — unless the clinic already took over (doctor care message
+    // / support handoff).
+    //
+    // Hot path: never await care-chat DB/socket work before the bot reply.
+    // shouldDeferToHuman only depends on handed_off / postBookingCare flags we
+    // already have — ingest can finish in the background.
     try {
       const branchECollecting =
         state.step === "awaiting_message_doctor_text" ||
         state.step === "awaiting_message_doctor_booking";
+      const humanOwnsThread =
+        conv.status === "handed_off" ||
+        state.handedOff === true ||
+        state.postBookingCare === true;
       const inBotWizard =
+        !humanOwnsThread &&
         typeof state.step === "string" &&
         state.step.startsWith("awaiting_") &&
         !branchECollecting;
@@ -1287,19 +1425,26 @@ export const WhatsAppService = {
         !branchECollecting &&
         !inBotWizard
       ) {
-        const care = await ingestWhatsAppPatientReply({
+        void ingestWhatsAppPatientReply({
           practiceId: practice.id,
           patientPhone,
           text,
-          conversationAlreadyHandedOff:
-            conv.status === "handed_off" || state.handedOff === true,
-          postBookingCare: state.postBookingCare === true,
+          conversationAlreadyHandedOff: humanOwnsThread,
+          postBookingCare: state.postBookingCare === true || humanOwnsThread,
           preferredProviderId: state.careProviderId,
           preferredBookingId: state.careBookingId,
-        });
-        if (care.shouldDeferToHuman) {
-          if (!state.handedOff) {
+          preferredPatientId: state.carePatientId,
+          bookPatientId: state.bookPatientId,
+        }).catch((err) =>
+          console.warn(
+            "[care-chat-wa] inbound ingest failed:",
+            err instanceof Error ? err.message : err,
+          ),
+        );
+        if (humanOwnsThread) {
+          if (!state.handedOff || conv.status !== "handed_off") {
             state.handedOff = true;
+            state.step = "idle";
             await prisma.whatsAppConversation.update({
               where: { id: conv.id },
               data: { status: "handed_off", state },

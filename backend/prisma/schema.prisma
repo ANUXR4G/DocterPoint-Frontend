@@ -37,7 +37,7 @@ model User {
 
 model Patient {
   id              String @id @db.Uuid
-  /** Globally unique Medical Record Number, e.g. MR00000001 */
+  /** Globally unique Medical Record Number, e.g. MR00000001 or PCMR00000001 */
   mrn             String @unique @map("mrn") @db.VarChar(32)
   profession      String?
   dateOfBirth     String? @map("date_of_birth")
@@ -339,6 +339,8 @@ model Practice {
   registrationNo         String?      @map("registration_no")
   phone                  String?      @db.VarChar(20)
   email                  String?      @db.VarChar(256)
+  /** Initials used in patient MRNs, e.g. PC → PCMR00000001 for Priya Clinic. */
+  mrnPrefix              String?      @unique @map("mrn_prefix") @db.VarChar(6)
   whatsappBusinessNumber String?      @map("whatsapp_business_number")
   whatsappWebhookSecret  String?      @map("whatsapp_webhook_secret")
   /// Structured FAQ answers for the WhatsApp bot (DocLine §9.2 / §11) — never free-form medical knowledge.

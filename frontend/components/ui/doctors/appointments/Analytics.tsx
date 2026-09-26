@@ -130,11 +130,11 @@ export default function Analytics() {
         <AnalyticsPeriodFilter value={type} onChange={setType} />
       </div>
 
-      <div className="mt-3 hidden sm:grid grid-cols-1 md:grid-cols-2 gap-3 h-52">
-        <div className="rounded-[26px] border border-neutral-300 dark:border-none dark:gradient-border-black bg-neutral-200 dark:bg-neutral-800 p-3">
+      <div className="mt-3 hidden h-64 grid-cols-1 gap-3 sm:grid md:grid-cols-2 md:h-72">
+        <div className="rounded-[26px] border border-neutral-300 bg-neutral-200 p-3 dark:border-none dark:gradient-border-black dark:bg-neutral-800">
           <AppointmentTrendLineChart data={appointmentMetrics} active={type} />
         </div>
-        <div className="rounded-[26px] border border-neutral-300 dark:border-none dark:gradient-border-black bg-neutral-200 dark:bg-neutral-800 p-3">
+        <div className="rounded-[26px] border border-neutral-300 bg-neutral-200 p-3 dark:border-none dark:gradient-border-black dark:bg-neutral-800">
           <PatientGenderBarChart data={appointmentMetrics} active={type} />
         </div>
       </div>

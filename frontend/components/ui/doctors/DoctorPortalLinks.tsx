@@ -11,7 +11,7 @@ const LINKS = [
   { href: "/doctor/notifications", label: "Notifications" },
   { href: "/doctor/appointments", label: "Appointments" },
   { href: "/doctor/patients", label: "Patients" },
-  { href: "/doctor/activity", label: "Support" },
+  { href: "/doctor/activity", label: "Patient Support" },
   { href: "/doctor/calendar", label: "Calendar" },
   { href: "/doctor/analytics", label: "Analytics" },
   { href: "/doctor/subscription", label: "Subscription" },

@@ -26,6 +26,8 @@ type Props = {
   peerName: string
   /** Shown above the thread */
   subtitle?: string
+  /** Hide title row when the parent already provides one (e.g. modal). */
+  showHeader?: boolean
   className?: string
 }
 
@@ -73,6 +75,7 @@ export default function CareChatPanel({
   peerUserId,
   peerName,
   subtitle,
+  showHeader = true,
   className = "",
 }: Props) {
   const [messages, setMessages] = useState<CareMessage[]>([])
@@ -184,21 +187,27 @@ export default function CareChatPanel({
     }
   }
 
+  const shellClass = showHeader
+    ? "rounded-2xl border border-slate-200 bg-white dark:border-neutral-700 dark:bg-neutral-900"
+    : "bg-transparent"
+
   return (
     <section
-      className={`flex min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-neutral-700 dark:bg-neutral-900 ${className}`}
+      className={`flex min-h-[22rem] flex-col overflow-hidden ${shellClass} ${className}`}
     >
-      <header className="border-b border-slate-200 px-4 py-3 dark:border-neutral-700">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-          Chat with {peerName}
-        </h3>
-        <p className="mt-0.5 text-xs text-slate-500">
-          {subtitle ||
-            (isConnected
-              ? "Live · WhatsApp replies from the patient appear here too"
-              : "Two-way with WhatsApp: clinic texts and patient replies sync here")}
-        </p>
-      </header>
+      {showHeader ? (
+        <header className="border-b border-slate-200 px-4 py-3 dark:border-neutral-700">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+            Chat with {peerName}
+          </h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {subtitle ||
+              (isConnected
+                ? "Live · WhatsApp replies from the patient appear here too"
+                : "Two-way with WhatsApp: clinic texts and patient replies sync here")}
+          </p>
+        </header>
+      ) : null}
 
       <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
         {loading ? (

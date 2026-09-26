@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { format, startOfToday } from "date-fns"
 import { months } from "@/lib/dummy/calender"
 import { AnalyticMetrics, TypeAnalytics, TypeAnalyticsParam } from "@/types"
@@ -18,6 +18,78 @@ export function genderSum(g?: {
     (g?.others ?? 0) +
     (g?.unknown ?? 0)
   )
+}
+
+type AnalyticsCell = TypeAnalytics[string]
+
+function isAnalyticsCell(value: unknown): value is AnalyticsCell {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "patients" in (value as object) &&
+      "appointments" in (value as object),
+  )
+}
+
+function unwrapAnalyticsPayload(payload: unknown):
+  | (TypeAnalytics & { __byDoctor?: unknown })
+  | { __error: true; message: string } {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "status" in payload &&
+    (payload as { status?: string }).status === "unsuccessful"
+  ) {
+    return {
+      __error: true,
+      message: String(
+        (payload as { message?: string }).message ?? "Analytics unavailable",
+      ),
+    }
+  }
+
+  const raw =
+    payload &&
+    typeof payload === "object" &&
+    "status" in payload &&
+    (payload as { status?: string }).status === "successful" &&
+    "data" in payload &&
+    (payload as { data?: unknown }).data != null
+      ? (payload as { data: unknown }).data
+      : payload
+
+  if (!raw || typeof raw !== "object") {
+    return { __error: true, message: "Invalid analytics response" }
+  }
+
+  const nested = raw as {
+    series?: unknown
+    byDoctor?: unknown
+    __byDoctor?: unknown
+  }
+
+  if (nested.series && typeof nested.series === "object") {
+    return {
+      ...(nested.series as TypeAnalytics),
+      __byDoctor: nested.byDoctor ?? nested.__byDoctor ?? [],
+    } as TypeAnalytics & { __byDoctor?: unknown }
+  }
+
+  const cellKeys = Object.keys(nested).filter(
+    (k) => k !== "byDoctor" && k !== "__byDoctor" && k !== "series",
+  )
+  if (cellKeys.some((k) => isAnalyticsCell((nested as Record<string, unknown>)[k]))) {
+    const { byDoctor, __byDoctor, ...rest } = nested as TypeAnalytics & {
+      byDoctor?: unknown
+      __byDoctor?: unknown
+    }
+    return {
+      ...(rest as TypeAnalytics),
+      __byDoctor: byDoctor ?? __byDoctor ?? [],
+    } as TypeAnalytics & { __byDoctor?: unknown }
+  }
+
+  return { __error: true, message: "Analytics unavailable" }
 }
 
 /**
@@ -50,10 +122,9 @@ export function useAnalytics(
   practiceId: string | null
   practiceName: string
 } {
-  const [totalAppointments, setTotalAppointments] = useState(0)
-  const [totalPatients, setTotalPatients] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [planLocked, setPlanLocked] = useState(false)
+  const lastTotalsRef = useRef({ patients: 0, appointments: 0 })
 
   const dash = usePracticeDashboardOptional()
   const practiceFromShell = dash?.practiceId ?? null
@@ -63,6 +134,7 @@ export function useAnalytics(
     () => proctoService.getMyPractices(),
     {
       enabled: !practiceFromShell,
+      staleTime: 60_000,
       select: (res) => {
         if (res?.status !== "successful" || !Array.isArray(res.data)) {
           return null
@@ -85,19 +157,27 @@ export function useAnalytics(
     : (mine?.name ?? "")
 
   useEffect(() => {
-    if (!practiceId) {
-      setErrorMessage(null)
-      setPlanLocked(false)
-      setTotalPatients(0)
-      setTotalAppointments(0)
-    }
+    lastTotalsRef.current = { patients: 0, appointments: 0 }
+    setErrorMessage(null)
+    setPlanLocked(false)
   }, [practiceId])
+
+  useEffect(() => {
+    // Period / doctor filter changed — drop stale totals until matching series lands.
+    lastTotalsRef.current = { patients: 0, appointments: 0 }
+  }, [param, providerId])
 
   const today = startOfToday()
   const currentCurrentMonth = format(today, "MMMM")
 
-  const { data, isLoading: analyticsLoading, isFetching: analyticsFetching } =
-    useApi(
+  const {
+    data,
+    isLoading: analyticsLoading,
+    isFetching: analyticsFetching,
+    isPreviousData,
+    isError,
+    error,
+  } = useApi(
     [`procto:practice:${practiceId}:analytics`, { param, providerId }],
     () => {
       if (!practiceId) throw new Error("No practice")
@@ -105,91 +185,79 @@ export function useAnalytics(
     },
     {
       enabled: !!practiceId,
-      staleTime: 60_000,
-      // Keep showing the last period/doctor charts while the new filter loads —
-      // otherwise every filter click (and live invalidate) flashes "Loading charts…".
+      staleTime: 30_000,
+      cacheTime: 5 * 60_000,
+      // Keep cache warm, but UI must not paint the previous period while a
+      // new Daily/Weekly/Monthly filter is loading (looks like filters broken).
       keepPreviousData: true,
-      select: (payload) => {
-        if (payload?.status === "unsuccessful") {
-          return {
-            __error: true as const,
-            message: String(payload.message ?? "Analytics unavailable"),
-          }
-        }
-        const raw =
-          payload?.status === "successful" && payload.data
-            ? payload.data
-            : payload
-        if (!raw || typeof raw !== "object") return raw as TypeAnalytics
-
-        const nested = raw as {
-          series?: TypeAnalytics
-          byDoctor?: unknown
-          __error?: boolean
-        }
-        if (nested.series && typeof nested.series === "object") {
-          return {
-            ...nested.series,
-            __byDoctor: nested.byDoctor ?? [],
-          } as TypeAnalytics & { __byDoctor?: unknown }
-        }
-        return raw as TypeAnalytics
-      },
+      retry: 2,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
+      refetchOnWindowFocus: false,
+      select: unwrapAnalyticsPayload,
     },
   )
 
+  const filterPending = Boolean(isPreviousData && analyticsFetching)
+
   useEffect(() => {
-    if (
-      data &&
-      typeof data === "object" &&
-      "__error" in data &&
-      (data as { __error?: boolean }).__error
-    ) {
-      const msg = String(
-        (data as { message?: string }).message ?? "Analytics unavailable",
-      )
+    if (data && typeof data === "object" && "__error" in data && data.__error) {
+      const msg = String(data.message ?? "Analytics unavailable")
       setErrorMessage(msg)
       setPlanLocked(/subscription|plan|upgrade|locked/i.test(msg))
-      setTotalPatients(0)
-      setTotalAppointments(0)
+      return
+    }
+    if (isError) {
+      const msg =
+        error instanceof Error ? error.message : "Analytics unavailable"
+      setErrorMessage(msg)
+      setPlanLocked(/subscription|plan|upgrade|locked/i.test(msg))
       return
     }
     setErrorMessage(null)
     setPlanLocked(false)
+  }, [data, isError, error])
 
-    if (!data || typeof data !== "object") {
-      setTotalPatients(0)
-      setTotalAppointments(0)
-      return
+  const analyticsData =
+    !filterPending &&
+    data &&
+    typeof data === "object" &&
+    !("__error" in data)
+      ? (() => {
+          const raw = data as TypeAnalytics & { __byDoctor?: unknown }
+          const { __byDoctor: _bd, ...series } = raw
+          return series as TypeAnalytics
+        })()
+      : undefined
+
+  const cells = useMemo(() => {
+    if (!analyticsData) return [] as Array<[string, AnalyticsCell]>
+    return Object.entries(analyticsData).filter(([, value]) =>
+      isAnalyticsCell(value),
+    ) as Array<[string, AnalyticsCell]>
+  }, [analyticsData])
+
+  const totals = useMemo(() => {
+    if (!analyticsData) {
+      // Keep last good totals during refetch / practice-id flicker so the
+      // dashboard does not flash 0 / “No data” on every live reload.
+      return lastTotalsRef.current
     }
-    const analytics = data as TypeAnalytics & { __byDoctor?: unknown }
-    const cells = Object.entries(analytics).filter(
-      ([key, value]) =>
-        key !== "__byDoctor" &&
-        value &&
-        typeof value === "object" &&
-        "patients" in (value as object),
-    ) as Array<[string, TypeAnalytics[string]]>
-
-    // Always sum all period cells (year must not collapse to current month name).
-    const patientCount = cells.reduce(
+    const patients = cells.reduce(
       (s, [, cell]) => s + genderSum(cell.patients),
       0,
     )
-    const appointmentCount = cells.reduce(
+    const appointments = cells.reduce(
       (s, [, cell]) => s + genderSum(cell.appointments),
       0,
     )
-
-    setTotalPatients(patientCount)
-    setTotalAppointments(appointmentCount)
-  }, [data])
+    lastTotalsRef.current = { patients, appointments }
+    return lastTotalsRef.current
+  }, [analyticsData, cells])
 
   function calculatePercentage(type: "patients" | "appointments" = "patients") {
     const currentIdx = Number(format(today, "M"))
     if (
-      !data ||
-      (typeof data === "object" && "__error" in data) ||
+      !analyticsData ||
       param === "week" ||
       param === "day" ||
       param === "month" ||
@@ -199,25 +267,27 @@ export function useAnalytics(
       return 0
     }
 
-    // MoM: requires year-shaped series (month name keys).
-    const analytics = data as TypeAnalytics
     const previousMonth = months[currentIdx - 2]
-    if (!previousMonth || !analytics[previousMonth] || !analytics[currentCurrentMonth]) {
+    if (
+      !previousMonth ||
+      !analyticsData[previousMonth] ||
+      !analyticsData[currentCurrentMonth]
+    ) {
       return 0
     }
 
     const previousTotal = genderSum(
       type === "patients"
-        ? analytics[previousMonth].patients
-        : analytics[previousMonth].appointments,
+        ? analyticsData[previousMonth].patients
+        : analyticsData[previousMonth].appointments,
     )
 
     if (previousTotal === 0) return 0
 
     const currentTotal = genderSum(
       type === "patients"
-        ? analytics[currentCurrentMonth].patients
-        : analytics[currentCurrentMonth].appointments,
+        ? analyticsData[currentCurrentMonth].patients
+        : analyticsData[currentCurrentMonth].appointments,
     )
 
     return Number(
@@ -225,18 +295,8 @@ export function useAnalytics(
     )
   }
 
-  const analyticsData =
-    data && typeof data === "object" && !("__error" in data)
-      ? (() => {
-          const raw = data as TypeAnalytics & {
-            __byDoctor?: unknown
-          }
-          const { __byDoctor: _bd, ...series } = raw
-          return series as TypeAnalytics
-        })()
-      : undefined
-
   const byDoctor = useMemo(() => {
+    if (filterPending) return []
     if (!data || typeof data !== "object" || "__error" in data) return []
     return (
       (
@@ -254,63 +314,79 @@ export function useAnalytics(
         }
       ).__byDoctor ?? []
     )
-  }, [data])
+  }, [data, filterPending])
 
-  const patientMetrics = analyticsData
-    ? Object.entries(analyticsData)
-        .filter(([key]) => key !== "__byDoctor")
-        .map(([key, value]) => ({
-          name: key,
-          male: value.patients.male,
-          female: value.patients.female,
-          others: value.patients.others ?? 0,
-          unknown: value.patients.unknown ?? 0,
-          hasMetrics: genderSum(value.patients) > 0,
-          compareMale: value.compare?.patients.male,
-          compareFemale: value.compare?.patients.female,
-          compareOthers: value.compare?.patients.others,
-          compareUnknown: value.compare?.patients.unknown,
-        }))
-    : []
+  const patientMetrics = useMemo(
+    () =>
+      cells.map(([key, value]) => ({
+        name: key,
+        male: value.patients.male,
+        female: value.patients.female,
+        others: value.patients.others ?? 0,
+        unknown: value.patients.unknown ?? 0,
+        hasMetrics: genderSum(value.patients) > 0,
+        compareMale: value.compare?.patients.male,
+        compareFemale: value.compare?.patients.female,
+        compareOthers: value.compare?.patients.others,
+        compareUnknown: value.compare?.patients.unknown,
+      })),
+    [cells],
+  )
 
-  const appointmentMetrics = analyticsData
-    ? Object.entries(analyticsData)
-        .filter(([key]) => key !== "__byDoctor")
-        .map(([key, value]) => ({
-          name: key,
-          male: value.appointments.male,
-          female: value.appointments.female,
-          others: value.appointments.others ?? 0,
-          unknown: value.appointments.unknown ?? 0,
-          hasMetrics: genderSum(value.appointments) > 0,
-          compareMale: value.compare?.appointments.male,
-          compareFemale: value.compare?.appointments.female,
-          compareOthers: value.compare?.appointments.others,
-          compareUnknown: value.compare?.appointments.unknown,
-        }))
-    : []
+  const appointmentMetrics = useMemo(
+    () =>
+      cells.map(([key, value]) => ({
+        name: key,
+        male: value.appointments.male,
+        female: value.appointments.female,
+        others: value.appointments.others ?? 0,
+        unknown: value.appointments.unknown ?? 0,
+        completed: value.status?.completed ?? 0,
+        cancelled: value.status?.cancelled ?? 0,
+        rescheduled: value.status?.rescheduled ?? 0,
+        hasMetrics:
+          genderSum(value.appointments) > 0 ||
+          (value.status?.completed ?? 0) +
+            (value.status?.cancelled ?? 0) +
+            (value.status?.rescheduled ?? 0) >
+            0,
+        compareMale: value.compare?.appointments.male,
+        compareFemale: value.compare?.appointments.female,
+        compareOthers: value.compare?.appointments.others,
+        compareUnknown: value.compare?.appointments.unknown,
+        compareCompleted: value.compare?.status?.completed,
+        compareCancelled: value.compare?.status?.cancelled,
+        compareRescheduled: value.compare?.status?.rescheduled,
+      })),
+    [cells],
+  )
 
   const waitingForPractice = !practiceId
     ? Boolean(mineLoading || (dash && !dash.practiceId && dash.loading))
     : false
 
+  const isLoading =
+    waitingForPractice ||
+    filterPending ||
+    Boolean(
+      practiceId &&
+        !analyticsData &&
+        !errorMessage &&
+        (analyticsLoading || analyticsFetching),
+    )
+
   return {
     data: analyticsData,
     byDoctor,
-    // Block only until practice id is known or the first series settles.
-    // Errors / empty payloads must leave loading so the UI is never stuck.
-    isLoading: waitingForPractice
-      ? true
-      : Boolean(practiceId) &&
-        analyticsLoading &&
-        !analyticsData &&
-        !errorMessage,
-    isRefreshing: Boolean(analyticsFetching && analyticsData),
+    isLoading,
+    isRefreshing: Boolean(
+      analyticsFetching && analyticsData && !filterPending,
+    ),
     errorMessage,
     planLocked,
-    totalPatients,
+    totalPatients: isLoading && !analyticsData ? 0 : totals.patients,
     patientMetrics,
-    totalAppointments,
+    totalAppointments: isLoading && !analyticsData ? 0 : totals.appointments,
     appointmentMetrics,
     calculatePercentage,
     practiceId,

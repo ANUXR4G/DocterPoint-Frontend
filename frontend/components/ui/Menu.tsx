@@ -174,7 +174,7 @@ export default function Menu({ role, logout }: Props) {
             </span>
             {support.map(({ name, icon, dest }, idx) => {
               const isLogout = name === "Logout"
-              const isHelp = name === "Help"
+              const isHelp = name === "Help" || name === "Help & Support"
               const isActive = navActiveFn(pathname, dest, currentTab)
               const badge = navBadgeCount(name)
 

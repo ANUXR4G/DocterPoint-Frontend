@@ -3,6 +3,7 @@ import { AppError, ResponseHandler } from "../../core/response.js";
 import { generateHash } from "../../core/security.js";
 import { isUuid } from "../../core/params.js";
 import type { PracticeType, PracticeMemberRole } from "@prisma/client";
+import { allocateUniquePracticeMrnPrefix } from "../../core/patientMrn.js";
 import { BookingStatus, ScheduleMode, OverrideType, Prisma } from "@prisma/client";
 import { AuthService } from "../auth.js";
 import {
@@ -39,6 +40,10 @@ const mineCache = new Map<string, { expires: number; data: unknown }>();
 
 function emptyGenderCounts() {
   return { male: 0, female: 0, others: 0, unknown: 0 };
+}
+
+function emptyStatusCounts() {
+  return { completed: 0, cancelled: 0, rescheduled: 0 };
 }
 
 function slugify(name: string): string {
@@ -310,6 +315,8 @@ export const PracticeService = {
     // Until a pool line is LIVE, Tel and optional WA hint stay aligned.
     const publicPhone = phoneDigits || waDigits || null;
 
+    const mrnPrefix = await allocateUniquePracticeMrnPrefix(data.name);
+
     const practice = await prisma.practice.create({
       data: {
         name: data.name,
@@ -317,6 +324,7 @@ export const PracticeService = {
         type: practiceType,
         specialty: data.specialty,
         consultationFee,
+        mrnPrefix,
         whatsappBusinessNumber: waDigits || publicPhone,
         registrationNo: data.registrationNo?.trim() || null,
         phone: publicPhone,
@@ -2616,9 +2624,11 @@ export const PracticeService = {
     type Cell = {
       patients: Record<string, number>;
       appointments: Record<string, number>;
+      status: { completed: number; cancelled: number; rescheduled: number };
       compare?: {
         patients: Record<string, number>;
         appointments: Record<string, number>;
+        status: { completed: number; cancelled: number; rescheduled: number };
       };
     };
 
@@ -2627,11 +2637,13 @@ export const PracticeService = {
       result[b.label] = {
         patients: emptyGenderCounts(),
         appointments: emptyGenderCounts(),
+        status: emptyStatusCounts(),
         ...(normalized === "yoy"
           ? {
               compare: {
                 patients: emptyGenderCounts(),
                 appointments: emptyGenderCounts(),
+                status: emptyStatusCounts(),
               },
             }
           : {}),
@@ -2659,7 +2671,6 @@ export const PracticeService = {
       where: {
         practiceId,
         ...(providerFilter ? { providerId: providerFilter } : {}),
-        status: { not: BookingStatus.CANCELED },
         OR: [
           { slotStart: { gte: fetchStart, lte: fetchEnd } },
           {
@@ -2671,6 +2682,7 @@ export const PracticeService = {
         ],
       },
       select: {
+        id: true,
         patientPhone: true,
         patientId: true,
         providerId: true,
@@ -2678,8 +2690,29 @@ export const PracticeService = {
         slotStart: true,
         sessionDate: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
+
+    let rescheduleEvents: Array<{ createdAt: Date; bookingId: string }> = [];
+    try {
+      rescheduleEvents = await prisma.notificationEvent.findMany({
+        where: {
+          practiceId,
+          type: "RESCHEDULE",
+          createdAt: { gte: fetchStart, lte: fetchEnd },
+          ...(providerFilter
+            ? { booking: { providerId: providerFilter } }
+            : {}),
+        },
+        select: { createdAt: true, bookingId: true },
+      });
+    } catch (err) {
+      console.warn(
+        "[analytics] reschedule series skipped:",
+        err instanceof Error ? err.message : err,
+      );
+    }
 
     const patientIds = [
       ...new Set(
@@ -2783,6 +2816,7 @@ export const PracticeService = {
         unknown: new Set<string>(),
       };
       for (const b of list) {
+        if (b.status === BookingStatus.CANCELED) continue;
         const g = genderOf(b);
         dest.appointments[g] += 1;
         const phoneKey = last10Digits(b.patientPhone) || b.patientPhone;
@@ -2793,12 +2827,32 @@ export const PracticeService = {
       }
     }
 
+    function accumulateStatus(
+      cell: Cell,
+      list: typeof bookings,
+      reschedules: typeof rescheduleEvents,
+      target: "main" | "compare",
+    ) {
+      const dest =
+        target === "compare" && cell.compare ? cell.compare : cell;
+      for (const b of list) {
+        if (b.status === BookingStatus.COMPLETED) dest.status.completed += 1;
+        else if (b.status === BookingStatus.CANCELED) dest.status.cancelled += 1;
+      }
+      dest.status.rescheduled += reschedules.length;
+    }
+
     for (const b of buckets) {
       const inBucket = bookings.filter((row) => {
         const at = bookingAt(row).getTime();
         return at >= b.start.getTime() && at <= b.end.getTime();
       });
       accumulate(result[b.label], inBucket, "main");
+      const reschedulesInBucket = rescheduleEvents.filter((n) => {
+        const t = n.createdAt.getTime();
+        return t >= b.start.getTime() && t <= b.end.getTime();
+      });
+      accumulateStatus(result[b.label], inBucket, reschedulesInBucket, "main");
 
       if (normalized === "yoy" && b.prevStart && b.prevEnd) {
         const prev = bookings.filter((row) => {
@@ -2806,11 +2860,17 @@ export const PracticeService = {
           return at >= b.prevStart!.getTime() && at <= b.prevEnd!.getTime();
         });
         accumulate(result[b.label], prev, "compare");
+        const prevReschedules = rescheduleEvents.filter((n) => {
+          const t = n.createdAt.getTime();
+          return t >= b.prevStart!.getTime() && t <= b.prevEnd!.getTime();
+        });
+        accumulateStatus(result[b.label], prev, prevReschedules, "compare");
       }
     }
 
     // Period for byDoctor = current range only (not YoY compare range)
     const periodBookings = bookings.filter((row) => {
+      if (row.status === BookingStatus.CANCELED) return false;
       const at = bookingAt(row).getTime();
       return at >= rangeStart!.getTime() && at <= rangeEnd!.getTime();
     });
@@ -2849,12 +2909,13 @@ export const PracticeService = {
       else if (b.status === BookingStatus.NO_SHOW) row.noShow += 1;
     }
 
-    // Also count canceled in period (excluded from main query)
+    // Also count canceled in period for by-doctor table
     const canceledInPeriod = await prisma.practiceBooking.groupBy({
       by: ["providerId"],
       where: {
         practiceId,
         status: BookingStatus.CANCELED,
+        ...(providerFilter ? { providerId: providerFilter } : {}),
         OR: [
           { slotStart: { gte: rangeStart!, lte: rangeEnd! } },
           {

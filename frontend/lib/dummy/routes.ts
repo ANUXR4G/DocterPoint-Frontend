@@ -28,7 +28,7 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/settings",
     },
     {
-      name: "Help",
+      name: "Help & Support",
       icon: "two-people",
     },
     {
@@ -63,7 +63,7 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/doctor/patients",
     },
     {
-      name: "Support",
+      name: "Patient Support",
       icon: "inbox",
       dest: "/doctor/activity",
     },
@@ -88,7 +88,7 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/settings",
     },
     {
-      name: "Help",
+      name: "Help & Support",
       icon: "two-people",
     },
     {
@@ -128,7 +128,7 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/doctor/patients",
     },
     {
-      name: "Support",
+      name: "Patient Support",
       icon: "inbox",
       dest: "/doctor/activity",
     },
@@ -158,7 +158,7 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/settings",
     },
     {
-      name: "Help",
+      name: "Help & Support",
       icon: "two-people",
     },
     {

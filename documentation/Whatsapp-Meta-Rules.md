@@ -61,7 +61,7 @@ All are **UTILITY**, language `en`, named parameters. Create in WhatsApp Manager
 | Internal key | Meta name (`metaName`) | Purpose |
 |--------------|------------------------|---------|
 | `BOOKING_CONFIRMATION` | `docline_booking_confirm` | After book |
-| `REMINDER` | `docline_appointment_reminder` | ~30 min before slot / morning-of token |
+| `REMINDER` | `docline_appointment_reminder` | ~24h before slot (day-before for tokens) and ~30 min before / morning-of token |
 | `CANCELLATION` | `docline_booking_cancelled` | Cancel |
 | `RESCHEDULE` | `docline_booking_rescheduled` | Time change |
 | `OVERRIDE_IMPACT` | `docline_schedule_change` | Clinic leave / block impact |

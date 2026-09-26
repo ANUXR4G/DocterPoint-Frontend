@@ -86,7 +86,16 @@ export function usePracticeOpenNotifications(enabled: boolean) {
 
   useProctoSocket(
     enabled ? practiceId : null,
-    () => void refresh(),
+    (event) => {
+      if (
+        event.event === "notification_created" ||
+        event.event === "booking_created" ||
+        event.event === "booking_updated" ||
+        event.event === "conversation_updated"
+      ) {
+        void refresh()
+      }
+    },
     () => void refresh(),
   )
 

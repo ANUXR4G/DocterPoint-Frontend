@@ -28,6 +28,7 @@ export type BotIntent =
   | "cancel"
   | "reschedule"
   | "register"
+  | "family"
   | "doctors"
   | "help"
   | "faq"
@@ -69,10 +70,12 @@ const INTENTS: BotIntent[] = [
   "cancel",
   "reschedule",
   "register",
+  "family",
   "doctors",
   "help",
   "faq",
   "human",
+  "message_doctor",
   "report",
   "my_docs",
   "confirm_yes",
@@ -393,6 +396,18 @@ const COMMAND_WORDS: Array<{ intent: BotIntent; words: string[] }> = [
     ],
   },
   {
+    intent: "family",
+    words: [
+      "family",
+      "families",
+      "myfamily",
+      "dependant",
+      "dependent",
+      "dependants",
+      "dependents",
+    ],
+  },
+  {
     intent: "book",
     words: ["book", "booking", "bok", "boook", "appointment", "appoinment"],
   },
@@ -433,13 +448,17 @@ export function exactMenuIntent(text: string): BotIntent | null {
     // Normalize NBSP / thin spaces that phones sometimes insert
     .replace(/[\u00a0\u202f\u2007\u2009]/g, " ")
     .replace(/^[*`~]+|[*`~]+$/g, "")
+    // Voice STT often appends "Book." / "Book!"
+    .replace(/^[.,!?;:…'"“”‘’]+|[.,!?;:…'"“”‘’]+$/g, "")
     // Strip list labels like "3 · New booking" / "3. New booking"
     .replace(/^[1-9]\s*[·.)\-:]+\s*/u, "")
     .replace(/\s+/g, " ");
-  if (!raw || raw.length > 40) return null;
+  if (!raw || raw.length > 48) return null;
   const t = raw
     .replace(/^(btn_|action_|cmd_|quick_)/i, "")
     .replace(/[\s-]+/g, "_");
+  // Branch F button title must never map to Book / open the default main menu
+  if (/^select_appointments?$|^select_appt$/.test(t)) return null;
   const aliases: Record<string, BotIntent> = {
     status: "status",
     statues: "status",
@@ -471,8 +490,6 @@ export function exactMenuIntent(text: string): BotIntent | null {
     register: "register",
     signup: "register",
     sign_up: "register",
-    family: "register",
-    family_member: "register",
     add_family: "register",
     register_family: "register",
     register_family_member: "register",
@@ -481,6 +498,14 @@ export function exactMenuIntent(text: string): BotIntent | null {
     family_member_dependant: "register",
     dependant: "register",
     dependent: "register",
+    // View / pick family members (menu 3)
+    family: "family",
+    family_member: "family",
+    family_members: "family",
+    my_family: "family",
+    my_family_members: "family",
+    view_family: "family",
+    list_family: "family",
     doctors: "doctors",
     doctor: "doctors",
     docters: "doctors",
@@ -555,11 +580,15 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
       book: "book",
       bookings: "status",
       status: "status",
-      family: "register",
+      family: "family",
+      my_family: "family",
       register: "register",
       support: "human",
       human: "human",
       agent: "human",
+      main: "help",
+      help: "help",
+      menu: "help",
       message_doctor: "message_doctor",
       message: "message_doctor",
       report: "report",
@@ -572,8 +601,6 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
       reschedule: "reschedule",
       language: "language",
       lang: "language",
-      help: "help",
-      menu: "help",
       new_book: "book",
     };
     return map[key] ?? null;
@@ -586,7 +613,7 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
   const map: Record<number, MenuShortcut> = {
     1: "book",
     2: "status",
-    3: "register",
+    3: "family",
     4: "human",
     5: "message_doctor",
     6: "report",
@@ -596,7 +623,7 @@ export function menuNumberShortcut(text: string): MenuShortcut | null {
 
 /**
  * Digit / list shortcuts for the post-booking choice menu (idle + active visit).
- * 1 Reschedule · 2 Cancel · 3 New booking · 4 Message doctor · 5 Report
+ * 1 Reschedule · 2 Cancel · 3 New booking · 4 Message doctor · 5 Report · 6 Main Menu
  */
 export function postBookingNumberShortcut(text: string): MenuShortcut | null {
   const raw = text
@@ -604,6 +631,9 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
     .replace(/^[*`~_]+|[*`~_]+$/g, "")
     .replace(/[\uFE0F\u20E3]/g, "");
   if (!raw) return null;
+
+  // Main Menu row id (also handled early in orchestrator)
+  if (/^(menu:main|idle:main)$/i.test(raw)) return "help";
 
   const listPick = /^post:([a-z_]+)$/i.exec(raw);
   if (listPick) {
@@ -618,6 +648,9 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
       report: "report",
       attach: "report",
       document: "report",
+      main: "help",
+      help: "help",
+      menu: "help",
     };
     return map[key] ?? null;
   }
@@ -625,7 +658,7 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
   // Typed menu titles (with or without "3 · " prefix)
   const label = raw
     .toLowerCase()
-    .replace(/^[1-5]\s*[·.)\-:]+\s*/u, "")
+    .replace(/^[1-6]\s*[·.)\-:]+\s*/u, "")
     .trim();
   if (/^(new\s+book(ing)?|book\s+(another|again|new)|another\s+booking)$/i.test(label)) {
     return "book";
@@ -644,8 +677,9 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
   ) {
     return "report";
   }
+  if (/^(main\s*menu|menu|help)$/i.test(label)) return "help";
 
-  const m = raw.match(/^(?:option\s*)?([1-5])(?:\s*[.)]?)?$/i);
+  const m = raw.match(/^(?:option\s*)?([1-6])(?:\s*[.)]?)?$/i);
   if (!m) return null;
   const n = Number(m[1]);
   const map: Record<number, MenuShortcut> = {
@@ -654,6 +688,7 @@ export function postBookingNumberShortcut(text: string): MenuShortcut | null {
     3: "book",
     4: "message_doctor",
     5: "report",
+    6: "help",
   };
   return map[n] ?? null;
 }
@@ -756,6 +791,18 @@ function parseIntentRegex(text: string): BotIntent {
     /रजिस्टर|पंजीकरण|नया मरीज़/.test(text)
   ) {
     return "register";
+  }
+  if (
+    /\b(my\s+)?famil(y|ies)\b|\bfamily\s+members?\b|\bdependants?\b|\bdependents?\b/.test(
+      t,
+    ) ||
+    /परिवार|आश्रित/.test(text)
+  ) {
+    // "add family" / "register family" stay register via exact aliases
+    if (/\b(add|register|new)\s+famil/.test(t) || /नया\s*परिवार/.test(text)) {
+      return "register";
+    }
+    return "family";
   }
   if (
     /^(doctors?|providers?|list|docters?|doktors?)$/i.test(t) ||
@@ -870,12 +917,13 @@ Patients may speak or type in English or Hindi (Devanagari or Hinglish) — incl
 There is NO required message format. Extract EVERY useful slot from a single utterance.
 Examples: "book me tomorrow at 10 am with Kabir", "kal shaam wali appointment", "I need status", "mera naam Ravi hai".
 Return ONLY compact JSON: {"intent":"...","slots":{...}}
-intent must be one of: book,status,cancel,reschedule,register,doctors,help,faq,human,message_doctor,report,my_docs,confirm_yes,confirm_no,unknown
+intent must be one of: book,status,cancel,reschedule,register,family,doctors,help,faq,human,message_doctor,report,my_docs,confirm_yes,confirm_no,unknown
 slots may include: date (YYYY-MM-DD), providerName, providerIndex (1-based), mode (TIME_BASED|TOKEN_BASED), slotIndex (1-based), rawDateText, timeText, preferredHour (0-23), preferredMinute (0-59), preferredPeriod (morning|afternoon|evening|night), name, gender (male|female|others), email
 Today's date context may be given. Map TODAY/TOMORROW / आज / कल to ISO dates.
 If the patient says a clock time ("10 am", "3:30 pm"), set preferredHour/preferredMinute and timeText.
 If they only say morning/afternoon/evening/night (or सुबह/दोपहर/शाम/रात), set preferredPeriod.
-REGISTER means create a patient account (sign up / new patient / रजिस्टर / पंजीकरण).
+REGISTER means create a patient account (sign up / new patient / रजिस्टर / पंजीकरण) or add a new family member.
+FAMILY means list / view family members already on this WhatsApp (my family / परिवार सदस्य).
 DOCTORS means list doctors/providers at the clinic (doctor list / डॉक्टर). Accept misspellings like DOCTERS, DOKORS, DOCATORS.
 BOOK means book an appointment (बुक / अपॉइंटमेंट). Accept common typos (BOK, BOOOK, APPOINTMNET). Prefer book when they mention a date/time for a visit.
 Prefer a command intent over unknown when the message is clearly a mistyped menu word.
@@ -884,7 +932,7 @@ Prefer a command intent over unknown when the message is clearly a mistyped menu
 Never treat menu/main as a booking date.`;
 
 /** Keep WhatsApp snappy — abort slow NLU and fall back to regex. */
-const NLU_LLM_TIMEOUT_MS = Number(process.env.NLU_LLM_TIMEOUT_MS || 600);
+const NLU_LLM_TIMEOUT_MS = Number(process.env.NLU_LLM_TIMEOUT_MS || 450);
 
 async function parseWithChatLlm(
   text: string,
@@ -1099,6 +1147,7 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_message_doctor_text",
     "awaiting_book_whom",
     "awaiting_book_patient",
+    "awaiting_family_pick",
     "awaiting_specialty",
     "awaiting_register_name",
     "awaiting_register_dob",
@@ -1132,7 +1181,30 @@ export function shouldUseLlmForMessage(
   text: string,
   fromVoice?: boolean,
 ): boolean {
-  if (!fromVoice) return stepUsesLlm(step);
+  const t = text.trim();
+  // Chip / list ids and short confirmations never need an LLM round-trip.
+  if (
+    /^(yes|y|no|n|male|female|others?|today|tomorrow|hi|hello|hey|ok|okay)$/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /^(date:|slot:|provider:|reg_email_|confirm:|whom:|specialty:|manage:|cancel:|booking:|rel:|menu:|post:|lang:|idle:)/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  // Pure digits (menu picks) — regex is enough.
+  if (/^\d{1,2}$/.test(t)) return false;
+
+  if (!fromVoice) {
+    // Ultra-short free text at idle → regex/menu; skip LLM latency.
+    if ((!step || step === "idle") && t.length <= 3) return false;
+    return stepUsesLlm(step);
+  }
   const confirmish = new Set([
     "awaiting_confirm",
     "awaiting_attach_offer",
@@ -1147,13 +1219,6 @@ export function shouldUseLlmForMessage(
     "awaiting_register_family_details",
   ]);
   if (step && confirmish.has(step)) return false;
-  const t = text.trim();
-  if (/^(yes|y|no|n|male|female|others?|today|tomorrow)$/i.test(t)) {
-    return false;
-  }
-  if (/^(date:|slot:|provider:|reg_email_|confirm:|whom:|specialty:|manage:|cancel:|booking:|rel:)/i.test(t)) {
-    return false;
-  }
   // Multi-word speech → LLM; also short but content-rich ("kal 10am")
   if (t.split(/\s+/).length >= 2) return true;
   if (parseSpokenTime(t).preferredHour != null) return true;

@@ -44,7 +44,7 @@ export type PracticePatientRow = {
   bookedViaPhone?: string | null
   name: string | null
   patientId: string | null
-  /** Globally unique Medical Record Number, e.g. MR00000042 */
+  /** Medical Record Number, e.g. MR00000042 or PCMR00000001 (clinic/doctor prefix). */
   mrn?: string | null
   /** WhatsApp / portal General Documents on the patient record. */
   attachments?: Array<{
@@ -116,6 +116,8 @@ type PracticeDashboardValue = {
   conversationTick: number
   /** Increments on booking_created / booking_updated (notifications soft-refresh). */
   bookingTick: number
+  /** Increments on notification_created (Notifications tab soft-refresh). */
+  notificationTick: number
   refresh: (opts?: { silent?: boolean }) => Promise<void>
   patchBooking: (id: string, patch: Partial<ProctoBooking>) => void
   setBookings: React.Dispatch<React.SetStateAction<ProctoBooking[]>>
@@ -174,6 +176,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
   const [patients, setPatients] = useState<PracticePatientRow[]>([])
   const [conversationTick, setConversationTick] = useState(0)
   const [bookingTick, setBookingTick] = useState(0)
+  const [notificationTick, setNotificationTick] = useState(0)
   const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bootInFlight = useRef(false)
   const lastBootAt = useRef(0)
@@ -328,6 +331,10 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
         setConversationTick((n) => n + 1)
         return
       }
+      if (event.event === "notification_created") {
+        setNotificationTick((n) => n + 1)
+        return
+      }
       setBookingTick((n) => n + 1)
       const incoming = event.booking as Record<string, unknown> | undefined
       setBookings((prev) => {
@@ -378,6 +385,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       patients,
       conversationTick,
       bookingTick,
+      notificationTick,
       refresh: load,
       patchBooking,
       setBookings,
@@ -401,6 +409,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       patients,
       conversationTick,
       bookingTick,
+      notificationTick,
       load,
       patchBooking,
     ],

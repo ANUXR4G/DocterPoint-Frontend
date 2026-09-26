@@ -31,8 +31,11 @@ export async function processNotificationEvent(notificationId: string): Promise<
     payload.templateKey ?? event.type ?? "BOOKING_CONFIRMATION",
   );
 
-  // Clinic inbox-only rows (no practice/doctor WA number) stay visible in-app.
-  if (recipientRole === "clinic" && !to.replace(/\D/g, "")) {
+  // Clinic inbox-only rows (no practice/doctor WA number, or forced inAppOnly).
+  if (
+    recipientRole === "clinic" &&
+    (Boolean(payload.inAppOnly) || !to.replace(/\D/g, ""))
+  ) {
     await prisma.notificationEvent.update({
       where: { id: event.id },
       data: {
@@ -41,7 +44,9 @@ export async function processNotificationEvent(notificationId: string): Promise<
         payload: {
           ...payload,
           inAppOnly: true,
-          error: "no clinic WhatsApp number — inbox only",
+          error: Boolean(payload.inAppOnly)
+            ? "in-app notification only"
+            : "no clinic WhatsApp number — inbox only",
         },
       },
     });

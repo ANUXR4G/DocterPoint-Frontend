@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import { PrismaClient, ScheduleMode } from "@prisma/client";
+import { allocateUniquePracticeMrnPrefix } from "../src/core/patientMrn.js";
 
 const prisma = new PrismaClient();
 
@@ -129,6 +130,7 @@ async function main() {
       type: "CLINIC",
       specialty: "Endocrinology & Diabetes",
       consultationFee: 800,
+      mrnPrefix: await allocateUniquePracticeMrnPrefix("Dr. Ananya Sharma Clinic"),
       phone: DEMO_CLINIC_PHONE,
       email: "dr.demo@glucoguide.com",
       whatsappBusinessNumber: `+91${DEMO_CLINIC_PHONE}`,
@@ -203,6 +205,7 @@ async function main() {
       type: "SOLO",
       specialty: "Endocrinology",
       consultationFee: 700,
+      mrnPrefix: await allocateUniquePracticeMrnPrefix("Dr. Priya Nair Clinic"),
       phone: DEMO_META_DISPLAY_PHONE,
       whatsappBusinessNumber: DEMO_META_DISPLAY_PHONE,
       email: "dr.solo@glucoguide.com",

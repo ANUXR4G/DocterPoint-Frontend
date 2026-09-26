@@ -89,7 +89,7 @@ export function AnalyticsChartsStrip() {
               mode={period === "yoy" ? "yoy" : "gender"}
             />
           </div>
-          <div className="dashboard-panel dashboard-panel-chart">
+          <div className="dashboard-panel dashboard-panel-chart min-h-[20rem]">
             <AppointmentTrendLineChart
               data={appointmentMetrics}
               active={period}

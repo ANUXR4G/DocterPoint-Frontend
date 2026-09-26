@@ -227,6 +227,72 @@ export class ChatService {
         ),
       );
 
+    // Staff → patient: surface on practice Notifications tab (message to patient).
+    void (async () => {
+      try {
+        const sender = await prisma.user.findUnique({
+          where: { id: senderId },
+          select: { role: true, name: true },
+        });
+        // Patients are handled below; only staff outbound goes here.
+        if (!sender || sender.role === "user") return;
+
+        const membership = await prisma.practiceMember.findFirst({
+          where: {
+            userId: senderId,
+            isActive: true,
+            role: {
+              in: [
+                "DOCTOR",
+                "PRACTICE_OWNER",
+                "PRACTICE_ADMIN",
+                "RECEPTIONIST",
+              ],
+            },
+          },
+          select: { practiceId: true },
+        });
+        if (!membership) return;
+
+        const booking = await prisma.practiceBooking.findFirst({
+          where: {
+            practiceId: membership.practiceId,
+            OR: [
+              { patientId: receiverId, providerId: senderId },
+              { patientId: receiverId },
+            ],
+          },
+          orderBy: [{ updatedAt: "desc" }],
+          select: {
+            id: true,
+            practiceId: true,
+            patientName: true,
+            patientPhone: true,
+            providerId: true,
+          },
+        });
+        if (!booking) return;
+
+        const { NotificationService } = await import(
+          "./procto/notification.service.js"
+        );
+        await NotificationService.enqueueClinicOutboundMessage({
+          practiceId: booking.practiceId,
+          bookingId: booking.id,
+          messagePreview: trimmed,
+          channel: "app",
+          patientName: booking.patientName,
+          patientPhone: booking.patientPhone,
+          providerName: sender.name,
+        });
+      } catch (err) {
+        console.warn(
+          "[clinic-inbox] outbound message notify failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    })();
+
     // Patient → doctor/staff: surface on practice Notifications tab.
     void (async () => {
       try {

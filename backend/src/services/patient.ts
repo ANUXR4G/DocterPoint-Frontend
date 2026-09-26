@@ -12,7 +12,7 @@ import { AppError } from "../core/response.js";
 import { noneExcluded } from "../core/utils.js";
 import { normalizeGender, requireGender } from "../core/gender.js";
 import { ageFromDob, normalizeDateOfBirth } from "../core/dob.js";
-import { allocatePatientMrn } from "../core/patientMrn.js";
+import { allocatePatientMrn, ensurePracticeMrnPrefix } from "../core/patientMrn.js";
 import {
   saveAadharCardImage,
   saveProfilePhotoImage,
@@ -324,25 +324,61 @@ export class PatientService {
     return { img_src: src, imgSrc: src };
   }
 
-  /** Lookup patient by WhatsApp / contact phone (full MSISDN or last 10). */
+  /** Lookup patient by WhatsApp / contact phone (full MSISDN or last 10).
+   * Prefer the primary account (`user.phone`) over family members who only
+   * share this number on `patient.contactNumber` (registered from this chat).
+   */
   static async findByPhone(phone: string) {
     const digits = phone.replace(/\D/g, "");
     if (digits.length < 10) return null;
     const last10 = digits.slice(-10);
 
-    const user = await prisma.user.findFirst({
+    const primary = await prisma.user.findFirst({
+      where: {
+        role: "user",
+        OR: [{ phone: digits }, { phone: { endsWith: last10 } }],
+        NOT: { email: { endsWith: "@patients.glucoguide.local" } },
+      },
+      include: { patient: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (primary) return primary;
+
+    const primaryAny = await prisma.user.findFirst({
+      where: {
+        role: "user",
+        OR: [{ phone: digits }, { phone: { endsWith: last10 } }],
+      },
+      include: { patient: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (primaryAny) return primaryAny;
+
+    const byContact = await prisma.user.findFirst({
       where: {
         role: "user",
         OR: [
-          { phone: digits },
-          { phone: { endsWith: last10 } },
+          { patient: { contactNumber: digits } },
+          { patient: { contactNumber: { endsWith: last10 } } },
+        ],
+        NOT: { email: { endsWith: "@patients.glucoguide.local" } },
+      },
+      include: { patient: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (byContact) return byContact;
+
+    return prisma.user.findFirst({
+      where: {
+        role: "user",
+        OR: [
           { patient: { contactNumber: digits } },
           { patient: { contactNumber: { endsWith: last10 } } },
         ],
       },
       include: { patient: true },
+      orderBy: { createdAt: "asc" },
     });
-    return user;
   }
 
   /**
@@ -435,6 +471,10 @@ export class PatientService {
     relationship?: string | null;
     /** Emirates ID / Aadhaar / National ID. */
     nationalId?: string | null;
+    /** Practice that owns this WhatsApp line — MRN gets clinic/doctor prefix. */
+    practiceId?: string | null;
+    /** Optional override; otherwise loaded/derived from practice. */
+    mrnPrefix?: string | null;
   }) {
     // Keep full WhatsApp MSISDN (e.g. 9715… / 9198…) — do not strip to last 10 / force +91.
     const phone = data.phone.replace(/\D/g, "");
@@ -552,7 +592,11 @@ export class PatientService {
       `wa-reg-${phone}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     );
 
-    const mrn = await allocatePatientMrn();
+    let mrnPrefix = data.mrnPrefix?.trim() || null;
+    if (!mrnPrefix && data.practiceId?.trim()) {
+      mrnPrefix = await ensurePracticeMrnPrefix(data.practiceId.trim());
+    }
+    const mrn = await allocatePatientMrn(prisma, { prefix: mrnPrefix });
 
     const user = await prisma.user.create({
       data: {

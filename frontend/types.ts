@@ -413,9 +413,19 @@ export type TypeAnalytics = Record<
   {
     patients: GenderCountBucket
     appointments: GenderCountBucket
+    status?: {
+      completed: number
+      cancelled: number
+      rescheduled: number
+    }
     compare?: {
       patients: GenderCountBucket
       appointments: GenderCountBucket
+      status?: {
+        completed: number
+        cancelled: number
+        rescheduled: number
+      }
     }
   }
 >
@@ -429,9 +439,15 @@ export type AnalyticMetrics = {
   others?: number
   unknown?: number
   hasMetrics: boolean
+  completed?: number
+  cancelled?: number
+  rescheduled?: number
   /** Present for yoy — last-year totals in the same gender shape */
   compareMale?: number
   compareFemale?: number
   compareOthers?: number
   compareUnknown?: number
+  compareCompleted?: number
+  compareCancelled?: number
+  compareRescheduled?: number
 }

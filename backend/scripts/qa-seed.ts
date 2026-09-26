@@ -9,6 +9,7 @@ import {
   PrismaClient,
   ScheduleMode,
 } from "@prisma/client";
+import { allocateUniquePracticeMrnPrefix } from "../src/core/patientMrn.js";
 
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = "Demo@12345";
@@ -153,6 +154,7 @@ async function main() {
         type: "CLINIC",
         specialty: "Diabetes QA",
         consultationFee: 700,
+        mrnPrefix: await allocateUniquePracticeMrnPrefix("QA_CLINIC_A"),
         phone: "9111000001",
         email: "qa.doctor.a@glucoguide.com",
         isActive: true,

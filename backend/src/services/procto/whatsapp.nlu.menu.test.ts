@@ -11,7 +11,7 @@ describe("menuNumberShortcut", () => {
   it("maps 1–6 to the six core main-menu actions", () => {
     assert.equal(menuNumberShortcut("1"), "book");
     assert.equal(menuNumberShortcut("2"), "status");
-    assert.equal(menuNumberShortcut("3"), "register");
+    assert.equal(menuNumberShortcut("3"), "family");
     assert.equal(menuNumberShortcut("4"), "human");
     assert.equal(menuNumberShortcut("5"), "message_doctor");
     assert.equal(menuNumberShortcut("6"), "report");
@@ -19,7 +19,7 @@ describe("menuNumberShortcut", () => {
 
   it("accepts dotted / emoji-keycap forms", () => {
     assert.equal(menuNumberShortcut("1."), "book");
-    assert.equal(menuNumberShortcut("3)"), "register");
+    assert.equal(menuNumberShortcut("3)"), "family");
     assert.equal(menuNumberShortcut("option 2"), "status");
     assert.equal(menuNumberShortcut("1️⃣"), "book");
   });
@@ -35,7 +35,7 @@ describe("menuNumberShortcut", () => {
   it("maps interactive menu list row ids", () => {
     assert.equal(menuNumberShortcut("menu:book"), "book");
     assert.equal(menuNumberShortcut("menu:bookings"), "status");
-    assert.equal(menuNumberShortcut("menu:family"), "register");
+    assert.equal(menuNumberShortcut("menu:family"), "family");
     assert.equal(menuNumberShortcut("menu:support"), "human");
     assert.equal(menuNumberShortcut("menu:message_doctor"), "message_doctor");
     assert.equal(menuNumberShortcut("menu:report"), "report");
@@ -64,12 +64,19 @@ describe("exactMenuIntent", () => {
     assert.equal(exactMenuIntent("Book New Appointment"), "book");
     assert.equal(exactMenuIntent("View / Manage Existing Bookings"), "status");
     assert.equal(exactMenuIntent("My bookings"), "status");
+    assert.equal(exactMenuIntent("My Family Members"), "family");
+    assert.equal(exactMenuIntent("My family"), "family");
     assert.equal(exactMenuIntent("Register Family Member / Dependant"), "register");
     assert.equal(exactMenuIntent("Add family"), "register");
     assert.equal(exactMenuIntent("Talk to Support / Agent"), "human");
     assert.equal(exactMenuIntent("Talk to agent"), "human");
     assert.equal(exactMenuIntent("Message to Doctor"), "message_doctor");
     assert.equal(exactMenuIntent("Attach Document"), "report");
+  });
+
+  it("does not treat Select Appointment as Book", () => {
+    assert.equal(exactMenuIntent("Select Appointment"), null);
+    assert.equal(exactMenuIntent("select appointment"), null);
   });
 
   it("maps main menu / menu to help", () => {
@@ -119,7 +126,7 @@ describe("BotPrompts.mainMenuOptions", () => {
     const reply = BotPrompts.mainMenuOptions("en");
     assert.match(reply, /1 · Book New Appointment/);
     assert.match(reply, /2 · View \/ Manage Existing Bookings/);
-    assert.match(reply, /3 · Register Family Member \/ Dependant/);
+    assert.match(reply, /3 · My Family Members/);
     assert.match(reply, /4 · Talk to Support \/ Agent/);
     assert.match(reply, /5 · Message to Doctor/);
     assert.match(reply, /6 · Attach Document/);

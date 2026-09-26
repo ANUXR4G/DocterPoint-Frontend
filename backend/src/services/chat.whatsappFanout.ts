@@ -10,8 +10,10 @@ import {
   sendWhatsAppText,
   type WhatsAppSendResult,
 } from "./procto/whatsapp.client.js";
-import { OPT_OUT_FOOTER } from "./procto/whatsapp.metaTemplates.js";
+import { OPT_OUT_FOOTER, CARE_REPLY_HINT } from "./procto/whatsapp.metaTemplates.js";
 
+/** How long session footers stay suppressed after first show (WhatsApp CS window). */
+const SESSION_HINTS_TTL_MS = 24 * 60 * 60 * 1000;
 const PREVIEW_MAX = 280;
 
 /** Keep full WhatsApp MSISDN (country + national); bare 10-digit stays legacy India. */
@@ -301,15 +303,49 @@ function sessionBody(
   providerName: string,
   practiceName: string,
   message: string,
+  includeHints: boolean,
 ): string {
-  return (
-    `*${providerName}* (${practiceName}):\n` +
-    `${message.trim()}\n\n` +
-    `Reply here on WhatsApp, or in the GlucoGuide app / patient portal.` +
-    OPT_OUT_FOOTER
-  );
+  const core =
+    `*${providerName}* (${practiceName}):\n` + `${message.trim()}`;
+  if (!includeHints) return core;
+  return core + CARE_REPLY_HINT + OPT_OUT_FOOTER;
 }
 
+function hintsStillFresh(shownAt: unknown): boolean {
+  if (typeof shownAt !== "string" || !shownAt.trim()) return false;
+  const t = Date.parse(shownAt);
+  if (!Number.isFinite(t)) return false;
+  return Date.now() - t < SESSION_HINTS_TTL_MS;
+}
+
+async function shouldIncludeSessionHints(
+  practiceId: string,
+  patientPhone: string,
+): Promise<boolean> {
+  const digits = patientPhone.replace(/\D/g, "");
+  const last10 = digits.slice(-10);
+  if (last10.length < 10) return true;
+
+  const conv = await prisma.whatsAppConversation.findFirst({
+    where: {
+      practiceId,
+      OR: [
+        ...(digits.length >= 11 ? [{ patientPhone: digits }] : []),
+        { patientPhone: last10 },
+        { patientPhone: { endsWith: last10 } },
+      ],
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { state: true },
+  });
+  if (!conv) return true;
+
+  const state =
+    conv.state && typeof conv.state === "object" && !Array.isArray(conv.state)
+      ? (conv.state as Record<string, unknown>)
+      : {};
+  return !hintsStillFresh(state.careSessionHintsShownAt);
+}
 function logResult(
   label: string,
   result: WhatsAppSendResult,
@@ -339,6 +375,25 @@ export async function fanOutCareMessageToWhatsApp(
   try {
     const ctx = await resolveStaffToPatientContext(senderId, receiverId);
     if (!ctx) return;
+
+    // Park the bot immediately (before Meta latency) so the patient's next
+    // free-text reply lands in care chat, not a leftover awaiting_* wizard.
+    try {
+      const { markWhatsAppConversationHandedOff } = await import(
+        "./chat.whatsappInbound.js"
+      );
+      await markWhatsAppConversationHandedOff({
+        practiceId: ctx.practiceId,
+        patientPhone: ctx.patientPhone,
+        carePatientId: receiverId,
+        careProviderId: senderId,
+      });
+    } catch (err) {
+      console.warn(
+        "[care-chat-wa] early handoff mark failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
 
     if (await isOptedOut(ctx.practiceId, ctx.patientPhone)) {
       console.log(
@@ -379,15 +434,30 @@ export async function fanOutCareMessageToWhatsApp(
       lineSource: line.source,
     };
 
+    const includeHints = await shouldIncludeSessionHints(
+      ctx.practiceId,
+      ctx.patientPhone,
+    );
+    const body = sessionBody(
+      ctx.providerName,
+      ctx.practiceName,
+      content,
+      includeHints,
+    );
+
     let lastSession: WhatsAppSendResult | null = null;
     let delivered = false;
     for (const phoneNumberId of candidates) {
       const session = await sendWhatsAppText(
         ctx.patientPhone,
-        sessionBody(ctx.providerName, ctx.practiceName, content),
+        body,
         phoneNumberId,
       );
-      logResult("session text", session, { ...extraBase, phoneNumberId });
+      logResult("session text", session, {
+        ...extraBase,
+        phoneNumberId,
+        hints: includeHints,
+      });
       lastSession = session;
       if (session.ok || session.simulated) {
         delivered = true;
@@ -434,13 +504,16 @@ export async function fanOutCareMessageToWhatsApp(
       }
     }
 
-    // Park the booking bot so patient replies land in care chat, not bot flows.
+    // Refresh handoff + session-hint stamp after a successful delivery.
     if (delivered) {
       void import("./chat.whatsappInbound.js")
         .then(({ markWhatsAppConversationHandedOff }) =>
           markWhatsAppConversationHandedOff({
             practiceId: ctx.practiceId,
             patientPhone: ctx.patientPhone,
+            markSessionHintsShown: includeHints,
+            carePatientId: receiverId,
+            careProviderId: senderId,
           }),
         )
         .catch((err) =>
