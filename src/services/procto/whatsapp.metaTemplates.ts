@@ -27,9 +27,13 @@ export type MetaTemplateDef = {
   audience: "patient" | "clinic";
 };
 
-/** Footer appended to free-form / session replies that are transactional. */
+/** Footer appended once per free-form / session transactional reply. Keep short. */
 export const OPT_OUT_FOOTER =
-  "\n\nReply STOP to opt out of appointment WhatsApp alerts from this clinic.";
+  "\n\nReply STOP to leave clinic WhatsApp chat and use the bot again.";
+
+/** Care-chat session hint (portal/app) — shown once per open WhatsApp window. */
+export const CARE_REPLY_HINT =
+  "\n\nReply here to message the clinic. Reply BOT for the booking menu.";
 
 /**
  * Approved utility copy — no promos, discounts, upsells, or “check our offers”.
@@ -305,7 +309,9 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
 ];
 
 export function getMetaTemplateByKey(key: string): MetaTemplateDef | undefined {
-  return META_UTILITY_TEMPLATES.find((t) => t.key === key);
+  // Day-before reminder reuses the approved appointment reminder template.
+  const resolved = key === "REMINDER_24H" ? "REMINDER" : key;
+  return META_UTILITY_TEMPLATES.find((t) => t.key === resolved);
 }
 
 /** Fill `{{param}}` placeholders from a values map. */
@@ -378,6 +384,7 @@ export function payloadToMetaParams(
         location: s("location", "clinic"),
       };
     case "REMINDER":
+    case "REMINDER_24H":
       return {
         practice_name: s("practiceName", "your clinic"),
         when_label: s("whenLabel", "your scheduled time"),

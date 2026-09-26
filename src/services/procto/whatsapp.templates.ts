@@ -55,7 +55,7 @@ export const BotPrompts = {
       "*Main menu*\n" +
         "1 · Book New Appointment\n" +
         "2 · View / Manage Existing Bookings\n" +
-        "3 · Register Family Member / Dependant\n" +
+        "3 · My Family Members\n" +
         "4 · Talk to Support / Agent\n" +
         "5 · Message to Doctor\n" +
         "6 · Attach Document\n\n" +
@@ -63,7 +63,7 @@ export const BotPrompts = {
       "*मुख्य मेनू*\n" +
         "1 · नई अपॉइंटमेंट बुक करें\n" +
         "2 · बुकिंग देखें / मैनेज करें\n" +
-        "3 · परिवार सदस्य रजिस्टर करें\n" +
+        "3 · मेरे परिवार सदस्य\n" +
         "4 · सपोर्ट / एजेंट से बात करें\n" +
         "5 · डॉक्टर को संदेश\n" +
         "6 · दस्तावेज़ भेजें\n\n" +
@@ -1003,8 +1003,27 @@ export const BotPrompts = {
     const lines = options.map((o) => `${o.index}. ${o.label}`).join("\n");
     return L(
       lang,
-      `Which *family member / dependent*?\n${lines}\n\nTap a profile below, or reply with a *number*.`,
-      `कौन सा *परिवार सदस्य / आश्रित*?\n${lines}\n\nनीचे प्रोफ़ाइल चुनें, या *संख्या* लिखें।`,
+      `Which *family member / dependent*?\n${lines}\n\nTap a profile below, or reply with a *number* or *name*.`,
+      `कौन सा *परिवार सदस्य / आश्रित*?\n${lines}\n\nनीचे प्रोफ़ाइल चुनें, या *संख्या* / *नाम* लिखें।`,
+    );
+  },
+
+  askFamilyMembersPick(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    if (!options.length) {
+      return L(
+        lang,
+        "No family members on this WhatsApp yet.\nTap *Add family* below, or reply *ADD FAMILY* to register someone.",
+        "इस व्हाट्सऐप पर अभी कोई परिवार सदस्य नहीं है।\nनीचे *Add family* दबाएँ, या रजिस्टर के लिए *ADD FAMILY* लिखें।",
+      );
+    }
+    const lines = options.map((o) => `${o.index}. ${o.label}`).join("\n");
+    return L(
+      lang,
+      `*Your family members* (${options.length}):\n${lines}\n\nTap a name to *book* for them, type their *name*, or choose *Add family* to register someone new.`,
+      `*आपके परिवार सदस्य* (${options.length}):\n${lines}\n\nबुक करने के लिए नाम चुनें / लिखें, या नया जोड़ने के लिए *Add family*।`,
     );
   },
 
@@ -1608,6 +1627,19 @@ export function renderNotificationTemplate(
     const preview = str(enriched, "messagePreview", "");
     return withOptOut(
       `${patient} sent a message via ${via} at ${practice}${
+        preview ? `: “${preview}”` : "."
+      }`,
+      str(payload, "recipientRole"),
+    );
+  }
+  if (templateKey === "CLINIC_OUTBOUND_MESSAGE") {
+    const via =
+      str(enriched, "messageChannel", "app") === "whatsapp"
+        ? "WhatsApp"
+        : "the app";
+    const preview = str(enriched, "messagePreview", "");
+    return withOptOut(
+      `Message to ${patient} via ${via} at ${practice}${
         preview ? `: “${preview}”` : "."
       }`,
       str(payload, "recipientRole"),

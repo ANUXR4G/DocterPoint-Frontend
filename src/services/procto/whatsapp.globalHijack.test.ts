@@ -14,6 +14,16 @@ describe("Global keyword hijacks", () => {
     assert.equal(parseGlobalKeywordHijack("attach document"), "attach");
   });
 
+  it("maps voice/STT Book variants so mid-flow (e.g. docs) can abort", () => {
+    assert.equal(parseGlobalKeywordHijack("Book."), "book");
+    assert.equal(parseGlobalKeywordHijack("book!"), "book");
+    assert.equal(parseGlobalKeywordHijack("book please"), "book");
+    assert.equal(parseGlobalKeywordHijack("please book"), "book");
+    assert.equal(parseGlobalKeywordHijack("book appointment"), "book");
+    assert.equal(parseGlobalKeywordHijack("new booking"), "book");
+    assert.equal(parseGlobalKeywordHijack("I want to book"), "book");
+  });
+
   it("maps Main / Menu to main menu and Help / Agent to support", () => {
     assert.equal(parseGlobalKeywordHijack("Main"), "main_menu");
     assert.equal(parseGlobalKeywordHijack("Menu"), "main_menu");
@@ -41,7 +51,7 @@ describe("Global keyword hijacks", () => {
     assert.equal(parseGlobalKeywordHijack("request callback"), "callback");
   });
 
-  it("ignores interactive ids and free sentences", () => {
+  it("ignores interactive ids and free sentences with dates", () => {
     assert.equal(parseGlobalKeywordHijack("menu:book"), null);
     assert.equal(parseGlobalKeywordHijack("cancel:yes"), null);
     assert.equal(parseGlobalKeywordHijack("doc:general"), null);

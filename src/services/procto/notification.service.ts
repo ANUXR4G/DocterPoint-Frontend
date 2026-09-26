@@ -140,6 +140,34 @@ async function createAndEnqueue(data: {
       },
     });
     void enqueueNotificationEvent(event.id);
+
+    // Live refresh for practice Notifications tab.
+    const role = String(data.payload.recipientRole || "");
+    const templateKey = String(data.payload.templateKey || "");
+    const inboxVisible =
+      role === "clinic" ||
+      (role === "patient" &&
+        (PATIENT_OUTBOUND_INBOX_KEYS as readonly string[]).includes(
+          templateKey,
+        ));
+    if (inboxVisible) {
+      void import("./proctoSocket.js")
+        .then(({ broadcastProctoEvent }) =>
+          broadcastProctoEvent(data.practiceId, {
+            event: "notification_created",
+            notification: {
+              id: event.id,
+              practice_id: data.practiceId,
+              booking_id: data.bookingId,
+              template_key: templateKey,
+              recipient_role: role,
+              created_at: event.createdAt.toISOString(),
+            },
+          }),
+        )
+        .catch(() => undefined);
+    }
+
     return event;
   } catch (error) {
     console.warn("notification enqueue skipped:", error);
@@ -158,6 +186,40 @@ const IDEMPOTENT_CLINIC_TEMPLATE_KEYS = new Set([
   "CLINIC_COMPLETED",
 ]);
 
+/** Keys never shown on the practice Notifications tab. */
+const EXCLUDED_INBOX_TEMPLATE_KEYS = [
+  "CLINIC_COMPLETED",
+  "VISIT_SUMMARY",
+] as const;
+
+/**
+ * Clinic-facing inbox rows: appointments, inbound patient messages, attachments,
+ * and staff→patient care-chat audits.
+ */
+const CLINIC_INBOX_TEMPLATE_KEYS = [
+  "CLINIC_NEW_BOOKING",
+  "CLINIC_CANCEL",
+  "CLINIC_RESCHEDULE",
+  "CLINIC_MESSAGE",
+  "CLINIC_DOCUMENT",
+  "CLINIC_OUTBOUND_MESSAGE",
+] as const;
+
+/**
+ * Patient-bound WhatsApp sends shown under "Message to patient"
+ * (excludes VISIT_SUMMARY).
+ */
+const PATIENT_OUTBOUND_INBOX_KEYS = [
+  "BOOKING_CONFIRMATION",
+  "CANCELLATION",
+  "REMINDER",
+  "REMINDER_24H",
+  "RESCHEDULE",
+  "PRESCRIPTION_UPDATE",
+  "QUEUE_ALERT",
+  "OVERRIDE_IMPACT",
+] as const;
+
 /**
  * Always write a clinic inbox row. WhatsApp send is optional — if there is no
  * clinic phone, the worker marks the event SKIPPED (in-app only) so status /
@@ -173,6 +235,8 @@ async function enqueueClinicInbox(data: {
   type: NotificationType;
   templateKey: string;
   payload: Record<string, unknown>;
+  /** Never WhatsApp the clinic — in-app Notifications row only. */
+  inAppOnly?: boolean;
 }) {
   if (
     data.bookingId &&
@@ -193,7 +257,10 @@ async function enqueueClinicInbox(data: {
     if (existing) return existing;
   }
 
-  const clinicTo = await resolveClinicNotifyPhone(data.practiceId);
+  const forceInApp = Boolean(data.inAppOnly);
+  const clinicTo = forceInApp
+    ? ""
+    : await resolveClinicNotifyPhone(data.practiceId);
   return createAndEnqueue({
     practiceId: data.practiceId,
     bookingId: data.bookingId,
@@ -203,7 +270,7 @@ async function enqueueClinicInbox(data: {
       to: clinicTo || "",
       templateKey: data.templateKey,
       recipientRole: "clinic",
-      inAppOnly: !clinicTo,
+      inAppOnly: forceInApp || !clinicTo,
     },
   });
 }
@@ -286,7 +353,10 @@ export const NotificationService = {
     return true;
   },
 
-  async enqueueReminder(bookingId: string) {
+  async enqueueReminder(
+    bookingId: string,
+    opts?: { kind?: "soon" | "24h" },
+  ) {
     const booking = await loadBooking(bookingId);
     if (!booking) return null;
 
@@ -298,13 +368,28 @@ export const NotificationService = {
       return null;
     }
 
+    const kind = opts?.kind === "24h" ? "24h" : "soon";
+    const templateKey = kind === "24h" ? "REMINDER_24H" : "REMINDER";
+
+    const already = await prisma.notificationEvent.findFirst({
+      where: {
+        bookingId: booking.id,
+        type: NotificationType.REMINDER,
+        status: { in: ["PENDING", "SENT"] },
+        payload: { path: ["templateKey"], equals: templateKey },
+      },
+      select: { id: true },
+    });
+    if (already) return already;
+
     return createAndEnqueue({
       practiceId: booking.practiceId,
       bookingId: booking.id,
       type: NotificationType.REMINDER,
       payload: {
         to: booking.patientPhone,
-        templateKey: "REMINDER",
+        templateKey,
+        reminderKind: kind,
         recipientRole: "patient",
         practiceName: booking.practice.name,
         providerName: booking.provider?.name ?? "",
@@ -536,22 +621,20 @@ export const NotificationService = {
   },
 
   /**
-   * Clinic inbox (+ WA text) for status changes that lack a dedicated CLINIC_* Meta template.
-   * Covers WAITING / NO_SHOW / COMPLETED so every queue change reaches the doctor.
+   * Clinic inbox for queue status — WAITING / NO_SHOW only.
+   * Visit completed is intentionally omitted from the Notifications tab.
    */
   async enqueueClinicStatusChange(
     bookingId: string,
     status: "WAITING" | "NO_SHOW" | "COMPLETED",
   ) {
+    if (status === "COMPLETED") return null;
+
     const booking = await loadBooking(bookingId);
     if (!booking) return null;
 
     const templateKey =
-      status === "WAITING"
-        ? "CLINIC_WAITING"
-        : status === "NO_SHOW"
-          ? "CLINIC_NO_SHOW"
-          : "CLINIC_COMPLETED";
+      status === "WAITING" ? "CLINIC_WAITING" : "CLINIC_NO_SHOW";
 
     return enqueueClinicInbox({
       practiceId: booking.practiceId,
@@ -564,11 +647,7 @@ export const NotificationService = {
         patientName: booking.patientName ?? "Patient",
         patientPhone: booking.patientPhone,
         statusLabel:
-          status === "WAITING"
-            ? "arrived / waiting"
-            : status === "NO_SHOW"
-              ? "no-show"
-              : "completed",
+          status === "WAITING" ? "arrived / waiting" : "no-show",
         ...whenFields(booking),
       },
     });
@@ -688,8 +767,51 @@ export const NotificationService = {
   },
 
   /**
-   * Practice inbox: undismissed clinic-facing notification events only.
-   * Patient WhatsApp send rows are omitted so each event appears once.
+   * Clinic inbox audit when staff messages a patient (care chat → WhatsApp fan-out).
+   * In-app only — WhatsApp delivery is handled by the care-chat fan-out path.
+   */
+  async enqueueClinicOutboundMessage(opts: {
+    practiceId: string;
+    bookingId: string;
+    messagePreview: string;
+    channel: "whatsapp" | "app";
+    patientName?: string | null;
+    patientPhone?: string | null;
+    providerName?: string | null;
+  }) {
+    const preview = String(opts.messagePreview || "").trim();
+    if (!preview) return null;
+    const booking = await loadBooking(opts.bookingId);
+    if (!booking || booking.practiceId !== opts.practiceId) return null;
+
+    return enqueueClinicInbox({
+      practiceId: booking.practiceId,
+      bookingId: booking.id,
+      type: NotificationType.QUEUE_ALERT,
+      templateKey: "CLINIC_OUTBOUND_MESSAGE",
+      inAppOnly: true,
+      payload: {
+        practiceName: booking.practice.name,
+        providerName:
+          opts.providerName?.trim() || booking.provider?.name || "",
+        patientName:
+          opts.patientName?.trim() || booking.patientName || "Patient",
+        patientPhone: opts.patientPhone?.trim() || booking.patientPhone,
+        messagePreview:
+          preview.length > 200 ? `${preview.slice(0, 199)}…` : preview,
+        messageChannel: opts.channel,
+        ...whenFields(booking),
+      },
+    });
+  },
+
+  /**
+   * Practice Notifications inbox:
+   * - Appointments / bookings (clinic)
+   * - Messages from patient
+   * - Attachments
+   * - Message to patient (care chat + patient WhatsApp utilities)
+   * Excludes visit completed and visit summary sent.
    */
   async listForPractice(
     practiceId: string,
@@ -708,24 +830,44 @@ export const NotificationService = {
     const skip = opts?.skip ?? 0;
     const statusFilter =
       opts?.status && opts.status !== "ALL" ? opts.status.trim() : undefined;
-    const kindKeys = clinicInboxKindTemplateKeys(opts?.kind);
+    const scope = clinicInboxKindScope(opts?.kind);
+
+    const templateOr = (keys: readonly string[]) =>
+      keys.map((key) => ({
+        payload: { path: ["templateKey"], equals: key },
+      }));
+
+    const recipientClauses: object[] = [];
+    if (scope.clinicKeys.length) {
+      recipientClauses.push({
+        AND: [
+          { payload: { path: ["recipientRole"], equals: "clinic" } },
+          { OR: templateOr(scope.clinicKeys) },
+        ],
+      });
+    }
+    if (scope.patientKeys.length) {
+      recipientClauses.push({
+        AND: [
+          { payload: { path: ["recipientRole"], equals: "patient" } },
+          { OR: templateOr(scope.patientKeys) },
+        ],
+      });
+    }
 
     const where = {
       practiceId,
       dismissedAt: null as Date | null,
       ...(statusFilter ? { status: statusFilter } : {}),
       AND: [
-        // Inbox is for the clinic — patient WhatsApp send audits are separate.
-        { payload: { path: ["recipientRole"], equals: "clinic" } },
-        ...(kindKeys?.length
-          ? [
-              {
-                OR: kindKeys.map((key) => ({
-                  payload: { path: ["templateKey"], equals: key },
-                })),
-              },
-            ]
-          : []),
+        ...(recipientClauses.length ? [{ OR: recipientClauses }] : []),
+        {
+          NOT: {
+            OR: EXCLUDED_INBOX_TEMPLATE_KEYS.map((key) => ({
+              payload: { path: ["templateKey"], equals: key },
+            })),
+          },
+        },
       ],
     };
 
@@ -885,31 +1027,45 @@ export const NotificationService = {
   },
 };
 
-function clinicInboxKindTemplateKeys(
-  kind?: string | null,
-): string[] | null {
+function clinicInboxKindScope(kind?: string | null): {
+  clinicKeys: readonly string[];
+  patientKeys: readonly string[];
+} {
   const k = String(kind || "")
     .trim()
     .toLowerCase();
-  if (!k || k === "all") return null;
-  const map: Record<string, string[]> = {
-    appointments: [
-      "CLINIC_NEW_BOOKING",
-      "CLINIC_CANCEL",
-      "CLINIC_RESCHEDULE",
-    ],
-    messages: ["CLINIC_MESSAGE"],
-    documents: ["CLINIC_DOCUMENT"],
-    queue: [
-      "CLINIC_QUEUE_ALERT",
-      "CLINIC_WAITING",
-      "CLINIC_NO_SHOW",
-      "CLINIC_COMPLETED",
-    ],
-    support: ["CLINIC_SUPPORT"],
-    schedule: ["CLINIC_OVERRIDE", "OVERRIDE_IMPACT", "CLINIC_MODE_CHANGE"],
+  if (!k || k === "all") {
+    return {
+      clinicKeys: CLINIC_INBOX_TEMPLATE_KEYS,
+      patientKeys: PATIENT_OUTBOUND_INBOX_KEYS,
+    };
+  }
+  if (k === "appointments") {
+    return {
+      clinicKeys: [
+        "CLINIC_NEW_BOOKING",
+        "CLINIC_CANCEL",
+        "CLINIC_RESCHEDULE",
+      ],
+      patientKeys: [],
+    };
+  }
+  if (k === "messages") {
+    return { clinicKeys: ["CLINIC_MESSAGE"], patientKeys: [] };
+  }
+  if (k === "documents") {
+    return { clinicKeys: ["CLINIC_DOCUMENT"], patientKeys: [] };
+  }
+  if (k === "outbound") {
+    return {
+      clinicKeys: ["CLINIC_OUTBOUND_MESSAGE"],
+      patientKeys: PATIENT_OUTBOUND_INBOX_KEYS,
+    };
+  }
+  return {
+    clinicKeys: CLINIC_INBOX_TEMPLATE_KEYS,
+    patientKeys: PATIENT_OUTBOUND_INBOX_KEYS,
   };
-  return map[k] ?? null;
 }
 
 function notificationTitle(
@@ -918,26 +1074,28 @@ function notificationTitle(
 ): string {
   const key = String(payload.templateKey || type);
   const map: Record<string, string> = {
-    BOOKING_CONFIRMATION: "Booking confirmed",
+    BOOKING_CONFIRMATION: "Message to patient · Booking confirmed",
     CLINIC_NEW_BOOKING: "New appointment",
-    CANCELLATION: "Booking cancelled",
+    CANCELLATION: "Message to patient · Booking cancelled",
     CLINIC_CANCEL: "Booking cancelled",
-    REMINDER: "Appointment reminder",
-    RESCHEDULE: "Booking rescheduled",
+    REMINDER: "Message to patient · Reminder",
+    REMINDER_24H: "Message to patient · Reminder (24h)",
+    RESCHEDULE: "Message to patient · Rescheduled",
     CLINIC_RESCHEDULE: "Booking rescheduled",
-    QUEUE_ALERT: "Queue update",
+    QUEUE_ALERT: "Message to patient · Queue update",
     CLINIC_QUEUE_ALERT: "Patient called in",
     CLINIC_WAITING: "Patient arrived / waiting",
     CLINIC_NO_SHOW: "Patient marked no-show",
     CLINIC_COMPLETED: "Visit completed",
-    CLINIC_DOCUMENT: "Document uploaded",
+    CLINIC_DOCUMENT: "Attachment uploaded",
     CLINIC_OVERRIDE: "Schedule override",
     CLINIC_MODE_CHANGE: "Booking type change",
     CLINIC_SUPPORT: "Support request",
-    CLINIC_MESSAGE: "New patient message",
+    CLINIC_MESSAGE: "Message from patient",
+    CLINIC_OUTBOUND_MESSAGE: "Message to patient",
     VISIT_SUMMARY: "Visit summary sent",
-    PRESCRIPTION_UPDATE: "Prescription update sent",
-    OVERRIDE_IMPACT: "Schedule change notice",
+    PRESCRIPTION_UPDATE: "Message to patient · Prescription",
+    OVERRIDE_IMPACT: "Message to patient · Schedule change",
   };
   return map[key] || key.replace(/_/g, " ");
 }
@@ -994,6 +1152,14 @@ function notificationSummary(
         : "via app";
     const preview = String(payload.messagePreview || "").trim();
     extras.push(via);
+    if (preview) extras.push(`“${preview}”`);
+  } else if (key === "CLINIC_OUTBOUND_MESSAGE") {
+    const via =
+      String(payload.messageChannel || "") === "whatsapp"
+        ? "via WhatsApp"
+        : "via app";
+    const preview = String(payload.messagePreview || "").trim();
+    extras.push(`sent ${via}`);
     if (preview) extras.push(`“${preview}”`);
   } else if (key === "CLINIC_NEW_BOOKING" || key === "CLINIC_RESCHEDULE") {
     if (channel) extras.push(channel.replace(/_/g, " ").toLowerCase());

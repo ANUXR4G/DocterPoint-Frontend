@@ -7,6 +7,10 @@ export type ProctoLiveEvent =
   | {
       event: "conversation_updated";
       conversation: Record<string, unknown>;
+    }
+  | {
+      event: "notification_created";
+      notification: Record<string, unknown>;
     };
 
 export function proctoRoomId(practiceId: string): string {

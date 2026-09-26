@@ -1,5 +1,7 @@
 import {
+  BookingStatus,
   MessageTemplateStatus,
+  NotificationType,
   PracticeMemberRole,
   PracticeSubscriptionStatus,
   WhatsAppNumberStatus,
@@ -213,26 +215,39 @@ export const PlatformAdminService = {
       1,
     );
     // Daily chart may need bookings outside the trend window when viewing last month with months=3
-    const dailyBookingsSource =
-      dailyMonthStart < trendStart
-        ? await prisma.practiceBooking.findMany({
-            where: {
-              createdAt: {
-                gte: dailyMonthStart,
-                lte: new Date(
-                  dailyBase.getFullYear(),
-                  dailyBase.getMonth() + 1,
-                  0,
-                  23,
-                  59,
-                  59,
-                  999,
-                ),
-              },
+    const dailyMonthEnd = new Date(
+      dailyBase.getFullYear(),
+      dailyBase.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+    const [dailyStatusBookings, dailyReschedules] = await Promise.all([
+      prisma.practiceBooking.findMany({
+        where: {
+          OR: [
+            {
+              status: BookingStatus.COMPLETED,
+              updatedAt: { gte: dailyMonthStart, lte: dailyMonthEnd },
             },
-            select: { createdAt: true },
-          })
-        : bookingsRecent;
+            {
+              status: BookingStatus.CANCELED,
+              updatedAt: { gte: dailyMonthStart, lte: dailyMonthEnd },
+            },
+          ],
+        },
+        select: { status: true, updatedAt: true },
+      }),
+      prisma.notificationEvent.findMany({
+        where: {
+          type: NotificationType.RESCHEDULE,
+          createdAt: { gte: dailyMonthStart, lte: dailyMonthEnd },
+        },
+        select: { createdAt: true },
+      }),
+    ]);
 
     const dailyBookings = Array.from({ length: daysInMonth }, (_, day) => {
       const dayStart = new Date(
@@ -249,10 +264,29 @@ export const PlatformAdminService = {
         59,
         999,
       );
-      const count = dailyBookingsSource.filter(
-        (b) => b.createdAt >= dayStart && b.createdAt <= dayEnd,
+      const completed = dailyStatusBookings.filter(
+        (b) =>
+          b.status === BookingStatus.COMPLETED &&
+          b.updatedAt >= dayStart &&
+          b.updatedAt <= dayEnd,
       ).length;
-      return { day: day + 1, count };
+      const cancelled = dailyStatusBookings.filter(
+        (b) =>
+          b.status === BookingStatus.CANCELED &&
+          b.updatedAt >= dayStart &&
+          b.updatedAt <= dayEnd,
+      ).length;
+      const rescheduled = dailyReschedules.filter(
+        (n) => n.createdAt >= dayStart && n.createdAt <= dayEnd,
+      ).length;
+      return {
+        day: day + 1,
+        date: `${dailyBase.getFullYear()}-${String(dailyBase.getMonth() + 1).padStart(2, "0")}-${String(day + 1).padStart(2, "0")}`,
+        completed,
+        cancelled,
+        rescheduled,
+        count: completed + cancelled + rescheduled,
+      };
     });
 
     const subscriptionBreakdown = await prisma.practiceSubscription.groupBy({

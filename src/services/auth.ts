@@ -13,7 +13,7 @@ import { settings, frontendBaseUrl } from "../config/index.js";
 import { assertValidTimeRange, minutesOf } from "./procto/slotEngine.js";
 import { requireGender } from "../core/gender.js";
 import { normalizeDateOfBirth, ageFromDob } from "../core/dob.js";
-import { allocatePatientMrn } from "../core/patientMrn.js";
+import { allocatePatientMrn, allocateUniquePracticeMrnPrefix } from "../core/patientMrn.js";
 
 type AuthRole = "user" | "doctor" | "admin";
 
@@ -528,13 +528,17 @@ export class AuthService {
       slug = `dr-${baseSlug}-${suffix++}`;
     }
 
+    const practiceName = `Dr. ${name}`;
+    const mrnPrefix = await allocateUniquePracticeMrnPrefix(practiceName);
+
     const practice = await prisma.practice.create({
       data: {
-        name: `Dr. ${name}`,
+        name: practiceName,
         slug,
         type: "SOLO",
         specialty: "General",
         consultationFee,
+        mrnPrefix,
         phone,
         email,
         registrationNo: licenseNo,

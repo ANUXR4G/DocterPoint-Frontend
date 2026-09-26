@@ -223,12 +223,12 @@ export function isOptIn(text: string): boolean {
 export function optOutAck(lang?: WaLang): string {
   return L(
     lang,
-    "You're opted out of *appointment WhatsApp alerts* from this clinic.\n" +
-      "You can still message here to book or ask FAQs.\n" +
-      "Reply *START* anytime to receive appointment alerts again.",
-    "आपने इस क्लिनिक की *अपॉइंटमेंट WhatsApp अलर्ट* बंद कर दी हैं।\n" +
-      "बुकिंग या FAQ के लिए यहाँ मैसेज कर सकते हैं।\n" +
-      "फिर से अलर्ट पाने के लिए कभी भी *START* लिखें।",
+    "You're out of *clinic WhatsApp chat* and back with the booking assistant.\n" +
+      "Appointment alert messages are paused. Reply *START* to turn alerts back on.\n" +
+      "Reply *Menu* anytime for booking help.",
+    "आप *क्लिनिक WhatsApp चैट* से बाहर हैं और बुकिंग असिस्टेंट पर वापस हैं।\n" +
+      "अपॉइंटमेंट अलर्ट रोक दिए गए हैं। अलर्ट फिर चालू करने के लिए *START* लिखें।\n" +
+      "बुकिंग मदद के लिए कभी भी *Menu* लिखें।",
   );
 }
 

@@ -1,6 +1,161 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { uuidToBase64 } from "../core/security.js";
 import { socketManager } from "../core/socket.js";
+
+const PROVISIONAL_EMAIL_SUFFIX = "@patients.glucoguide.local";
+
+function isProvisionalWaUser(email: string | null | undefined): boolean {
+  return String(email || "")
+    .trim()
+    .toLowerCase()
+    .endsWith(PROVISIONAL_EMAIL_SUFFIX);
+}
+
+/**
+ * Pick the portal care-chat patient for a WhatsApp MSISDN.
+ * Prefer booking / conversation ids over provisional WA-only twins that share
+ * the same last-10 digits (otherwise replies land on the wrong Message thread).
+ */
+async function resolveCareChatPatientUser(opts: {
+  practiceId: string;
+  patientPhone: string;
+  preferredUserIds?: Array<string | null | undefined>;
+}): Promise<{ id: string } | null> {
+  const digitsRaw = String(opts.patientPhone || "").replace(/\D/g, "");
+  const digits = digitsRaw.slice(-10);
+  if (digits.length < 10) return null;
+
+  const preferred: string[] = [];
+  for (const id of opts.preferredUserIds || []) {
+    const t = String(id || "").trim();
+    if (t && !preferred.includes(t)) preferred.push(t);
+  }
+
+  for (const id of preferred) {
+    const hit = await prisma.user.findFirst({
+      where: { id, role: "user" },
+      select: { id: true },
+    });
+    if (hit) return hit;
+  }
+
+  const bookingLinked = await prisma.practiceBooking.findFirst({
+    where: {
+      practiceId: opts.practiceId,
+      patientId: { not: null },
+      OR: [
+        { patientPhone: digits },
+        { patientPhone: { endsWith: digits } },
+        ...(digitsRaw.length >= 11
+          ? [
+              { patientPhone: digitsRaw },
+              { patientPhone: { endsWith: digitsRaw } },
+            ]
+          : []),
+      ],
+    },
+    orderBy: [{ updatedAt: "desc" }],
+    select: { patientId: true },
+  });
+  if (bookingLinked?.patientId) {
+    const hit = await prisma.user.findFirst({
+      where: { id: bookingLinked.patientId, role: "user" },
+      select: { id: true },
+    });
+    if (hit) return hit;
+  }
+
+  const candidates = await prisma.user.findMany({
+    where: {
+      role: "user",
+      OR: [
+        ...(digitsRaw.length >= 11
+          ? [
+              { phone: digitsRaw },
+              { patient: { is: { contactNumber: digitsRaw } } },
+            ]
+          : []),
+        { phone: digits },
+        { phone: { endsWith: digits } },
+        { patient: { is: { contactNumber: digits } } },
+        { patient: { is: { contactNumber: { endsWith: digits } } } },
+      ],
+    },
+    select: {
+      id: true,
+      email: true,
+      phone: true,
+      createdAt: true,
+      patient: { select: { contactNumber: true } },
+    },
+    take: 20,
+  });
+  if (!candidates.length) return null;
+
+  const score = (u: (typeof candidates)[number]): number => {
+    let s = 0;
+    const phone = String(u.phone || "").replace(/\D/g, "");
+    const contact = String(u.patient?.contactNumber || "").replace(/\D/g, "");
+    if (phone === digits || phone === digitsRaw) s += 100;
+    if (contact === digits || contact === digitsRaw) s += 40;
+    if (phone.endsWith(digits)) s += 30;
+    if (contact.endsWith(digits)) s += 20;
+    if (!isProvisionalWaUser(u.email)) s += 50;
+    else s -= 80;
+    return s;
+  };
+
+  candidates.sort((a, b) => {
+    const d = score(b) - score(a);
+    if (d !== 0) return d;
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  });
+  return { id: candidates[0].id };
+}
+
+/** Move recent WA replies off provisional twins onto the portal patient thread. */
+async function reattributeProvisionalCareMessages(opts: {
+  correctPatientId: string;
+  patientPhone: string;
+}): Promise<void> {
+  const digits = String(opts.patientPhone || "").replace(/\D/g, "").slice(-10);
+  if (digits.length < 10) return;
+
+  const twins = await prisma.user.findMany({
+    where: {
+      role: "user",
+      id: { not: opts.correctPatientId },
+      email: { endsWith: PROVISIONAL_EMAIL_SUFFIX },
+      OR: [
+        { phone: { endsWith: digits } },
+        { patient: { is: { contactNumber: { endsWith: digits } } } },
+      ],
+    },
+    select: { id: true },
+    take: 10,
+  });
+  if (!twins.length) return;
+
+  const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  for (const twin of twins) {
+    const updated = await prisma.message.updateMany({
+      where: {
+        type: "direct",
+        senderId: twin.id,
+        createdAt: { gte: since },
+      },
+      data: { senderId: opts.correctPatientId },
+    });
+    if (updated.count > 0) {
+      console.log("[care-chat-wa] reattributed provisional replies", {
+        from: twin.id,
+        to: opts.correctPatientId,
+        count: updated.count,
+      });
+    }
+  }
+}
 
 export function looksLikeBotCommand(text: string): boolean {
   const t = text.trim().toLowerCase();
@@ -26,7 +181,7 @@ export function looksLikeBotCommand(text: string): boolean {
   // Known button / list titles (display text when Meta sends title instead of id)
   // Bare "main" = Main Menu reply title truncation; Male/Female/Others = gender buttons.
   if (
-    /^(main(\s*menu)?|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back|select(\s+appointment)?|general(\s+document)?|male|female|others?|self|spouse|parent|child|sibling|friend)$/i.test(
+    /^(main(\s*menu)?|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|my\s*family(\s*members?)?|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back|select(\s+appointment)?|general(\s+document)?|male|female|others?|self|spouse|parent|child|sibling|friend)$/i.test(
       t,
     )
   ) {
@@ -118,6 +273,10 @@ export async function ingestWhatsAppPatientReply(opts: {
   /** Doctor selected from multi-booking Message-doctor picker. */
   preferredProviderId?: string;
   preferredBookingId?: string;
+  /** Portal patient User id stamped when clinic messaged from care chat. */
+  preferredPatientId?: string;
+  /** Booking / family patient pinned on the WA conversation. */
+  bookPatientId?: string;
 }): Promise<{ ingested: boolean; shouldDeferToHuman: boolean }> {
   const text = String(opts.text || "").trim();
   if (!text || text.length > 4000) {
@@ -135,23 +294,13 @@ export async function ingestWhatsAppPatientReply(opts: {
     return { ingested: false, shouldDeferToHuman: false };
   }
 
-  const patient = await prisma.user.findFirst({
-    where: {
-      role: "user",
-      OR: [
-        ...(digitsRaw.length >= 11
-          ? [
-              { phone: digitsRaw },
-              { patient: { is: { contactNumber: digitsRaw } } },
-            ]
-          : []),
-        { phone: digits },
-        { phone: { endsWith: digits } },
-        { patient: { is: { contactNumber: digits } } },
-        { patient: { is: { contactNumber: { endsWith: digits } } } },
-      ],
-    },
-    select: { id: true },
+  const patient = await resolveCareChatPatientUser({
+    practiceId: opts.practiceId,
+    patientPhone: opts.patientPhone,
+    preferredUserIds: [
+      opts.preferredPatientId,
+      opts.bookPatientId,
+    ],
   });
   if (!patient) {
     console.log("[care-chat-wa] inbound skip: no patient user for phone", {
@@ -160,6 +309,11 @@ export async function ingestWhatsAppPatientReply(opts: {
     });
     return { ingested: false, shouldDeferToHuman: false };
   }
+
+  void reattributeProvisionalCareMessages({
+    correctPatientId: patient.id,
+    patientPhone: opts.patientPhone,
+  }).catch(() => undefined);
 
   const phoneOr = [
     { patientId: patient.id },
@@ -410,6 +564,12 @@ export async function ingestWhatsAppPatientReply(opts: {
 export async function markWhatsAppConversationHandedOff(opts: {
   practiceId: string;
   patientPhone: string;
+  /** First care message in this 24h window — stamp session hint footer as shown. */
+  markSessionHintsShown?: boolean;
+  /** Portal patient User id (care-chat peer) — WA replies must use this thread. */
+  carePatientId?: string;
+  /** Staff User id who sent the care message. */
+  careProviderId?: string;
 }): Promise<void> {
   const digits = String(opts.patientPhone || "").replace(/\D/g, "");
   const last10Phone = digits.slice(-10);
@@ -440,6 +600,36 @@ export async function markWhatsAppConversationHandedOff(opts: {
       ? (existing.state as Record<string, unknown>)
       : {};
 
+  // Clear mid-flow wizard steps so free-text replies are ingested into care chat
+  // instead of being swallowed as "bot wizard" input (awaiting_date / slot / …).
+  const nextState: Record<string, unknown> = {
+    ...prev,
+    handedOff: true,
+    postBookingCare: true,
+    step: "idle",
+    pendingDoc: null,
+    bookingChoices: undefined,
+    providerChoices: undefined,
+    patientChoices: undefined,
+    dateChoices: undefined,
+    slotChoices: undefined,
+    specialtyChoices: undefined,
+    failedTurns: 0,
+    idleReminderSentAt: undefined,
+    ...(opts.carePatientId
+      ? {
+          carePatientId: opts.carePatientId,
+          bookPatientId: opts.carePatientId,
+        }
+      : {}),
+    ...(opts.careProviderId ? { careProviderId: opts.careProviderId } : {}),
+    ...(opts.markSessionHintsShown
+      ? { careSessionHintsShownAt: new Date().toISOString() }
+      : {}),
+  };
+
+  const stateJson = nextState as unknown as Prisma.InputJsonValue;
+
   await prisma.whatsAppConversation.upsert({
     where: {
       practiceId_patientPhone: {
@@ -451,11 +641,11 @@ export async function markWhatsAppConversationHandedOff(opts: {
       practiceId: opts.practiceId,
       patientPhone: phoneKey,
       status: "handed_off",
-      state: { ...prev, handedOff: true },
+      state: stateJson,
     },
     update: {
       status: "handed_off",
-      state: { ...prev, handedOff: true },
+      state: stateJson,
     },
   });
 }

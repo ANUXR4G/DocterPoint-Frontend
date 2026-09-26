@@ -68,8 +68,8 @@ const MAIN_MENU_ROWS = [
   },
   {
     id: "menu:family",
-    title: "3 · Add family",
-    description: "Register a dependant",
+    title: "3 · My family",
+    description: "View or add family members",
   },
   {
     id: "menu:support",

@@ -1,6 +1,9 @@
 /**
- * Global keyword hijacks — exact trigger words that abort any mid-flow step
+ * Global keyword hijacks — trigger words that abort any mid-flow step
  * and redirect (Branch A/C/F) or end the session / log a callback.
+ *
+ * Voice STT often adds punctuation ("Book.") or short politeness
+ * ("book please") — those must still interrupt doc-upload and other steps.
  */
 
 export type GlobalHijack =
@@ -14,8 +17,40 @@ export type GlobalHijack =
   /** Route to human support / agent */
   | "agent";
 
+/** Normalize typed / STT text for standalone command matching. */
+export function normalizeHijackText(text: string): string {
+  return String(text || "")
+    .trim()
+    .replace(/^[*`~_]+|[*`~_]+$/g, "")
+    .replace(/[\u00a0\u202f\u2007\u2009]/g, " ")
+    // Whisper / phone STT trailing (and leading) punctuation
+    .replace(/^[.,!?;:…'"“”‘’]+|[.,!?;:…'"“”‘’]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 /**
- * Returns a hijack when the user typed a standalone trigger keyword.
+ * True when the utterance looks like a short command, not free-form booking
+ * speech with a date/time ("book tomorrow morning").
+ */
+function isShortCommandUtterance(t: string): boolean {
+  if (!t || t.length > 48) return false;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length > 5) return false;
+  // Date/time cues → leave for NLU (do not blind-hijack)
+  if (
+    /\b(tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|कल|आज|सुबह|शाम|\d{1,2}([:.]\d{2})?\s*(am|pm)?|\d{1,2}\/\d{1,2})\b/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Returns a hijack when the user typed/spoke a standalone trigger keyword.
  * Interactive ids (menu:, cancel:yes, …) never match.
  */
 export function parseGlobalKeywordHijack(text: string): GlobalHijack | null {
@@ -23,7 +58,7 @@ export function parseGlobalKeywordHijack(text: string): GlobalHijack | null {
     .trim()
     .replace(/^[*`~_]+|[*`~_]+$/g, "")
     .replace(/[\u00a0\u202f\u2007\u2009]/g, " ");
-  if (!raw || raw.length > 40) return null;
+  if (!raw || raw.length > 60) return null;
 
   // Structured interactive payloads — never treat as keyword hijacks.
   if (
@@ -34,7 +69,8 @@ export function parseGlobalKeywordHijack(text: string): GlobalHijack | null {
     return null;
   }
 
-  const t = raw.toLowerCase().replace(/\s+/g, " ").trim();
+  const t = normalizeHijackText(raw);
+  if (!t) return null;
 
   // Exit / Cancel → end session (exact only; "cancel booking" stays Branch B).
   if (
@@ -45,7 +81,11 @@ export function parseGlobalKeywordHijack(text: string): GlobalHijack | null {
   }
 
   // Navigation — Main / Menu → main interactive menu
-  if (/^(main|menu|main\s*menu|show\s*menu|open\s*menu|back\s*to\s*menu|मेनू|मुख्य\s*मेनू)$/i.test(t)) {
+  if (
+    /^(main|menu|main\s*menu|show\s*menu|open\s*menu|back\s*to\s*menu|मेनू|मुख्य\s*मेनू)$/i.test(
+      t,
+    )
+  ) {
     return "main_menu";
   }
 
@@ -54,16 +94,33 @@ export function parseGlobalKeywordHijack(text: string): GlobalHijack | null {
     return "agent";
   }
 
-  if (/^(register|registration|sign\s*up|signup)$/i.test(t)) {
+  if (
+    /^(register|registration|sign\s*up|signup|please\s+register)$/i.test(t)
+  ) {
     return "register";
   }
 
-  if (/^(book|booking)$/i.test(t)) {
+  // Book — exact + short voice/STT variants (must abort mid-flow, e.g. docs)
+  if (
+    /^(book|booking|bok|please\s+book|book\s+please|book\s+now|new\s+book(ing)?|start\s+book(ing)?|book\s+(an?\s+)?(appointment|slot|visit)|appointment)$/i.test(
+      t,
+    )
+  ) {
+    return "book";
+  }
+  // Short spoken command containing "book" without a date/time payload
+  if (
+    isShortCommandUtterance(t) &&
+    /\b(book|booking)\b/i.test(t) &&
+    !/\b(cancel|reschedule|attach|document|report)\b/i.test(t)
+  ) {
     return "book";
   }
 
   if (
-    /^(attach|attach\s*(a\s+)?(document|doc|file|report)?|document)$/i.test(t)
+    /^(attach|attach\s*(a\s+)?(document|doc|file|report)?|document|please\s+attach)$/i.test(
+      t,
+    )
   ) {
     return "attach";
   }
