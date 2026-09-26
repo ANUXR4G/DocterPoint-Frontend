@@ -70,6 +70,9 @@ model Doctor {
   contactNumbers           Json   @map("contact_numbers")
   appointmentValidityDays  Int    @default(7) @map("appointment_validity_days")
   licenseNo                String? @map("license_no")
+  /// Deferred booking-mode switch (TIME↔TOKEN). Applied on/after this local date.
+  pendingSchedule          Json?     @map("pending_schedule")
+  pendingScheduleEffective DateTime? @map("pending_schedule_effective") @db.Date
 
   user         User          @relation(fields: [id], references: [id], onDelete: Cascade)
   hospital     Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Cascade)

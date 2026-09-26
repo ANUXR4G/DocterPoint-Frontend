@@ -24,8 +24,9 @@ export function looksLikeBotCommand(text: string): boolean {
   if (/^[1-9]\s*[·.•\-–—)]\s*\S+/u.test(t)) return true;
 
   // Known button / list titles (display text when Meta sends title instead of id)
+  // Bare "main" = Main Menu reply title truncation; Male/Female/Others = gender buttons.
   if (
-    /^(main\s*menu|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back|select(\s+appointment)?|general(\s+document)?)$/i.test(
+    /^(main(\s*menu)?|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back|select(\s+appointment)?|general(\s+document)?|male|female|others?|self|spouse|parent|child|sibling|friend)$/i.test(
       t,
     )
   ) {
@@ -171,9 +172,12 @@ export async function ingestWhatsAppPatientReply(opts: {
 
   // Prefer the booking/doctor the patient picked in Message-doctor flow.
   let booking: {
+    id: string;
     providerId: string;
     patientId: string | null;
     status: string;
+    patientName: string | null;
+    patientPhone: string;
   } | null = null;
 
   if (opts.preferredBookingId) {
@@ -183,7 +187,14 @@ export async function ingestWhatsAppPatientReply(opts: {
         practiceId: opts.practiceId,
         OR: phoneOr,
       },
-      select: { providerId: true, patientId: true, status: true },
+      select: {
+        id: true,
+        providerId: true,
+        patientId: true,
+        status: true,
+        patientName: true,
+        patientPhone: true,
+      },
     });
     if (preferred?.providerId) booking = preferred;
   }
@@ -199,7 +210,14 @@ export async function ingestWhatsAppPatientReply(opts: {
         },
       },
       orderBy: [{ slotStart: "desc" }, { updatedAt: "desc" }],
-      select: { providerId: true, patientId: true, status: true },
+      select: {
+        id: true,
+        providerId: true,
+        patientId: true,
+        status: true,
+        patientName: true,
+        patientPhone: true,
+      },
     });
     if (preferred?.providerId) booking = preferred;
   }
@@ -216,7 +234,14 @@ export async function ingestWhatsAppPatientReply(opts: {
         },
       },
       orderBy: [{ slotStart: "desc" }, { updatedAt: "desc" }],
-      select: { providerId: true, patientId: true, status: true },
+      select: {
+        id: true,
+        providerId: true,
+        patientId: true,
+        status: true,
+        patientName: true,
+        patientPhone: true,
+      },
     });
   }
   if (!booking?.providerId) {
@@ -229,7 +254,14 @@ export async function ingestWhatsAppPatientReply(opts: {
         ],
       },
       orderBy: [{ updatedAt: "desc" }],
-      select: { providerId: true, patientId: true, status: true },
+      select: {
+        id: true,
+        providerId: true,
+        patientId: true,
+        status: true,
+        patientName: true,
+        patientPhone: true,
+      },
     });
   }
 
@@ -347,6 +379,26 @@ export async function ingestWhatsAppPatientReply(opts: {
     receivers: receivers.length,
     providerId: providerId ?? null,
   });
+
+  if (anyCreated && booking?.id) {
+    void import("./procto/notification.service.js")
+      .then(({ NotificationService }) =>
+        NotificationService.enqueueClinicPatientMessage({
+          practiceId: opts.practiceId,
+          bookingId: booking.id,
+          messagePreview: text,
+          channel: "whatsapp",
+          patientName: booking.patientName,
+          patientPhone: booking.patientPhone,
+        }),
+      )
+      .catch((err) =>
+        console.warn(
+          "[clinic-inbox] patient WA message notify failed:",
+          err instanceof Error ? err.message : err,
+        ),
+      );
+  }
 
   return {
     ingested: anyCreated,

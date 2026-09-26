@@ -775,7 +775,12 @@ function parseIntentRegex(text: string): BotIntent {
     /रीशेड्यूल|समय बदल/.test(text)
   )
     return "reschedule";
-  if (/cancel|रद्द/.test(t) || /रद्द/.test(text)) return "cancel";
+  if (
+    /^(cancel|cancle|cancell)$/i.test(t) ||
+    /\bcancel\s+(my\s+)?(booking|appointment|visit|slot)\b/.test(t) ||
+    /रद्द/.test(text)
+  )
+    return "cancel";
   if (
     /status|my appointment|my booking|token number|upcoming/.test(t) ||
     /स्थिति|मेरी अपॉइंटमेंट|मेरी बुकिंग|टोकन/.test(text)

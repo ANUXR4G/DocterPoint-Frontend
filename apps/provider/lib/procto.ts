@@ -81,7 +81,35 @@ export async function fetchPracticePatients(practiceId: string) {
 
 export async function fetchSchedules(practiceId: string, providerId?: string) {
   const qs = providerId ? `?providerId=${providerId}` : "";
-  return api<ScheduleRow[]>(`/procto/practices/${practiceId}/schedules${qs}`);
+  const res = await api<
+    | ScheduleRow[]
+    | {
+        schedules?: ScheduleRow[];
+        pendingModeChange?: {
+          toMode: string;
+          fromMode?: string | null;
+          effectiveDate: string;
+        } | null;
+      }
+  >(`/procto/practices/${practiceId}/schedules${qs}`);
+  if (res.status === "successful" && res.data && !Array.isArray(res.data)) {
+    return {
+      ...res,
+      data: res.data.schedules ?? [],
+      pendingModeChange: res.data.pendingModeChange ?? null,
+    };
+  }
+  return { ...res, pendingModeChange: null as null };
+}
+
+export async function saveProviderSettings(
+  practiceId: string,
+  body: Record<string, unknown>,
+) {
+  return api(`/procto/practices/${practiceId}/provider-settings`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
 }
 
 export async function fetchOverrides(practiceId: string, providerId?: string) {
@@ -132,10 +160,11 @@ export type PracticeNotificationRow = {
 
 export async function fetchPracticeNotifications(
   practiceId: string,
-  opts?: { status?: string; take?: number },
+  opts?: { status?: string; kind?: string; take?: number },
 ) {
   const qs = new URLSearchParams();
   if (opts?.status) qs.set("status", opts.status);
+  if (opts?.kind) qs.set("kind", opts.kind);
   if (opts?.take != null) qs.set("take", String(opts.take));
   const q = qs.toString();
   return api<{

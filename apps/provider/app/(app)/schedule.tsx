@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Chip,
@@ -15,6 +15,7 @@ import {
   fetchOverrides,
   upsertSchedule,
   createOverride,
+  saveProviderSettings,
 } from "@/lib/procto";
 import { DAY_LABELS, type OverrideRow, type ScheduleRow } from "@/lib/types";
 import { colors, radii, space } from "@/lib/theme";
@@ -35,6 +36,9 @@ export default function ScheduleScreen() {
   const [rows, setRows] = useState<ScheduleRow[]>([]);
   const [overrides, setOverrides] = useState<OverrideRow[]>([]);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [bookingType, setBookingType] = useState<"TIME" | "TOKEN">("TIME");
+  const [pendingNote, setPendingNote] = useState("");
   const [type, setType] = useState<(typeof TYPES)[number]["value"]>("BLOCK_DAY");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
@@ -53,7 +57,29 @@ export default function ScheduleScreen() {
       fetchSchedules(practiceId, providerId ?? undefined),
       fetchOverrides(practiceId, providerId ?? undefined),
     ]);
-    if (sRes.status === "successful") setRows((sRes.data as ScheduleRow[]) ?? []);
+    if (sRes.status === "successful") {
+      const list = (sRes.data as ScheduleRow[]) ?? [];
+      setRows(list);
+      const first = list[0];
+      if (first) {
+        setBookingType(first.mode === "TOKEN_BASED" ? "TOKEN" : "TIME");
+      }
+      const pending = (
+        sRes as {
+          pendingModeChange?: {
+            toMode: string;
+            effectiveDate: string;
+          } | null;
+        }
+      ).pendingModeChange;
+      if (pending) {
+        setPendingNote(
+          `Switch to ${
+            pending.toMode === "TOKEN_BASED" ? "Token queue" : "Time slots"
+          } applies ${pending.effectiveDate}.`,
+        );
+      } else setPendingNote("");
+    }
     if (oRes.status === "successful")
       setOverrides((oRes.data as OverrideRow[]) ?? []);
     if (sRes.status !== "successful" && oRes.status !== "successful") {
@@ -69,6 +95,73 @@ export default function ScheduleScreen() {
     bookings: false,
     ops: true,
   });
+
+  async function switchBookingType(next: "TIME" | "TOKEN") {
+    if (!practiceId || !providerId || next === bookingType) {
+      return;
+    }
+    const fromLabel = bookingType === "TOKEN" ? "Token queue" : "Time slots";
+    const toLabel = next === "TOKEN" ? "Token queue" : "Time slots";
+    Alert.alert(
+      "Confirm booking type change",
+      `Switch from ${fromLabel} to ${toLabel}?\n\nAfter you confirm, the new type takes effect from tomorrow. Today's appointments keep ${fromLabel}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          style: "default",
+          onPress: () => void applyBookingType(next),
+        },
+      ],
+    );
+  }
+
+  async function applyBookingType(next: "TIME" | "TOKEN") {
+    if (!practiceId || !providerId) return;
+    const seed = rows[0];
+    const locationId =
+      seed?.locationId ||
+      seed?.location?.id ||
+      membership?.practice.locations[0]?.id;
+    if (!locationId) {
+      setError("Missing location — cannot switch booking type.");
+      return;
+    }
+    const workingDays = [
+      ...new Set(rows.map((r) => r.dayOfWeek)),
+    ].sort((a, b) => a - b);
+    const start =
+      seed?.startTime || seed?.sessionStart || "09:00";
+    const end = seed?.endTime || seed?.sessionEnd || "17:00";
+    setBusy(true);
+    setError("");
+    setInfo("");
+    const res = await saveProviderSettings(practiceId, {
+      providerId,
+      locationId,
+      bookingType: next,
+      workingDays: workingDays.length ? workingDays : [1, 2, 3, 4, 5],
+      startTime: start,
+      endTime: end,
+      breakStartTime: seed?.breakStartTime || undefined,
+      breakEndTime: seed?.breakEndTime || undefined,
+      slotDurationMins: seed?.slotIntervalMin || 15,
+      patientsPerSlot: seed?.maxPerSlot || 1,
+    });
+    setBusy(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not switch booking type");
+      await load();
+      return;
+    }
+    setBookingType(next);
+    const payload = res.data as { message?: string } | null;
+    setInfo(
+      payload?.message ||
+        "Booking type switch confirmed — it takes effect tomorrow.",
+    );
+    await load();
+  }
 
 function beginEdit(s: ScheduleRow) {
     setEditId(s.id);
@@ -179,7 +272,30 @@ function beginEdit(s: ScheduleRow) {
       <ErrorText text={error} />
 
       {pane === "hours" ? (
-        rows.length === 0 ? (
+        <>
+          <Text style={styles.sectionLabel}>Booking type (this doctor)</Text>
+          <View style={styles.chips}>
+            <Chip
+              label="Time slots"
+              active={bookingType === "TIME"}
+              onPress={() => void switchBookingType("TIME")}
+            />
+            <Chip
+              label="Token queue"
+              active={bookingType === "TOKEN"}
+              onPress={() => void switchBookingType("TOKEN")}
+            />
+          </View>
+          {pendingNote ? (
+            <Text style={styles.pending}>{pendingNote}</Text>
+          ) : (
+            <Text style={styles.hint}>
+              Tap to switch — confirm in the dialog. Change takes effect
+              tomorrow.
+            </Text>
+          )}
+          {info ? <Text style={styles.pending}>{info}</Text> : null}
+        {rows.length === 0 ? (
           <EmptyState text="No weekly hours configured yet." />
         ) : (
           rows.map((s) => (
@@ -248,7 +364,8 @@ function beginEdit(s: ScheduleRow) {
               )}
             </View>
           ))
-        )
+        )}
+        </>
       ) : (
         <>
           <View style={styles.chips}>
@@ -347,5 +464,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.inkSoft,
     lineHeight: 20,
+  },
+  sectionLabel: {
+    marginBottom: space.sm,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: colors.inkSoft,
+  },
+  hint: {
+    marginBottom: space.md,
+    fontSize: 12,
+    color: colors.inkSoft,
+    lineHeight: 18,
+  },
+  pending: {
+    marginBottom: space.md,
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.brand,
+    lineHeight: 18,
   },
 });

@@ -808,6 +808,18 @@ export const BookingService = {
       (medicines ?? (Array.isArray(existing.medicines) ? existing.medicines : []))
         .length > 0;
 
+    const prevDocsKey = JSON.stringify(existing.documents ?? []);
+    const nextDocsKey = JSON.stringify(documents ?? existing.documents ?? []);
+    const documentsChanged =
+      data.documents !== undefined && prevDocsKey !== nextDocsKey;
+    const prevDocCount = Array.isArray(existing.documents)
+      ? existing.documents.length
+      : 0;
+    const nextDocCount = Array.isArray(documents)
+      ? documents.length
+      : prevDocCount;
+    const documentsAdded = documentsChanged && nextDocCount > prevDocCount;
+
     const updated = await prisma.practiceBooking.update({
       where: { id: bookingId },
       data: {
@@ -825,6 +837,18 @@ export const BookingService = {
         location: { select: { name: true, address: true, city: true } },
       },
     });
+
+    if (documentsAdded && Array.isArray(documents)) {
+      const newest = documents[documents.length - 1] as
+        | { name?: string }
+        | undefined;
+      const docName = String(newest?.name || "").trim() || "Document";
+      void NotificationService.enqueueClinicDocumentAttached(
+        bookingId,
+        docName,
+        { kind: "visit" },
+      ).catch(() => undefined);
+    }
 
     if (nextStatus === BookingStatus.IN_PROGRESS) {
       void NotificationService.enqueueQueueAlert(bookingId).catch(() => undefined);
@@ -1338,6 +1362,9 @@ export const BookingService = {
     locationId: string,
     dateStr: string,
   ) {
+    const { PracticeService } = await import("./practice.service.js");
+    await PracticeService.applyDuePendingSchedule(providerId);
+
     const date = parseLocalDate(dateStr);
     if (Number.isNaN(date.getTime())) {
       throw new AppError(400, "invalid date");

@@ -28,8 +28,9 @@ export function shouldHideFromCareChat(text: string): boolean {
   if (/^[1-9]$/.test(t)) return true;
   if (/^[1-9]\s*[·.•\-–—)]\s*\S+/u.test(t)) return true;
 
+  // Bare "main" = Main Menu truncation; Male/Female/Others = gender buttons.
   if (
-    /^(main\s*menu|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back|select(\s+appointment)?|general(\s+document)?)$/i.test(
+    /^(main(\s*menu)?|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back|select(\s+appointment)?|general(\s+document)?|male|female|others?|self|spouse|parent|child|sibling|friend)$/i.test(
       t,
     )
   ) {

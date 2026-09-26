@@ -3658,15 +3658,15 @@ async function applyIdScanToRegister(
   state.regName = name;
   if (scan.dateOfBirth) state.regDob = scan.dateOfBirth;
   if (scan.address) state.regAddress = scan.address;
+  if (scan.aadharNumber) {
+    state.regNationalId = String(scan.aadharNumber).replace(/\D/g, "").slice(0, 32);
+  } else if (scan.panNumber) {
+    state.regNationalId = String(scan.panNumber).replace(/\s+/g, "").slice(0, 32);
+  }
   // Registered mobile is always the WhatsApp sender — never OCR contactNumber.
 
   // Branch C family flow: name (from ID) → relationship → DOB/ID (skip what OCR filled).
   if (state.registeringFamily) {
-    if (scan.aadharNumber) {
-      state.regNationalId = String(scan.aadharNumber).replace(/\D/g, "").slice(0, 32);
-    } else if (scan.panNumber) {
-      state.regNationalId = String(scan.panNumber).replace(/\s+/g, "").slice(0, 32);
-    }
     if (scan.gender) state.regGender = scan.gender;
 
     if (!state.regRelationship?.trim()) {
@@ -4657,8 +4657,10 @@ async function runOrchestratorCore(input: {
   // Branch E — collect message body before NLU (so free text is not re-classified).
   if (state.step === "awaiting_message_doctor_text") {
     const body = text.trim();
+    const hasRealContent = /[A-Za-z\u0900-\u097F0-9]/.test(body);
     if (
       body.length < 2 ||
+      !hasRealContent ||
       /^(menu|bot|resume|help|book|cancel|status)$/i.test(body)
     ) {
       if (state.messageDoctorAdminRoute) {
@@ -4957,10 +4959,14 @@ async function runOrchestratorCore(input: {
 
   if (state.step === "awaiting_book_whom") {
     const raw = text.trim();
+    // Digits / list order: 1 = Self, 2 = Family (matches withWhomButtons order)
+    const digit = /^([12])(?:\s*[.)·\-–—])?\s*$/u.exec(raw)?.[1];
     const isSelf =
+      digit === "1" ||
       /^(whom:self|self|myself|me|you|अपने|खुद|स्वयं)$/i.test(raw) ||
       /^self\b/i.test(raw);
     const isFamily =
+      digit === "2" ||
       /^(whom:family|family|dependent|dependant|परिवार|आश्रित)$/i.test(raw) ||
       /family\s*member/i.test(raw) ||
       /dependent/i.test(raw);
@@ -5201,7 +5207,17 @@ async function runOrchestratorCore(input: {
   const escalate = async () =>
     transferToAgent(convId, practice, state, lang, patientPhone);
 
-  if (looksClinical(text) || wantsHuman(text) || nlu.intent === "human") {
+  if (looksClinical(text) || wantsHuman(text)) {
+    return escalate();
+  }
+  // Only escalate on explicit Support/Agent menu taps or regex handoff —
+  // never on LLM guessing "human" from gibberish / URLs / emoji.
+  if (
+    nlu.intent === "human" &&
+    nlu.source === "regex" &&
+    (wantsHuman(text) ||
+      /^(help|agent|human|staff|support|हेल्प|मदद)$/i.test(text.trim()))
+  ) {
     return escalate();
   }
 
@@ -6114,8 +6130,20 @@ async function runOrchestratorCore(input: {
   }
 
   const fails = (state.failedTurns ?? 0) + 1;
-  if (fails >= 2) {
-    return transferToAgent(convId, practice, state, lang, patientPhone);
+  // Don't auto-dump patients to an agent after a couple of typos / gibberish —
+  // that traps them in handed_off. Keep offering the menu; they can tap Support.
+  if (fails >= 5) {
+    await saveState(convId, { ...state, failedTurns: 0 });
+    const patient = await PatientService.findByPhone(patientPhone);
+    return withMainMenu(
+      L(
+        lang,
+        "I'm still not sure what you need. Tap *Menu* below, or reply *Support* to talk to an agent.",
+        "मुझे अभी भी समझ नहीं आया। नीचे *Menu* टैप करें, या एजेंट से बात के लिए *Support* लिखें।",
+      ) +
+        "\n\n" +
+        BotPrompts.help(practice.name, greetingPatientName(patient), lang),
+    );
   }
   await saveState(convId, { ...state, failedTurns: fails });
   {

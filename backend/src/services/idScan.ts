@@ -318,12 +318,95 @@ export function heuristicDobFromText(text: string): string | null {
   return null;
 }
 
-function mergeHeuristicDob(fields: IdScanFields, text?: string | null): IdScanFields {
-  if (fields.dateOfBirth || !text) return fields;
-  const dob = heuristicDobFromText(text);
-  if (!dob) return fields;
-  console.info(`[idScan] heuristic DOB from text: ${dob}`);
-  return { ...fields, dateOfBirth: dob };
+export function heuristicAadhaarFromText(text: string): string | null {
+  if (!text?.trim()) return null;
+  const spaced = text.match(/\b(\d{4})\s+(\d{4})\s+(\d{4})\b/);
+  if (spaced) return `${spaced[1]}${spaced[2]}${spaced[3]}`;
+  const compact = text.match(/\b(\d{12})\b/);
+  return compact?.[1] ?? null;
+}
+
+export function heuristicPanFromText(text: string): string | null {
+  if (!text?.trim()) return null;
+  const pan = text.match(/\b([A-Z]{5}[0-9]{4}[A-Z])\b/i);
+  return pan?.[1]?.toUpperCase() ?? null;
+}
+
+export function heuristicGenderFromText(
+  text: string,
+): IdScanFields["gender"] {
+  if (!text?.trim()) return null;
+  if (/(?:gender|लिंग)\s*[:\-]?\s*(female|f|महिला)\b/i.test(text)) {
+    return "female";
+  }
+  if (/(?:gender|लिंग)\s*[:\-]?\s*(male|m|पुरुष)\b/i.test(text)) {
+    return "male";
+  }
+  if (/\bfemale\b|महिला/i.test(text)) return "female";
+  if (/\bmale\b|पुरुष/i.test(text)) return "male";
+  if (/\bothers?\b|\bother\b/i.test(text) && /gender|लिंग/i.test(text)) {
+    return "others";
+  }
+  return null;
+}
+
+export function heuristicNameFromText(text: string): string | null {
+  if (!text?.trim()) return null;
+  const labeled = text.match(
+    /(?:^|\n)\s*(?:name|नाम)\s*[:\-]?\s*([A-Za-z][A-Za-z .']{1,60})/i,
+  );
+  if (labeled?.[1]) return normalizeName(labeled[1]);
+  return null;
+}
+
+/** Fill gaps from DigiLocker / selectable PDF text when the model omits fields. */
+function mergeHeuristicFields(
+  fields: IdScanFields,
+  text?: string | null,
+): IdScanFields {
+  if (!text?.trim()) return fields;
+  let next = { ...fields };
+  if (!next.dateOfBirth) {
+    const dob = heuristicDobFromText(text);
+    if (dob) {
+      console.info(`[idScan] heuristic DOB from text: ${dob}`);
+      next = { ...next, dateOfBirth: dob };
+    }
+  }
+  if (!next.aadharNumber) {
+    const aadhaar = heuristicAadhaarFromText(text);
+    if (aadhaar) {
+      console.info(`[idScan] heuristic Aadhaar from text`);
+      next = {
+        ...next,
+        aadharNumber: aadhaar,
+        documentType: next.documentType || "AADHAAR",
+        documentNumberMasked:
+          next.documentNumberMasked ||
+          `${aadhaar.slice(0, 4)} ${aadhaar.slice(4, 8)} ${aadhaar.slice(8)}`,
+      };
+    }
+  }
+  if (!next.panNumber) {
+    const pan = heuristicPanFromText(text);
+    if (pan) {
+      console.info(`[idScan] heuristic PAN from text`);
+      next = {
+        ...next,
+        panNumber: pan,
+        documentType: next.documentType || "PAN",
+      };
+    }
+  }
+  if (!next.gender) {
+    const gender = heuristicGenderFromText(text);
+    if (gender) next = { ...next, gender };
+  }
+  if (!next.name) {
+    const name = heuristicNameFromText(text);
+    if (name) next = { ...next, name };
+  }
+  return next;
 }
 
 async function callTextModel(systemPrompt: string, userText: string): Promise<string> {
@@ -874,7 +957,7 @@ export const IdScanService = {
     if (pdfText && textLooksUsefulForId(pdfText)) {
       try {
         const textJson = await callTextModel(TEXT_ID_PROMPT, pdfText);
-        const fromText = mergeHeuristicDob(
+        const fromText = mergeHeuristicFields(
           toIdFields(parseJsonFromModel(textJson)),
           pdfText,
         );
@@ -893,7 +976,7 @@ export const IdScanService = {
     }
 
     const text = await callVisionModel(mimeType, raw, ID_PROMPT);
-    const fields = mergeHeuristicDob(
+    const fields = mergeHeuristicFields(
       toIdFields(parseJsonFromModel(text)),
       pdfText,
     );

@@ -97,6 +97,8 @@ export type ScheduleRow = {
   sessionStart?: string | null;
   sessionEnd?: string | null;
   maxTokens?: number | null;
+  breakStartTime?: string | null;
+  breakEndTime?: string | null;
   isActive: boolean;
 };
 

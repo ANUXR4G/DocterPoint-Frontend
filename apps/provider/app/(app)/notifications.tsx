@@ -27,6 +27,16 @@ import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
 
 const STATUS_FILTERS = ["ALL", "SENT", "PENDING", "FAILED", "SKIPPED"] as const;
 
+const KIND_FILTERS = [
+  { id: "ALL", label: "All types" },
+  { id: "appointments", label: "Appointments" },
+  { id: "messages", label: "Messages" },
+  { id: "documents", label: "Documents" },
+  { id: "queue", label: "Queue" },
+  { id: "support", label: "Support" },
+  { id: "schedule", label: "Schedule" },
+] as const;
+
 function statusLabel(status: string) {
   switch ((status || "").toUpperCase()) {
     case "ALL":
@@ -50,6 +60,8 @@ export default function NotificationsScreen() {
   const { practiceId, membership } = usePractice();
   const [status, setStatus] =
     useState<(typeof STATUS_FILTERS)[number]>("ALL");
+  const [kind, setKind] =
+    useState<(typeof KIND_FILTERS)[number]["id"]>("ALL");
   const [items, setItems] = useState<PracticeNotificationRow[]>([]);
   const [total, setTotal] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
@@ -63,6 +75,7 @@ export default function NotificationsScreen() {
       if (!practiceId) return;
       const res = await fetchPracticeNotifications(practiceId, {
         status: status === "ALL" ? undefined : status,
+        kind: kind === "ALL" ? undefined : kind,
         take: 80,
       });
       if (res.status === "successful" && res.data) {
@@ -78,7 +91,7 @@ export default function NotificationsScreen() {
         setItems([]);
       }
     },
-    [practiceId, status],
+    [practiceId, status, kind],
   );
 
   useEffect(() => {
@@ -87,7 +100,7 @@ export default function NotificationsScreen() {
 
   usePracticeLiveRefresh(() => void load({ silent: true }));
 
-async function dismiss(id: string) {
+  async function dismiss(id: string) {
     if (!practiceId || dismissingId) return;
     setDismissingId(id);
     const prev = items;
@@ -115,8 +128,19 @@ async function dismiss(id: string) {
       <PageTitle
         eyebrow={membership?.practice.name}
         title="Notifications"
-        subtitle="Open booking alerts. Tap a row to clear it."
+        subtitle="Appointments, messages, documents, and queue. Tap a row to clear."
       />
+
+      <View style={styles.filters}>
+        {KIND_FILTERS.map((k) => (
+          <Chip
+            key={k.id}
+            label={k.label}
+            active={kind === k.id}
+            onPress={() => setKind(k.id)}
+          />
+        ))}
+      </View>
 
       <View style={styles.filters}>
         {STATUS_FILTERS.map((s) => (

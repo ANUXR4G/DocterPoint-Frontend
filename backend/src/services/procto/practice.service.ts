@@ -3,7 +3,7 @@ import { AppError, ResponseHandler } from "../../core/response.js";
 import { generateHash } from "../../core/security.js";
 import { isUuid } from "../../core/params.js";
 import type { PracticeType, PracticeMemberRole } from "@prisma/client";
-import { BookingStatus, ScheduleMode, OverrideType } from "@prisma/client";
+import { BookingStatus, ScheduleMode, OverrideType, Prisma } from "@prisma/client";
 import { AuthService } from "../auth.js";
 import {
   assertValidTimeRange,
@@ -1617,6 +1617,18 @@ export const PracticeService = {
             providerId,
           )
         : providerId;
+    if (scoped) {
+      await this.applyDuePendingSchedule(scoped);
+    } else {
+      const providers = await prisma.providerSchedule.findMany({
+        where: { practiceId, isActive: true },
+        select: { providerId: true },
+        distinct: ["providerId"],
+      });
+      await Promise.all(
+        providers.map((p) => this.applyDuePendingSchedule(p.providerId)),
+      );
+    }
     return prisma.providerSchedule.findMany({
       where: {
         practiceId,
@@ -1625,6 +1637,34 @@ export const PracticeService = {
       },
       include: { location: true },
     });
+  },
+
+  async getPendingModeChange(providerId: string) {
+    await this.applyDuePendingSchedule(providerId);
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: providerId },
+      select: {
+        pendingSchedule: true,
+        pendingScheduleEffective: true,
+      },
+    });
+    if (!doctor?.pendingSchedule || !doctor.pendingScheduleEffective) {
+      return null;
+    }
+    const p = doctor.pendingSchedule as {
+      toMode?: string;
+      fromMode?: string;
+      bookingType?: string;
+    };
+    return {
+      toMode:
+        p.toMode ||
+        (p.bookingType === "TOKEN" || p.bookingType === "TOKEN_BASED"
+          ? "TOKEN_BASED"
+          : "TIME_BASED"),
+      fromMode: p.fromMode ?? null,
+      effectiveDate: formatLocalDate(doctor.pendingScheduleEffective),
+    };
   },
 
   async getOverrides(
@@ -1987,6 +2027,9 @@ export const PracticeService = {
 
   /**
    * Sync doctor profile + weekly schedule in one transaction (batch write).
+   * Switching Time slots ↔ Token queue is deferred to the next clinic day so
+   * today's already-booked visits keep working. Hours on the current mode
+   * still save immediately.
    */
   async syncProviderSettings(
     practiceId: string,
@@ -2008,6 +2051,7 @@ export const PracticeService = {
     actorUserId: string,
   ) {
     await this.assertCanManageProvider(practiceId, actorUserId, providerId);
+    await this.applyDuePendingSchedule(providerId);
 
     const workingDays = Array.from(
       new Set((data.workingDays ?? []).map(Number).filter((d) => d >= 0 && d <= 6)),
@@ -2035,11 +2079,26 @@ export const PracticeService = {
       }
     }
 
-    const mode =
+    const requestedMode =
       data.bookingType === "TOKEN" || data.bookingType === "TOKEN_BASED"
         ? ScheduleMode.TOKEN_BASED
         : ScheduleMode.TIME_BASED;
-    const isTime = mode === ScheduleMode.TIME_BASED;
+
+    const existingSchedules = await prisma.providerSchedule.findMany({
+      where: {
+        practiceId,
+        providerId,
+        locationId: data.locationId,
+        isActive: true,
+      },
+    });
+    const currentMode = resolveProviderBookingMode(existingSchedules);
+    const modeChanging =
+      currentMode != null && currentMode !== requestedMode;
+
+    // Keep serving today's mode; new mode lands tomorrow.
+    const applyMode = modeChanging && currentMode ? currentMode : requestedMode;
+    const isTime = applyMode === ScheduleMode.TIME_BASED;
     const slotMins = Math.min(120, Math.max(5, Number(data.slotDurationMins) || 15));
     const patientsPerSlot = isTime
       ? 1
@@ -2064,7 +2123,7 @@ export const PracticeService = {
       providerId,
       locationId: data.locationId,
       dayOfWeek,
-      mode,
+      mode: applyMode,
       slotIntervalMin: isTime ? slotMins : null,
       startTime: isTime ? data.startTime : null,
       endTime: isTime ? data.endTime : null,
@@ -2077,6 +2136,29 @@ export const PracticeService = {
       isActive: true,
     }));
 
+    const tomorrowIso = formatLocalDate(
+      new Date(parseLocalDate(formatLocalDate(new Date())).getTime() + 86400000),
+    );
+    const pendingPayload = modeChanging
+      ? {
+          locationId: data.locationId,
+          bookingType:
+            requestedMode === ScheduleMode.TOKEN_BASED ? "TOKEN" : "TIME",
+          workingDays,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          breakStartTime: breakStart || undefined,
+          breakEndTime: breakEnd || undefined,
+          slotDurationMins: slotMins,
+          patientsPerSlot: Math.min(
+            50,
+            Math.max(1, Number(data.patientsPerSlot) || 1),
+          ),
+          fromMode: currentMode,
+          toMode: requestedMode,
+        }
+      : null;
+
     const [schedules, provider] = await prisma.$transaction(async (tx) => {
       await Promise.all([
         name
@@ -2088,6 +2170,15 @@ export const PracticeService = {
             ...(licenseNo ? { licenseNo } : {}),
             ...(validity != null ? { appointmentValidityDays: validity } : {}),
             availableTimes: `${workingDays.join(",")}|${data.startTime}-${data.endTime}`,
+            ...(modeChanging && pendingPayload
+              ? {
+                  pendingSchedule: pendingPayload,
+                  pendingScheduleEffective: parseLocalDate(tomorrowIso),
+                }
+              : {
+                  pendingSchedule: Prisma.JsonNull,
+                  pendingScheduleEffective: null,
+                }),
           },
         }),
       ]);
@@ -2106,7 +2197,6 @@ export const PracticeService = {
         });
       }
 
-      // Replace weekly rows in two statements instead of N upserts
       await tx.providerSchedule.deleteMany({
         where: {
           practiceId,
@@ -2133,7 +2223,12 @@ export const PracticeService = {
             name: true,
             email: true,
             doctor: {
-              select: { licenseNo: true, appointmentValidityDays: true },
+              select: {
+                licenseNo: true,
+                appointmentValidityDays: true,
+                pendingSchedule: true,
+                pendingScheduleEffective: true,
+              },
             },
           },
         }),
@@ -2142,7 +2237,188 @@ export const PracticeService = {
       return [created, user] as const;
     });
 
-    return { schedules, provider };
+    if (modeChanging && pendingPayload) {
+      void this.notifyBookingModeChange({
+        practiceId,
+        providerId,
+        providerName: provider?.name ?? null,
+        fromMode: currentMode!,
+        toMode: requestedMode,
+        effectiveDate: tomorrowIso,
+      }).catch((err) =>
+        console.warn("mode-change notification skipped:", err),
+      );
+    }
+
+    return {
+      schedules,
+      provider,
+      modeChangeDeferred: modeChanging,
+      modeChangeEffectiveDate: modeChanging ? tomorrowIso : null,
+      pendingMode: modeChanging ? requestedMode : null,
+      activeMode: applyMode,
+      message: modeChanging
+        ? `Booking type switch to ${
+            requestedMode === ScheduleMode.TOKEN_BASED
+              ? "Token queue"
+              : "Time slots"
+          } is scheduled. It will appear for patients from ${tomorrowIso} (tomorrow). Today's appointments keep the current mode.`
+        : "Provider settings saved.",
+    };
+  },
+
+  /** Apply deferred Time↔Token switches whose effective date is today or earlier. */
+  async applyDuePendingSchedule(providerId: string) {
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: providerId },
+      select: {
+        pendingSchedule: true,
+        pendingScheduleEffective: true,
+      },
+    });
+    if (!doctor?.pendingSchedule || !doctor.pendingScheduleEffective) return false;
+
+    const effectiveIso = formatLocalDate(doctor.pendingScheduleEffective);
+    const todayIso = formatLocalDate(new Date());
+    if (effectiveIso > todayIso) return false;
+
+    const pending = doctor.pendingSchedule as {
+      locationId?: string;
+      bookingType?: string;
+      workingDays?: number[];
+      startTime?: string;
+      endTime?: string;
+      breakStartTime?: string;
+      breakEndTime?: string;
+      slotDurationMins?: number;
+      patientsPerSlot?: number;
+    };
+    const locationId = pending.locationId?.trim();
+    if (!locationId || !pending.startTime || !pending.endTime) {
+      await prisma.doctor.update({
+        where: { id: providerId },
+        data: {
+          pendingSchedule: Prisma.JsonNull,
+          pendingScheduleEffective: null,
+        },
+      });
+      return false;
+    }
+
+    const membership = await prisma.practiceMember.findFirst({
+      where: { userId: providerId, isActive: true },
+      select: { practiceId: true },
+    });
+    if (!membership) return false;
+
+    const mode =
+      pending.bookingType === "TOKEN" || pending.bookingType === "TOKEN_BASED"
+        ? ScheduleMode.TOKEN_BASED
+        : ScheduleMode.TIME_BASED;
+    const isTime = mode === ScheduleMode.TIME_BASED;
+    const workingDays = Array.from(
+      new Set(
+        (pending.workingDays ?? [])
+          .map(Number)
+          .filter((d) => d >= 0 && d <= 6),
+      ),
+    );
+    if (!workingDays.length) {
+      await prisma.doctor.update({
+        where: { id: providerId },
+        data: {
+          pendingSchedule: Prisma.JsonNull,
+          pendingScheduleEffective: null,
+        },
+      });
+      return false;
+    }
+
+    const slotMins = Math.min(
+      120,
+      Math.max(5, Number(pending.slotDurationMins) || 15),
+    );
+    const patientsPerSlot = isTime
+      ? 1
+      : Math.min(50, Math.max(1, Number(pending.patientsPerSlot) || 1));
+    const workSpan =
+      minutesOf(pending.endTime) - minutesOf(pending.startTime);
+    const maxTokens = isTime
+      ? null
+      : Math.max(
+          patientsPerSlot,
+          Math.floor((workSpan / slotMins) * patientsPerSlot),
+        );
+    const breakStart = pending.breakStartTime?.trim() || null;
+    const breakEnd = pending.breakEndTime?.trim() || null;
+
+    const scheduleRows = workingDays.map((dayOfWeek) => ({
+      practiceId: membership.practiceId,
+      providerId,
+      locationId,
+      dayOfWeek,
+      mode,
+      slotIntervalMin: isTime ? slotMins : null,
+      startTime: isTime ? pending.startTime! : null,
+      endTime: isTime ? pending.endTime! : null,
+      maxPerSlot: patientsPerSlot,
+      sessionStart: !isTime ? pending.startTime! : null,
+      sessionEnd: !isTime ? pending.endTime! : null,
+      maxTokens,
+      breakStartTime: breakStart,
+      breakEndTime: breakEnd,
+      isActive: true,
+    }));
+
+    await prisma.$transaction(async (tx) => {
+      await tx.providerSchedule.deleteMany({
+        where: {
+          practiceId: membership.practiceId,
+          providerId,
+          locationId,
+        },
+      });
+      await tx.providerSchedule.createMany({ data: scheduleRows });
+      await tx.doctor.update({
+        where: { id: providerId },
+        data: {
+          pendingSchedule: Prisma.JsonNull,
+          pendingScheduleEffective: null,
+        },
+      });
+    });
+    return true;
+  },
+
+  async notifyBookingModeChange(opts: {
+    practiceId: string;
+    providerId: string;
+    providerName: string | null;
+    fromMode: ScheduleMode;
+    toMode: ScheduleMode;
+    effectiveDate: string;
+  }) {
+    const booking = await prisma.practiceBooking.findFirst({
+      where: {
+        practiceId: opts.practiceId,
+        providerId: opts.providerId,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!booking) return null;
+
+    const { NotificationService } = await import("./notification.service.js");
+    const label = (m: ScheduleMode) =>
+      m === ScheduleMode.TOKEN_BASED ? "Token queue" : "Time slots";
+    return NotificationService.enqueueClinicModeChange({
+      practiceId: opts.practiceId,
+      bookingId: booking.id,
+      providerName: opts.providerName,
+      fromLabel: label(opts.fromMode),
+      toLabel: label(opts.toMode),
+      effectiveDate: opts.effectiveDate,
+    });
   },
 
   async getCalendar(
@@ -2150,6 +2426,7 @@ export const PracticeService = {
     providerId: string,
     dateStr: string,
   ) {
+    await this.applyDuePendingSchedule(providerId);
     const date = parseLocalDate(dateStr);
     const dayOfWeek = practiceWeekday(date);
     const dayStart = startOfLocalDay(date);
