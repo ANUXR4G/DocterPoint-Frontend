@@ -932,7 +932,7 @@ Prefer a command intent over unknown when the message is clearly a mistyped menu
 Never treat menu/main as a booking date.`;
 
 /** Keep WhatsApp snappy — abort slow NLU and fall back to regex. */
-const NLU_LLM_TIMEOUT_MS = Number(process.env.NLU_LLM_TIMEOUT_MS || 450);
+const NLU_LLM_TIMEOUT_MS = Number(process.env.NLU_LLM_TIMEOUT_MS || 280);
 
 async function parseWithChatLlm(
   text: string,

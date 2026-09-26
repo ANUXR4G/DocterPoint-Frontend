@@ -607,7 +607,7 @@ async function applyGlobalKeywordHijack(opts: {
       where: { id: convId },
       data: { status: "bot_active", state: touch(cleared) },
     }).catch(() => undefined);
-    const patient = await PatientService.findByPhone(patientPhone);
+    const patient = await findPatientByPhoneCached(patientPhone);
     return withMainMenu(
       BotPrompts.help(practice.name, greetingPatientName(patient), lang),
     );
@@ -955,11 +955,11 @@ function withFaqActions(reply: string, lang: WaLang): OrchestratorResult {
 
 /** Welcome / HELP — six-option interactive main menu (Meta list ≤10 rows). */
 function withMainMenu(reply: string): OrchestratorResult {
-  // Always send the numbered list as text first — interactive Menu body truncates.
   // Titles ≤24 chars (Meta limit).
+  // One Meta call only — interactive rows ARE the menu (no text-then-list RTT).
   return {
     reply,
-    textBeforeMenu: true,
+    textBeforeMenu: false,
     menuList: [
       {
         id: "menu:book",
@@ -999,7 +999,7 @@ function withMainMenu(reply: string): OrchestratorResult {
 function withPostBookingMenu(reply: string): OrchestratorResult {
   return {
     reply,
-    textBeforeMenu: true,
+    textBeforeMenu: false,
     menuList: [
       {
         id: "post:reschedule",
@@ -1041,20 +1041,70 @@ const UPCOMING_STATUSES = [
   BookingStatus.ACCEPTED,
 ] as const;
 
-async function findUpcomingBooking(practiceId: string, patientPhone: string) {
-  const bookings = await BookingService.listForPatient({ phone: patientPhone });
-  return (
-    bookings.find(
-      (b) =>
-        b.practiceId === practiceId &&
-        UPCOMING_STATUSES.includes(
-          b.status as (typeof UPCOMING_STATUSES)[number],
-        ),
-    ) ?? null
+const PROVIDER_CACHE_TTL_MS = 120_000;
+const UPCOMING_CACHE_TTL_MS = 20_000;
+const PATIENT_NAME_CACHE_TTL_MS = 120_000;
+
+const providerCache = new Map<
+  string,
+  { at: number; list: Awaited<ReturnType<typeof loadProvidersUncached>> }
+>();
+const upcomingCache = new Map<
+  string,
+  { at: number; list: Awaited<ReturnType<typeof listUpcomingBookingsUncached>> }
+>();
+const patientByPhoneCache = new Map<
+  string,
+  { at: number; user: Awaited<ReturnType<typeof PatientService.findByPhone>> }
+>();
+
+function cacheFresh<T extends { at: number }>(
+  hit: T | undefined,
+  ttl: number,
+): T | null {
+  if (!hit) return null;
+  if (Date.now() - hit.at > ttl) return null;
+  return hit;
+}
+
+function invalidatePatientPhoneCache(patientPhone: string) {
+  patientByPhoneCache.delete(normalizePhone(patientPhone).slice(-10));
+}
+
+function invalidateUpcomingCache(practiceId: string, patientPhone: string) {
+  upcomingCache.delete(
+    `${practiceId}:${normalizePhone(patientPhone).slice(-10)}`,
   );
 }
 
+async function findPatientByPhoneCached(patientPhone: string) {
+  const key = normalizePhone(patientPhone).slice(-10);
+  const cached = cacheFresh(patientByPhoneCache.get(key), PATIENT_NAME_CACHE_TTL_MS);
+  if (cached) return cached.user;
+  const user = await PatientService.findByPhone(patientPhone);
+  patientByPhoneCache.set(key, { at: Date.now(), user });
+  return user;
+}
+
+async function findUpcomingBooking(practiceId: string, patientPhone: string) {
+  const list = await listUpcomingBookings(practiceId, patientPhone);
+  return list[0] ?? null;
+}
+
 async function listUpcomingBookings(practiceId: string, patientPhone: string) {
+  const digits = normalizePhone(patientPhone).slice(-10);
+  const cacheKey = `${practiceId}:${digits}`;
+  const cached = cacheFresh(upcomingCache.get(cacheKey), UPCOMING_CACHE_TTL_MS);
+  if (cached) return cached.list;
+  const list = await listUpcomingBookingsUncached(practiceId, patientPhone);
+  upcomingCache.set(cacheKey, { at: Date.now(), list });
+  return list;
+}
+
+async function listUpcomingBookingsUncached(
+  practiceId: string,
+  patientPhone: string,
+) {
   const bookings = await BookingService.listForPatient({ phone: patientPhone });
   return bookings
     .filter(
@@ -1286,7 +1336,7 @@ async function resolveWhatsAppPatientUser(patientPhone: string): Promise<{
     return { id: self.id, name: baseName || self.name || null };
   }
 
-  const existing = await PatientService.findByPhone(patientPhone);
+  const existing = await findPatientByPhoneCached(patientPhone);
   if (existing?.id) {
     return { id: existing.id, name: existing.name ?? null };
   }
@@ -2062,6 +2112,7 @@ async function finishWhatsAppCancel(opts: {
       reason: reason ?? undefined,
       skipPatientNotification: true,
     });
+    invalidateUpcomingCache(practice.id, patientPhone);
   } catch (err) {
     console.warn(
       "[WhatsApp cancel]",
@@ -2143,7 +2194,7 @@ async function startManageBookingsFlow(opts: {
 
   if (!upcoming.length) {
     await saveState(convId, idleState(state));
-    const patient = await PatientService.findByPhone(patientPhone);
+    const patient = await findPatientByPhoneCached(patientPhone);
     if (!patient) {
       return withMainMenu(
         L(
@@ -2440,7 +2491,7 @@ async function dispatchMenuIntent(opts: {
     case "help": {
       // Always the full main menu (1–6). Post-booking chips are for idle "hi"
       // / free-text after a visit — not for Menu / Main menu / HELP.
-      const patient = await PatientService.findByPhone(patientPhone);
+      const patient = await findPatientByPhoneCached(patientPhone);
       return withMainMenu(
         BotPrompts.help(practice.name, greetingPatientName(patient), lang),
       );
@@ -2519,6 +2570,14 @@ function specialtyFromDescription(description?: string | null): string | undefin
  * specialization so patients can choose on clinic numbers.
  */
 async function loadProviders(practiceId: string) {
+  const cached = cacheFresh(providerCache.get(practiceId), PROVIDER_CACHE_TTL_MS);
+  if (cached) return cached.list;
+  const list = await loadProvidersUncached(practiceId);
+  providerCache.set(practiceId, { at: Date.now(), list });
+  return list;
+}
+
+async function loadProvidersUncached(practiceId: string) {
   const members = await prisma.practiceMember.findMany({
     where: {
       practiceId,
@@ -2712,7 +2771,7 @@ async function handleAwaitingDate(
     )
   ) {
     await saveState(convId, idleState(state));
-    const patient = await PatientService.findByPhone(patientPhone);
+    const patient = await findPatientByPhoneCached(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, greetingPatientName(patient), lang));
   }
   if (/^(cancel|stop|nevermind|never mind|abort)$/i.test(trimmed)) {
@@ -3392,7 +3451,7 @@ async function confirmBooking(
           where: { id: state.bookPatientId },
           include: { patient: true },
         })
-      : await PatientService.findByPhone(phone);
+      : await findPatientByPhoneCached(phone);
     if (!existing?.id) {
       // Keep confirm context only if they somehow skipped register mid-flow.
       await saveState(convId, {
@@ -3441,6 +3500,7 @@ async function confirmBooking(
     console.log(
       `[whatsapp] booking confirmed id=${verified.id} practice=${verified.practiceId} phone=${phone}`,
     );
+    invalidateUpcomingCache(practice.id, phone);
     await saveState(convId, {
       ...idleState(state),
       lastBookingId: verified.id,
@@ -3690,7 +3750,7 @@ async function applyIdScanToRegister(
   scan: IdScanFields,
 ): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
-  const existing = await PatientService.findByPhone(patientPhone);
+  const existing = await findPatientByPhoneCached(patientPhone);
   // Primary already registered — offer family signup unless already in that flow.
   if (existing && !state.registeringFamily) {
     if (scan.name) state.regName = scan.name.trim();
@@ -3935,7 +3995,7 @@ async function startRegisterFlow(
   prev: ConversationState = {},
 ): Promise<OrchestratorResult> {
   const lang = resolveLang(prev.preferredLanguage);
-  const existing = await PatientService.findByPhone(patientPhone);
+  const existing = await findPatientByPhoneCached(patientPhone);
   if (existing) {
     // Menu "Register" while already registered → Branch C (family) with notice.
     return startFamilyMemberFlow(convId, prev, {
@@ -4068,6 +4128,8 @@ async function confirmFamilyMember(
       address: state.regAddress ?? null,
       practiceId: practice.id,
     });
+    invalidatePatientPhoneCache(patientPhone);
+    invalidatePatientPhoneCache(depPhone);
     const continueToBook = state.afterRegister === "book";
     const pendingSlots = state.pendingBookSlots ?? {};
     const displayName = result.relationship
@@ -4163,6 +4225,8 @@ async function confirmRegister(
       address: state.regAddress ?? null,
       practiceId: practice.id,
     });
+    invalidatePatientPhoneCache(patientPhone);
+    invalidatePatientPhoneCache(registerPhone);
     const continueToBook = state.afterRegister === "book";
     const pendingSlots = state.pendingBookSlots ?? {};
 
@@ -4229,33 +4293,40 @@ export async function runOrchestrator(input: {
   text: string;
   idScan?: IdScanFields;
   fromVoice?: boolean;
+  fromInteractive?: boolean;
 }): Promise<OrchestratorResult> {
   const result = await runOrchestratorCore(input);
-  const latest = await prisma.whatsAppConversation.findUnique({
-    where: { id: input.convId },
-  });
-  const st = (latest?.state as ConversationState) ?? input.state ?? {};
 
-  // Remember which menu was shown so typed 1–6 match (Book vs Reschedule)
+  // Stamp lastMenuKind without blocking Meta send (was: findUnique + saveState).
   const rows = result.menuList ?? [];
-  if (rows.some((r) => r.id.startsWith("menu:"))) {
-    const next = { ...st, lastMenuKind: "main" as const };
-    await saveState(input.convId, next);
-  } else if (rows.some((r) => r.id.startsWith("post:"))) {
-    const next = { ...st, lastMenuKind: "post" as const };
-    await saveState(input.convId, next);
+  const lastMenuKind = rows.some((r) => r.id.startsWith("menu:"))
+    ? "main"
+    : rows.some((r) => r.id.startsWith("post:"))
+      ? "post"
+      : null;
+  if (lastMenuKind) {
+    void prisma.$executeRaw`
+      UPDATE whatsapp_conversations
+      SET state = COALESCE(state, '{}'::jsonb) || ${JSON.stringify({ lastMenuKind })}::jsonb
+      WHERE id = ${input.convId}::uuid
+    `.catch(() => undefined);
   }
 
   return {
-    reply: guardOutbound(result.reply, resolveLang(st.preferredLanguage)),
+    reply: guardOutbound(
+      result.reply,
+      resolveLang(input.state.preferredLanguage),
+    ),
     doctorList: result.doctorList,
     replyButtons: result.replyButtons,
     dateList: result.dateList,
     slotList: result.slotList,
     bookingList: result.bookingList,
     patientList: result.patientList,
+    specialtyList: result.specialtyList,
     menuList: result.menuList,
     textBeforeMenu: result.textBeforeMenu,
+    calendarInvite: result.calendarInvite,
   };
 }
 
@@ -4267,8 +4338,10 @@ async function runOrchestratorCore(input: {
   text: string;
   idScan?: IdScanFields;
   fromVoice?: boolean;
+  fromInteractive?: boolean;
 }): Promise<OrchestratorResult> {
-  const { practice, patientPhone, convId, text, idScan, fromVoice } = input;
+  const { practice, patientPhone, convId, text, idScan, fromVoice, fromInteractive } =
+    input;
   let state = { ...(input.state ?? {}) };
 
   // Meta opt-out / opt-in (STOP / START) — honour before other intents.
@@ -4290,7 +4363,7 @@ async function runOrchestratorCore(input: {
         where: { id: convId },
         data: { status: "bot_active", state: touch(state) },
       });
-      const patient = await PatientService.findByPhone(patientPhone);
+      const patient = await findPatientByPhoneCached(patientPhone);
       return withMainMenu(
         `${optOutAck(resolveLang(state.preferredLanguage))}\n\n` +
           BotPrompts.help(
@@ -4341,7 +4414,7 @@ async function runOrchestratorCore(input: {
             reply: `${languageSetAck(chosenNow)}\n\n${withBooking.reply}`,
           };
         }
-        const patientAfterLang = await PatientService.findByPhone(patientPhone);
+        const patientAfterLang = await findPatientByPhoneCached(patientPhone);
         return {
           ...withMainMenu(
             `${languageSetAck(chosenNow)}\n\n` +
@@ -4356,7 +4429,7 @@ async function runOrchestratorCore(input: {
       }
 
       // First-time language pick
-      const patientAfterLang = await PatientService.findByPhone(patientPhone);
+      const patientAfterLang = await findPatientByPhoneCached(patientPhone);
       return {
         ...withMainMenu(
           aiDisclosure(practice.name, chosenNow) +
@@ -4495,7 +4568,7 @@ async function runOrchestratorCore(input: {
     }).catch(() => undefined);
 
     if (resumeMenuOnly && !midFlowBotStep) {
-      const patient = await PatientService.findByPhone(patientPhone);
+      const patient = await findPatientByPhoneCached(patientPhone);
       return withMainMenu(BotPrompts.help(practice.name, greetingPatientName(patient), lang));
     }
     // Fall through — process BOOK / STATUS / document link / etc. normally
@@ -4548,7 +4621,7 @@ async function runOrchestratorCore(input: {
     if (/^(idle:main|menu:main)$/i.test(raw)) {
       const cleared = idleState(state);
       await saveState(convId, cleared);
-      const patient = await PatientService.findByPhone(patientPhone);
+      const patient = await findPatientByPhoneCached(patientPhone);
       return withMainMenu(
         BotPrompts.help(practice.name, greetingPatientName(patient), lang),
       );
@@ -4946,7 +5019,7 @@ async function runOrchestratorCore(input: {
       state.regNationalId = null;
       state.step = "awaiting_register_name";
       await saveState(convId, state);
-      const primary = await PatientService.findByPhone(patientPhone);
+      const primary = await findPatientByPhoneCached(patientPhone);
       return {
         reply: BotPrompts.askRegisterFamilyName(
           lang,
@@ -4966,7 +5039,7 @@ async function runOrchestratorCore(input: {
     if (!typed) {
       return { reply: BotPrompts.askRegisterFamilyPhone(lang) };
     }
-    const existingFamily = await PatientService.findByPhone(typed);
+    const existingFamily = await findPatientByPhoneCached(typed);
     if (existingFamily) {
       return {
         reply:
@@ -5261,7 +5334,7 @@ async function runOrchestratorCore(input: {
     if (!familyChoices.length) {
       const selfName =
         selfChoice?.label.replace(/^Self\s*[·.\-:]+\s*/i, "").trim() ||
-        (await PatientService.findByPhone(patientPhone))?.name ||
+        (await findPatientByPhoneCached(patientPhone))?.name ||
         "";
       return startFamilyRegisterForBook(convId, nextSlots, state, selfName);
     }
@@ -5363,7 +5436,7 @@ async function runOrchestratorCore(input: {
 
     if (choice.id === FAMILY_ADD_ID) {
       const selfName =
-        (await PatientService.findByPhone(patientPhone))?.name || "";
+        (await findPatientByPhoneCached(patientPhone))?.name || "";
       return startFamilyMemberFlow(convId, state, {
         alreadyRegisteredAs: selfName,
       });
@@ -5501,7 +5574,9 @@ async function runOrchestratorCore(input: {
 
   const contextHint = `step=${state.step ?? "idle"}; practice=${practice.name}; today=${formatLocalDate(new Date())}${fromVoice ? "; source=voice_note" : ""}`;
   const nlu = await parseUtterance(text, contextHint, {
-    useLlm: shouldUseLlmForMessage(state.step, text, fromVoice),
+    useLlm:
+      !fromInteractive &&
+      shouldUseLlmForMessage(state.step, text, fromVoice),
   });
   if (fromVoice) {
     state = applyTimePreferenceFromSlots(state, nlu.slots, text);
@@ -5627,7 +5702,7 @@ async function runOrchestratorCore(input: {
       });
       if (withBooking) return withBooking;
     }
-    const patient = await PatientService.findByPhone(patientPhone);
+    const patient = await findPatientByPhoneCached(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, greetingPatientName(patient), lang));
   }
 
@@ -6107,7 +6182,7 @@ async function runOrchestratorCore(input: {
       /^(back|menu|main\s*menu|status)$/i.test(raw);
 
     if (isBack) {
-      const patient = await PatientService.findByPhone(patientPhone);
+      const patient = await findPatientByPhoneCached(patientPhone);
       await saveState(convId, idleState(state));
       return withMainMenu(
         BotPrompts.help(practice.name, greetingPatientName(patient), lang),
@@ -6312,7 +6387,7 @@ async function runOrchestratorCore(input: {
     if (no) {
       const cleared = idleState(state);
       await saveState(convId, cleared);
-      const patient = await PatientService.findByPhone(patientPhone);
+      const patient = await findPatientByPhoneCached(patientPhone);
       return withMainMenu(
         BotPrompts.help(practice.name, greetingPatientName(patient), lang),
       );
@@ -6491,7 +6566,7 @@ async function runOrchestratorCore(input: {
       });
       if (withBooking) return withBooking;
     }
-    const patient = await PatientService.findByPhone(patientPhone);
+    const patient = await findPatientByPhoneCached(patientPhone);
     return withMainMenu(BotPrompts.help(practice.name, greetingPatientName(patient), lang));
   }
 
@@ -6500,7 +6575,7 @@ async function runOrchestratorCore(input: {
   // that traps them in handed_off. Keep offering the menu; they can tap Support.
   if (fails >= 5) {
     await saveState(convId, { ...state, failedTurns: 0 });
-    const patient = await PatientService.findByPhone(patientPhone);
+    const patient = await findPatientByPhoneCached(patientPhone);
     return withMainMenu(
       L(
         lang,
