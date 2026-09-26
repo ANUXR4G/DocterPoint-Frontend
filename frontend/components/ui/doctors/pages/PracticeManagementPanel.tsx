@@ -18,6 +18,7 @@ import {
   type PracticeTab,
 } from "@/lib/doctorPracticeTabs";
 import { formatPracticeTime } from "@/lib/practiceTime";
+import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal";
 
 type Tab = PracticeTab;
 
@@ -93,18 +94,48 @@ const OVERRIDE_TYPES = ["BLOCK_DAY", "BLOCK_SLOT", "EMERGENCY_LEAVE", "TOKEN_LIM
 const EXTRA_SLOT_TYPE = "EXTRA_SLOT";
 
 type ScheduleRow = {
-  dayOfWeek: number;
-  mode: string;
-  startTime?: string | null;
-  endTime?: string | null;
-  sessionStart?: string | null;
-  sessionEnd?: string | null;
-  slotIntervalMin?: number | null;
-  maxPerSlot?: number;
-  maxTokens?: number | null;
-  breakStartTime?: string | null;
-  breakEndTime?: string | null;
-};
+  dayOfWeek: number
+  mode: string
+  startTime?: string | null
+  endTime?: string | null
+  sessionStart?: string | null
+  sessionEnd?: string | null
+  slotIntervalMin?: number | null
+  maxPerSlot?: number
+  maxTokens?: number | null
+  breakStartTime?: string | null
+  breakEndTime?: string | null
+}
+
+function normalizeSchedulesResponse(data: unknown): {
+  schedules: ScheduleRow[]
+  pendingModeChange: {
+    toMode: string
+    fromMode?: string | null
+    effectiveDate: string
+  } | null
+} {
+  if (Array.isArray(data)) {
+    return { schedules: data as ScheduleRow[], pendingModeChange: null }
+  }
+  if (data && typeof data === "object") {
+    const obj = data as {
+      schedules?: ScheduleRow[]
+      pendingModeChange?: {
+        toMode: string
+        fromMode?: string | null
+        effectiveDate: string
+      } | null
+    }
+    if (Array.isArray(obj.schedules)) {
+      return {
+        schedules: obj.schedules,
+        pendingModeChange: obj.pendingModeChange ?? null,
+      }
+    }
+  }
+  return { schedules: [], pendingModeChange: null }
+}
 
 
 export function PracticeManagementPanel({ embedded = false }: { embedded?: boolean }) {
@@ -187,7 +218,12 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
   );
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [calendar, setCalendar] = useState<CalendarData | null>(null);
-  const [schedules, setSchedules] = useState<unknown[]>([]);
+  const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
+  const [pendingModeChange, setPendingModeChange] = useState<{
+    toMode: string
+    fromMode?: string | null
+    effectiveDate: string
+  } | null>(null);
   const [overrides, setOverrides] = useState<unknown[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -239,7 +275,11 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
   const loadSchedules = useCallback(async () => {
     if (!practice || !providerId) return;
     const res = await proctoService.getSchedules(practice.id, providerId);
-    if (res.status === "successful") setSchedules(res.data);
+    if (res.status === "successful") {
+      const normalized = normalizeSchedulesResponse(res.data);
+      setSchedules(normalized.schedules);
+      setPendingModeChange(normalized.pendingModeChange);
+    }
   }, [practice, providerId]);
 
   const loadOverrides = useCallback(async () => {
@@ -558,7 +598,8 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
               practiceId={practice.id}
               providerId={providerId}
               locationId={locationId}
-              schedules={schedules as ScheduleRow[]}
+              schedules={schedules}
+              pendingModeChange={pendingModeChange}
               providerUser={
                 practice.members.find((m) => m.userId === providerId)?.user ?? {
                   id: providerId,
@@ -566,8 +607,11 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
                   doctor: null,
                 }
               }
-              onSaved={() => {
-                setMessage("Doctor settings saved.");
+              onSaved={(info) => {
+                setMessage(
+                  info?.message ||
+                    "Doctor settings saved.",
+                );
                 void loadSchedules();
                 void reloadMemberships();
               }}
@@ -1168,6 +1212,7 @@ function SchedulePanel({
   providerId,
   locationId,
   schedules,
+  pendingModeChange,
   providerUser,
   onSaved,
 }: {
@@ -1175,6 +1220,11 @@ function SchedulePanel({
   providerId: string;
   locationId: string;
   schedules: ScheduleRow[];
+  pendingModeChange?: {
+    toMode: string
+    fromMode?: string | null
+    effectiveDate: string
+  } | null;
   providerUser: {
     id: string;
     name: string | null;
@@ -1183,20 +1233,20 @@ function SchedulePanel({
       appointmentValidityDays: number;
     } | null;
   };
-  onSaved: () => void;
+  onSaved: (info?: { message?: string }) => void;
 }) {
   const seed = schedules[0];
   const seedStart =
     seed?.startTime || seed?.sessionStart || "09:00";
   const seedEnd = seed?.endTime || seed?.sessionEnd || "17:00";
+  const activeMode: "TIME" | "TOKEN" =
+    seed?.mode === "TOKEN_BASED" ? "TOKEN" : "TIME";
 
   const [name, setName] = useState(providerUser.name ?? "");
   const [licenseNo, setLicenseNo] = useState(
     providerUser.doctor?.licenseNo ?? "",
   );
-  const [bookingType, setBookingType] = useState<"TIME" | "TOKEN">(
-    seed?.mode === "TOKEN_BASED" ? "TOKEN" : "TIME",
-  );
+  const [bookingType, setBookingType] = useState<"TIME" | "TOKEN">(activeMode);
   const [workingDays, setWorkingDays] = useState<number[]>(() =>
     schedules.length
       ? [...new Set(schedules.map((s) => s.dayOfWeek))].sort()
@@ -1221,6 +1271,7 @@ function SchedulePanel({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [modeConfirm, setModeConfirm] = useState<"TIME" | "TOKEN" | null>(null);
 
   useEffect(() => {
     setName(providerUser.name ?? "");
@@ -1249,24 +1300,32 @@ function SchedulePanel({
     );
   }
 
-  async function save() {
+  function requestBookingType(next: "TIME" | "TOKEN") {
+    if (next === bookingType) return;
     setError("");
-    if (!name.trim() || !licenseNo.trim()) {
+    setModeConfirm(next);
+  }
+
+  async function save(opts?: { bookingTypeOverride?: "TIME" | "TOKEN" }) {
+    setError("");
+    const modeOnly = Boolean(opts?.bookingTypeOverride);
+    if (!modeOnly && (!name.trim() || !licenseNo.trim())) {
       setError("Dr Name and license number are required.");
-      return;
+      return false;
     }
     if (workingDays.length === 0) {
       setError("Select at least one working day.");
-      return;
+      return false;
     }
 
+    const nextType = opts?.bookingTypeOverride ?? bookingType;
     setSaving(true);
     const res = await proctoService.saveProviderSettings(practiceId, {
       providerId,
       locationId,
-      name: name.trim(),
-      licenseNo: licenseNo.trim(),
-      bookingType,
+      name: name.trim() || providerUser.name || undefined,
+      licenseNo: licenseNo.trim() || providerUser.doctor?.licenseNo || undefined,
+      bookingType: nextType,
       workingDays,
       startTime,
       endTime,
@@ -1283,18 +1342,68 @@ function SchedulePanel({
 
     if (res.status !== "successful") {
       setError(res.message || "Could not save settings.");
-      return;
+      return false;
     }
-    onSaved();
+    if (opts?.bookingTypeOverride) {
+      setBookingType(opts.bookingTypeOverride);
+    }
+    const payload = res.data as {
+      message?: string
+      modeChangeDeferred?: boolean
+    } | null
+    onSaved({
+      message:
+        payload?.message ||
+        (payload?.modeChangeDeferred
+          ? "Booking type switch confirmed — it takes effect tomorrow."
+          : "Doctor settings saved."),
+    });
+    return true;
   }
+
+  async function confirmModeChange() {
+    if (!modeConfirm) return;
+    setError("");
+    const ok = await save({ bookingTypeOverride: modeConfirm });
+    if (ok) setModeConfirm(null);
+  }
+
+  const modeLabel = (id: "TIME" | "TOKEN") =>
+    id === "TOKEN" ? "Token queue" : "Time slots";
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">
+      <BookingModeChangeModal
+        open={modeConfirm != null}
+        fromLabel={modeLabel(activeMode)}
+        toLabel={modeLabel(modeConfirm ?? activeMode)}
+        confirming={saving}
+        error={modeConfirm ? error : ""}
+        onCancel={() => {
+          setModeConfirm(null);
+          setError("");
+        }}
+        onConfirm={() => void confirmModeChange()}
+      />
       <div className="rounded-xl border dark:border-neutral-700 p-4 space-y-5">
         <h2 className="font-semibold">Doctor & schedule settings</h2>
         <p className="text-xs opacity-60 -mt-3">
-          Same fields as doctor registration — update anytime.
+          Per doctor — pick Time slots or Token queue (confirm to apply from
+          tomorrow).
         </p>
+
+        {pendingModeChange ? (
+          <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+            Switching to{" "}
+            <strong>
+              {pendingModeChange.toMode === "TOKEN_BASED"
+                ? "Token queue"
+                : "Time slots"}
+            </strong>{" "}
+            on <strong>{pendingModeChange.effectiveDate}</strong>. Until then,
+            patients still book with the current mode.
+          </p>
+        ) : null}
 
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#0099ff]">
@@ -1324,7 +1433,11 @@ function SchedulePanel({
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#0099ff]">
             Booking type
           </p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div
+            className="grid grid-cols-2 gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-1.5 dark:border-neutral-700 dark:bg-neutral-900/50"
+            role="radiogroup"
+            aria-label="Booking type"
+          >
             {(
               [
                 ["TIME", "Time slots"],
@@ -1334,11 +1447,13 @@ function SchedulePanel({
               <button
                 key={id}
                 type="button"
-                onClick={() => setBookingType(id)}
-                className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                role="radio"
+                aria-checked={bookingType === id}
+                onClick={() => requestBookingType(id)}
+                className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
                   bookingType === id
-                    ? "border-[#0099ff] bg-[#0099ff]/10"
-                    : "dark:border-neutral-700 opacity-70"
+                    ? "bg-white text-neutral-900 shadow-sm ring-1 ring-[#0099ff] dark:bg-neutral-800 dark:text-white"
+                    : "text-neutral-600 hover:bg-white/70 dark:text-neutral-300 dark:hover:bg-neutral-800/80"
                 }`}
               >
                 {label}
@@ -1346,8 +1461,8 @@ function SchedulePanel({
             ))}
           </div>
           <p className="mt-2 text-xs opacity-60">
-            One mode per doctor — time slots or token queue, not both. Saving
-            replaces the other mode.
+            Switching opens a confirmation. After confirm, the new type takes
+            effect tomorrow.
           </p>
         </div>
 

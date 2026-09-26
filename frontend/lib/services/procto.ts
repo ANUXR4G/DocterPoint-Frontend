@@ -313,10 +313,11 @@ export const proctoService = {
 
   listPracticeNotifications: (
     practiceId: string,
-    opts?: { status?: string; take?: number; skip?: number },
+    opts?: { status?: string; kind?: string; take?: number; skip?: number },
   ) => {
     const qs = new URLSearchParams();
     if (opts?.status) qs.set("status", opts.status);
+    if (opts?.kind) qs.set("kind", opts.kind);
     if (opts?.take != null) qs.set("take", String(opts.take));
     if (opts?.skip != null) qs.set("skip", String(opts.skip));
     const q = qs.toString();

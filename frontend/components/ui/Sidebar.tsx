@@ -135,8 +135,9 @@ export default function Sidebar({ role, logout }: Props) {
                         : "stroke-slate-400 dark:stroke-slate-500"
                     }`}
                   />
+                  {/* Collapsed rail: badge on icon. Expanded xl: badge beside label only. */}
                   {badge > 0 ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white xl:hidden">
                       {badge > 99 ? "99+" : badge}
                     </span>
                   ) : null}
@@ -192,7 +193,7 @@ export default function Sidebar({ role, logout }: Props) {
                     }
                   />
                   {badge > 0 ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white xl:hidden">
                       {badge > 99 ? "99+" : badge}
                     </span>
                   ) : null}

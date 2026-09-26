@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button, Icon, IconInput, ThemeUI } from "@/components"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { PracticeManagementPanel } from "@/components/ui/doctors/pages/PracticeManagementPanel"
+import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal"
 import { PracticeDashboardProvider } from "@/contexts/PracticeDashboardContext"
 import { useRole } from "@/hooks/useRole"
 import { useUser } from "@/hooks/useUser"
@@ -821,6 +822,14 @@ function DoctorAccountForm({
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [modeConfirm, setModeConfirm] = useState<"TIME" | "TOKEN" | null>(null)
+  const [pendingModeChange, setPendingModeChange] = useState<{
+    toMode: string
+    effectiveDate: string
+  } | null>(null)
+
+  const activeMode: "TIME" | "TOKEN" =
+    schedules[0]?.mode === "TOKEN_BASED" ? "TOKEN" : "TIME"
 
   useEffect(() => {
     if (!locationId) {
@@ -830,7 +839,24 @@ function DoctorAccountForm({
     void proctoService
       .getSchedules(membership.practice.id, userId)
       .then((res) => {
-        if (res.status === "successful") setSchedules(res.data ?? [])
+        if (res.status === "successful") {
+          const data = res.data as
+            | unknown[]
+            | {
+                schedules?: typeof schedules
+                pendingModeChange?: {
+                  toMode: string
+                  effectiveDate: string
+                } | null
+              }
+          if (Array.isArray(data)) {
+            setSchedules(data as typeof schedules)
+            setPendingModeChange(null)
+          } else if (data && Array.isArray(data.schedules)) {
+            setSchedules(data.schedules)
+            setPendingModeChange(data.pendingModeChange ?? null)
+          }
+        }
         setLoading(false)
       })
   }, [membership.practice.id, userId, locationId])
@@ -867,51 +893,79 @@ function DoctorAccountForm({
     )
   }
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault()
+  /** Settings only — always confirm; registration stays a free pick. */
+  function requestBookingType(next: "TIME" | "TOKEN") {
+    if (loading) return
+    if (next === bookingType) return
+    setError("")
+    setModeConfirm(next)
+  }
+
+  async function save(
+    e?: React.FormEvent,
+    opts?: { bookingTypeOverride?: "TIME" | "TOKEN"; modeOnly?: boolean },
+  ) {
+    e?.preventDefault()
     setError("")
     setMessage("")
     if (!locationId) {
       setError("Practice location missing.")
-      return
+      return false
     }
-    if (!name.trim() || !licenseNo.trim()) {
+    if (!opts?.modeOnly && (!name.trim() || !licenseNo.trim())) {
       setError("Fill Dr Name and license number.")
-      return
+      return false
+    }
+    if (opts?.modeOnly && !name.trim() && !provider?.name) {
+      setError("Dr Name is required.")
+      return false
     }
     const feeNum = Number(consultationFee)
-    if (!Number.isFinite(feeNum) || feeNum <= 0) {
-      setError(
-        "Appointment / consultation fee (₹) is required and must be greater than 0.",
-      )
-      return
+    if (!opts?.modeOnly) {
+      if (!Number.isFinite(feeNum) || feeNum <= 0) {
+        setError(
+          "Appointment / consultation fee (₹) is required and must be greater than 0.",
+        )
+        return false
+      }
     }
     if (workingDays.length === 0) {
       setError("Select at least one working day.")
-      return
+      return false
     }
     if (!startTime || !endTime || startTime >= endTime) {
       setError("Working end time must be after start time.")
-      return
+      return false
     }
     setSaving(true)
-    const profileRes = await proctoService.updatePracticeProfile(
-      membership.practice.id,
-      { consultationFee: feeNum },
-    )
-    if (profileRes.status !== "successful") {
-      setSaving(false)
-      setError(profileRes.message || "Could not update appointment fee.")
-      return
+    const nextType = opts?.bookingTypeOverride ?? bookingType
+
+    // Fee update is clinic-admin only — skip on mode switch so staff doctors can confirm.
+    if (!opts?.modeOnly && Number.isFinite(feeNum) && feeNum > 0) {
+      const profileRes = await proctoService.updatePracticeProfile(
+        membership.practice.id,
+        { consultationFee: feeNum },
+      )
+      if (profileRes.status !== "successful") {
+        // Solo owners update fee; clinic staff doctors may lack admin — continue schedule save.
+        const msg = String(profileRes.message || "")
+        if (!/not authorized|permission|403|admin/i.test(msg)) {
+          setSaving(false)
+          setError(profileRes.message || "Could not update appointment fee.")
+          return false
+        }
+      }
     }
+
     const res = await proctoService.saveProviderSettings(
       membership.practice.id,
       {
         providerId: userId,
         locationId,
-        name: name.trim(),
-        licenseNo: licenseNo.trim(),
-        bookingType,
+        name: name.trim() || provider?.name || undefined,
+        licenseNo:
+          licenseNo.trim() || provider?.doctor?.licenseNo || undefined,
+        bookingType: nextType,
         workingDays,
         startTime,
         endTime,
@@ -928,17 +982,75 @@ function DoctorAccountForm({
     setSaving(false)
     if (res.status !== "successful") {
       setError(res.message || "Could not save doctor details.")
-      return
+      return false
     }
-    setMessage("Doctor details saved.")
+    if (opts?.bookingTypeOverride) setBookingType(opts.bookingTypeOverride)
+    const payload = res.data as {
+      message?: string
+      modeChangeDeferred?: boolean
+    } | null
+    setMessage(
+      payload?.message ||
+        (payload?.modeChangeDeferred
+          ? "Booking type switch confirmed — it takes effect tomorrow."
+          : "Doctor details saved."),
+    )
+    // Refresh schedules so pending banner appears.
+    const schedRes = await proctoService.getSchedules(
+      membership.practice.id,
+      userId,
+    )
+    if (schedRes.status === "successful") {
+      const data = schedRes.data as
+        | unknown[]
+        | {
+            schedules?: typeof schedules
+            pendingModeChange?: {
+              toMode: string
+              effectiveDate: string
+            } | null
+          }
+      if (Array.isArray(data)) {
+        setSchedules(data as typeof schedules)
+        setPendingModeChange(null)
+      } else if (data && Array.isArray(data.schedules)) {
+        setSchedules(data.schedules)
+        setPendingModeChange(data.pendingModeChange ?? null)
+      }
+    }
+    return true
+  }
+
+  async function confirmModeChange() {
+    if (!modeConfirm) return
+    const ok = await save(undefined, {
+      bookingTypeOverride: modeConfirm,
+      modeOnly: true,
+    })
+    if (ok) setModeConfirm(null)
   }
 
   if (loading) {
     return <p className="text-base font-medium opacity-80">Loading doctor details…</p>
   }
 
+  const modeLabel = (id: "TIME" | "TOKEN") =>
+    id === "TOKEN" ? "Token queue" : "Time slots"
+
   return (
     <form className="text-left" onSubmit={(e) => void save(e)}>
+      <BookingModeChangeModal
+        open={modeConfirm != null}
+        fromLabel={modeLabel(activeMode)}
+        toLabel={modeLabel(modeConfirm ?? activeMode)}
+        confirming={saving}
+        error={modeConfirm ? error : ""}
+        onCancel={() => {
+          setModeConfirm(null)
+          setError("")
+        }}
+        onConfirm={() => void confirmModeChange()}
+      />
       <p className={sectionLabel}>Doctor profile</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <IconInput
@@ -984,9 +1096,25 @@ function DoctorAccountForm({
 
       <p className={`${sectionLabel} mt-5`}>Booking type</p>
       <p className="mb-2 text-xs opacity-60">
-        One mode per doctor — time slots or token queue, not both.
+        Change in Settings here (not registration). Confirm to apply from
+        tomorrow.
       </p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {pendingModeChange ? (
+        <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          Switching to{" "}
+          <strong>
+            {pendingModeChange.toMode === "TOKEN_BASED"
+              ? "Token queue"
+              : "Time slots"}
+          </strong>{" "}
+          on <strong>{pendingModeChange.effectiveDate}</strong>.
+        </p>
+      ) : null}
+      <div
+        className="grid grid-cols-2 gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-1.5 dark:border-[#333] dark:bg-[#141414]"
+        role="radiogroup"
+        aria-label="Booking type"
+      >
         {(
           [
             ["TIME", "Time slots"],
@@ -996,11 +1124,14 @@ function DoctorAccountForm({
           <button
             key={id}
             type="button"
-            onClick={() => setBookingType(id)}
-            className={`rounded-xl border px-4 py-3 text-base font-bold transition ${
+            role="radio"
+            aria-checked={bookingType === id}
+            disabled={loading || saving}
+            onClick={() => requestBookingType(id)}
+            className={`rounded-xl px-4 py-3 text-base font-bold transition disabled:opacity-50 ${
               bookingType === id
-                ? "border-[var(--theme-primary)] bg-[var(--theme-primary)]/10 text-neutral-900 dark:text-white"
-                : "border-neutral-200 text-neutral-500 dark:border-[#333] dark:text-[#999]"
+                ? "bg-white text-neutral-900 shadow-sm ring-1 ring-[var(--theme-primary)] dark:bg-[#1c1c1c] dark:text-white"
+                : "text-neutral-500 hover:bg-white/70 dark:text-[#999] dark:hover:bg-[#1c1c1c]/80"
             }`}
           >
             {label}

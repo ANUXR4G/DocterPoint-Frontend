@@ -264,6 +264,10 @@ export default function ClinicDoctorsPage() {
                       {today.done}
                     </p>
                     <p className="text-xs text-neutral-500">
+                      Booking type is set per doctor under Hours &amp; blocks
+                      (Time slots or Token queue). Switches apply tomorrow.
+                    </p>
+                    <p className="text-xs text-neutral-500">
                       This week:{" "}
                       {period
                         ? `${period.bookings} bookings · ${period.completed} completed · ${period.waiting} waiting`

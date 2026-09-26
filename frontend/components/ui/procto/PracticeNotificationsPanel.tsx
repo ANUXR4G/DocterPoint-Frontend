@@ -12,6 +12,16 @@ import { emitPracticeNotificationsChanged } from "@/hooks/usePracticeOpenNotific
 
 const STATUS_FILTERS = ["ALL", "SENT", "PENDING", "FAILED", "SKIPPED"] as const
 
+const KIND_FILTERS = [
+  { id: "ALL", label: "All types" },
+  { id: "appointments", label: "Appointments" },
+  { id: "messages", label: "Messages" },
+  { id: "documents", label: "Documents" },
+  { id: "queue", label: "Queue" },
+  { id: "support", label: "Support" },
+  { id: "schedule", label: "Schedule" },
+] as const
+
 /** Soft labels for send status — avoid alarming "Failed" in the clinic inbox. */
 function statusLabel(status: string) {
   switch ((status || "").toUpperCase()) {
@@ -71,6 +81,7 @@ export default function PracticeNotificationsPanel() {
   const liveConnected = dash.liveConnected
 
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>("ALL")
+  const [kind, setKind] = useState<(typeof KIND_FILTERS)[number]["id"]>("ALL")
   const [items, setItems] = useState<PracticeNotification[]>([])
   const [total, setTotal] = useState(0)
   const [pendingCount, setPendingCount] = useState(0)
@@ -83,6 +94,8 @@ export default function PracticeNotificationsPanel() {
 
   const statusRef = useRef(status)
   statusRef.current = status
+  const kindRef = useRef(kind)
+  kindRef.current = kind
   const practiceIdRef = useRef(practiceId)
   practiceIdRef.current = practiceId
   const hasItemsRef = useRef(false)
@@ -159,6 +172,7 @@ export default function PracticeNotificationsPanel() {
     try {
       const res = await proctoService.listPracticeNotifications(id, {
         status: statusRef.current === "ALL" ? undefined : statusRef.current,
+        kind: kindRef.current === "ALL" ? undefined : kindRef.current,
         take: 80,
       })
       if (gen !== requestGen.current) return
@@ -206,7 +220,7 @@ export default function PracticeNotificationsPanel() {
     // Avoid empty-state flash before the first paint of a fetch.
     if (!hasItemsRef.current) setLoading(true)
     void fetchList()
-  }, [practiceId, status, fetchList])
+  }, [practiceId, status, kind, fetchList])
 
   useEffect(() => {
     if (!practiceId) return
@@ -304,22 +318,49 @@ export default function PracticeNotificationsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+          Type
+        </p>
         <div className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((s) => (
+          {KIND_FILTERS.map((k) => (
             <button
-              key={s}
+              key={k.id}
               type="button"
-              onClick={() => setStatus(s)}
+              onClick={() => setKind(k.id)}
               className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                status === s
+                kind === k.id
                   ? "bg-[var(--theme-primary)] text-white"
                   : "border border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300"
               }`}
             >
-              {statusLabel(s)}
+              {k.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+            Delivery
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {STATUS_FILTERS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatus(s)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  status === s
+                    ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                    : "border border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300"
+                }`}
+              >
+                {statusLabel(s)}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="ml-auto flex flex-wrap gap-2 text-xs font-semibold">
           <span
@@ -352,7 +393,7 @@ export default function PracticeNotificationsPanel() {
       </div>
 
       <p className="text-sm text-neutral-500 dark:text-neutral-400">
-        Open alerts for{" "}
+        For{" "}
         <span className="font-semibold text-neutral-800 dark:text-neutral-200">
           {practiceName || "your practice"}
         </span>
@@ -376,7 +417,7 @@ export default function PracticeNotificationsPanel() {
         <p className="text-sm text-neutral-500">Loading notifications…</p>
       ) : items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700">
-          No open notifications. Booking, queue, document, and support alerts will appear here.
+          No open notifications. New appointments, patient messages, documents, and queue updates will appear here.
         </p>
       ) : (
         <ul

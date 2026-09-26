@@ -284,7 +284,8 @@ export default function DoctorRegisterForm({
         ))}
       </div>
       <p className="mt-2 text-xs opacity-60">
-        Choose one mode — time slots or token queue, not both.
+        Choose one mode for sign-up. You can switch later in Settings (takes
+        effect the next day after confirm).
       </p>
 
       <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-[0.12em] text-[#0099ff]">
