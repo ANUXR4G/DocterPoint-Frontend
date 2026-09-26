@@ -79,9 +79,9 @@ function replyButtonsAsListRows(
 }
 
 /** Short TTL caches — WhatsApp traffic is bursty; avoid repeat DB on every tap. */
-const PRACTICE_RESOLVE_TTL_MS = 180_000;
-const STAFF_CHECK_TTL_MS = 180_000;
-const ENTITLEMENT_TTL_MS = 120_000;
+const PRACTICE_RESOLVE_TTL_MS = 300_000;
+const STAFF_CHECK_TTL_MS = 600_000;
+const ENTITLEMENT_TTL_MS = 300_000;
 
 const practiceResolveCache = new Map<
   string,
@@ -999,7 +999,7 @@ export const WhatsAppService = {
               ? isPostBooking
                 ? "What would you like to do?"
                 : `Tap an option (${optionRange}):`
-              : result.reply.split("\n").slice(0, 8).join("\n").slice(0, 400) ||
+              : result.reply.split("\n").slice(0, 8).join("\n").slice(0, 900) ||
                 (isPostBooking
                   ? "What would you like to do?"
                   : `Tap an option (${optionRange}):`),
@@ -1333,11 +1333,23 @@ export const WhatsAppService = {
 
     const patientPhone = normalizePhone(payload.from);
 
-    // Load conversation early so voice/ID acks can use preferred language.
-    const convEarly = await this.getOrCreateConversation(
-      practice.id,
-      patientPhone,
+    // Parallel hot path: conversation + staff + entitlement in one round.
+    const entCached = fresh(
+      entitlementCache.get(practice.id),
+      ENTITLEMENT_TTL_MS,
     );
+    const [convEarly, isStaff, ent] = await Promise.all([
+      this.getOrCreateConversation(practice.id, patientPhone),
+      isStaffOrClinicPhone(patientPhone, practice),
+      entCached
+        ? Promise.resolve(entCached.ent)
+        : getPracticeEntitlement(practice.id, { skipBookingCount: true }).then(
+            (e) => {
+              entitlementCache.set(practice.id, { at: Date.now(), ent: e });
+              return e;
+            },
+          ),
+    ]);
     const earlyState = (convEarly.state as ConversationState) ?? {};
     const lang = resolveLang(earlyState.preferredLanguage);
 
@@ -1358,21 +1370,6 @@ export const WhatsAppService = {
         ? payload.transcribedText
         : payload.body;
 
-    const entCached = fresh(
-      entitlementCache.get(practice.id),
-      ENTITLEMENT_TTL_MS,
-    );
-    const [isStaff, ent] = await Promise.all([
-      isStaffOrClinicPhone(patientPhone, practice),
-      entCached
-        ? Promise.resolve(entCached.ent)
-        : getPracticeEntitlement(practice.id, { skipBookingCount: true }).then(
-            (e) => {
-              entitlementCache.set(practice.id, { at: Date.now(), ent: e });
-              return e;
-            },
-          ),
-    ]);
     const conv = convEarly;
 
     if (isStaff) {
@@ -1445,10 +1442,13 @@ export const WhatsAppService = {
           if (!state.handedOff || conv.status !== "handed_off") {
             state.handedOff = true;
             state.step = "idle";
-            await prisma.whatsAppConversation.update({
-              where: { id: conv.id },
-              data: { status: "handed_off", state },
-            });
+            // Don't block the care-ack on this write.
+            void prisma.whatsAppConversation
+              .update({
+                where: { id: conv.id },
+                data: { status: "handed_off", state },
+              })
+              .catch(() => undefined);
           }
           return { reply: BotPrompts.careReplyReceived(lang) };
         }
@@ -1468,6 +1468,7 @@ export const WhatsAppService = {
       text,
       idScan: payload.idScan,
       fromVoice: payload.messageType === "audio",
+      fromInteractive: Boolean(payload.fromInteractive),
     });
   },
 
