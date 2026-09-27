@@ -336,6 +336,8 @@ model Practice {
   type                   PracticeType @default(SOLO)
   specialty              String?
   consultationFee        Float?       @map("consultation_fee")
+  /// Optional advance (₹) the WhatsApp bot asks for before a visit; null = ask for the full consultation fee.
+  advanceBookingAmount   Float?       @map("advance_booking_amount")
   registrationNo         String?      @map("registration_no")
   phone                  String?      @db.VarChar(20)
   email                  String?      @db.VarChar(256)
@@ -363,6 +365,7 @@ model Practice {
   subscription   PracticeSubscription?
   messageTemplates MessageTemplate[]
   reviews        PracticeReview[]
+  paymentRequests PaymentRequest[]
 
   @@map("practices")
 }
@@ -487,6 +490,7 @@ model PracticeBooking {
   location      ClinicLocation      @relation(fields: [locationId], references: [id], onDelete: Cascade)
   notifications NotificationEvent[]
   review        PracticeReview?
+  paymentRequests PaymentRequest[]
 
   @@index([practiceId, providerId, status, slotStart])
   @@index([practiceId, providerId, sessionDate, status])
@@ -494,6 +498,46 @@ model PracticeBooking {
   @@index([patientId])
   @@index([paymentLinkId])
   @@map("practice_bookings")
+}
+
+/// Every Razorpay Payment Link sent to a patient: WhatsApp advance / fee prepay and staff custom requests.
+model PaymentRequest {
+  id            String    @id @default(uuid()) @db.Uuid
+  practiceId    String    @map("practice_id") @db.Uuid
+  /// Doctor the payment belongs to (staff doctors only see their own).
+  providerId    String?   @map("provider_id") @db.Uuid
+  bookingId     String?   @map("booking_id") @db.Uuid
+  patientId     String?   @map("patient_id") @db.Uuid
+  patientName   String?   @map("patient_name")
+  patientPhone  String    @map("patient_phone") @db.VarChar(20)
+  /// ADVANCE | CONSULTATION | CUSTOM
+  kind          String    @db.VarChar(16)
+  purpose       String?   @db.VarChar(250)
+  /// Paise.
+  amount        Int
+  /// PENDING | PAID | EXPIRED | CANCELLED
+  status        String    @default("PENDING") @db.VarChar(16)
+  linkId        String?   @unique @map("link_id")
+  linkUrl       String?   @map("link_url")
+  paymentId     String?   @map("payment_id")
+  paidAt        DateTime? @map("paid_at") @db.Timestamptz(6)
+  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(6)
+  /// WHATSAPP_BOT | WEB_PORTAL | PROVIDER_APP
+  channel       String    @db.VarChar(16)
+  requestedById String?   @map("requested_by_id") @db.Uuid
+  /// WhatsApp delivery of the link: SENT | FAILED | SIMULATED | null (shared in-chat by the bot).
+  waDelivery    String?   @map("wa_delivery") @db.VarChar(16)
+  waError       String?   @map("wa_error")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  practice Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  booking  PracticeBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([practiceId, createdAt])
+  @@index([practiceId, providerId, status])
+  @@index([bookingId])
+  @@map("payment_requests")
 }
 
 model NotificationEvent {

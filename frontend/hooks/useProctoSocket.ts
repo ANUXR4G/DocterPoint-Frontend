@@ -20,7 +20,8 @@ export function useProctoSocket(
         (event.event === "booking_created" ||
           event.event === "booking_updated" ||
           event.event === "conversation_updated" ||
-          event.event === "notification_created")
+          event.event === "notification_created" ||
+          event.event === "payment_updated")
       ) {
         onEvent(event as ProctoWsEvent)
       }

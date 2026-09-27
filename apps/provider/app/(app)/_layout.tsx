@@ -168,6 +168,10 @@ export default function AppLayout() {
             name="analytics"
             options={{ href: null, title: "Analytics", headerShown: true }}
           />
+          <Tabs.Screen
+            name="payments"
+            options={{ href: null, title: "Payments", headerShown: true }}
+          />
           <Tabs.Screen name="profile" options={{ title: "More" }} />
           <Tabs.Screen
             name="subscriptions"

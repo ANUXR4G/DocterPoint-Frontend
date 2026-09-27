@@ -306,6 +306,49 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
     requiresTemplateOutsideWindow: true,
     audience: "patient",
   },
+  {
+    key: "PAYMENT_REQUEST",
+    metaName: "docline_payment_request",
+    category: "UTILITY",
+    language: "en",
+    body:
+      "Payment request from {{practice_name}}.\n" +
+      "Amount: {{amount}}\n" +
+      "For: {{purpose}}\n" +
+      "Pay securely (UPI / card / netbanking): {{pay_link}}\n" +
+      "Link valid until {{valid_until}}.\n" +
+      "Reply STOP to opt out of appointment alerts.",
+    examples: {
+      practice_name: "City Care Clinic",
+      amount: "₹500",
+      purpose: "Blood test charges",
+      pay_link: "https://rzp.io/rzp/abc123",
+      valid_until: "30 Sep 2026, 6:00 PM",
+    },
+    paramNames: ["practice_name", "amount", "purpose", "pay_link", "valid_until"],
+    requiresTemplateOutsideWindow: true,
+    audience: "patient",
+  },
+  {
+    key: "PAYMENT_RECEIVED",
+    metaName: "docline_payment_received",
+    category: "UTILITY",
+    language: "en",
+    body:
+      "Payment received: {{amount}} to {{practice_name}}.\n" +
+      "For: {{purpose}}\n" +
+      "Payment ID: {{payment_id}}\n" +
+      "Reply STOP to opt out of appointment alerts.",
+    examples: {
+      amount: "₹500",
+      practice_name: "City Care Clinic",
+      purpose: "Consultation fee · 30 Sep 2026, 10:30 AM",
+      payment_id: "pay_Q1w2e3r4t5y6u7",
+    },
+    paramNames: ["amount", "practice_name", "purpose", "payment_id"],
+    requiresTemplateOutsideWindow: true,
+    audience: "patient",
+  },
 ];
 
 export function getMetaTemplateByKey(key: string): MetaTemplateDef | undefined {
@@ -459,6 +502,21 @@ export function payloadToMetaParams(
         practice_name: s("practiceName", "your clinic"),
         provider_name: s("providerName", "your doctor"),
         medicines_preview: s("medicinesPreview", "None prescribed"),
+      };
+    case "PAYMENT_REQUEST":
+      return {
+        practice_name: s("practiceName", "your clinic"),
+        amount: s("amountLabel"),
+        purpose: s("purpose", "Clinic charges"),
+        pay_link: s("payLink"),
+        valid_until: s("validUntil", "the date shown on the page"),
+      };
+    case "PAYMENT_RECEIVED":
+      return {
+        amount: s("amountLabel"),
+        practice_name: s("practiceName", "your clinic"),
+        purpose: s("purpose", "Clinic charges"),
+        payment_id: s("paymentId", "—"),
       };
     default:
       return {};

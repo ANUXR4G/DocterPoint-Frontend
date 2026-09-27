@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/doctor/activity", label: "Patient Support" },
   { href: "/doctor/calendar", label: "Calendar" },
   { href: "/doctor/analytics", label: "Analytics" },
+  { href: "/clinic/payments", label: "Payments" },
   { href: practiceTabHref("setup"), label: "Hours & blocks" },
   { href: practiceTabHref("doctors"), label: "Doctors" },
   { href: "/clinic/subscription", label: "Subscription" },

@@ -283,3 +283,91 @@ export async function cancelPendingCheckout(practiceId: string) {
   });
 }
 
+
+export type PaymentRequestStatus = "PENDING" | "PAID" | "EXPIRED" | "CANCELLED";
+
+export type PaymentRequestRow = {
+  id: string;
+  kind: "ADVANCE" | "CONSULTATION" | "CUSTOM";
+  label: string;
+  purpose: string | null;
+  /** Paise. */
+  amount: number;
+  status: PaymentRequestStatus;
+  linkUrl: string | null;
+  paymentId: string | null;
+  paidAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  patientName: string | null;
+  patientPhone: string;
+  patientId: string | null;
+  bookingId: string | null;
+  providerId: string | null;
+  providerName: string | null;
+  requestedByName: string | null;
+  channel: "WHATSAPP_BOT" | "WEB_PORTAL" | "PROVIDER_APP";
+  waDelivery: "SENT" | "FAILED" | "SIMULATED" | null;
+  waError: string | null;
+};
+
+export type PaymentsListResponse = {
+  items: PaymentRequestRow[];
+  summary: {
+    collected: number;
+    paidCount: number;
+    pending: number;
+    pendingCount: number;
+    closedCount: number;
+    total: number;
+  };
+  paymentsEnabled: boolean;
+};
+
+export async function fetchPayments(
+  practiceId: string,
+  opts: { status?: string; from?: string; q?: string } = {},
+) {
+  const params = new URLSearchParams();
+  if (opts.status) params.set("status", opts.status);
+  if (opts.from) params.set("from", opts.from);
+  if (opts.q) params.set("q", opts.q);
+  const qs = params.toString();
+  return api<PaymentsListResponse>(
+    `/procto/payments/practice/${practiceId}${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function createPaymentRequest(body: {
+  practiceId: string;
+  bookingId?: string;
+  patientId?: string | null;
+  patientName?: string;
+  patientPhone?: string;
+  amount: string;
+  purpose: string;
+  expiresInDays?: number;
+}) {
+  return api<PaymentRequestRow>("/procto/payments/requests", {
+    method: "POST",
+    body: JSON.stringify({ ...body, channel: "PROVIDER_APP" }),
+  });
+}
+
+export async function refreshPaymentRequest(id: string) {
+  return api<PaymentRequestRow>(`/procto/payments/requests/${id}?refresh=1`);
+}
+
+export async function resendPaymentRequest(id: string) {
+  return api<PaymentRequestRow>(`/procto/payments/requests/${id}/resend`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function cancelPaymentRequest(id: string) {
+  return api<PaymentRequestRow>(`/procto/payments/requests/${id}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}

@@ -1374,12 +1374,24 @@ export const BotPrompts = {
     );
   },
 
-  askPayBeforeVisit(amountLabel: string, lang?: WaLang): string {
+  askPayBeforeVisit(
+    amountLabel: string,
+    lang?: WaLang,
+    kind: "ADVANCE" | "CONSULTATION" = "CONSULTATION",
+  ): string {
+    const en =
+      kind === "ADVANCE"
+        ? `pay the advance booking amount (${amountLabel})`
+        : `pay the consultation fee (${amountLabel})`;
+    const hi =
+      kind === "ADVANCE"
+        ? `अग्रिम बुकिंग राशि (${amountLabel})`
+        : `परामर्श शुल्क (${amountLabel})`;
     return L(
       lang,
-      `💳 Would you like to *pay the consultation fee (${amountLabel})* now, before your appointment?\n\n` +
+      `💳 Would you like to *${en}* now, before your appointment?\n\n` +
         "Tap *Yes* to get a secure Razorpay link, or *No* to pay at the clinic.",
-      `💳 क्या आप अपॉइंटमेंट से पहले *परामर्श शुल्क (${amountLabel})* अभी भरना चाहेंगे?\n\n` +
+      `💳 क्या आप अपॉइंटमेंट से पहले *${hi}* अभी भरना चाहेंगे?\n\n` +
         "सुरक्षित Razorpay लिंक के लिए *Yes*, या क्लिनिक पर भुगतान के लिए *No* दबाएँ।",
     );
   },

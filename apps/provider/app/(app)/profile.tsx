@@ -155,6 +155,10 @@ export default function ProfileScreen() {
               onPress={() => router.push("/(app)/analytics")}
             />
             <Chip label="Hours & blocks" onPress={() => router.push("/(app)/schedule")} />
+            <Chip
+              label="Payments"
+              onPress={() => router.push("/(app)/payments" as "/(app)/inbox")}
+            />
             <Chip label="Plans & billing" onPress={() => router.push("/(app)/subscriptions")} />
             <Chip label="WhatsApp inbox" onPress={() => router.push("/(app)/inbox")} />
             <Chip

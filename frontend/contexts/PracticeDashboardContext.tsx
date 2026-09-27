@@ -10,7 +10,11 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import {
+  proctoService,
+  type PaymentRequestRow,
+  type ProctoBooking,
+} from "@/lib/services/procto"
 import { useProctoSocket } from "@/hooks/useProctoSocket"
 import {
   applyLiveBookingEvent,
@@ -120,6 +124,8 @@ type PracticeDashboardValue = {
   bookingTick: number
   /** Increments on notification_created (Notifications tab soft-refresh). */
   notificationTick: number
+  /** Latest `payment_updated` row from the shared WS (Payments tab upserts it). */
+  lastPaymentEvent: PaymentRequestRow | null
   refresh: (opts?: { silent?: boolean }) => Promise<void>
   patchBooking: (id: string, patch: Partial<ProctoBooking>) => void
   setBookings: React.Dispatch<React.SetStateAction<ProctoBooking[]>>
@@ -182,6 +188,8 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
   const [conversationTick, setConversationTick] = useState(0)
   const [bookingTick, setBookingTick] = useState(0)
   const [notificationTick, setNotificationTick] = useState(0)
+  const [lastPaymentEvent, setLastPaymentEvent] =
+    useState<PaymentRequestRow | null>(null)
   const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bootInFlight = useRef(false)
   const lastBootAt = useRef(0)
@@ -340,6 +348,10 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
         setNotificationTick((n) => n + 1)
         return
       }
+      if (event.event === "payment_updated") {
+        setLastPaymentEvent(event.payment)
+        return
+      }
       setBookingTick((n) => n + 1)
       const incoming = event.booking as Record<string, unknown> | undefined
       setBookings((prev) => {
@@ -391,6 +403,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       conversationTick,
       bookingTick,
       notificationTick,
+      lastPaymentEvent,
       refresh: load,
       patchBooking,
       setBookings,
@@ -415,6 +428,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       conversationTick,
       bookingTick,
       notificationTick,
+      lastPaymentEvent,
       load,
       patchBooking,
     ],

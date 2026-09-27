@@ -156,6 +156,7 @@ export function PracticeLiveProvider({ children }: { children: ReactNode }) {
         setConversationTick((n) => n + 1);
         return;
       }
+      if (event.event === "payment_updated") return;
 
       if (
         event.event !== "booking_created" &&

@@ -26,6 +26,30 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-13
+- **Date opened:** 2026-09-28
+- **Severity:** 2
+- **Process:** P-BOOK (slots) / Settings
+- **Description:** Found while verifying CR-20260928-12. (1) Doctor **Settings** sometimes showed default hours (09:00–17:00, 15-min slots) instead of the saved schedule; pressing *Save* would then overwrite the real slots. (2) **Solo doctors could not save their fee** (nor the new advance amount): `PATCH /procto/practices/:id/profile` returned 403 "only clinic owners…".
+- **Evidence:** Browser (dr.solo): after reload the form showed 09:00–17:00 while DB rows were 10:00–14:00 / 20 min; resource timing showed `GET …/schedules?providerId=52T4p8AwTA-…` → 403. Direct profile PATCH → 403; the only member of the SOLO practice has role `DOCTOR`.
+- **Containment:** DB schedule rows confirmed untouched (`updatedAt` 2026-09-17) before any further save.
+- **Root cause:** (1) `DoctorAccountForm` took `userId` from `/users/doctor/info`, whose `id` is a public encoded ID, not the user UUID; when that request resolved first the schedule fetch 403'd and the form silently kept its defaults with *Save* enabled. (2) SOLO practices are created with the doctor as `DOCTOR` (no owner), but `updatePractice` required `PRACTICE_OWNER` / `PRACTICE_ADMIN`.
+- **Corrective action:** (1) Use `membership.userId` (from `/practices/mine`); if the schedule fails to load show the error and disable *Save* (also blocked while loading). (2) New `PracticeService.assertProfileEditor`: owner / admin, or the **only active member** (role DOCTOR) of a **SOLO** practice; used by `updatePractice` only (`assertAdmin` unchanged for doctor / patient management).
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** Reloaded Settings repeatedly → schedules requested with the UUID (200) and real hours shown (10:00–14:00, 20 min). dr.solo saved advance ₹200 → DB 200 → reload shows 200 → cleared → DB `null`; schedule rows still Mon / Wed / Fri 10:00–14:00 / 20 min. Frontend + backend tsc clean.
+
+### CR-20260928-12
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-BOOK / billing (WhatsApp + portals)
+- **Description:** Requested: WhatsApp payment for an **advance booking amount**, plus **custom amount** requests sent by the doctor from the portal to the patient on WhatsApp (Razorpay), in all portals, and a **Payments** tab where the doctor sees payment status.
+- **Evidence:** User request; only a consultation-fee prepay link per booking existed (CR-20260928-11).
+- **Containment:** n/a.
+- **Root cause:** No configurable advance amount, no way to request arbitrary amounts, no payment list.
+- **Corrective action:** Additive migration `20260352000000_payment_requests` (`practices.advance_booking_amount`; `payment_requests` ledger with unique `link_id`, indexes, FKs; backfilled existing booking links) — applied to Supabase before backend deploy. `PaymentRequestService` (create custom link + WA `docline_payment_request`, resend, cancel, refresh, lazy expiry, list + summary, callback / webhook → `PAID` once + receipt `docline_payment_received`, booking fields synced only for matching prepay links). WA prepay uses the advance when set ("pay the advance booking amount (₹X)"), else the fee. Routes `/procto/payments/practice/:id`, `/requests`, `/requests/:id[/resend|/cancel]`; socket `payment_updated`. Settings: *Advance booking amount* in clinic + doctor forms. Web: `/doctor/payments` + `/clinic/payments` (sidebar + portal links), `PaymentRequestModal`, *Request payment* in the visit Payment status dialog. Provider app: **More → Payments** (list, status chips, request form, share / refresh / resend / cancel). Risk R19 added.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** 170/170 procto tests (new: advance vs fee offer, custom amount parse, link expiry clamp, phone normalisation, kind labels). Orchestrator smoke on a temp conversation + non-existent booking: re-prompt reads "pay the advance booking amount (₹300)", *No* → pay at clinic → document offer (conversation deleted). Browser (dr.solo): Payments page loads (summary, tabs, range, search), sidebar + portal link present, request modal validation ("Enter the amount…") and patient suggestions work — **no request sent** (live Razorpay key + real patients). Settings round-trip (see CR-20260928-13). Backend tsc + build, frontend tsc + build, provider tsc clean. **Open:** `docline_payment_request` / `docline_payment_received` need Meta approval per WABA for delivery outside the 24 h window; production Razorpay webhook needs `payment_link` events + `RAZORPAY_WEBHOOK_SECRET`.
+
 ### CR-20260928-11
 - **Date opened:** 2026-09-28
 - **Severity:** 3
