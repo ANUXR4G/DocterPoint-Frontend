@@ -15,6 +15,7 @@ import {
   getTokenSession,
   getValidityBounds,
   hasExtraSlotsForDay,
+  isBookingStillUpcoming,
   isDateWithinValidity,
   isSlotStartBookable,
   parseLocalDate,
@@ -593,6 +594,12 @@ export const BookingService = {
     ) {
       throw new AppError(400, "only scheduled or accepted bookings can be rescheduled.");
     }
+    if (!isBookingStillUpcoming(existing)) {
+      throw new AppError(
+        400,
+        "This appointment time has already passed, so it can no longer be rescheduled.",
+      );
+    }
 
     const oldWhen =
       existing.mode === ScheduleMode.TOKEN_BASED
@@ -1073,6 +1080,16 @@ export const BookingService = {
           : "only requested or accepted appointments can be canceled.",
       );
     }
+    // WAITING = checked in at the clinic; they may still cancel after the slot time.
+    if (
+      booking.status !== BookingStatus.WAITING &&
+      !isBookingStillUpcoming(booking)
+    ) {
+      throw new AppError(
+        400,
+        "This appointment time has already passed, so it can no longer be canceled.",
+      );
+    }
     const reason = opts.reason?.trim().slice(0, 280);
     if (reason) {
       const prev = booking.notes?.trim() || "";
@@ -1090,7 +1107,16 @@ export const BookingService = {
     });
   },
 
-  async listForPatient(opts: { phone?: string; patientId?: string }) {
+  async listForPatient(opts: {
+    phone?: string;
+    patientId?: string;
+    practiceId?: string;
+    statuses?: BookingStatus[];
+    /** Only visits that have not started (slot) / not a past token day. */
+    upcomingOnly?: boolean;
+    updatedSince?: Date;
+    take?: number;
+  }) {
     const or: Record<string, unknown>[] = [];
     if (opts.patientId) {
       or.push({ patientId: opts.patientId });
@@ -1105,8 +1131,25 @@ export const BookingService = {
     if (!or.length) {
       return [];
     }
+    const where: Prisma.PracticeBookingWhereInput = {
+      OR: or as Prisma.PracticeBookingWhereInput[],
+    };
+    if (opts.practiceId) where.practiceId = opts.practiceId;
+    if (opts.statuses?.length) where.status = { in: opts.statuses };
+    if (opts.updatedSince) where.updatedAt = { gte: opts.updatedSince };
+    if (opts.upcomingOnly) {
+      const now = new Date();
+      where.AND = [
+        {
+          OR: [
+            { slotStart: { gt: now } },
+            { slotStart: null, sessionDate: { gte: startOfLocalDay(now) } },
+          ],
+        },
+      ];
+    }
     const bookings = await prisma.practiceBooking.findMany({
-      where: { OR: or },
+      where,
       include: {
         practice: {
           select: {
@@ -1120,7 +1163,7 @@ export const BookingService = {
         location: { select: { name: true, address: true, city: true } },
       },
       orderBy: [{ slotStart: "asc" }, { sessionDate: "asc" }, { createdAt: "desc" }],
-      take: 50,
+      take: opts.take ?? 50,
     });
 
     // Batch providers — avoid N+1 enrichBooking (was 2–3 queries per row).

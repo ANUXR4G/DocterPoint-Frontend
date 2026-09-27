@@ -350,15 +350,33 @@ export const BotPrompts = {
   },
 
   /** Branch F — uploaded without linking to a visit. */
-  documentSavedGeneral(opts: { name: string; lang?: WaLang }): string {
+  documentSavedGeneral(opts: {
+    name: string;
+    lang?: WaLang;
+    patientName?: string | null;
+  }): string {
+    const who = opts.patientName?.trim();
     return L(
       opts.lang,
-      `✅ Document received and saved to your record.\n` +
+      `✅ Document received and saved to ${who ? `*${who}*'s` : "your"} record.\n` +
         `File: *${opts.name}* (general document — not linked to any appointment).\n` +
         `Reply *Menu* anytime for more options.`,
-      `✅ दस्तावेज़ मिल गया और आपके रिकॉर्ड में सेव हो गया।\n` +
+      `✅ दस्तावेज़ मिल गया और ${who ? `*${who}* के` : "आपके"} रिकॉर्ड में सेव हो गया।\n` +
         `फ़ाइल: *${opts.name}* (सामान्य दस्तावेज़ — किसी अपॉइंटमेंट से नहीं जुड़ा)।\n` +
         `और विकल्पों के लिए कभी भी *Menu* लिखें।`,
+    );
+  },
+
+  /** Branch F — general document on a shared number: whose record? */
+  askDocumentPatientPick(
+    options: Array<{ index: number; label: string }>,
+    lang?: WaLang,
+  ): string {
+    const lines = options.map((o) => `${o.index}. ${o.label}`).join("\n");
+    return L(
+      lang,
+      `Which patient is this document for?\n${lines}\n\nTap a name below, or reply with a *number* or *name*.`,
+      `यह दस्तावेज़ किस मरीज़ के लिए है?\n${lines}\n\nनीचे नाम चुनें, या *संख्या* / *नाम* लिखें।`,
     );
   },
 
@@ -1005,6 +1023,29 @@ export const BotPrompts = {
       lang,
       `Whom is this booking for?\n${lines}\n\nTap a name below (or reply with a *number* / *name*), or tap *Add family member* to register someone new.`,
       `यह बुकिंग किसके लिए है?\n${lines}\n\nनीचे नाम चुनें (या *संख्या* / *नाम* लिखें), या नया सदस्य जोड़ने के लिए *Add family member* दबाएँ।`,
+    );
+  },
+
+  /** "Member" — every patient profile registered on this WhatsApp number. */
+  registeredMembers(
+    members: Array<{ name: string; isSelf: boolean }>,
+    lang?: WaLang,
+  ): string {
+    if (!members.length) {
+      return L(
+        lang,
+        "No patients are registered on this WhatsApp number yet.\nReply *REGISTER* to create your profile.",
+        "इस व्हाट्सऐप नंबर पर अभी कोई मरीज़ रजिस्टर्ड नहीं है।\nप्रोफ़ाइल बनाने के लिए *REGISTER* लिखें।",
+      );
+    }
+    const lines = members
+      .map((m, i) => `${i + 1}. ${m.name}${m.isSelf ? " (Self)" : ""}`)
+      .join("\n");
+    const n = members.length;
+    return L(
+      lang,
+      `*${n} patient${n === 1 ? "" : "s"} registered* on this WhatsApp number:\n${lines}`,
+      `इस व्हाट्सऐप नंबर पर *${n} मरीज़ रजिस्टर्ड* हैं:\n${lines}`,
     );
   },
 

@@ -74,6 +74,15 @@ describe("exactMenuIntent", () => {
     assert.equal(exactMenuIntent("Attach Document"), "report");
   });
 
+  it("maps Member / Members to the registered-patients list, not family or bookings", () => {
+    assert.equal(exactMenuIntent("Member"), "members");
+    assert.equal(exactMenuIntent("members"), "members");
+    assert.equal(exactMenuIntent("My members"), "members");
+    assert.equal(exactMenuIntent("patients"), "members");
+    assert.equal(exactMenuIntent("family members"), "family");
+    assert.equal(exactMenuIntent("family:add"), "register");
+  });
+
   it("does not treat Select Appointment as Book", () => {
     assert.equal(exactMenuIntent("Select Appointment"), null);
     assert.equal(exactMenuIntent("select appointment"), null);

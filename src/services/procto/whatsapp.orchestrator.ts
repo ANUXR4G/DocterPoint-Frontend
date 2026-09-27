@@ -35,7 +35,7 @@ import {
   type BotIntent,
   type NluSlots,
 } from "./whatsapp.nlu.js";
-import { formatLocalDate, formatPracticeDateTime, formatPracticeTime, filterWaBookableSlotChoices, isSlotStartBookable, parseLocalDate, practiceWeekday } from "./slotEngine.js";
+import { formatLocalDate, formatPracticeDateTime, formatPracticeTime, filterWaBookableSlotChoices, isBookingStillUpcoming, isSlotStartBookable, parseLocalDate, practiceWeekday } from "./slotEngine.js";
 import { buildCalendarInvite, bookingReferenceId } from "./bookingCalendar.js";
 import {
   parseFamilyDobAndId,
@@ -112,6 +112,8 @@ export type ConversationStep =
   | "awaiting_document_upload"
   /** Branch F — Select Appointment | General Document after upload. */
   | "awaiting_document_link"
+  /** Branch F — General Document on a shared number: pick whose record. */
+  | "awaiting_document_patient"
   /** NLU freeform book confirmation (Did you mean…?). */
   | "awaiting_nlu_book_confirm"
   /** Branch D — Talk to Support / Agent (LiveChat handoff). */
@@ -432,6 +434,14 @@ function repromptHintForStep(state: ConversationState, lang: WaLang): string {
       return BotPrompts.askAttachDocumentUpload(lang);
     case "awaiting_document_link":
       return BotPrompts.askLinkDocumentToAppointment(lang);
+    case "awaiting_document_patient":
+      return BotPrompts.askDocumentPatientPick(
+        (state.patientChoices ?? []).map((c, i) => ({
+          index: i + 1,
+          label: c.label,
+        })),
+        lang,
+      );
     case "awaiting_nlu_book_confirm":
       return BotPrompts.nluBookConfirm(
         formatNluBookConfirmSummary(state.pendingBookSlots ?? {}),
@@ -1095,26 +1105,24 @@ async function listUpcomingBookings(practiceId: string, patientPhone: string) {
   const digits = normalizePhone(patientPhone).slice(-10);
   const cacheKey = `${practiceId}:${digits}`;
   const cached = cacheFresh(upcomingCache.get(cacheKey), UPCOMING_CACHE_TTL_MS);
-  if (cached) return cached.list;
+  if (cached) return cached.list.filter((b) => isBookingStillUpcoming(b));
   const list = await listUpcomingBookingsUncached(practiceId, patientPhone);
   upcomingCache.set(cacheKey, { at: Date.now(), list });
   return list;
 }
 
+/** View / Manage, cancel, reschedule — only visits that have not happened yet. */
 async function listUpcomingBookingsUncached(
   practiceId: string,
   patientPhone: string,
 ) {
-  const bookings = await BookingService.listForPatient({ phone: patientPhone });
-  return bookings
-    .filter(
-      (b) =>
-        b.practiceId === practiceId &&
-        UPCOMING_STATUSES.includes(
-          b.status as (typeof UPCOMING_STATUSES)[number],
-        ),
-    )
-    .slice(0, 5);
+  return BookingService.listForPatient({
+    phone: patientPhone,
+    practiceId,
+    statuses: [...UPCOMING_STATUSES],
+    upcomingOnly: true,
+    take: 5,
+  });
 }
 
 /** Branch F — ask for upload first; link to appointment after the file arrives. */
@@ -1146,6 +1154,7 @@ async function finishBranchFGeneralDocument(
   state: ConversationState,
   patientPhone: string,
   lang: WaLang,
+  patientUserId?: string,
 ): Promise<OrchestratorResult> {
   const doc = state.pendingDoc;
   if (!doc?.url) {
@@ -1156,20 +1165,56 @@ async function finishBranchFGeneralDocument(
     });
     return { reply: BotPrompts.askAttachDocumentUpload(lang) };
   }
+  if (!patientUserId) {
+    const profiles = await PatientService.listLinkedToWhatsApp(patientPhone);
+    if (profiles.length > 1) {
+      const patientChoices = profiles.map((p) => ({
+        id: p.id,
+        label: p.isSelf ? `Self · ${firstGivenName(p.name) || p.name}` : p.name,
+        isSelf: p.isSelf,
+      }));
+      await saveState(convId, {
+        ...keepPrefs(state),
+        step: "awaiting_document_patient",
+        patientChoices,
+        pendingDoc: doc,
+        failedTurns: 0,
+      });
+      return documentPatientPicker(patientChoices, lang);
+    }
+  }
   const { attachWhatsAppPatientDocument } = await import("./whatsapp.visitDocs.js");
   const result = await attachWhatsAppPatientDocument({
     patientPhone,
     doc,
     lang,
     practiceId,
+    patientUserId,
   });
   await saveState(convId, {
     ...idleState(state),
     pendingDoc: null,
+    patientChoices: undefined,
     lastBookingId: undefined,
     failedTurns: 0,
   });
   return withMainMenu(result.reply);
+}
+
+function documentPatientPicker(
+  choices: Array<{ label: string; isSelf?: boolean }>,
+  lang: WaLang,
+): OrchestratorResult {
+  return withPatientPicker(
+    BotPrompts.askDocumentPatientPick(
+      choices.map((c, i) => ({ index: i + 1, label: c.label })),
+      lang,
+    ),
+    choices.map((c) => ({
+      label: c.label,
+      description: c.isSelf ? "Yourself" : "Family member",
+    })),
+  );
 }
 
 async function finishBranchFBookingDocument(
@@ -1273,32 +1318,35 @@ async function replyWithPostBookingMenu(opts: {
   );
 }
 
-/** Active + recent visits eligible for Branch E Message doctor. */
-const MESSAGE_DOCTOR_STATUSES = [
-  BookingStatus.SCHEDULED,
-  BookingStatus.REQUESTED,
-  BookingStatus.ACCEPTED,
-  BookingStatus.IN_PROGRESS,
-  BookingStatus.COMPLETED,
-] as const;
-
 const MESSAGE_DOCTOR_RECENT_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * Branch E Message doctor: upcoming visits (not elapsed), in-progress visits, and
+ * visits completed in the last 30 days. Elapsed SCHEDULED/REQUESTED/ACCEPTED rows
+ * never happened and are excluded.
+ */
 async function listMessageDoctorBookings(
   practiceId: string,
   patientPhone: string,
 ) {
-  const bookings = await BookingService.listForPatient({ phone: patientPhone });
   const now = Date.now();
-  const eligible = bookings.filter((b) => {
-    if (b.practiceId !== practiceId) return false;
-    if (
-      !MESSAGE_DOCTOR_STATUSES.includes(
-        b.status as (typeof MESSAGE_DOCTOR_STATUSES)[number],
-      )
-    ) {
-      return false;
-    }
+  const [upcoming, recent] = await Promise.all([
+    BookingService.listForPatient({
+      phone: patientPhone,
+      practiceId,
+      statuses: [...UPCOMING_STATUSES],
+      upcomingOnly: true,
+      take: 5,
+    }),
+    BookingService.listForPatient({
+      phone: patientPhone,
+      practiceId,
+      statuses: [BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED],
+      updatedSince: new Date(now - MESSAGE_DOCTOR_RECENT_MS),
+      take: 20,
+    }),
+  ]);
+  const eligible = [...upcoming, ...recent].filter((b) => {
     if (b.status === BookingStatus.COMPLETED) {
       const when = (b.slotStart ?? b.sessionDate ?? b.updatedAt)?.getTime?.()
         ?? (b.updatedAt instanceof Date ? b.updatedAt.getTime() : now);
@@ -2473,6 +2521,8 @@ async function dispatchMenuIntent(opts: {
         state,
         lang,
       });
+    case "members":
+      return showRegisteredMembers({ convId, patientPhone, state, lang });
     case "register":
       return startRegisterFlow(convId, patientPhone, state);
     case "doctors": {
@@ -3897,6 +3947,31 @@ async function startFamilyMemberFlow(
 
 const FAMILY_ADD_ID = "__add_family__";
 
+/** "Member" — count + list of all patients on this number (no appointments). */
+async function showRegisteredMembers(opts: {
+  convId: string;
+  patientPhone: string;
+  state: ConversationState;
+  lang: WaLang;
+}): Promise<OrchestratorResult> {
+  const { convId, patientPhone, state, lang } = opts;
+  const profiles = await PatientService.listLinkedToWhatsApp(patientPhone);
+  await saveState(convId, idleState(state));
+  const reply = BotPrompts.registeredMembers(
+    profiles.map((p) => ({ name: p.name, isSelf: p.isSelf })),
+    lang,
+  );
+  if (!profiles.length) return withMainMenu(reply);
+  return {
+    reply,
+    replyButtons: [
+      { id: "menu:book", title: lang === "hi" ? "बुक" : "Book" },
+      { id: "family:add", title: lang === "hi" ? "परिवार जोड़ें" : "Add family" },
+      { id: "menu:main", title: lang === "hi" ? "मुख्य मेनू" : "Main Menu" },
+    ],
+  };
+}
+
 /** Menu 3 — list family members; tap name to book, or Add family to register. */
 async function startFamilyListFlow(opts: {
   convId: string;
@@ -4610,7 +4685,13 @@ async function runOrchestratorCore(input: {
   if (state.step && state.step !== "idle" && isTimedOut(state)) {
     state = idleState(state);
     await saveState(convId, state);
-    return withMainMenu(BotPrompts.chatClosed(lang));
+    // Abandoned mid-flow input must not be applied, but a fresh command runs now.
+    const freshCommand =
+      /^(?:menu|post|idle):/i.test(text.trim()) ||
+      Boolean(exactMenuIntent(text)) ||
+      wantsFullMainMenu(text) ||
+      /^(hi|hii+|hello|hey|start|नमस्ते)$/i.test(text.trim());
+    if (!freshCommand) return withMainMenu(BotPrompts.chatClosed(lang));
   }
 
   // Patient replied — clear any pending idle-reminder flag
@@ -4814,6 +4895,50 @@ async function runOrchestratorCore(input: {
 
     return withDocumentLinkButtons(
       BotPrompts.askLinkDocumentToAppointment(lang),
+    );
+  }
+
+  if (
+    state.step === "awaiting_document_patient" &&
+    !/^(?:menu|post):/i.test(text.trim())
+  ) {
+    const choices = state.patientChoices ?? [];
+    const raw = text.trim();
+    if (/^(cancel|stop|skip|no|नहीं|रद्द)$/i.test(raw)) {
+      await saveState(convId, {
+        ...idleState(state),
+        pendingDoc: null,
+        patientChoices: undefined,
+      });
+      return withMainMenu(BotPrompts.attachDocumentSkipped(lang));
+    }
+    const idx = parseSlotChoiceIndex(text);
+    let choice =
+      idx !== null && idx >= 1 && idx <= choices.length
+        ? choices[idx - 1]!
+        : null;
+    if (!choice && /^(self|me|myself|you|अपने|खुद|स्वयं)$/i.test(raw)) {
+      choice = choices.find((c) => c.isSelf) ?? null;
+    }
+    if (!choice && raw.length >= 2) {
+      const q = raw.toLowerCase();
+      choice =
+        choices.find((c) =>
+          c.label
+            .toLowerCase()
+            .replace(/^self\s*[·.\-:]+\s*/i, "")
+            .replace(/\s·\s.*$/, "")
+            .includes(q),
+        ) ?? null;
+    }
+    if (!choice) return documentPatientPicker(choices, lang);
+    return finishBranchFGeneralDocument(
+      convId,
+      practice.id,
+      state,
+      patientPhone,
+      lang,
+      choice.id,
     );
   }
 
@@ -6420,6 +6545,10 @@ async function runOrchestratorCore(input: {
   }
 
   // Top-level intents
+  if (nlu.intent === "members") {
+    return showRegisteredMembers({ convId, patientPhone, state, lang });
+  }
+
   if (nlu.intent === "family") {
     return startFamilyListFlow({
       convId,

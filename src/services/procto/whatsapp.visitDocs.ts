@@ -336,12 +336,25 @@ export async function attachWhatsAppPatientDocument(opts: {
   lang?: WaLang;
   /** When set, also enqueue a clinic inbox notification (needs a booking anchor). */
   practiceId?: string;
+  /** Profile picked on a shared number; must be linked to this WhatsApp. */
+  patientUserId?: string;
 }): Promise<{ reply: string; attached: boolean }> {
   const linked = await PatientService.listLinkedToWhatsApp(opts.patientPhone).catch(
-    () => [] as Array<{ id: string; isSelf?: boolean }>,
+    () => [] as Array<{ id: string; name?: string; isSelf?: boolean }>,
   );
-  const self = linked.find((p) => p.isSelf) ?? linked[0];
-  let patientId: string | null = self?.id ?? null;
+  let target: { id: string; name?: string; isSelf?: boolean } | undefined;
+  if (opts.patientUserId) {
+    target = linked.find((p) => p.id === opts.patientUserId);
+    if (!target) {
+      return {
+        attached: false,
+        reply: BotPrompts.visitDocUploadFailed(opts.lang),
+      };
+    }
+  } else {
+    target = linked.find((p) => p.isSelf) ?? linked[0];
+  }
+  let patientId: string | null = target?.id ?? null;
   if (!patientId) {
     const user = await PatientService.findByPhone(opts.patientPhone);
     patientId = user?.patient?.id ?? null;
@@ -373,14 +386,23 @@ export async function attachWhatsAppPatientDocument(opts: {
 
   if (opts.practiceId) {
     const digits = last10(opts.patientPhone);
-    const anchor = await prisma.practiceBooking.findFirst({
-      where: {
-        practiceId: opts.practiceId,
-        patientPhone: { endsWith: digits },
-      },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      select: { id: true },
-    });
+    const anchorOrder = [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }];
+    const anchor =
+      (await prisma.practiceBooking.findFirst({
+        where: { practiceId: opts.practiceId, patientId },
+        orderBy: anchorOrder,
+        select: { id: true },
+      })) ??
+      (linked.length <= 1
+        ? await prisma.practiceBooking.findFirst({
+            where: {
+              practiceId: opts.practiceId,
+              patientPhone: { endsWith: digits },
+            },
+            orderBy: anchorOrder,
+            select: { id: true },
+          })
+        : null);
     if (anchor) {
       void import("./notification.service.js")
         .then(({ NotificationService }) =>
@@ -404,6 +426,7 @@ export async function attachWhatsAppPatientDocument(opts: {
     reply: BotPrompts.documentSavedGeneral({
       name: opts.doc.name,
       lang: opts.lang,
+      patientName: linked.length > 1 ? target?.name : null,
     }),
   };
 }
