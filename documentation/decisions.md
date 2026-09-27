@@ -126,7 +126,7 @@ Ops APIs (admin JWT `users:write`):
 |---------------|----------|
 | BSP vs Meta Cloud | **MOCK** for local; evaluate Gupshup/Interakt before production |
 | Hindi bot | Deferred |
-| Fee collection on WhatsApp | Deferred (V1 appointment-only) |
+| Fee collection on WhatsApp | **Shipped (optional prepay)** — after a WA booking the patient is asked *pay before the appointment?* Yes → Razorpay **Payment Link** on the platform account (amount = `Practice.consultationFee`), No → pay at clinic. Payment Links (not Orders/Checkout) because the patient is in WhatsApp with no web session; hosted page handles UPI/cards. Truth is recorded only from a signature-verified callback redirect or `payment_link.*` webhook (or a server-side re-fetch on *Refresh*) — never from the client. Status on `PracticeBooking.payment*`; no per-clinic payouts / Route yet (settlement to clinics is manual). |
 | Patient WA → visit documents | **Shipped** — image/PDF on clinic line attaches to open `PracticeBooking.documents` (Cloudinary + care-chat ping); *REPORT* / *MY DOCS*; ID OCR still for *REGISTER* |
 | Expo doctor app | **Shipped** as `apps/provider`: Queue · Calendar · Patients · **Plans (practice billing)** · Visit · More; schedule editor / analytics remain on web. Patient Expo has **no** subscription tab. |
 | Multi-doctor clinic | Supported via `PracticeMember` (ahead of strict solo V1) |

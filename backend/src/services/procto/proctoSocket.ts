@@ -41,6 +41,9 @@ export function serializeBooking(booking: {
   medicines?: unknown;
   documents?: unknown;
   arrivedAt?: Date | null;
+  paymentStatus?: string | null;
+  paymentAmount?: number | null;
+  paidAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): Record<string, unknown> {
@@ -64,6 +67,13 @@ export function serializeBooking(booking: {
     medicines: booking.medicines ?? null,
     documents: booking.documents ?? null,
     arrived_at: booking.arrivedAt?.toISOString() ?? null,
+    ...(booking.paymentStatus !== undefined
+      ? {
+          payment_status: booking.paymentStatus,
+          payment_amount: booking.paymentAmount ?? null,
+          paid_at: booking.paidAt?.toISOString() ?? null,
+        }
+      : {}),
     created_at: booking.createdAt.toISOString(),
     updated_at: booking.updatedAt.toISOString(),
   };

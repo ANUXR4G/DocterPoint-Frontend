@@ -146,6 +146,10 @@ export const proctoService = {
 
   getBooking: (id: string) => proctoFetch(`/procto/bookings/${id}`),
 
+  /** Pre-visit payment; `refresh` asks Razorpay for the latest link state. */
+  getBookingPayment: (id: string, refresh = false) =>
+    proctoFetch(`/procto/bookings/${id}/payment${refresh ? "?refresh=1" : ""}`),
+
   getMyBookings: () => proctoFetch("/procto/bookings/mine"),
 
   cancelBooking: (id: string, phone?: string, reason?: string) =>
@@ -574,6 +578,12 @@ export type ProctoBooking = {
   disease?: string | null;
   arrivedAt?: string | null;
   arrived_at?: string | null;
+  paymentStatus?: string | null;
+  payment_status?: string | null;
+  paymentAmount?: number | null;
+  payment_amount?: number | null;
+  paidAt?: string | null;
+  paid_at?: string | null;
   createdAt?: string | null;
   created_at?: string | null;
   practice?: { name: string; slug: string; specialty?: string | null };

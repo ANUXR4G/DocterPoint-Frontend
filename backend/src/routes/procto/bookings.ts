@@ -332,6 +332,45 @@ router.get(
   },
 );
 
+router.get(
+  "/:id/payment",
+  requireAuth("booking:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = param(req.params.id);
+      const found = await prisma.practiceBooking.findUnique({
+        where: { id },
+        select: {
+          practiceId: true,
+          providerId: true,
+          practice: { select: { consultationFee: true } },
+        },
+      });
+      if (!found) return ResponseHandler.unsuccessful(res, 404, "booking not found.");
+      await PracticeService.assertCanViewBooking(
+        found.practiceId,
+        req.sessionUser!.id,
+        found.providerId,
+      );
+      const {
+        BookingPaymentService,
+        paymentView,
+        prepayAmountPaise,
+      } = await import("../../services/procto/bookingPayment.service.js");
+      const booking =
+        req.query.refresh === "1"
+          ? await BookingPaymentService.refresh(id)
+          : await prisma.practiceBooking.findUniqueOrThrow({ where: { id } });
+      return ResponseHandler.fetchSuccessful(res, "payment fetched.", {
+        ...paymentView(booking),
+        clinicFee: prepayAmountPaise(found.practice.consultationFee),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.post(
   "/:id/general-documents",
   requireAuth("booking:update"),

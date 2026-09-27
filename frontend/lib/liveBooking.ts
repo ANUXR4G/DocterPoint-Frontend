@@ -57,6 +57,15 @@ export function patchBookingFields<T extends { id: string }>(
     incoming.consultationType,
   )
   const arrivedAt = optionalStr(incoming.arrived_at, incoming.arrivedAt)
+  const paymentStatus = optionalStr(
+    incoming.payment_status,
+    incoming.paymentStatus,
+  )
+  const paymentAmount =
+    incoming.payment_amount !== undefined
+      ? incoming.payment_amount
+      : incoming.paymentAmount
+  const paidAt = optionalStr(incoming.paid_at, incoming.paidAt)
 
   return {
     ...existing,
@@ -87,6 +96,13 @@ export function patchBookingFields<T extends { id: string }>(
       ? { consultationType, consultation_type: consultationType }
       : {}),
     ...(arrivedAt !== undefined ? { arrivedAt, arrived_at: arrivedAt } : {}),
+    ...(paymentStatus !== undefined
+      ? { paymentStatus, payment_status: paymentStatus }
+      : {}),
+    ...(paymentAmount !== undefined
+      ? { paymentAmount, payment_amount: paymentAmount }
+      : {}),
+    ...(paidAt !== undefined ? { paidAt, paid_at: paidAt } : {}),
   } as T
 }
 

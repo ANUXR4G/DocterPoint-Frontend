@@ -25,6 +25,18 @@ export type RazorpayCustomer = {
   name?: string;
 };
 
+export type RazorpayPaymentLink = {
+  id: string;
+  short_url: string;
+  status: "created" | "partially_paid" | "paid" | "expired" | "cancelled";
+  amount: number;
+  amount_paid?: number;
+  expire_by?: number;
+  reference_id?: string;
+  payments?: Array<{ payment_id: string; status?: string; created_at?: number }> | null;
+  notes?: Record<string, string> | string;
+};
+
 export type RazorpayPlan = {
   id: string;
   period: string;
@@ -202,6 +214,56 @@ export const razorpay = {
         notes: body.notes,
       },
     });
+  },
+
+  createPaymentLink(body: {
+    amount: number;
+    currency?: string;
+    description: string;
+    reference_id?: string;
+    expire_by?: number;
+    customer?: { name?: string; contact?: string; email?: string };
+    notify?: { sms?: boolean; email?: boolean };
+    reminder_enable?: boolean;
+    callback_url?: string;
+    callback_method?: "get";
+    notes?: Record<string, string>;
+  }) {
+    return this.request<RazorpayPaymentLink>("/payment_links", {
+      method: "POST",
+      body: { currency: "INR", accept_partial: false, ...body },
+    });
+  },
+
+  getPaymentLink(paymentLinkId: string) {
+    return this.request<RazorpayPaymentLink>(
+      `/payment_links/${encodeURIComponent(paymentLinkId)}`,
+    );
+  },
+
+  /** Redirect after a Payment Link is paid (`callback_url`, GET params). */
+  verifyPaymentLinkSignature(params: {
+    paymentLinkId: string;
+    referenceId: string;
+    status: string;
+    paymentId: string;
+    signature: string | undefined;
+  }): boolean {
+    if (!this.isConfigured() || !params.signature) return false;
+    const expected = crypto
+      .createHmac("sha256", settings.razorpayKeySecret)
+      .update(
+        `${params.paymentLinkId}|${params.referenceId}|${params.status}|${params.paymentId}`,
+      )
+      .digest("hex");
+    try {
+      return crypto.timingSafeEqual(
+        Buffer.from(expected),
+        Buffer.from(params.signature),
+      );
+    } catch {
+      return false;
+    }
   },
 
   /** Razorpay Checkout success — one-time order payments. */

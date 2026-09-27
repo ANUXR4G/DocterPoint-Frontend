@@ -1487,6 +1487,9 @@ export const BookingService = {
         medicines: true,
         documents: true,
         arrivedAt: true,
+        paymentStatus: true,
+        paymentAmount: true,
+        paidAt: true,
         createdAt: true,
         updatedAt: true,
         location: {

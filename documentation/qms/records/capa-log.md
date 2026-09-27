@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-11
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-BOOK / billing (WhatsApp booking)
+- **Description:** Requested: on WhatsApp, ask the patient whether they want to **pay before the appointment**; *Yes* → send a Razorpay link for the consultation fee. Add a **Payment status** button on the appointment page.
+- **Evidence:** User request; bookings had no payment fields and WA fee collection was deferred in `decisions.md`.
+- **Containment:** n/a.
+- **Root cause:** No per-appointment payment capability.
+- **Corrective action:** Additive migration `20260351000000_booking_payment` (`payment_status`, `payment_amount`, `payment_link_id` (+ index), `payment_link_url`, `payment_id`, `paid_at`; applied to Supabase before backend deploy). `lib/razorpay.ts` Payment Links create / fetch / callback-signature verify. `BookingPaymentService` (create / reuse link, decline, apply state, refresh, callback, webhook). WA step `awaiting_pay_offer` after booking confirmation (skipped with no fee or no Razorpay keys) → then the existing document offer. `GET /procto/payments/razorpay/callback` (HTML result page), `payment_link.*` in the Razorpay webhook, `GET /procto/bookings/:id/payment[?refresh=1]`. Socket + list carry payment fields. UI: `PaymentStatusButton` pill + dialog in the Appointments table (desktop + mobile) and visit header. Risk R18 added.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** New `bookingPayment.test.ts` (amount, expiry clamp, status mapping, staff view, signature accept / reject) — 162/162 pass. Razorpay test-mode link created, fetched and cancelled via the API (request shape confirmed). Forged callback signature → 400, no booking change. Orchestrator smoke on a temp conversation with a non-existent booking ID: unclear reply re-prompts Yes/No; *No* → "pay at the clinic" → document offer; *Yes* with link failure → graceful fallback → document offer (conversation deleted; no real booking touched). Browser (dr.solo): Appointments *Payment* column shows *Not requested*; dialog shows ₹700 clinic fee + Refresh; visit header pill present. Backend + frontend tsc + builds clean. **Open:** production webhook needs `payment_link` events enabled in the Razorpay dashboard + `RAZORPAY_WEBHOOK_SECRET` (callback + Refresh work without it); production key mode (test / live) unverified.
+
 ### CR-20260928-10
 - **Date opened:** 2026-09-28
 - **Severity:** 3
