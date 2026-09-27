@@ -21,5 +21,6 @@ Score: **Impact** (1–5) × **Likelihood** (1–5). Treat ≥12 as needing acti
 | R14 | Shared WA number: OTP login / bot "Self" resolves to a family dependent | 4 | 3 | 12 | `pickPrimaryPatientUser` (dependents with `relationship` never owner) in OTP verify, `findByPhone`, `listLinkedToWhatsApp` | Eng | Mitigated |
 | R16 | Shared WA number: general document saved to the wrong family member's record | 4 | 3 | 12 | `awaiting_document_patient` picker when >1 linked profile; `patientUserId` must be in `listLinkedToWhatsApp` | Eng | Mitigated |
 | R15 | Elapsed appointments offered / accepted for patient cancel or reschedule | 3 | 4 | 12 | `isBookingStillUpcoming` in `listForPatient({ upcomingOnly })` (DB filter), WA manage list, `cancelByPatient` / `reschedule` guards | Eng | Mitigated |
+| R17 | Emergency walk-in bypasses slot capacity → abused as a back door for over-booking, or added by a non-member / patient | 3 | 2 | 6 | Separate `POST /procto/bookings/walk-in` (`booking:update` scope — patients lack it) + active membership; DOCTOR role only for own list; plan quota still enforced; starts `WAITING` now (never a future slot), tagged `EMERGENCY_WALK_IN` + red *Walk-in* badge so usage is visible | Eng | Mitigated |
 
-**Last reviewed:** 2026-09-27
+**Last reviewed:** 2026-09-28

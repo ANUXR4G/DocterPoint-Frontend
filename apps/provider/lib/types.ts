@@ -133,6 +133,11 @@ export function whenLabel(b: BookingRow) {
   return "—";
 }
 
+export function consultationTypeLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  return value === "EMERGENCY_WALK_IN" ? "Emergency walk-in" : value;
+}
+
 export function nextActions(status: string): Array<{ status: string; label: string }> {
   switch (String(status || "").toUpperCase()) {
     case "SCHEDULED":

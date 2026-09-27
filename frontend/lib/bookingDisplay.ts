@@ -25,6 +25,26 @@ export function chiefComplaintOf(booking: { disease?: string | null }): string {
   return d && !/^general\s+consultation$/i.test(d) ? d : ""
 }
 
+export const EMERGENCY_WALK_IN = "EMERGENCY_WALK_IN"
+
+export function isEmergencyWalkIn(booking: {
+  consultationType?: string | null
+  consultation_type?: string | null
+}): boolean {
+  return (
+    (booking.consultationType ?? booking.consultation_type ?? "") ===
+    EMERGENCY_WALK_IN
+  )
+}
+
+/** Human label for `consultationType` (internal codes → readable text). */
+export function consultationTypeLabel(
+  value: string | null | undefined,
+): string {
+  if (!value) return ""
+  return value === EMERGENCY_WALK_IN ? "Emergency walk-in" : value
+}
+
 /** Milliseconds for sorting — prefers slot time, then token session day, then created. */
 export function bookingWhenMs(booking: ProctoBooking): number {
   const slot = booking.slotStart ?? booking.slot_start

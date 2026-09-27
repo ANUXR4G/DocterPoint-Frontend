@@ -92,6 +92,11 @@ export type PatientProfile = {
   phone?: string | null;
 };
 
+export function consultationTypeLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  return value === "EMERGENCY_WALK_IN" ? "Emergency walk-in" : value;
+}
+
 export function bookingWhen(b: ProctoBooking): string {
   const mode = b.mode;
   const token = b.tokenNumber ?? b.token_number;

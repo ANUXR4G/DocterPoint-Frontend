@@ -22,7 +22,8 @@ import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBa
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
-import { chiefComplaintOf } from "@/lib/bookingDisplay"
+import { chiefComplaintOf, isEmergencyWalkIn } from "@/lib/bookingDisplay"
+import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import {
   formatPracticeDate,
   formatPracticeTime,
@@ -364,8 +365,9 @@ export default function DoctorQueue({
                       className="mt-0.5"
                     />
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-neutral-900 dark:text-white">
-                        {name}
+                      <p className="flex min-w-0 items-center gap-1.5 font-medium text-neutral-900 dark:text-white">
+                        <span className="truncate">{name}</span>
+                        {isEmergencyWalkIn(b) ? <EmergencyWalkInBadge /> : null}
                       </p>
                       {p?.mrn?.trim() ? (
                         <p className="mt-0.5 text-xs font-semibold tabular-nums tracking-wide text-neutral-500 dark:text-neutral-400">
@@ -475,7 +477,12 @@ export default function DoctorQueue({
                           imgSrc={p?.imgSrc}
                           size="sm"
                         />
-                        <p className="font-medium">{name}</p>
+                        <div>
+                          <p className="font-medium">{name}</p>
+                          {isEmergencyWalkIn(b) ? (
+                            <EmergencyWalkInBadge className="mt-0.5" />
+                          ) : null}
+                        </div>
                       </div>
                     </td>
                     <td className="px-3 py-3 align-middle">

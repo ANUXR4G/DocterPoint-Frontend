@@ -97,6 +97,29 @@ router.get("/availability", async (req: Request, res: Response, next: NextFuncti
 });
 
 router.post(
+  "/walk-in",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await BookingService.createWalkIn(
+        {
+          practiceId: String(req.body?.practiceId || ""),
+          providerId: String(req.body?.providerId || ""),
+          locationId: req.body?.locationId ? String(req.body.locationId) : undefined,
+          patientPhone: String(req.body?.patientPhone || ""),
+          patientName: String(req.body?.patientName || ""),
+          disease: req.body?.disease ? String(req.body.disease) : undefined,
+        },
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.createSuccessful(res, "walk-in added.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
   "/",
   attachSessionIfPresent(),
   async (req: Request, res: Response, next: NextFunction) => {

@@ -21,6 +21,7 @@ import { isClinicAdminRole, usePractice } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { updateBookingStatus } from "@/lib/procto";
 import {
+  consultationTypeLabel,
   nextActions,
   whenLabel,
   type BookingRow,
@@ -193,7 +194,9 @@ export default function AppointmentsScreen() {
               </View>
               <Text style={styles.meta}>{whenLabel(b)}</Text>
               <Text style={styles.meta}>
-                {b.disease || b.consultationType || b.mode?.replace(/_/g, " ")}
+                {b.disease ||
+                  consultationTypeLabel(b.consultationType) ||
+                  b.mode?.replace(/_/g, " ")}
               </Text>
               <View style={styles.chips}>
                 {nextActions(b.status).map((a) => (

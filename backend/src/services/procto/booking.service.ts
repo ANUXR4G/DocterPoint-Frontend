@@ -124,6 +124,7 @@ function normalizeBookingDocuments(
 }
 
 const MAX_GENERAL_DOCUMENTS = 30;
+export const EMERGENCY_WALK_IN = "EMERGENCY_WALK_IN";
 
 export const BookingService = {
   async createBooking(data: {
@@ -447,6 +448,110 @@ export const BookingService = {
     console.log(
       `[createBooking] stored id=${booking.id} practice=${booking.practiceId} ` +
         `provider=${booking.providerId} phone=${booking.patientPhone} channel=${booking.channel}`,
+    );
+    return booking;
+  },
+
+  /**
+   * Clinic-side emergency walk-in: patient is at the desk now. No slot / token
+   * pick, no schedule or capacity check (must never be refused for lack of a
+   * free slot). Starts "now", goes straight to WAITING, tagged
+   * `consultationType = EMERGENCY_WALK_IN`. No patient WhatsApp confirmation.
+   */
+  async createWalkIn(
+    data: {
+      practiceId: string;
+      providerId: string;
+      locationId?: string;
+      patientPhone: string;
+      patientName: string;
+      disease?: string;
+    },
+    actorUserId: string,
+  ) {
+    const digits = String(data.patientPhone || "").replace(/\D/g, "");
+    const patientPhone =
+      digits.length >= 11 && digits.length <= 15 ? digits : digits.slice(-10);
+    if (patientPhone.length < 10) {
+      throw new AppError(400, "Enter a valid patient mobile number.");
+    }
+    const patientName = String(data.patientName || "").trim().slice(0, 120);
+    if (!patientName) throw new AppError(400, "Enter the patient name.");
+
+    const actor = await prisma.practiceMember.findUnique({
+      where: {
+        practiceId_userId: { practiceId: data.practiceId, userId: actorUserId },
+      },
+      select: { role: true, isActive: true },
+    });
+    if (!actor?.isActive) ResponseHandler.noPermission("not authorized.");
+    if (actor!.role === "DOCTOR" && data.providerId !== actorUserId) {
+      throw new AppError(403, "Doctors can add walk-ins only to their own list.");
+    }
+
+    const { assertBookingQuota } = await import("./planEntitlements.js");
+    await assertBookingQuota(data.practiceId);
+
+    const [practice, provider, location] = await Promise.all([
+      prisma.practice.findUnique({
+        where: { id: data.practiceId },
+        select: { isActive: true },
+      }),
+      prisma.practiceMember.findFirst({
+        where: {
+          practiceId: data.practiceId,
+          userId: data.providerId,
+          isActive: true,
+        },
+        select: { id: true },
+      }),
+      prisma.clinicLocation.findFirst({
+        where: {
+          practiceId: data.practiceId,
+          isActive: true,
+          ...(data.locationId ? { id: data.locationId } : {}),
+        },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      }),
+    ]);
+    if (!practice?.isActive) throw new AppError(403, "This clinic is not active.");
+    if (!provider) throw new AppError(400, "provider is not an active member of this practice.");
+    if (!location) throw new AppError(400, "No active location configured for this clinic.");
+
+    const now = new Date();
+    const booking = await prisma.practiceBooking.create({
+      data: {
+        practiceId: data.practiceId,
+        locationId: location.id,
+        providerId: data.providerId,
+        patientPhone,
+        patientName,
+        mode: ScheduleMode.TIME_BASED,
+        status: BookingStatus.WAITING,
+        channel: BookingChannel.PROVIDER_APP,
+        slotStart: now,
+        slotEnd: new Date(now.getTime() + 15 * 60 * 1000),
+        consultationType: EMERGENCY_WALK_IN,
+        disease: data.disease?.trim().slice(0, 500) || null,
+      },
+      include: { practice: true, location: true },
+    });
+
+    void NotificationService.enqueueConfirmation(booking.id, {
+      skipPatientTemplate: true,
+    }).catch(() => undefined);
+    void broadcastProctoEvent(
+      booking.practiceId,
+      { event: "booking_created", booking: serializeBooking(booking) },
+      booking.patientId,
+    ).catch(() => undefined);
+    void import("../opsSocket.js")
+      .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
+      .catch(() => undefined);
+
+    console.log(
+      `[createWalkIn] id=${booking.id} practice=${booking.practiceId} provider=${booking.providerId} by=${actorUserId}`,
     );
     return booking;
   },

@@ -18,7 +18,8 @@ import {
   bookingStatusClass,
   bookingStatusLabel,
 } from "@/lib/bookingStatus"
-import { chiefComplaintOf } from "@/lib/bookingDisplay"
+import { chiefComplaintOf, isEmergencyWalkIn } from "@/lib/bookingDisplay"
+import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
@@ -557,11 +558,14 @@ export default function VisitPage() {
                   </p>
                 </div>
               </div>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${bookingStatusClass(booking.status)}`}
-              >
-                {bookingStatusLabel(booking.status)}
-              </span>
+              <div className="flex flex-col items-end gap-1.5">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${bookingStatusClass(booking.status)}`}
+                >
+                  {bookingStatusLabel(booking.status)}
+                </span>
+                {isEmergencyWalkIn(booking) ? <EmergencyWalkInBadge /> : null}
+              </div>
             </div>
           </div>
         </section>

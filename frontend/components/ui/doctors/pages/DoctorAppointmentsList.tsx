@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { MessageCircle, RefreshCw } from "lucide-react"
+import { MessageCircle, RefreshCw, Siren } from "lucide-react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
@@ -13,9 +13,12 @@ import {
 import {
   chiefComplaintOf,
   formatBookingWhenDetailed,
+  isEmergencyWalkIn,
   sortBookingsByWhen,
 } from "@/lib/bookingDisplay"
 import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
+import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
+import EmergencyWalkInModal from "@/components/ui/procto/EmergencyWalkInModal"
 import {
   APPOINTMENT_RANGE_PRESETS,
   MAX_CUSTOM_RANGE_DAYS,
@@ -114,6 +117,7 @@ export default function DoctorAppointmentsList({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionError, setActionError] = useState("")
   const [bookOpen, setBookOpen] = useState(false)
+  const [walkInOpen, setWalkInOpen] = useState(false)
   const [chatBooking, setChatBooking] = useState<ProctoBooking | null>(null)
 
   const isClinic = portal === "clinic"
@@ -312,7 +316,15 @@ export default function DoctorAppointmentsList({
               : "Your visits."
         }
         action={
-          isClinic ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-700"
+              onClick={() => setWalkInOpen(true)}
+            >
+              <Siren className="size-4" aria-hidden />
+              Emergency walk-in
+            </button>
             <button
               type="button"
               className="dashboard-btn-primary"
@@ -320,20 +332,27 @@ export default function DoctorAppointmentsList({
             >
               Book appointment
             </button>
-          ) : null
+          </div>
         }
       />
 
-      {isClinic ? (
-        <ClinicBookAppointmentModal
-          open={bookOpen}
-          onClose={() => setBookOpen(false)}
-          onBooked={() => {
-            void refresh({ silent: true })
-            void loadRows()
-          }}
-        />
-      ) : null}
+      <ClinicBookAppointmentModal
+        open={bookOpen}
+        onClose={() => setBookOpen(false)}
+        onBooked={() => {
+          void refresh({ silent: true })
+          void loadRows()
+        }}
+      />
+      <EmergencyWalkInModal
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        onAdded={() => {
+          void refresh({ silent: true })
+          if (rangePreset === "today") void loadRows()
+          else setRangePreset("today")
+        }}
+      />
 
       {actionError ? (
         <p className="mb-3 text-sm text-red-700 dark:text-red-400" role="alert">
@@ -418,19 +437,14 @@ export default function DoctorAppointmentsList({
         <p className="mt-4 text-sm text-neutral-500">Loading…</p>
       ) : rangeError ? null : filtered.length === 0 ? (
         <p className="mt-4 text-sm text-neutral-500">
-          No appointments for {rangeLabel} in this filter.
-          {isClinic ? (
-            <>
-              {" "}
-              <button
-                type="button"
-                className="font-semibold text-[var(--theme-primary)] hover:underline"
-                onClick={() => setBookOpen(true)}
-              >
-                Book one now
-              </button>
-            </>
-          ) : null}
+          No appointments for {rangeLabel} in this filter.{" "}
+          <button
+            type="button"
+            className="font-semibold text-[var(--theme-primary)] hover:underline"
+            onClick={() => setBookOpen(true)}
+          >
+            Book one now
+          </button>
         </p>
       ) : (
         <>
@@ -461,8 +475,9 @@ export default function DoctorAppointmentsList({
                     </p>
                   </div>
                 </div>
-                <p className="mt-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                <p className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                   {formatBookingWhenDetailed(b)}
+                  {isEmergencyWalkIn(b) ? <EmergencyWalkInBadge /> : null}
                 </p>
                 {isClinic ? (
                   <p className="mt-1 text-xs text-neutral-500">
@@ -536,6 +551,11 @@ export default function DoctorAppointmentsList({
                     ) : null}
                     <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
                       {formatBookingWhenDetailed(b)}
+                      {isEmergencyWalkIn(b) ? (
+                        <div className="mt-1">
+                          <EmergencyWalkInBadge />
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3">
                       <ChiefComplaintCell text={chiefComplaintOf(b)} />

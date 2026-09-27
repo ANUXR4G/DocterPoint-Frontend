@@ -23,7 +23,11 @@ import { usePatientLive } from "@/lib/PatientLiveContext";
 import { patchBookingFields } from "@/lib/liveBooking";
 import { getSessionUserId } from "@/lib/sessionUser";
 import { colors, radii, space } from "@/lib/theme";
-import { bookingWhen, type BookingDetail } from "@/lib/types";
+import {
+  bookingWhen,
+  consultationTypeLabel,
+  type BookingDetail,
+} from "@/lib/types";
 
 function statusTone(status: string) {
   const s = (status || "").toUpperCase();
@@ -163,7 +167,11 @@ export default function BookingDetailScreen() {
           />
           <Detail
             label="Reason"
-            value={display.disease || display.consultationType || "—"}
+            value={
+              display.disease ||
+              consultationTypeLabel(display.consultationType) ||
+              "—"
+            }
           />
         </Panel>
 

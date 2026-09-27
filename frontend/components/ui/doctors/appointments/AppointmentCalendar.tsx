@@ -19,6 +19,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import { consultationTypeLabel } from "@/lib/bookingDisplay"
 import {
   formatPracticeDateTime,
   formatPracticeTime,
@@ -179,8 +180,9 @@ function BookingHoverDetails({ booking }: { booking: CalBooking }) {
           <dt className="opacity-60">Disease</dt>
           <dd className="text-right font-semibold">
             {booking.disease ||
-              booking.consultationType ||
-              booking.consultation_type ||
+              consultationTypeLabel(
+                booking.consultationType || booking.consultation_type,
+              ) ||
               "—"}
           </dd>
         </div>

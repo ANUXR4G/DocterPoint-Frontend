@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-09
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-BOOK (clinic-side manual booking)
+- **Description:** No way to add a patient who walks in with an emergency — the Appointments page had no manual-booking button in the doctor portal, and the clinic modal requires a free slot. Requested: button on the Appointments page; no time-slot question, just an emergency walk-in.
+- **Evidence:** User request; `DoctorAppointmentsList` rendered *Book appointment* only for `portal="clinic"`; `ClinicBookAppointmentModal` blocks without an open slot.
+- **Containment:** n/a.
+- **Root cause:** Only slot/token-based booking existed; no desk-emergency path.
+- **Corrective action:** New `BookingService.createWalkIn` + `POST /procto/bookings/walk-in` (`booking:update`, active membership, DOCTOR only for self, quota enforced) → booking at now in `WAITING`, `consultationType = EMERGENCY_WALK_IN`, no patient template. Appointments page (both portals): red **Emergency walk-in** button + modal (doctor, name, mobile, optional chief complaint) and **Book appointment** for everyone; after adding, list jumps to Today. Red *Walk-in* badge in Appointments / Queue / visit page; `consultationTypeLabel` shows "Emergency walk-in" instead of the raw code (web, provider app, patient app). Risk R17 added.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** API (local :3002, dr.solo): bad phone → 400, blank name → 400, foreign practice → 403, doctor → other provider → 403 "only to their own list", no auth → 401 (no booking created). Browser: header shows *Emergency walk-in* + *Book appointment*; modal has no slot picker, fixed doctor for solo, empty submit → "Enter the patient name." Backend tests 147/147; backend, frontend, provider, patient-app tsc clean.
+
 ### CR-20260928-08
 - **Date opened:** 2026-09-28
 - **Severity:** 3
