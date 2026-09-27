@@ -153,10 +153,8 @@ export function nextActions(status: string): Array<{ status: string; label: stri
         { status: "CANCELED", label: "Cancel" },
       ];
     case "IN_PROGRESS":
-      return [
-        { status: "COMPLETED", label: "Finish" },
-        { status: "NO_SHOW", label: "No-show" },
-      ];
+      // Finish only from the visit screen's own button (saves notes with it).
+      return [{ status: "NO_SHOW", label: "No-show" }];
     case "COMPLETED":
     case "CANCELED":
     case "CANCELLED":

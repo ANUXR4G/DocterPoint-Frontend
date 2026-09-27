@@ -109,6 +109,85 @@ function ageFromDob(dob?: string | null, age?: number | null): string {
   return n >= 0 && n <= 130 ? String(n) : ""
 }
 
+function GeneralDocumentsTab({
+  docs,
+  linked,
+  uploading,
+  onUpload,
+}: {
+  docs: VisitDoc[]
+  linked: boolean | null
+  uploading: boolean
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+}) {
+  if (linked === false) {
+    return (
+      <p className="mt-4 text-sm opacity-60">
+        This visit isn&apos;t linked to a registered patient, so there is no
+        patient record for general documents.
+      </p>
+    )
+  }
+  return (
+    <>
+      <label
+        className={`mt-3 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-violet-300 bg-violet-50/50 px-4 py-6 text-center dark:border-violet-500/40 dark:bg-violet-950/20 ${
+          uploading || linked === null
+            ? "pointer-events-none opacity-50"
+            : "hover:border-violet-500"
+        }`}
+      >
+        <span className="text-sm font-semibold text-violet-700 dark:text-violet-300">
+          {uploading ? "Uploading…" : "Upload to patient record"}
+        </span>
+        <span className="text-xs opacity-70">JPG, PNG, WEBP, PDF · max 10 MB</span>
+        <input
+          type="file"
+          className="hidden"
+          accept={BOOKING_DOCUMENT_ACCEPT}
+          disabled={uploading || linked === null}
+          onChange={onUpload}
+        />
+      </label>
+      {docs.length === 0 ? (
+        <p className="mt-4 text-sm opacity-60">
+          {linked === null ? "Loading…" : "No general documents yet."}
+        </p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {docs.map((d, idx) => (
+            <li
+              key={`${d.url}-${idx}`}
+              className="flex items-center gap-2 rounded-xl border border-neutral-200 px-3 py-2 dark:border-neutral-700"
+            >
+              <a
+                href={d.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">
+                  <Icon name="written-page" className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-violet-700 hover:underline dark:text-violet-300">
+                    {d.name || "View document"}
+                  </span>
+                  {d.uploadedAt ? (
+                    <span className="block text-xs opacity-60">
+                      {formatPracticeDate(d.uploadedAt)}
+                    </span>
+                  ) : null}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
+}
+
 export default function VisitPage() {
   const params = useParams<{ bookingId: string }>()
   const router = useRouter()
@@ -136,6 +215,9 @@ export default function VisitPage() {
   const [remarks, setRemarks] = useState("")
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [documents, setDocuments] = useState<VisitDoc[]>([])
+  const [docTab, setDocTab] = useState<"appointment" | "general">("appointment")
+  const [generalDocs, setGeneralDocs] = useState<VisitDoc[]>([])
+  const [generalLinked, setGeneralLinked] = useState<boolean | null>(null)
   const [medName, setMedName] = useState("")
   const [medAmount, setMedAmount] = useState("1")
   const [medTimes, setMedTimes] = useState<string[]>(["morning"])
@@ -215,6 +297,19 @@ export default function VisitPage() {
     )
   }, [fromShared])
 
+  const loadGeneralDocs = useCallback(async () => {
+    if (!bookingId) return
+    const res = await proctoService.getGeneralDocuments(bookingId)
+    if (res.status !== "successful" || !res.data) return
+    const data = res.data as { patientLinked?: boolean; documents?: VisitDoc[] }
+    setGeneralLinked(Boolean(data.patientLinked))
+    setGeneralDocs(Array.isArray(data.documents) ? data.documents : [])
+  }, [bookingId])
+
+  useEffect(() => {
+    if (ready) void loadGeneralDocs()
+  }, [ready, loadGeneralDocs])
+
   function toggleTime(time: string) {
     setMedTimes((prev) =>
       prev.includes(time)
@@ -291,6 +386,35 @@ export default function VisitPage() {
     setMedicines(next)
     setMessage("")
     await persistVisit(next, documents, { successMessage: "Medicine removed." })
+  }
+
+  async function onUploadGeneral(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file || !bookingId) return
+    setUploading(true)
+    setError("")
+    setMessage("")
+    try {
+      const uploaded = await uploadBookingDocument(file)
+      const res = await proctoService.addGeneralDocument(bookingId, {
+        name: uploaded.name,
+        url: uploaded.url,
+      })
+      if (res.status !== "successful") {
+        setError(res.message || "Could not save to the patient record.")
+        return
+      }
+      const data = res.data as { documents?: VisitDoc[] }
+      setGeneralDocs(Array.isArray(data?.documents) ? data.documents : [])
+      setMessage("Saved to the patient's general documents.")
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not upload document.",
+      )
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -615,11 +739,55 @@ export default function VisitPage() {
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
               Documents
             </h2>
-            <span className="text-xs opacity-50">
-              {documents.length}/{MAX_BOOKING_DOCUMENTS}
-            </span>
+            {docTab === "appointment" ? (
+              <span className="text-xs opacity-50">
+                {documents.length}/{MAX_BOOKING_DOCUMENTS}
+              </span>
+            ) : null}
           </div>
 
+          <div
+            role="tablist"
+            aria-label="Document type"
+            className="mt-3 grid grid-cols-2 gap-1 rounded-xl border border-neutral-200 p-1 dark:border-neutral-700"
+          >
+            {(
+              [
+                ["appointment", "Appointment", documents.length],
+                ["general", "General", generalDocs.length],
+              ] as const
+            ).map(([id, label, count]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={docTab === id}
+                onClick={() => setDocTab(id)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                  docTab === id
+                    ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
+                    : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                }`}
+              >
+                {label} ({count})
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs opacity-60">
+            {docTab === "appointment"
+              ? "Files for this visit only."
+              : "Patient's health record (lab reports, ID, insurance) — not tied to a visit."}
+          </p>
+
+          {docTab === "general" ? (
+            <GeneralDocumentsTab
+              docs={generalDocs}
+              linked={generalLinked}
+              uploading={uploading}
+              onUpload={(e) => void onUploadGeneral(e)}
+            />
+          ) : (
+          <>
           {!isCompleted ? (
             <label
               className={`mt-3 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/50 px-4 py-6 text-center dark:border-blue-500/40 dark:bg-blue-950/20 ${
@@ -681,6 +849,8 @@ export default function VisitPage() {
                 </li>
               ))}
             </ul>
+          )}
+          </>
           )}
         </section>
       </div>

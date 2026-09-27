@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-08
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-BOOK (visit page documents); P-AUTH (patient record access)
+- **Description:** Doctors could not find a patient's *General* documents from the appointment page — only visit files were shown; general files were only behind the Patients-tab paperclip. Requested: *General* and *Appointment* document options on the visit page.
+- **Evidence:** User report; visit page rendered `booking.documents` only.
+- **Containment:** n/a.
+- **Root cause:** No API exposed `Patient.documents` per booking for the visit page.
+- **Corrective action:** Visit page Documents → tabs *Appointment (n)* / *General (n)*; General lists + uploads to `Patient.documents` via new `GET/POST /procto/bookings/:id/general-documents`. Access: view requires `assertCanViewBooking`; add requires active membership and own visit unless owner/admin. Patient resolved from `booking.patientId` or a single phone match only (no guessing on shared numbers). Finish still only from the visit page (list controls stop at *Appointment started*).
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** Browser (dr.solo): Roopa visit → Appointment (1) / General (0) "No general documents yet"; Satheesh visit → Appointment (3) / General (1) lists WhatsApp general doc "Logo myplex.png" with date. Backend + frontend + provider tsc.
+- **Status:** Verified (local)
+- **Docs updated:** `documentation/flow.md`
+
 ### CR-20260928-07
 - **Date opened:** 2026-09-28
 - **Severity:** 3

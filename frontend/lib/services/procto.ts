@@ -282,6 +282,18 @@ export const proctoService = {
       body: JSON.stringify(body),
     }),
 
+  getGeneralDocuments: (bookingId: string) =>
+    proctoFetch(`/procto/bookings/${bookingId}/general-documents`),
+
+  addGeneralDocument: (
+    bookingId: string,
+    doc: { name: string; url: string },
+  ) =>
+    proctoFetch(`/procto/bookings/${bookingId}/general-documents`, {
+      method: "POST",
+      body: JSON.stringify(doc),
+    }),
+
   listPracticeBookings: (
     practiceId: string,
     opts?:

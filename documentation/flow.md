@@ -174,7 +174,8 @@ BookingService.createBooking({ slotStart | sessionDate, mode, patientPhone, … 
 ```
 
 Status lifecycle (doctor queue):  
-`ACCEPTED` → `WAITING` → `IN_PROGRESS` → `COMPLETED` · or `CANCELED` / `NO_SHOW`.
+`ACCEPTED` → `WAITING` → `IN_PROGRESS` → `COMPLETED` · or `CANCELED` / `NO_SHOW`.  
+`COMPLETED` is set only from the visit page (**Finish appointment** on web, **Save & finish** in the provider app), which saves remarks + medicines in the same call. Queue / Appointments list controls stop at *Appointment started* (+ No-show / Cancel).
 
 ---
 
@@ -233,6 +234,8 @@ Inbound → practice resolve → staff gate
 **Voice notes:** Patient sends a WhatsApp voice message → Meta webhook `type=audio` → download via Graph API → speech-to-text (`OPENAI_API_KEY` Whisper, else `HF_TOKEN`) → same orchestrator as typed text. No fixed phrase format is required: one note can carry date + time + doctor (“book tomorrow at 10 am with Kabir”). Unclear / empty STT replies asking the patient to speak again or type freely. Spoken times are matched to the nearest open slot when available. Optional `WHATSAPP_STT_LANGUAGE=hi` (or `en`) to bias Whisper. Local test:
 
 **Attach document (Menu → Attach, or *Yes* after booking):** bot first asks **Select Appointment | General Document** (*No* cancels) → *Select Appointment*: 1 upcoming visit → "Send a photo or PDF for this visit: *…*"; 2+ → visit list first → *General Document*: shared number → *Which patient?* → "Send a photo or PDF — saved to *X*'s record (not linked to any appointment)" → file saved to the chosen place. A file sent without choosing first still gets the two buttons after upload when an upcoming visit exists.
+
+**Visit page → Documents:** two tabs — **Appointment** (this visit's `PracticeBooking.documents`, max 5, read-only once finished) and **General** (the patient's `Patient.documents` health record: WhatsApp *General Document* uploads + clinic uploads, max 30). General tab uses `GET/POST /procto/bookings/:id/general-documents` (view: `assertCanViewBooking`; add: active member, own visit unless owner/admin). Patient is resolved from `booking.patientId`, or a *single* account on that phone — never guessed on a shared number (tab then says the visit isn't linked).
 
 **Visit documents (patient → doctor):** Outside active *REGISTER* steps, inbound WhatsApp *image* or *PDF* (`type=image|document`) downloads via Graph → uploads to Cloudinary (same `gluco-guide-users` preset as portal) → appends to the patient’s open `PracticeBooking.documents` (max 5) → live `booking_updated` + care-chat ping to the doctor. Caption becomes the file name. Reply *REPORT* for how-to; *MY DOCS* / *STATUS* list attachments. Active register flow + captions like “Aadhaar/PAN/ID” still use ID OCR — **JPG/PNG/PDF** (PDF page 1 is rasterized, then the same vision OCR as photos).
 
