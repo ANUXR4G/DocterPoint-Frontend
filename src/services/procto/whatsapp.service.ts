@@ -650,6 +650,8 @@ export const WhatsAppService = {
             (Boolean(alreadyRegistered) && !activelyRegistering);
 
           if (useBranchF) {
+            const generalChosen =
+              awaitingDocUpload && earlyState.docTarget === "general";
             const branchF = await receiveWhatsAppBranchFDocument({
               practiceId: practiceEarly.id,
               patientPhone: patientPhoneEarly,
@@ -658,9 +660,13 @@ export const WhatsAppService = {
               filename: filename || undefined,
               caption: caption || undefined,
               lang: langEarly,
-              preferredBookingId: awaitingDocUpload
-                ? earlyState.lastBookingId || null
-                : null,
+              preferredBookingId:
+                awaitingDocUpload && !generalChosen
+                  ? earlyState.lastBookingId || null
+                  : null,
+              general: generalChosen
+                ? { patientUserId: earlyState.docPatientUserId || undefined }
+                : undefined,
             });
 
             if (branchF.nextStep === "awaiting_document_link" && branchF.pendingDoc) {
@@ -674,6 +680,9 @@ export const WhatsAppService = {
                     postBookingCare: false,
                     step: "awaiting_document_link",
                     pendingDoc: branchF.pendingDoc,
+                    docTarget: undefined,
+                    docPatientUserId: undefined,
+                    docPatientName: undefined,
                     idleReminderSentAt: undefined,
                   },
                 },
@@ -706,6 +715,9 @@ export const WhatsAppService = {
                   ...earlyState,
                   step: "idle",
                   pendingDoc: null,
+                  docTarget: undefined,
+                  docPatientUserId: undefined,
+                  docPatientName: undefined,
                   lastBookingId:
                     branchF.bookingId || earlyState.lastBookingId,
                   idleReminderSentAt: undefined,

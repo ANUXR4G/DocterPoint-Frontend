@@ -24,6 +24,21 @@ describe("Branch F attach document", () => {
     );
   });
 
+  it("askDocumentKind names both choices before any upload", () => {
+    const reply = BotPrompts.askDocumentKind("en");
+    assert.match(reply, /Select Appointment/);
+    assert.match(reply, /General Document/);
+    assert.doesNotMatch(reply, /upload/i);
+  });
+
+  it("askGeneralDocumentUpload names whose record and says not linked", () => {
+    assert.match(
+      BotPrompts.askGeneralDocumentUpload("Rathul Satheesh", "en"),
+      /\*Rathul Satheesh\*'s record \(not linked to any appointment\)/,
+    );
+    assert.match(BotPrompts.askGeneralDocumentUpload(undefined, "en"), /your record/);
+  });
+
   it("askLinkDocumentToAppointment offers linking choice", () => {
     assert.match(
       BotPrompts.askLinkDocumentToAppointment("en"),

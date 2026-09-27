@@ -500,6 +500,8 @@ export async function receiveWhatsAppBranchFDocument(opts: {
   lang?: WaLang;
   /** Post-booking path already chose a visit. */
   preferredBookingId?: string | null;
+  /** Patient chose General Document before uploading — never link to a visit. */
+  general?: { patientUserId?: string };
 }): Promise<BranchFUploadResult> {
   const lang = opts.lang;
 
@@ -550,16 +552,24 @@ export async function receiveWhatsAppBranchFDocument(opts: {
   );
   const patientIds = linked.map((p) => p.id);
 
-  const open = await listOpenBookingsForWhatsApp(
-    opts.practiceId,
-    opts.patientPhone,
-    { patientIds, take: 5 },
-  );
+  const open = opts.general
+    ? []
+    : await listOpenBookingsForWhatsApp(opts.practiceId, opts.patientPhone, {
+        patientIds,
+        take: 5,
+      });
   const openIds = open.map((b) => b.id);
-  const target = resolveBranchFDocTarget({
-    preferredBookingId: opts.preferredBookingId,
-    openBookingIds: openIds,
-  });
+  const target = opts.general
+    ? "general"
+    : resolveBranchFDocTarget({
+        preferredBookingId: opts.preferredBookingId,
+        openBookingIds: openIds,
+      });
+  const generalPatientUserId =
+    opts.general?.patientUserId &&
+    patientIds.includes(opts.general.patientUserId)
+      ? opts.general.patientUserId
+      : undefined;
 
   // Explicit open visit already chosen — attach to that booking only.
   if (target === "attach_preferred" && opts.preferredBookingId) {
@@ -584,6 +594,7 @@ export async function receiveWhatsAppBranchFDocument(opts: {
       doc,
       lang,
       practiceId: opts.practiceId,
+      patientUserId: generalPatientUserId,
     });
     // If patient profile missing, still confirm after Cloudinary upload via Admin help.
     if (!general.attached) {

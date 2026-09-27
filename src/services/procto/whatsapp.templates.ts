@@ -389,6 +389,33 @@ export const BotPrompts = {
     );
   },
 
+  /** Branch F — before upload: which kind of document? */
+  askDocumentKind(lang?: WaLang): string {
+    return L(
+      lang,
+      "What is this document for?\n\n" +
+        "• *Select Appointment* — attach it to an upcoming visit\n" +
+        "• *General Document* — save it to the patient's health record\n\n" +
+        "Tap a button below.",
+      "यह दस्तावेज़ किसके लिए है?\n\n" +
+        "• *Select Appointment* — किसी आगामी विज़िट से जोड़ें\n" +
+        "• *General Document* — मरीज़ के हेल्थ रिकॉर्ड में सेव करें\n\n" +
+        "नीचे बटन दबाएँ।",
+    );
+  },
+
+  /** Branch F — General Document chosen; now ask for the file. */
+  askGeneralDocumentUpload(patientName?: string | null, lang?: WaLang): string {
+    const who = patientName?.trim();
+    return L(
+      lang,
+      `Send a *photo* or *PDF* now — it will be saved to ${who ? `*${who}*'s` : "your"} record ` +
+        `(not linked to any appointment).\n\nOr reply *No* / *SKIP* to cancel.`,
+      `अब *फ़ोटो* या *PDF* भेजें — यह ${who ? `*${who}* के` : "आपके"} रिकॉर्ड में सेव होगा ` +
+        `(किसी अपॉइंटमेंट से नहीं जुड़ा)।\n\nरद्द करने के लिए *No* / *SKIP* लिखें।`,
+    );
+  },
+
   /** Branch F — after upload, when active appointments exist. */
   askLinkDocumentToAppointment(lang?: WaLang): string {
     return L(

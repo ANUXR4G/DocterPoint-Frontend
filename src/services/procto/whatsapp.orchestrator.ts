@@ -214,6 +214,11 @@ export type ConversationState = {
   messageDoctorName?: string | null;
   /** Branch F — Cloudinary upload waiting for appointment link choice. */
   pendingDoc?: { name: string; url: string; uploadedAt: string } | null;
+  /** Branch F — General Document chosen before upload; the next file skips linking. */
+  docTarget?: "general";
+  /** Branch F — whose record the pre-chosen General Document goes to (shared number). */
+  docPatientUserId?: string;
+  docPatientName?: string;
   /** Preferred reply language (set on first contact) */
   preferredLanguage?: "en" | "hi";
   /**
@@ -405,6 +410,16 @@ function withYesNo(reply: string): OrchestratorResult {
   };
 }
 
+/** Branch F — upload prompt matching what the patient already chose. */
+function documentUploadPrompt(state: ConversationState, lang: WaLang): string {
+  if (state.docTarget === "general") {
+    return BotPrompts.askGeneralDocumentUpload(state.docPatientName, lang);
+  }
+  return state.pendingSummary
+    ? BotPrompts.askReportForVisit(state.pendingSummary, lang)
+    : BotPrompts.askAttachDocumentUpload(lang);
+}
+
 /** Branch F — Select Appointment | General Document. */
 function withDocumentLinkButtons(reply: string): OrchestratorResult {
   return {
@@ -453,9 +468,11 @@ function repromptHintForStep(state: ConversationState, lang: WaLang): string {
         : BotPrompts.askDate(lang);
     case "awaiting_document_upload":
     case "awaiting_report":
-      return BotPrompts.askAttachDocumentUpload(lang);
+      return documentUploadPrompt(state, lang);
     case "awaiting_document_link":
-      return BotPrompts.askLinkDocumentToAppointment(lang);
+      return state.pendingDoc?.url
+        ? BotPrompts.askLinkDocumentToAppointment(lang)
+        : BotPrompts.askDocumentKind(lang);
     case "awaiting_document_patient":
       return BotPrompts.askDocumentPatientPick(
         (state.patientChoices ?? []).map((c, i) => ({
@@ -667,7 +684,7 @@ async function continueFlowPrompt(
         bookingPickRows(bookings),
       );
     case "awaiting_document_link":
-      return withDocumentLinkButtons(BotPrompts.askLinkDocumentToAppointment(lang));
+      return withDocumentLinkButtons(repromptHintForStep(state, lang));
     case "awaiting_document_patient":
       return documentPatientPicker(patients, lang);
     case "awaiting_attach_offer":
@@ -1421,19 +1438,20 @@ async function listUpcomingBookingsUncached(
   });
 }
 
-/** Branch F — ask for upload first; link to appointment after the file arrives. */
+/** Branch F — ask Select Appointment | General Document before asking for the file. */
 async function startReportAttachFlow(opts: {
   convId: string;
   practice: PracticeCtx;
   patientPhone: string;
   state: ConversationState;
   lang: WaLang;
+  keepLastBooking?: boolean;
 }): Promise<OrchestratorResult> {
   const { convId, state, lang } = opts;
   await saveState(convId, {
     ...idleState(state),
-    step: "awaiting_document_upload",
-    lastBookingId: undefined,
+    step: "awaiting_document_link",
+    lastBookingId: opts.keepLastBooking ? state.lastBookingId : undefined,
     pendingDoc: null,
     bookingChoices: undefined,
     pendingSummary: undefined,
@@ -1441,7 +1459,7 @@ async function startReportAttachFlow(opts: {
     postBookingCare: false,
     handedOff: false,
   });
-  return { reply: BotPrompts.askAttachDocumentUpload(lang) };
+  return withDocumentLinkButtons(BotPrompts.askDocumentKind(lang));
 }
 
 async function finishBranchFGeneralDocument(
@@ -1452,15 +1470,7 @@ async function finishBranchFGeneralDocument(
   lang: WaLang,
   patientUserId?: string,
 ): Promise<OrchestratorResult> {
-  const doc = state.pendingDoc;
-  if (!doc?.url) {
-    await saveState(convId, {
-      ...idleState(state),
-      step: "awaiting_document_upload",
-      pendingDoc: null,
-    });
-    return { reply: BotPrompts.askAttachDocumentUpload(lang) };
-  }
+  const doc = state.pendingDoc?.url ? state.pendingDoc : null;
   if (!patientUserId) {
     const profiles = await PatientService.listLinkedToWhatsApp(patientPhone);
     if (profiles.length > 1) {
@@ -1478,6 +1488,32 @@ async function finishBranchFGeneralDocument(
       });
       return documentPatientPicker(patientChoices, lang);
     }
+  }
+  if (!doc) {
+    const picked = patientUserId
+      ? state.patientChoices?.find((c) => c.id === patientUserId)
+      : undefined;
+    const docPatientName =
+      picked && !picked.isSelf
+        ? picked.label.replace(/\s·\s.*$/, "").trim() || undefined
+        : undefined;
+    await saveState(convId, {
+      ...idleState(state),
+      step: "awaiting_document_upload",
+      lastBookingId: undefined,
+      pendingDoc: null,
+      pendingSummary: undefined,
+      patientChoices: undefined,
+      docTarget: "general",
+      docPatientUserId: patientUserId,
+      docPatientName,
+      failedTurns: 0,
+      postBookingCare: false,
+      handedOff: false,
+    });
+    return {
+      reply: BotPrompts.askGeneralDocumentUpload(docPatientName, lang),
+    };
   }
   const { attachWhatsAppPatientDocument } = await import("./whatsapp.visitDocs.js");
   const result = await attachWhatsAppPatientDocument({
@@ -1520,6 +1556,7 @@ async function finishBranchFBookingDocument(
   patientPhone: string,
   bookingId: string,
   lang: WaLang,
+  visitLabel?: string,
 ): Promise<OrchestratorResult> {
   const doc = state.pendingDoc;
   if (!doc?.url) {
@@ -1528,8 +1565,16 @@ async function finishBranchFBookingDocument(
       step: "awaiting_document_upload",
       pendingDoc: null,
       lastBookingId: bookingId,
+      pendingSummary: visitLabel,
+      failedTurns: 0,
+      postBookingCare: false,
+      handedOff: false,
     });
-    return { reply: BotPrompts.askAttachDocumentUpload(lang) };
+    return {
+      reply: visitLabel
+        ? BotPrompts.askReportForVisit(visitLabel, lang)
+        : BotPrompts.askAttachDocumentUpload(lang),
+    };
   }
   const { attachPendingDocToBooking } = await import("./whatsapp.visitDocs.js");
   const result = await attachPendingDocToBooking({
@@ -5049,16 +5094,14 @@ async function runOrchestratorCore(input: {
   // After booking — Yes/No attach-document offer (before menu shortcuts)
   if (state.step === "awaiting_attach_offer") {
     if (/^(yes|y|confirm|ok|हाँ|हां|जी)$/i.test(text.trim())) {
-      await saveState(convId, {
-        ...keepPrefs(state),
-        step: "awaiting_document_upload",
-        lastBookingId: state.lastBookingId,
-        pendingDoc: null,
-        failedTurns: 0,
-        postBookingCare: false,
-        handedOff: false,
+      return startReportAttachFlow({
+        convId,
+        practice,
+        patientPhone,
+        state,
+        lang,
+        keepLastBooking: true,
       });
-      return { reply: BotPrompts.askAttachDocumentUpload(lang) };
     }
     if (/^(no|n|nope|skip|later|बाद में|नहीं)$/i.test(text.trim())) {
       await saveState(convId, {
@@ -5113,17 +5156,24 @@ async function runOrchestratorCore(input: {
       !parseGlobalKeywordHijack(text) &&
       !wantsFullMainMenu(text)
     ) {
-      return {
-        reply: state.pendingSummary
-          ? BotPrompts.askReportForVisit(state.pendingSummary, lang)
-          : BotPrompts.askAttachDocumentUpload(lang),
-      };
+      return { reply: documentUploadPrompt(state, lang) };
     }
   }
 
   // Branch F — link uploaded doc to appointment or save as general
   if (state.step === "awaiting_document_link") {
     const t = text.trim();
+    // Before any file is sent, "No" cancels instead of meaning General Document.
+    if (
+      !state.pendingDoc?.url &&
+      /^(no|n|nope|skip|cancel|stop|later|बाद में|नहीं|रद्द)$/i.test(t)
+    ) {
+      await saveState(convId, {
+        ...idleState(state),
+        pendingDoc: null,
+      });
+      return withMainMenu(BotPrompts.attachDocumentSkipped(lang));
+    }
     const wantGeneral =
       /^(doc:general|general(\s*document)?|patient(\s*record)?|no|skip)$/i.test(
         t,
@@ -5157,13 +5207,15 @@ async function runOrchestratorCore(input: {
         };
       }
       if (upcoming.length === 1) {
+        const only = upcoming[0]!;
         return finishBranchFBookingDocument(
           convId,
           practice,
           state,
           patientPhone,
-          upcoming[0]!.id,
+          only.id,
           lang,
+          postBookingVisitLines([only])[0] || bookingWhenLabel(only),
         );
       }
       const bookingChoices = upcoming.map((b) => ({
@@ -6464,7 +6516,7 @@ async function runOrchestratorCore(input: {
       postBookingCare: false,
       handedOff: false,
     });
-    return { reply: BotPrompts.askAttachDocumentUpload(lang) };
+    return { reply: BotPrompts.askReportForVisit(choice.label, lang) };
   }
 
   if (state.step === "awaiting_provider") {
