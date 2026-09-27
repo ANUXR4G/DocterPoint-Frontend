@@ -48,6 +48,58 @@ function isActiveAwaitingReply(state: ConversationState): boolean {
   return Boolean(step && step !== "idle");
 }
 
+/** What the patient was doing, for the idle reminder ("…while *booking…*"). */
+export function idleActivityLabel(
+  state: ConversationState,
+): { en: string; hi: string } | null {
+  const step = state.step ?? "";
+  if (step.startsWith("awaiting_register_")) {
+    if (state.registeringFamily) {
+      const name = state.regName?.trim();
+      return name
+        ? { en: `adding ${name} to your family`, hi: `${name} को परिवार में जोड़ते समय` }
+        : { en: "adding a family member", hi: "परिवार सदस्य जोड़ते समय" };
+    }
+    return { en: "creating your patient profile", hi: "प्रोफ़ाइल बनाते समय" };
+  }
+  if (step.startsWith("awaiting_cancel_")) {
+    return { en: "cancelling a booking", hi: "बुकिंग रद्द करते समय" };
+  }
+  if (step.startsWith("awaiting_reschedule_")) {
+    return { en: "rescheduling a booking", hi: "बुकिंग बदलते समय" };
+  }
+  if (step.startsWith("awaiting_manage_")) {
+    return { en: "managing your booking", hi: "बुकिंग मैनेज करते समय" };
+  }
+  if (step.startsWith("awaiting_message_doctor_")) {
+    return { en: "messaging your doctor", hi: "डॉक्टर को संदेश भेजते समय" };
+  }
+  if (
+    step.startsWith("awaiting_document_") ||
+    step.startsWith("awaiting_report") ||
+    step === "awaiting_attach_offer"
+  ) {
+    return { en: "attaching a document", hi: "दस्तावेज़ भेजते समय" };
+  }
+  if (
+    [
+      "awaiting_book_whom",
+      "awaiting_book_patient",
+      "awaiting_family_pick",
+      "awaiting_specialty",
+      "awaiting_provider",
+      "awaiting_date",
+      "awaiting_mode",
+      "awaiting_slot",
+      "awaiting_confirm",
+      "awaiting_nlu_book_confirm",
+    ].includes(step)
+  ) {
+    return { en: "booking an appointment", hi: "अपॉइंटमेंट बुक करते समय" };
+  }
+  return null;
+}
+
 function activityAgeMs(state: ConversationState, now: number): number | null {
   if (!state.updatedAt) return null;
   const t = Date.parse(state.updatedAt);
@@ -104,9 +156,10 @@ async function resolvePhoneNumberId(
 async function sendReminder(
   to: string,
   lang: WaLang,
+  state: ConversationState,
   phoneNumberId?: string,
 ): Promise<boolean> {
-  const body = BotPrompts.idleReminder(lang);
+  const body = BotPrompts.idleReminder(lang, idleActivityLabel(state));
   const btnSent = await sendWhatsAppInteractiveButtons(
     to,
     {
@@ -188,7 +241,7 @@ export async function processWhatsAppIdleTimeouts(now = Date.now()): Promise<{
     const phoneNumberId = await resolvePhoneNumberId(conv.practiceId);
 
     if (action === "remind") {
-      const ok = await sendReminder(conv.patientPhone, lang, phoneNumberId);
+      const ok = await sendReminder(conv.patientPhone, lang, state, phoneNumberId);
       if (!ok) {
         console.warn(
           `[wa-idle] reminder failed conv=${conv.id} to=${conv.patientPhone}`,

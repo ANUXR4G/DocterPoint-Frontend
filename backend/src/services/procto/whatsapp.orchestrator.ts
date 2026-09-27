@@ -467,6 +467,199 @@ function repromptHintForStep(state: ConversationState, lang: WaLang): string {
   }
 }
 
+function bookingPickRows(
+  choices: Array<{ label: string }>,
+): Array<{ label: string; description?: string }> {
+  return choices.map((c) => {
+    const [title, ...rest] = c.label.split(" · ");
+    return {
+      label: (title || c.label).slice(0, 24),
+      description: rest.join(" · ").slice(0, 72) || undefined,
+    };
+  });
+}
+
+/**
+ * Idle "Continue" — re-ask the pending question with the same buttons / list
+ * the step originally showed. Read-only: never mutates or saves state.
+ */
+async function continueFlowPrompt(
+  state: ConversationState,
+  lang: WaLang,
+  patientPhone: string,
+): Promise<OrchestratorResult> {
+  const numbered = (rows: Array<{ label: string }>) =>
+    rows.map((c, i) => ({ index: i + 1, label: c.label }));
+  const bookings = state.bookingChoices ?? [];
+  const patients = state.patientChoices ?? [];
+  switch (state.step) {
+    case "awaiting_register_gender":
+      return withGenderButtons(
+        state.registeringFamily
+          ? BotPrompts.askRegisterFamilyGender(lang)
+          : BotPrompts.askRegisterGender(lang),
+      );
+    case "awaiting_register_relationship":
+      return withRelationshipButtons(
+        BotPrompts.askRegisterFamilyRelationship(lang),
+        lang,
+      );
+    case "awaiting_register_family_details": {
+      const hasDob = Boolean(state.regDob?.trim());
+      const hasId = Boolean(state.regNationalId?.trim());
+      const who = state.regName?.trim()
+        ? L(
+            lang,
+            `Adding *${state.regName.trim()}* to your family.\n`,
+            `*${state.regName.trim()}* को परिवार में जोड़ रहे हैं।\n`,
+          )
+        : "";
+      return {
+        reply:
+          who +
+          (hasDob && !hasId
+            ? BotPrompts.askRegisterFamilyIdOnly(lang)
+            : !hasDob && hasId
+              ? BotPrompts.askRegisterFamilyDobOnly(lang)
+              : BotPrompts.askRegisterFamilyDobAndId(lang)),
+      };
+    }
+    case "awaiting_register_email_opt":
+      return emailOptPrompt(lang);
+    case "awaiting_register_email":
+      return { reply: BotPrompts.askRegisterEmail(lang) };
+    case "awaiting_register_family_opt":
+      return withYesNo(BotPrompts.askRegisterFamilyOpt("", lang));
+    case "awaiting_register_family_phone":
+      return { reply: BotPrompts.askRegisterFamilyPhone(lang) };
+    case "awaiting_register_confirm":
+      return withYesNo(
+        BotPrompts.askRegisterConfirm(
+          state.pendingSummary || "",
+          state.afterRegister === "book",
+          lang,
+        ),
+      );
+    case "awaiting_book_whom": {
+      const self = await findPatientByPhoneCached(patientPhone);
+      return withWhomButtons(
+        BotPrompts.askBookWhom(self?.name ?? null, lang),
+        self?.name ?? null,
+        lang,
+      );
+    }
+    case "awaiting_book_patient": {
+      const hasAdd = patients.some((c) => c.id === FAMILY_ADD_ID);
+      const profiles = patients.filter((c) => c.id !== FAMILY_ADD_ID);
+      return withPatientPicker(
+        hasAdd
+          ? BotPrompts.askBookFamilyPick(numbered(profiles), lang)
+          : BotPrompts.askBookPatientPick(numbered(patients), lang),
+        patients.map((c) => ({
+          label: c.label,
+          description:
+            c.id === FAMILY_ADD_ID
+              ? "Register a new member"
+              : c.isSelf
+                ? "Yourself"
+                : "Family member",
+        })),
+      );
+    }
+    case "awaiting_family_pick": {
+      const family = patients.filter((c) => c.id !== FAMILY_ADD_ID);
+      return withPatientPicker(
+        BotPrompts.askFamilyMembersPick(numbered(family), lang),
+        [
+          ...family.map((c) => ({ label: c.label, description: "Book for them" })),
+          { label: "Add family", description: "Register a new member" },
+        ],
+      );
+    }
+    case "awaiting_specialty": {
+      const labels = (state.specialtyChoices ?? []).map((c) => c.label);
+      return withSpecialtyList(
+        BotPrompts.askSpecialty(
+          labels.map((label, i) => ({ index: i + 1, label })),
+          lang,
+        ),
+        labels,
+      );
+    }
+    case "awaiting_provider": {
+      const providers = state.providerChoices ?? [];
+      return withDoctorList(
+        BotPrompts.askProvider(
+          providers.map((p, i) => ({ index: i + 1, name: p.name, detail: p.detail })),
+          lang,
+        ),
+        providers,
+      );
+    }
+    case "awaiting_date":
+      return withDateButtons(BotPrompts.askDate(lang), state.date);
+    case "awaiting_mode":
+      return withModeButtons(BotPrompts.askMode(true, true, lang), true, true);
+    case "awaiting_confirm":
+      return state.pendingSummary
+        ? withBookingConfirmButtons(state.pendingSummary, lang)
+        : withDateButtons(BotPrompts.askDate(lang), state.date);
+    case "awaiting_manage_booking":
+      return withBookingPicker(
+        BotPrompts.askManageBookingsPick(numbered(bookings), lang),
+        bookingPickRows(bookings),
+      );
+    case "awaiting_manage_action":
+      return withManageActionButtons(
+        BotPrompts.askManageAction(state.pendingSummary || "", lang),
+        lang,
+      );
+    case "awaiting_cancel_booking":
+      return withBookingPicker(
+        BotPrompts.askCancelPick(numbered(bookings), lang),
+        bookingPickRows(bookings),
+      );
+    case "awaiting_cancel_confirm":
+      return withCancelConfirmButtons(
+        BotPrompts.askCancelConfirm(state.pendingSummary || "", lang),
+        lang,
+      );
+    case "awaiting_cancel_reason":
+      return { reply: BotPrompts.askCancelReason(state.pendingSummary, lang) };
+    case "awaiting_reschedule_booking":
+      return withBookingPicker(
+        BotPrompts.askReschedulePick(numbered(bookings), lang),
+        bookingPickRows(bookings),
+      );
+    case "awaiting_message_doctor_booking":
+      return withBookingPicker(
+        BotPrompts.askMessageDoctorPick(numbered(bookings), lang),
+        bookingPickRows(bookings),
+      );
+    case "awaiting_report_booking":
+      return withBookingPicker(
+        BotPrompts.askReportPick(numbered(bookings), lang),
+        bookingPickRows(bookings),
+      );
+    case "awaiting_document_link":
+      return withDocumentLinkButtons(BotPrompts.askLinkDocumentToAppointment(lang));
+    case "awaiting_document_patient":
+      return documentPatientPicker(patients, lang);
+    case "awaiting_attach_offer":
+      return withYesNo(BotPrompts.askAttachDocument(lang));
+    case "awaiting_nlu_book_confirm":
+      return {
+        reply: repromptHintForStep(state, lang),
+        replyButtons: [
+          { id: "nlu:yes", title: "Yes" },
+          { id: "nlu:no", title: "No" },
+        ],
+      };
+    default:
+      return { reply: repromptHintForStep(state, lang) };
+  }
+}
+
 /** Branch C — Spouse | Child | Parent (free text also accepted). */
 function withRelationshipButtons(
   reply: string,
@@ -4762,18 +4955,10 @@ async function runOrchestratorCore(input: {
         });
         return refreshed;
       }
+      const again = await continueFlowPrompt(state, lang, patientPhone);
       return {
-        reply:
-          BotPrompts.idleContinueAck(lang) +
-          "\n\n" +
-          repromptHintForStep(state, lang),
-        replyButtons:
-          state.step === "awaiting_nlu_book_confirm"
-            ? [
-                { id: "nlu:yes", title: "Yes" },
-                { id: "nlu:no", title: "No" },
-              ]
-            : undefined,
+        ...again,
+        reply: `${BotPrompts.idleContinueAck(lang)}\n\n${again.reply}`,
       };
     }
   }

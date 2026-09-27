@@ -1200,11 +1200,16 @@ export const BotPrompts = {
   },
 
   /** Proactive nudge when the patient goes quiet mid-flow (>10 min). */
-  idleReminder(lang?: WaLang): string {
+  idleReminder(
+    lang?: WaLang,
+    activity?: { en: string; hi: string } | null,
+  ): string {
     return L(
       lang,
-      "It looks like you stepped away. Tap *Continue* to finish or *Main Menu* to start over.",
-      "लगता है आप थोड़ी देर के लिए चले गए। जारी रखने के लिए *Continue*, या फिर से शुरू करने के लिए *Main Menu* दबाएँ।",
+      `It looks like you stepped away${activity ? ` while *${activity.en}*` : ""}.\n` +
+        "Tap *Continue* to pick up where you left off, or *Main Menu* to start over.",
+      `लगता है आप थोड़ी देर के लिए चले गए${activity ? ` (*${activity.hi}*)` : ""}।\n` +
+        "जहाँ छोड़ा था वहीं से जारी रखने के लिए *Continue*, या फिर से शुरू करने के लिए *Main Menu* दबाएँ।",
     );
   },
 

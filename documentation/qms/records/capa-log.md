@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260928-01
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-SUP (WhatsApp idle reminder / resume)
+- **Description:** Idle nudge "It looks like you stepped away… Tap Continue" gave no context; tapping Continue replied "Reply below to continue" without repeating the pending question or its buttons (family DOB/ID, gender, relationship, Self/Family, pickers).
+- **Evidence:** Patient screenshot 2026-09-27 22:33 (UAE); local repro on conv state `awaiting_register_family_details` → generic hint, no buttons.
+- **Containment:** N/A (state was preserved; patient could still type the answer).
+- **Root cause:** `repromptHintForStep` covered only a few steps and returned text only; Continue attached buttons for one step (`awaiting_nlu_book_confirm`).
+- **Corrective action:** `continueFlowPrompt` re-sends each step's original prompt with its buttons/list from saved state (read-only). Reminder names the activity ("…while *adding Roopa Satheesh to your family*").
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** Repro: Continue on family DOB/ID, gender, relationship, book-whom, date → correct prompt + buttons, state unchanged; 137/137 procto tests (3 new).
+- **Status:** Verified
+- **Docs updated:** capa-log
+
 ### NC-20260927-05
 - **Date opened:** 2026-09-27
 - **Severity:** 2
