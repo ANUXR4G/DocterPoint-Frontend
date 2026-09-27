@@ -593,6 +593,8 @@ export default function VisitPage() {
                   bookingId={booking.id}
                   status={booking.paymentStatus}
                   amount={booking.paymentAmount}
+                  patientName={booking.patientName}
+                  patientPhone={booking.patientPhone}
                   onUpdate={(patch) =>
                     setBooking((prev) => (prev ? { ...prev, ...patch } : prev))
                   }

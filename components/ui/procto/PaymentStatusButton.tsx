@@ -1,10 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { CreditCard, ExternalLink, RefreshCw } from "lucide-react"
+import { CreditCard, ExternalLink, IndianRupee, RefreshCw } from "lucide-react"
 import PopupModal from "@/components/modals/Modal"
-import { proctoService } from "@/lib/services/procto"
+import PaymentRequestModal from "@/components/ui/procto/PaymentRequestModal"
+import { proctoService, type PaymentRequestRow } from "@/lib/services/procto"
 import { formatPracticeDateTime } from "@/lib/practiceTime"
+import {
+  formatRupees,
+  paymentStatusStyle,
+  PAYMENT_STATUS_STYLES,
+} from "@/lib/paymentDisplay"
 
 type PaymentInfo = {
   status: string | null
@@ -13,50 +19,13 @@ type PaymentInfo = {
   paymentId: string | null
   paidAt: string | null
   clinicFee: number | null
-}
-
-const STATUS: Record<string, { label: string; className: string }> = {
-  PAID: {
-    label: "Paid",
-    className:
-      "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200",
-  },
-  PENDING: {
-    label: "Payment pending",
-    className:
-      "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200",
-  },
-  DECLINED: {
-    label: "Pay at clinic",
-    className:
-      "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-200",
-  },
-  EXPIRED: {
-    label: "Link expired",
-    className:
-      "border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-200",
-  },
-  CANCELLED: {
-    label: "Link cancelled",
-    className:
-      "border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-200",
-  },
-}
-
-const NOT_REQUESTED = {
-  label: "Not requested",
-  className:
-    "border-neutral-300 bg-white text-neutral-600 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-300",
+  advanceAmount?: number | null
+  requests?: PaymentRequestRow[]
+  paymentsEnabled?: boolean
 }
 
 export function paymentStatusLabel(status: string | null | undefined): string {
-  return (status && STATUS[status]?.label) || NOT_REQUESTED.label
-}
-
-function rupees(paise: number | null | undefined): string {
-  if (paise == null) return "—"
-  const r = paise / 100
-  return `₹${Number.isInteger(r) ? r : r.toFixed(2)}`
+  return paymentStatusStyle(status).label
 }
 
 export default function PaymentStatusButton({
@@ -64,12 +33,16 @@ export default function PaymentStatusButton({
   status,
   amount,
   compact = false,
+  patientName,
+  patientPhone,
   onUpdate,
 }: {
   bookingId: string
   status?: string | null
   amount?: number | null
   compact?: boolean
+  patientName?: string | null
+  patientPhone?: string | null
   onUpdate?: (patch: {
     paymentStatus: string | null
     paymentAmount: number | null
@@ -77,17 +50,20 @@ export default function PaymentStatusButton({
   }) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
   const [info, setInfo] = useState<PaymentInfo | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [notice, setNotice] = useState("")
   const [copied, setCopied] = useState(false)
 
   const onUpdateRef = useRef(onUpdate)
   onUpdateRef.current = onUpdate
 
   const current = open && info ? info.status : (status ?? null)
-  const style = (current && STATUS[current]) || NOT_REQUESTED
+  const style = paymentStatusStyle(current)
   const shownAmount = open && info ? info.amount : amount
+  const customRequests = (info?.requests ?? []).filter((r) => r.kind === "CUSTOM")
 
   const load = useCallback(
     async (refresh: boolean) => {
@@ -111,7 +87,10 @@ export default function PaymentStatusButton({
   )
 
   useEffect(() => {
-    if (open) void load(true)
+    if (open) {
+      setNotice("")
+      void load(true)
+    }
   }, [open, load])
 
   async function copyLink() {
@@ -138,12 +117,26 @@ export default function PaymentStatusButton({
         <CreditCard className={compact ? "size-3" : "size-3.5"} aria-hidden />
         {style.label}
         {current === "PAID" || current === "PENDING"
-          ? ` · ${rupees(shownAmount)}`
+          ? ` · ${formatRupees(shownAmount)}`
           : ""}
       </button>
 
+      <PaymentRequestModal
+        open={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        booking={{ id: bookingId, patientName, patientPhone }}
+        onSent={(row) => {
+          setNotice(
+            row.waDelivery === "FAILED"
+              ? "Link created, but WhatsApp didn't deliver it — copy the link from Payments and share it."
+              : `Payment request for ${formatRupees(row.amount)} sent on WhatsApp.`,
+          )
+          void load(false)
+        }}
+      />
+
       <PopupModal
-        open={open}
+        open={open && !requestOpen}
         handler={() => setOpen(false)}
         title="Payment status"
         direction="center"
@@ -151,16 +144,7 @@ export default function PaymentStatusButton({
         secondaryBtn={
           <button
             type="button"
-            className="dashboard-btn-secondary"
-            onClick={() => setOpen(false)}
-          >
-            Close
-          </button>
-        }
-        primaryBtn={
-          <button
-            type="button"
-            className="dashboard-btn-primary inline-flex items-center gap-1.5"
+            className="dashboard-btn-secondary inline-flex items-center gap-1.5"
             onClick={() => void load(true)}
             disabled={loading}
           >
@@ -171,6 +155,18 @@ export default function PaymentStatusButton({
             Refresh
           </button>
         }
+        primaryBtn={
+          info?.paymentsEnabled === false ? undefined : (
+            <button
+              type="button"
+              className="dashboard-btn-primary inline-flex items-center gap-1.5"
+              onClick={() => setRequestOpen(true)}
+            >
+              <IndianRupee className="size-3.5" aria-hidden />
+              Request payment
+            </button>
+          )
+        }
       >
         <div className="space-y-3 px-4 pb-2 text-sm">
           {error ? (
@@ -178,9 +174,14 @@ export default function PaymentStatusButton({
               {error}
             </p>
           ) : null}
+          {notice ? (
+            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200">
+              {notice}
+            </p>
+          ) : null}
           <dl className="space-y-2">
             <div className="flex justify-between gap-3">
-              <dt className="opacity-60">Status</dt>
+              <dt className="opacity-60">Pre-visit payment</dt>
               <dd>
                 <span
                   className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${style.className}`}
@@ -192,7 +193,9 @@ export default function PaymentStatusButton({
             <div className="flex justify-between gap-3">
               <dt className="opacity-60">Amount</dt>
               <dd className="font-semibold tabular-nums">
-                {rupees(shownAmount ?? info?.clinicFee ?? null)}
+                {formatRupees(
+                  shownAmount ?? info?.advanceAmount ?? info?.clinicFee ?? null,
+                )}
               </dd>
             </div>
             {info?.paidAt ? (
@@ -247,6 +250,38 @@ export default function PaymentStatusButton({
                       ? "No consultation fee is set for this clinic, so WhatsApp doesn't offer online payment."
                       : "Online payment wasn't requested for this visit (booked outside WhatsApp or before the option existed)."}
           </p>
+
+          {customRequests.length ? (
+            <div className="border-t border-neutral-200 pt-3 dark:border-neutral-700">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide opacity-60">
+                Other payment requests
+              </p>
+              <ul className="space-y-1.5">
+                {customRequests.map((r) => {
+                  const s =
+                    PAYMENT_STATUS_STYLES[r.status] ?? paymentStatusStyle(null)
+                  return (
+                    <li
+                      key={r.id}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="min-w-0 truncate">
+                        {r.label}
+                        <span className="ml-1.5 font-semibold tabular-nums">
+                          {formatRupees(r.amount)}
+                        </span>
+                      </span>
+                      <span
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${s.className}`}
+                      >
+                        {s.label}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ) : null}
         </div>
       </PopupModal>
     </>

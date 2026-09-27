@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/doctor/activity", label: "Patient Support" },
   { href: "/doctor/calendar", label: "Calendar" },
   { href: "/doctor/analytics", label: "Analytics" },
+  { href: "/doctor/payments", label: "Payments" },
   { href: "/doctor/subscription", label: "Subscription" },
 ] as const
 

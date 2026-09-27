@@ -9,7 +9,6 @@ import { PracticeManagementPanel } from "@/components/ui/doctors/pages/PracticeM
 import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal"
 import { PracticeDashboardProvider } from "@/contexts/PracticeDashboardContext"
 import { useRole } from "@/hooks/useRole"
-import { useUser } from "@/hooks/useUser"
 import { proctoService } from "@/lib/services/procto"
 
 type Tab = "settings" | "practice" | "theme"
@@ -179,6 +178,7 @@ type Membership = {
     phone?: string | null
     email?: string | null
     consultationFee?: number | null
+    advanceBookingAmount?: number | null
     whatsappBusinessNumber?: string | null
     locations: { id: string; name: string; address: string; city: string }[]
     members: Array<{
@@ -199,7 +199,6 @@ type Membership = {
 }
 
 function DoctorOrClinicAccountSettings() {
-  const { data: userInfo } = useUser("doctor")
   const [memberships, setMemberships] = useState<Membership[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -277,10 +276,7 @@ function DoctorOrClinicAccountSettings() {
   }
 
   return (
-    <DoctorAccountForm
-      membership={membership}
-      userId={userInfo?.id ?? membership.userId}
-    />
+    <DoctorAccountForm membership={membership} userId={membership.userId} />
   )
 }
 
@@ -302,6 +298,11 @@ function ClinicAccountForm({
   const [consultationFee, setConsultationFee] = useState(
     membership.practice.consultationFee != null
       ? String(membership.practice.consultationFee)
+      : "",
+  )
+  const [advanceAmount, setAdvanceAmount] = useState(
+    membership.practice.advanceBookingAmount != null
+      ? String(membership.practice.advanceBookingAmount)
       : "",
   )
   const [waBotPhone, setWaBotPhone] = useState<string | null>(
@@ -338,6 +339,11 @@ function ClinicAccountForm({
     setConsultationFee(
       membership.practice.consultationFee != null
         ? String(membership.practice.consultationFee)
+        : "",
+    )
+    setAdvanceAmount(
+      membership.practice.advanceBookingAmount != null
+        ? String(membership.practice.advanceBookingAmount)
         : "",
     )
   }, [membership])
@@ -417,6 +423,11 @@ function ClinicAccountForm({
       setError("Appointment / consultation fee (₹) is required and must be greater than 0.")
       return
     }
+    const advanceNum = advanceAmount.trim() ? Number(advanceAmount) : null
+    if (advanceNum != null && (!Number.isFinite(advanceNum) || advanceNum < 1)) {
+      setError("Advance booking amount must be at least ₹1 (or leave it empty).")
+      return
+    }
     setSaving(true)
     const phoneToSave =
       (waBotPhone || telNo).replace(/\D/g, "").slice(-10) || telNo.trim()
@@ -428,6 +439,7 @@ function ClinicAccountForm({
         phone: phoneToSave,
         email: email.trim(),
         consultationFee: feeNum,
+        advanceBookingAmount: advanceNum,
         location: {
           id: loc?.id,
           address: address.trim(),
@@ -589,9 +601,22 @@ function ClinicAccountForm({
           }
           className="w-full min-w-0"
         />
+        <IconInput
+          icon="written-page"
+          name="advanceBookingAmount"
+          label="Advance booking amount (₹, optional)"
+          type="number"
+          value={advanceAmount}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setAdvanceAmount(e.target.value)
+          }
+          className="w-full min-w-0"
+        />
       </div>
       <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-        Shown when patients text *FAQ* or ask about fees on WhatsApp.
+        Fee is shown when patients text *FAQ* or ask about fees on WhatsApp.
+        After a WhatsApp booking the bot offers to collect the advance booking
+        amount online (Razorpay) — or the full fee when the advance is empty.
       </p>
 
       <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
@@ -799,6 +824,7 @@ function DoctorAccountForm({
     }>
   >([])
   const [loading, setLoading] = useState(true)
+  const [scheduleLoadError, setScheduleLoadError] = useState("")
 
   const [name, setName] = useState(provider?.name ?? "")
   const [licenseNo, setLicenseNo] = useState(provider?.doctor?.licenseNo ?? "")
@@ -806,6 +832,11 @@ function DoctorAccountForm({
   const [consultationFee, setConsultationFee] = useState(
     membership.practice.consultationFee != null
       ? String(membership.practice.consultationFee)
+      : "",
+  )
+  const [advanceAmount, setAdvanceAmount] = useState(
+    membership.practice.advanceBookingAmount != null
+      ? String(membership.practice.advanceBookingAmount)
       : "",
   )
   const [bookingType, setBookingType] = useState<"TIME" | "TOKEN">("TIME")
@@ -856,6 +887,12 @@ function DoctorAccountForm({
             setSchedules(data.schedules)
             setPendingModeChange(data.pendingModeChange ?? null)
           }
+          setScheduleLoadError("")
+        } else {
+          setScheduleLoadError(
+            res.message ||
+              "Could not load your working hours. Reload the page before saving.",
+          )
         }
         setLoading(false)
       })
@@ -872,7 +909,16 @@ function DoctorAccountForm({
         ? String(membership.practice.consultationFee)
         : "",
     )
-  }, [provider, membership.practice.consultationFee])
+    setAdvanceAmount(
+      membership.practice.advanceBookingAmount != null
+        ? String(membership.practice.advanceBookingAmount)
+        : "",
+    )
+  }, [
+    provider,
+    membership.practice.consultationFee,
+    membership.practice.advanceBookingAmount,
+  ])
 
   useEffect(() => {
     if (!schedules.length) return
@@ -929,6 +975,19 @@ function DoctorAccountForm({
         return false
       }
     }
+    const advanceNum = advanceAmount.trim() ? Number(advanceAmount) : null
+    if (
+      !opts?.modeOnly &&
+      advanceNum != null &&
+      (!Number.isFinite(advanceNum) || advanceNum < 1)
+    ) {
+      setError("Advance booking amount must be at least ₹1 (or leave it empty).")
+      return false
+    }
+    if (scheduleLoadError) {
+      setError(scheduleLoadError)
+      return false
+    }
     if (workingDays.length === 0) {
       setError("Select at least one working day.")
       return false
@@ -944,7 +1003,7 @@ function DoctorAccountForm({
     if (!opts?.modeOnly && Number.isFinite(feeNum) && feeNum > 0) {
       const profileRes = await proctoService.updatePracticeProfile(
         membership.practice.id,
-        { consultationFee: feeNum },
+        { consultationFee: feeNum, advanceBookingAmount: advanceNum },
       )
       if (profileRes.status !== "successful") {
         // Solo owners update fee; clinic staff doctors may lack admin — continue schedule save.
@@ -1089,9 +1148,21 @@ function DoctorAccountForm({
             setConsultationFee(e.target.value)
           }
         />
+        <IconInput
+          icon="written-page"
+          name="advanceBookingAmount"
+          label="Advance booking amount (₹, optional)"
+          type="number"
+          value={advanceAmount}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setAdvanceAmount(e.target.value)
+          }
+        />
       </div>
       <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-        Shown when patients text *FAQ* or ask about fees on WhatsApp.
+        Fee is shown when patients text *FAQ* or ask about fees on WhatsApp.
+        After a WhatsApp booking the bot offers to collect the advance booking
+        amount online (Razorpay) — or the full fee when the advance is empty.
       </p>
 
       <p className={`${sectionLabel} mt-5`}>Booking type</p>
@@ -1250,8 +1321,10 @@ function DoctorAccountForm({
         </label>
       </div>
 
-      {error ? (
-        <p className="mt-4 text-base font-semibold text-red-600 dark:text-red-300">{error}</p>
+      {error || scheduleLoadError ? (
+        <p className="mt-4 text-base font-semibold text-red-600 dark:text-red-300">
+          {error || scheduleLoadError}
+        </p>
       ) : null}
       {message ? (
         <p className="mt-4 text-base font-semibold text-green-600 dark:text-green-400">
@@ -1263,7 +1336,7 @@ function DoctorAccountForm({
         <Button
           className="center !w-full !py-3.5 !text-lg !font-bold sm:!w-auto sm:min-w-[220px]"
           typeBtn="submit"
-          disabled={saving}
+          disabled={saving || loading || Boolean(scheduleLoadError)}
         >
           {saving ? (
             <div className="size-5">

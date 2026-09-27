@@ -150,6 +150,45 @@ export const proctoService = {
   getBookingPayment: (id: string, refresh = false) =>
     proctoFetch(`/procto/bookings/${id}/payment${refresh ? "?refresh=1" : ""}`),
 
+  listPayments: (
+    practiceId: string,
+    opts?: { status?: string; from?: string; to?: string; q?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts?.status) qs.set("status", opts.status);
+    if (opts?.from) qs.set("from", opts.from);
+    if (opts?.to) qs.set("to", opts.to);
+    if (opts?.q) qs.set("q", opts.q);
+    const s = qs.toString();
+    return proctoFetch(`/procto/payments/practice/${practiceId}${s ? `?${s}` : ""}`);
+  },
+
+  /** Staff custom amount → Razorpay link sent to the patient on WhatsApp. */
+  createPaymentRequest: (body: {
+    practiceId: string;
+    bookingId?: string;
+    patientId?: string;
+    patientName?: string;
+    patientPhone?: string;
+    providerId?: string;
+    amount: number;
+    purpose: string;
+    expiresInDays?: number;
+  }) =>
+    proctoFetch("/procto/payments/requests", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  getPaymentRequest: (id: string, refresh = false) =>
+    proctoFetch(`/procto/payments/requests/${id}${refresh ? "?refresh=1" : ""}`),
+
+  resendPaymentRequest: (id: string) =>
+    proctoFetch(`/procto/payments/requests/${id}/resend`, { method: "POST" }),
+
+  cancelPaymentRequest: (id: string) =>
+    proctoFetch(`/procto/payments/requests/${id}/cancel`, { method: "POST" }),
+
   getMyBookings: () => proctoFetch("/procto/bookings/mine"),
 
   cancelBooking: (id: string, phone?: string, reason?: string) =>
@@ -662,7 +701,48 @@ export type ProctoWsEvent =
   | {
       event: "notification_created";
       notification: Record<string, unknown>;
-    };
+    }
+  | { event: "payment_updated"; payment: PaymentRequestRow };
+
+export type PaymentRequestStatus = "PENDING" | "PAID" | "EXPIRED" | "CANCELLED";
+
+export type PaymentRequestRow = {
+  id: string;
+  kind: "ADVANCE" | "CONSULTATION" | "CUSTOM";
+  label: string;
+  purpose: string | null;
+  /** Paise. */
+  amount: number;
+  status: PaymentRequestStatus;
+  linkUrl: string | null;
+  paymentId: string | null;
+  paidAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  patientName: string | null;
+  patientPhone: string;
+  patientId: string | null;
+  bookingId: string | null;
+  providerId: string | null;
+  providerName: string | null;
+  requestedByName: string | null;
+  channel: "WHATSAPP_BOT" | "WEB_PORTAL" | "PROVIDER_APP";
+  waDelivery: "SENT" | "FAILED" | "SIMULATED" | null;
+  waError: string | null;
+};
+
+export type PaymentsListResponse = {
+  items: PaymentRequestRow[];
+  summary: {
+    collected: number;
+    paidCount: number;
+    pending: number;
+    pendingCount: number;
+    closedCount: number;
+    total: number;
+  };
+  paymentsEnabled: boolean;
+};
 
 /** Doctors linked to this clinic (PracticeMember), DOCTOR first; solo owner fallback. */
 export function getPracticeProviders(

@@ -538,6 +538,8 @@ export default function DoctorAppointmentsList({
                     bookingId={b.id}
                     status={b.paymentStatus ?? b.payment_status}
                     amount={b.paymentAmount ?? b.payment_amount}
+                    patientName={b.patientName || b.patient?.name}
+                    patientPhone={b.patientPhone}
                     compact
                     onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
                   />
@@ -619,6 +621,8 @@ export default function DoctorAppointmentsList({
                         bookingId={b.id}
                         status={b.paymentStatus ?? b.payment_status}
                         amount={b.paymentAmount ?? b.payment_amount}
+                        patientName={b.patientName || b.patient?.name}
+                        patientPhone={b.patientPhone}
                         compact
                         onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
                       />
