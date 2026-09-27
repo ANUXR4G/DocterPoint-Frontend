@@ -175,7 +175,7 @@ BookingService.createBooking({ slotStart | sessionDate, mode, patientPhone, … 
 
 Status lifecycle (doctor queue):  
 `ACCEPTED` → `WAITING` → `IN_PROGRESS` → `COMPLETED` · or `CANCELED` / `NO_SHOW`.  
-`COMPLETED` is set only from the visit page (**Finish appointment** on web, **Save & finish** in the provider app), which saves remarks + medicines in the same call. Queue / Appointments list controls stop at *Appointment started* (+ No-show / Cancel).
+`COMPLETED` is set only from the visit page (**Finish appointment** on web, **Save & finish** in the provider app), which saves remarks + medicines in the same call. Queue / Appointments list controls stop at *Appointment started* (+ No-show / Cancel). Server enforces it: `PATCH /procto/bookings/:id/status` rejects `COMPLETED` (400); finishing goes through `PATCH /procto/bookings/:id/visit` only.
 
 ---
 

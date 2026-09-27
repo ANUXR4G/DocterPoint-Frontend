@@ -252,6 +252,13 @@ router.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const status = req.body.status as BookingStatus;
+      if (String(status || "").toUpperCase() === BookingStatus.COMPLETED) {
+        return ResponseHandler.unsuccessful(
+          res,
+          400,
+          "Finish the appointment from the visit page (it saves remarks and medicines with it).",
+        );
+      }
       const data = await BookingService.updateStatus(
         param(req.params.id),
         status,
