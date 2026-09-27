@@ -12,7 +12,12 @@ const FILTER_KEYS: QueueStatusFilter[] = [
   "waiting",
   "in_appointment",
   "done",
+  "canceled",
+  "no_show",
 ]
+
+/** Shown only when at least one row has that status (or it is selected). */
+const OPTIONAL_KEYS = new Set<QueueStatusFilter>(["canceled", "no_show"])
 
 type Props = {
   value: QueueStatusFilter
@@ -39,7 +44,9 @@ export default function BookingStatusFilterBar({
       role="tablist"
       aria-label={ariaLabel}
     >
-      {FILTER_KEYS.map((key) => (
+      {FILTER_KEYS.filter(
+        (key) => !OPTIONAL_KEYS.has(key) || counts[key] > 0 || value === key,
+      ).map((key) => (
         <button
           key={key}
           type="button"
