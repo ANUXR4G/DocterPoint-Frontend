@@ -40,6 +40,7 @@ export function serializeBooking(booking: {
   doctorRemarks?: string | null;
   medicines?: unknown;
   documents?: unknown;
+  arrivedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): Record<string, unknown> {
@@ -62,6 +63,7 @@ export function serializeBooking(booking: {
     doctor_remarks: booking.doctorRemarks ?? null,
     medicines: booking.medicines ?? null,
     documents: booking.documents ?? null,
+    arrived_at: booking.arrivedAt?.toISOString() ?? null,
     created_at: booking.createdAt.toISOString(),
     updated_at: booking.updatedAt.toISOString(),
   };
