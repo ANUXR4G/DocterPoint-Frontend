@@ -6,6 +6,7 @@ import {
   type ClinicLocation,
   type PracticeMember,
 } from "@prisma/client";
+import { randomInt } from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { publicWebOrigin } from "../../config/index.js";
 import { BookingService } from "./booking.service.js";
@@ -656,10 +657,31 @@ async function applyGlobalKeywordHijack(opts: {
 }
 
 /** Unique placeholder phone for WA-only dependents (linked via contactNumber). */
-function syntheticDependentPhone(primaryPhone: string, name: string): string {
-  const base = normalizePhone(primaryPhone).slice(-10) || "0000000000";
-  const mix = `${base}${name}${Date.now()}`.replace(/\D/g, "");
-  return `8${(mix + "000000000000").slice(0, 11)}`;
+/**
+ * Login-phone placeholder for a dependent without their own mobile.
+ * Must be unique on its last 10 digits — PatientService.findByPhone matches
+ * by suffix, so a collision makes registration fail as "already registered".
+ */
+export async function allocateDependentPhone(
+  primaryPhone: string,
+): Promise<string> {
+  const base = normalizePhone(primaryPhone).slice(-4).padStart(4, "0");
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const tail = String(randomInt(0, 10_000_000_000)).padStart(10, "0");
+    const candidate = `8${base}${tail}`;
+    const last10 = candidate.slice(-10);
+    const taken = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: { endsWith: last10 } },
+          { patient: { contactNumber: { endsWith: last10 } } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!taken) return candidate;
+  }
+  throw new Error("Could not allocate a profile number. Please try again.");
 }
 
 /**
@@ -4193,7 +4215,7 @@ async function confirmFamilyMember(
   try {
     const depPhone =
       state.regPhone?.replace(/\D/g, "") ||
-      syntheticDependentPhone(patientPhone, name);
+      (await allocateDependentPhone(patientPhone));
     const result = await PatientService.registerViaWhatsApp({
       phone: depPhone,
       whatsappFrom: normalizePhone(patientPhone),
@@ -4258,9 +4280,19 @@ async function confirmFamilyMember(
       ),
     );
   } catch (err) {
-    const msg =
+    const raw =
       err instanceof Error ? err.message : "Could not save family member.";
-    console.warn(`[whatsapp] confirmFamilyMember failed:`, msg);
+    console.warn(`[whatsapp] confirmFamilyMember failed:`, raw);
+    const duplicate =
+      (err as { statusCode?: number })?.statusCode === 409 &&
+      /already registered/i.test(raw);
+    const msg = duplicate
+      ? L(
+          lang,
+          `Could not save *${name}* — that profile number is already in use. Please try again.`,
+          `*${name}* को सेव नहीं कर सके — वह प्रोफ़ाइल नंबर पहले से उपयोग में है। कृपया फिर से कोशिश करें।`,
+        )
+      : raw;
     await saveState(convId, {
       ...state,
       step: "awaiting_register_family_details",

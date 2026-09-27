@@ -73,7 +73,6 @@ function replyButtonsAsListRows(
   const rows = buttons.map((b) => ({
     id: b.id,
     title: b.title.slice(0, 24),
-    description: "Choose an option",
   }));
   return withMainMenuListRow(rows);
 }
