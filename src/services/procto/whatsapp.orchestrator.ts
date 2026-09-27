@@ -13,7 +13,7 @@ import { BookingService } from "./booking.service.js";
 import {
   BookingPaymentService,
   formatRupees,
-  prepayAmountPaise,
+  prepayOffer,
 } from "./bookingPayment.service.js";
 import { PatientService } from "../patient.js";
 import { BotPrompts, firstGivenName } from "./whatsapp.templates.js";
@@ -205,6 +205,7 @@ export type ConversationState = {
   handedOff?: boolean;
   /** Consultation fee (paise) offered at `awaiting_pay_offer`. */
   payOfferAmount?: number;
+  payOfferKind?: "ADVANCE" | "CONSULTATION";
   /** Branch D — when patient tapped Talk to Support / Agent. */
   supportRequestedAt?: string;
   supportLabel?: string;
@@ -467,6 +468,7 @@ function repromptHintForStep(state: ConversationState, lang: WaLang): string {
       return BotPrompts.askPayBeforeVisit(
         formatRupees(state.payOfferAmount ?? 0),
         lang,
+        state.payOfferKind,
       );
     case "awaiting_confirm":
       return state.pendingSummary
@@ -703,7 +705,7 @@ async function continueFlowPrompt(
       return documentPatientPicker(patients, lang);
     case "awaiting_pay_offer":
       return withYesNo(
-        BotPrompts.askPayBeforeVisit(formatRupees(state.payOfferAmount ?? 0), lang),
+        BotPrompts.askPayBeforeVisit(formatRupees(state.payOfferAmount ?? 0), lang, state.payOfferKind),
       );
     case "awaiting_attach_offer":
       return withYesNo(BotPrompts.askAttachDocument(lang));
@@ -3914,16 +3916,16 @@ async function confirmBooking(
       `[whatsapp] booking confirmed id=${verified.id} practice=${verified.practiceId} phone=${phone}`,
     );
     invalidateUpcomingCache(practice.id, phone);
-    const payOfferAmount = BookingPaymentService.canOfferPrepay(
-      practice.consultationFee,
-    )
-      ? (prepayAmountPaise(practice.consultationFee) ?? undefined)
-      : undefined;
+    const payOffer = BookingPaymentService.canOfferPrepay(practice)
+      ? prepayOffer(practice)
+      : null;
+    const payOfferAmount = payOffer?.amount;
     await saveState(convId, {
       ...idleState(state),
       lastBookingId: verified.id,
       step: payOfferAmount ? "awaiting_pay_offer" : "awaiting_attach_offer",
       payOfferAmount,
+      payOfferKind: payOffer?.kind,
     });
 
     const location =
@@ -3966,7 +3968,7 @@ async function confirmBooking(
       },
     );
     const nextPrompt = payOfferAmount
-      ? BotPrompts.askPayBeforeVisit(formatRupees(payOfferAmount), lang)
+      ? BotPrompts.askPayBeforeVisit(formatRupees(payOfferAmount), lang, payOffer?.kind)
       : BotPrompts.askAttachDocument(lang);
     return {
       ...withYesNo(`${confirmText}\n\n${nextPrompt}`),
@@ -5123,7 +5125,7 @@ async function runOrchestratorCore(input: {
     const no = /^(no|n|nope|skip|later|बाद में|नहीं)$/i.test(text.trim());
     if (!yes && !no) {
       return withYesNo(
-        BotPrompts.askPayBeforeVisit(formatRupees(state.payOfferAmount ?? 0), lang),
+        BotPrompts.askPayBeforeVisit(formatRupees(state.payOfferAmount ?? 0), lang, state.payOfferKind),
       );
     }
     let head: string;
@@ -5150,6 +5152,7 @@ async function runOrchestratorCore(input: {
       ...state,
       step: "awaiting_attach_offer",
       payOfferAmount: undefined,
+      payOfferKind: undefined,
     });
     const attachPrompt = BotPrompts.askAttachDocument(lang);
     return {

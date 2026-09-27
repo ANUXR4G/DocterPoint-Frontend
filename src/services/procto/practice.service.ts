@@ -865,6 +865,26 @@ export const PracticeService = {
     return member;
   },
 
+  /** Owner/admin, or the only active doctor of a SOLO practice (created with DOCTOR role). */
+  async assertProfileEditor(practiceId: string, userId: string) {
+    const member = await this.assertMember(practiceId, userId);
+    if (member.role === "PRACTICE_OWNER" || member.role === "PRACTICE_ADMIN") {
+      return member;
+    }
+    if (member.role === "DOCTOR") {
+      const [practice, activeMembers] = await Promise.all([
+        prisma.practice.findUnique({
+          where: { id: practiceId },
+          select: { type: true },
+        }),
+        prisma.practiceMember.count({ where: { practiceId, isActive: true } }),
+      ]);
+      if (practice?.type === "SOLO" && activeMembers === 1) return member;
+    }
+    ResponseHandler.noPermission("only clinic owners can manage doctors and patients.");
+    return member;
+  },
+
   /**
    * Clinic owners/admins manage any provider; clinic-staff doctors manage
    * only themselves (own schedule / profile / leave).
@@ -1834,6 +1854,7 @@ export const PracticeService = {
       name?: string;
       specialty?: string;
       consultationFee?: number;
+      advanceBookingAmount?: number | string | null;
       whatsappBusinessNumber?: string;
       registrationNo?: string;
       phone?: string;
@@ -1848,10 +1869,7 @@ export const PracticeService = {
     },
     actorUserId: string,
   ) {
-    await this.assertAdmin(practiceId, actorUserId);
-    if (data.bgSrc !== undefined) {
-      // already admin
-    }
+    await this.assertProfileEditor(practiceId, actorUserId);
 
     let nextConsultationFee: number | undefined;
     if (data.consultationFee !== undefined) {
@@ -1863,6 +1881,23 @@ export const PracticeService = {
         );
       }
       nextConsultationFee = fee;
+    }
+
+    let nextAdvance: number | null | undefined;
+    if (data.advanceBookingAmount !== undefined) {
+      const raw = data.advanceBookingAmount;
+      if (raw === null || String(raw).trim() === "") {
+        nextAdvance = null;
+      } else {
+        const adv = Number(raw);
+        if (!Number.isFinite(adv) || adv < 1 || adv > 100000) {
+          throw new AppError(
+            400,
+            "Advance booking amount must be between ₹1 and ₹1,00,000 (leave it empty to ask for the full fee).",
+          );
+        }
+        nextAdvance = Math.round(adv * 100) / 100;
+      }
     }
 
     const liveLine = await prisma.whatsAppNumber.findFirst({
@@ -1927,6 +1962,9 @@ export const PracticeService = {
           ...(data.specialty !== undefined ? { specialty: data.specialty } : {}),
           ...(nextConsultationFee !== undefined
             ? { consultationFee: nextConsultationFee }
+            : {}),
+          ...(nextAdvance !== undefined
+            ? { advanceBookingAmount: nextAdvance }
             : {}),
           ...(data.whatsappBusinessNumber !== undefined
             ? { whatsappBusinessNumber: data.whatsappBusinessNumber }
@@ -2019,6 +2057,10 @@ export const PracticeService = {
           },
         },
       });
+    }).then((updated) => {
+      clearMineCacheFor(actorUserId);
+      for (const m of updated.members) clearMineCacheFor(m.userId);
+      return updated;
     });
   },
 
@@ -2050,6 +2092,7 @@ export const PracticeService = {
             type: true,
             specialty: true,
             consultationFee: true,
+            advanceBookingAmount: true,
             registrationNo: true,
             phone: true,
             email: true,

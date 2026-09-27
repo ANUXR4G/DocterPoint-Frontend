@@ -11,7 +11,8 @@ export type ProctoLiveEvent =
   | {
       event: "notification_created";
       notification: Record<string, unknown>;
-    };
+    }
+  | { event: "payment_updated"; payment: Record<string, unknown> };
 
 export function proctoRoomId(practiceId: string): string {
   return `${practiceId}_PROCTO`;

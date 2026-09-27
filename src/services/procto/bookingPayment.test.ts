@@ -8,6 +8,13 @@ import {
   prepayAmountPaise,
   statusFromLink,
 } from "./bookingPayment.service.js";
+import {
+  customLinkExpiry,
+  kindLabel,
+  normalizePatientPhone,
+  parseCustomAmountPaise,
+  prepayOffer,
+} from "./paymentHelpers.js";
 import { razorpay } from "../../lib/razorpay.js";
 import { settings } from "../../config/index.js";
 
@@ -77,6 +84,64 @@ describe("paymentView", () => {
     assert.equal(paymentView({ ...base, paymentStatus: "PENDING" }).linkUrl, "https://rzp.io/x");
     assert.equal(paymentView({ ...base, paymentStatus: "PAID" }).linkUrl, null);
     assert.equal(paymentView({ ...base, paymentStatus: null }).status, null);
+  });
+});
+
+describe("prepayOffer", () => {
+  test("advance booking amount wins over the full fee", () => {
+    assert.deepEqual(
+      prepayOffer({ consultationFee: 700, advanceBookingAmount: 200 }),
+      { amount: 20000, kind: "ADVANCE" },
+    );
+  });
+  test("falls back to the consultation fee", () => {
+    assert.deepEqual(
+      prepayOffer({ consultationFee: 700, advanceBookingAmount: null }),
+      { amount: 70000, kind: "CONSULTATION" },
+    );
+  });
+  test("nothing payable → no offer", () => {
+    assert.equal(prepayOffer({ consultationFee: null, advanceBookingAmount: 0 }), null);
+  });
+});
+
+describe("parseCustomAmountPaise", () => {
+  test("accepts rupees with commas / ₹ / 2 decimals", () => {
+    assert.equal(parseCustomAmountPaise("₹1,500"), 150000);
+    assert.equal(parseCustomAmountPaise(249.5), 24950);
+    assert.equal(parseCustomAmountPaise("99.99"), 9999);
+  });
+  test("rejects < ₹1, > ₹5 lakh, 3+ decimals, junk", () => {
+    assert.equal(parseCustomAmountPaise(0.5), null);
+    assert.equal(parseCustomAmountPaise(500001), null);
+    assert.equal(parseCustomAmountPaise("10.555"), null);
+    assert.equal(parseCustomAmountPaise("abc"), null);
+    assert.equal(parseCustomAmountPaise(""), null);
+  });
+});
+
+describe("customLinkExpiry", () => {
+  const now = new Date("2026-09-28T04:00:00Z");
+  const day = 24 * 60 * 60 * 1000;
+  test("default 7 days, clamped to 1–30", () => {
+    assert.equal(customLinkExpiry(undefined, now).getTime(), now.getTime() + 7 * day);
+    assert.equal(customLinkExpiry(3, now).getTime(), now.getTime() + 3 * day);
+    assert.equal(customLinkExpiry(90, now).getTime(), now.getTime() + 30 * day);
+    assert.equal(customLinkExpiry(0, now).getTime(), now.getTime() + 7 * day);
+  });
+});
+
+describe("normalizePatientPhone / kindLabel", () => {
+  test("keeps international digits, trims local to 10", () => {
+    assert.equal(normalizePatientPhone("+91 98765 43210"), "919876543210");
+    assert.equal(normalizePatientPhone("00971507801104"), "971507801104");
+    assert.equal(normalizePatientPhone("98765-43210"), "9876543210");
+    assert.equal(normalizePatientPhone("12345"), null);
+  });
+  test("labels", () => {
+    assert.equal(kindLabel("ADVANCE"), "Advance booking amount");
+    assert.equal(kindLabel("CONSULTATION"), "Consultation fee");
+    assert.equal(kindLabel("CUSTOM", "Lab tests"), "Lab tests");
   });
 });
 

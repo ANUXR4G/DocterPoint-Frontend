@@ -32,10 +32,10 @@ router.post("/", async (req: Request, res: Response, next: NextFunction) => {
 
     const event = String((req.body as { event?: string })?.event ?? "");
     if (event.startsWith("payment_link.")) {
-      const { BookingPaymentService } = await import(
-        "../../services/procto/bookingPayment.service.js"
+      const { PaymentRequestService } = await import(
+        "../../services/procto/paymentRequest.service.js"
       );
-      const data = await BookingPaymentService.handleWebhookEvent(req.body ?? {});
+      const data = await PaymentRequestService.handleWebhookEvent(req.body ?? {});
       return ResponseHandler.fetchSuccessful(res, "Payment link webhook processed", data);
     }
     const data = await BillingService.handleWebhookEvent(req.body ?? {});

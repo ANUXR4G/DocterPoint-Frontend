@@ -241,6 +241,13 @@ export const razorpay = {
     );
   },
 
+  cancelPaymentLink(paymentLinkId: string) {
+    return this.request<RazorpayPaymentLink>(
+      `/payment_links/${encodeURIComponent(paymentLinkId)}/cancel`,
+      { method: "POST" },
+    );
+  },
+
   /** Redirect after a Payment Link is paid (`callback_url`, GET params). */
   verifyPaymentLinkSignature(params: {
     paymentLinkId: string;
