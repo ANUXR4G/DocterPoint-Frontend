@@ -99,6 +99,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Care chat ↔ WhatsApp | Outbound: `chat.whatsappFanout.ts`; inbound replies: `chat.whatsappInbound.ts` into `Message` + `_CHAT` sockets | Patient can answer clinic care texts on WhatsApp; `BOOK`/`BOT` still reach the bot |
 | UTILITY template copy | Single catalog `whatsapp.metaTemplates.ts`; free-form fallbacks render from it | Stop drifted duplicate bodies in `whatsapp.templates.ts` |
 | WA session vs template | Bot short ack + `skipPatientNotification` for confirm/cancel/reschedule; clinic still gets `CLINIC_*` | Avoid double patient messages in one turn |
+| Book → *Family member* | Re-read profiles on the number; 0 family → register; ≥1 → picker of existing family + *Add family member* (never auto-pick, never jump to registration) | Shared-number households book for existing dependents; adding a new one stays one tap |
 
 Ops APIs (admin JWT `users:write`):
 - `GET/POST /procto/admin/numbers`
