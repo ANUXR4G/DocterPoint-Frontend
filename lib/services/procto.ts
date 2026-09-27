@@ -130,6 +130,20 @@ export const proctoService = {
       body: JSON.stringify(body),
     }),
 
+  /** Emergency walk-in — no slot pick; starts now in the waiting list. */
+  createWalkIn: (body: {
+    practiceId: string;
+    providerId: string;
+    locationId?: string;
+    patientName: string;
+    patientPhone: string;
+    disease?: string;
+  }) =>
+    proctoFetch("/procto/bookings/walk-in", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   getBooking: (id: string) => proctoFetch(`/procto/bookings/${id}`),
 
   getMyBookings: () => proctoFetch("/procto/bookings/mine"),

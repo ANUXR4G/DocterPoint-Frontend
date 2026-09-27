@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { type ProctoBooking } from "@/lib/services/procto"
+import { consultationTypeLabel } from "@/lib/bookingDisplay"
 import {
   bookingStatusLabel,
   matchesQueueStatusFilter,
@@ -102,7 +103,7 @@ export default function Appointments() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs font-semibold opacity-70">
-                  {b.disease || b.consultationType || "—"}
+                  {b.disease || consultationTypeLabel(b.consultationType) || "—"}
                 </p>
               </li>
             ))}
@@ -130,7 +131,7 @@ export default function Appointments() {
                       {bookingStatusLabel(b.status || "")}
                     </td>
                     <td className="px-4 py-3">
-                      {b.disease || b.consultationType || "—"}
+                      {b.disease || consultationTypeLabel(b.consultationType) || "—"}
                     </td>
                   </tr>
                 ))}

@@ -23,7 +23,10 @@ import CareChatPanel from "@/components/ui/procto/CareChatPanel"
 import { getSessionUserId } from "@/lib/sessionUser"
 import { patchBookingFields } from "@/lib/liveBooking"
 import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
-import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
+import {
+  consultationTypeLabel,
+  formatBookingWhenDetailed,
+} from "@/lib/bookingDisplay"
 import {
   formatPracticeDate,
   formatPracticeDateTime,
@@ -316,7 +319,7 @@ export default function PatientVisitPage() {
   const disease =
     dash(booking.disease) !== "—"
       ? dash(booking.disease)
-      : dash(booking.consultationType)
+      : dash(consultationTypeLabel(booking.consultationType))
 
   const isCompleted = (booking.status || "").toUpperCase() === "COMPLETED"
   const practiceId =

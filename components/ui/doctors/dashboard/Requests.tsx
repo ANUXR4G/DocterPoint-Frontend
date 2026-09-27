@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { type ProctoBooking } from "@/lib/services/procto"
+import { consultationTypeLabel } from "@/lib/bookingDisplay"
 import {
   filterBookingsByDate,
   usePracticeDashboard,
@@ -55,7 +56,7 @@ export default function Requests() {
                 {b.patientPhone || b.patient_phone || "—"}
               </p>
               <p className="mt-auto pt-2 text-xs font-semibold opacity-60">
-                {b.disease || b.consultationType || "Visit"} · Open visit →
+                {b.disease || consultationTypeLabel(b.consultationType) || "Visit"} · Open visit →
               </p>
             </Link>
           ))}
