@@ -29,6 +29,8 @@ export type BotIntent =
   | "reschedule"
   | "register"
   | "family"
+  /** Count + list every patient profile registered on this WhatsApp number. */
+  | "members"
   | "doctors"
   | "help"
   | "faq"
@@ -71,6 +73,7 @@ const INTENTS: BotIntent[] = [
   "reschedule",
   "register",
   "family",
+  "members",
   "doctors",
   "help",
   "faq",
@@ -435,6 +438,10 @@ const COMMAND_WORDS: Array<{ intent: BotIntent; words: string[] }> = [
     intent: "my_docs",
     words: ["mydocs", "mydoc", "documents", "document"],
   },
+  {
+    intent: "members",
+    words: ["member", "members", "memebr", "memeber", "membr", "mymembers"],
+  },
 ];
 
 /**
@@ -491,6 +498,7 @@ export function exactMenuIntent(text: string): BotIntent | null {
     signup: "register",
     sign_up: "register",
     add_family: "register",
+    "family:add": "register",
     register_family: "register",
     register_family_member: "register",
     register_family_member_dependant: "register",
@@ -506,6 +514,21 @@ export function exactMenuIntent(text: string): BotIntent | null {
     my_family_members: "family",
     view_family: "family",
     list_family: "family",
+    // All patients registered on this number (Self + family)
+    member: "members",
+    members: "members",
+    my_member: "members",
+    my_members: "members",
+    all_members: "members",
+    list_members: "members",
+    view_members: "members",
+    show_members: "members",
+    registered_members: "members",
+    patients: "members",
+    my_patients: "members",
+    registered_patients: "members",
+    profiles: "members",
+    my_profiles: "members",
     doctors: "doctors",
     doctor: "doctors",
     docters: "doctors",
@@ -793,6 +816,15 @@ function parseIntentRegex(text: string): BotIntent {
     return "register";
   }
   if (
+    /^(my\s+|all\s+|list\s+|show\s+|view\s+)?(registered\s+)?(members?|patients?|profiles?)$/.test(
+      t,
+    ) ||
+    /\bhow many\s+(members?|patients?|profiles?)\b/.test(t) ||
+    /^(मेरे\s*|सभी\s*)?सदस्य$/.test(text.trim())
+  ) {
+    return "members";
+  }
+  if (
     /\b(my\s+)?famil(y|ies)\b|\bfamily\s+members?\b|\bdependants?\b|\bdependents?\b/.test(
       t,
     ) ||
@@ -917,13 +949,14 @@ Patients may speak or type in English or Hindi (Devanagari or Hinglish) — incl
 There is NO required message format. Extract EVERY useful slot from a single utterance.
 Examples: "book me tomorrow at 10 am with Kabir", "kal shaam wali appointment", "I need status", "mera naam Ravi hai".
 Return ONLY compact JSON: {"intent":"...","slots":{...}}
-intent must be one of: book,status,cancel,reschedule,register,family,doctors,help,faq,human,message_doctor,report,my_docs,confirm_yes,confirm_no,unknown
+intent must be one of: book,status,cancel,reschedule,register,family,members,doctors,help,faq,human,message_doctor,report,my_docs,confirm_yes,confirm_no,unknown
 slots may include: date (YYYY-MM-DD), providerName, providerIndex (1-based), mode (TIME_BASED|TOKEN_BASED), slotIndex (1-based), rawDateText, timeText, preferredHour (0-23), preferredMinute (0-59), preferredPeriod (morning|afternoon|evening|night), name, gender (male|female|others), email
 Today's date context may be given. Map TODAY/TOMORROW / आज / कल to ISO dates.
 If the patient says a clock time ("10 am", "3:30 pm"), set preferredHour/preferredMinute and timeText.
 If they only say morning/afternoon/evening/night (or सुबह/दोपहर/शाम/रात), set preferredPeriod.
 REGISTER means create a patient account (sign up / new patient / रजिस्टर / पंजीकरण) or add a new family member.
 FAMILY means list / view family members already on this WhatsApp (my family / परिवार सदस्य).
+MEMBERS means how many / which patients are registered on this WhatsApp number, including self ("member", "members", "patients", "how many members").
 DOCTORS means list doctors/providers at the clinic (doctor list / डॉक्टर). Accept misspellings like DOCTERS, DOKORS, DOCATORS.
 BOOK means book an appointment (बुक / अपॉइंटमेंट). Accept common typos (BOK, BOOOK, APPOINTMNET). Prefer book when they mention a date/time for a visit.
 Prefer a command intent over unknown when the message is clearly a mistyped menu word.

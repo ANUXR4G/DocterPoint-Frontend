@@ -141,6 +141,25 @@ export function isSlotStartBookable(
 }
 
 /**
+ * Patient cancel / reschedule window: time slot not started yet, or token day is today
+ * or later. `sessionDate` is a DATE column written from clinic midnight, so compare the
+ * same UTC date key Postgres stored.
+ */
+export function isBookingStillUpcoming(
+  b: { slotStart?: Date | null; sessionDate?: Date | null },
+  nowMs: number = Date.now(),
+): boolean {
+  if (b.slotStart) return isSlotStartBookable(b.slotStart, nowMs);
+  if (b.sessionDate) {
+    return (
+      b.sessionDate.toISOString().slice(0, 10) >=
+      startOfLocalDay(new Date(nowMs)).toISOString().slice(0, 10)
+    );
+  }
+  return false;
+}
+
+/**
  * WhatsApp slot buttons / list rows — drop any start that is not strictly after now.
  * This is the final gate before replyButtons / slotList are built.
  */

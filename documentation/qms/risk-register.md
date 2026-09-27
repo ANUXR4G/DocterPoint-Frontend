@@ -19,5 +19,7 @@ Score: **Impact** (1–5) × **Likelihood** (1–5). Treat ≥12 as needing acti
 | R12 | `QA_EXPOSE_OTP` leaks codes in non-prod API/UI | 3 | 2 | 6 | Env-gated; never set in production; Playwright webServer only | Eng | Mitigated |
 | R13 | Supabase session pooler `EMAXCONNSESSION` under E2E/admin fan-out | 3 | 4 | 12 | Transaction pooler + Prisma `connection_limit`; workers=1 in Playwright | Eng | Open |
 | R14 | Shared WA number: OTP login / bot "Self" resolves to a family dependent | 4 | 3 | 12 | `pickPrimaryPatientUser` (dependents with `relationship` never owner) in OTP verify, `findByPhone`, `listLinkedToWhatsApp` | Eng | Mitigated |
+| R16 | Shared WA number: general document saved to the wrong family member's record | 4 | 3 | 12 | `awaiting_document_patient` picker when >1 linked profile; `patientUserId` must be in `listLinkedToWhatsApp` | Eng | Mitigated |
+| R15 | Elapsed appointments offered / accepted for patient cancel or reschedule | 3 | 4 | 12 | `isBookingStillUpcoming` in `listForPatient({ upcomingOnly })` (DB filter), WA manage list, `cancelByPatient` / `reschedule` guards | Eng | Mitigated |
 
 **Last reviewed:** 2026-09-27

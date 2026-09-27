@@ -26,6 +26,35 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260927-03
+- **Date opened:** 2026-09-27
+- **Severity:** 2
+- **Process:** P-NOTIFY / WhatsApp Branch F (document attach)
+- **Description:** *General Document* on a shared number saved the file to an arbitrary profile (Self or first linked) without asking which patient.
+- **Evidence:** `attachWhatsAppPatientDocument` used `linked.find(isSelf) ?? linked[0]`; clinic notification anchored to the latest booking on the phone (any family member).
+- **Containment:** Picker before save when >1 profile is linked.
+- **Root cause:** Branch F assumed one patient per WhatsApp number.
+- **Corrective action:** New step `awaiting_document_patient` (pending file kept, pick by tap / number / name, cancel discards); `patientUserId` validated against `listLinkedToWhatsApp` before write; clinic anchor = chosen patient's booking (phone fallback only when single profile); confirmation names the patient.
+- **Owner / due:** Engineering / 2026-09-27
+- **Verification:** `yarn build`; WA smoke on 971507801104 → picker "Self · Satheesh / Rathul Satheesh · Child", invalid reply re-asks, pending file retained; foreign `patientUserId` rejected without write.
+- **Status:** Closed 2026-09-27
+- **Docs updated:** qms/risk-register.md (R16), decisions.md
+
+### NC-20260927-02
+- **Date opened:** 2026-09-27
+- **Severity:** 3
+- **Process:** P-BOOK / WhatsApp View–Manage booking
+- **Description:** WhatsApp *View / Manage booking* listed a 25 Sep appointment (already elapsed, status still ACCEPTED) for reschedule / cancel.
+- **Evidence:** Booking `c98b2009…` slotStart 2026-09-25 11:40 IST, status ACCEPTED, shown on 2026-09-27.
+- **Containment:** Manage list filters out elapsed visits at query time.
+- **Root cause:** `listUpcomingBookingsUncached` filtered by status only (no time check); `cancelByPatient` / `reschedule` had no elapsed guard. The list also read the oldest 50 bookings first, so heavy histories could hide real upcoming ones.
+- **Corrective action:** `isBookingStillUpcoming` (slot not started / token day ≥ clinic today); `BookingService.listForPatient({ practiceId, statuses, upcomingOnly, take })` filters in SQL; patient cancel (except WAITING) and reschedule reject elapsed visits.
+- **Owner / due:** Engineering / 2026-09-27
+- **Recurrence (same day):** *Message doctor* list had its own status-only filter and still showed `c98b2009…`. Now: upcoming (not elapsed) + IN_PROGRESS/COMPLETED updated in last 30 days, filtered in SQL via `listForPatient({ updatedSince })`.
+- **Verification:** `yarn build`; WA smoke on 971507801104 → only 28 Sep visit listed; reschedule of `c98b2009…` rejected; guard true for today/tomorrow token day, false for yesterday. Message doctor → 28 Sep (Rathul) + 23 Sep completed (Satheesh) only.
+- **Status:** Closed 2026-09-27
+- **Docs updated:** qms/risk-register.md (R15)
+
 ### NC-20260927-01
 - **Date opened:** 2026-09-27
 - **Severity:** 2

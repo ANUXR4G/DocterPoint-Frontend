@@ -99,6 +99,8 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Care chat ↔ WhatsApp | Outbound: `chat.whatsappFanout.ts`; inbound replies: `chat.whatsappInbound.ts` into `Message` + `_CHAT` sockets | Patient can answer clinic care texts on WhatsApp; `BOOK`/`BOT` still reach the bot |
 | UTILITY template copy | Single catalog `whatsapp.metaTemplates.ts`; free-form fallbacks render from it | Stop drifted duplicate bodies in `whatsapp.templates.ts` |
 | WA session vs template | Bot short ack + `skipPatientNotification` for confirm/cancel/reschedule; clinic still gets `CLINIC_*` | Avoid double patient messages in one turn |
+| Typed *Member* / *Members* / *Patients* | Intent `members`: count + list of every profile on the number (Self first, then family with relationship) + Book / Add family / Main Menu — no appointments | Patients asked "who is registered on my number", not "what is booked" |
+| Attach → *General Document* | 1 linked profile → save directly; >1 → ask *Which patient?* (Self + family) before saving; pick is re-validated against the number's linked profiles | Never guess whose medical record a file belongs to on a shared number |
 | Book → *Family member* | Re-read profiles on the number; 0 family → register; ≥1 → picker of existing family + *Add family member* (never auto-pick, never jump to registration) | Shared-number households book for existing dependents; adding a new one stays one tap |
 
 Ops APIs (admin JWT `users:write`):
