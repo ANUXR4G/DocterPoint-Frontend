@@ -26,6 +26,34 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260927-05
+- **Date opened:** 2026-09-27
+- **Severity:** 2
+- **Process:** P-BOOK (WhatsApp family registration)
+- **Description:** Registering a second family member without their own mobile failed at the last step with "You're already registered as Rathul Satheesh… Reply BOOK" and looped back to the DOB/ID prompt.
+- **Evidence:** Patient screenshot 2026-09-27 22:17; conv `10bfa009` stuck at `awaiting_register_family_details` with Roopa Satheesh / Spouse / 1979-12-20 / female. Old `syntheticDependentPhone("971507801104", any)` = `815078011041` = Rathul's login phone.
+- **Containment:** Collected details kept in state; patient can resend DOB + ID after deploy to finish.
+- **Root cause:** Placeholder dependent phone was `8 + last10(primary) + first digit of Date.now()` — deterministic per WhatsApp number, so every dependent after the first collided on `findByPhone` (409 self-registration message).
+- **Corrective action:** `allocateDependentPhone` — `8 + last4 + 10 random digits`, checked unique on last-10 against user phone and patient contactNumber (6 attempts). Family save 409 now shows a family-specific message instead of the self-registration text.
+- **Owner / due:** Engineering / 2026-09-27
+- **Verification:** 10 allocations for 971507801104 → 10 distinct 15-digit numbers, none equal Rathul's, 0 `findByPhone` hits; backend `tsc` OK. Live WA confirmation pending deploy.
+- **Status:** Verified
+- **Docs updated:** capa-log
+
+### NC-20260927-04
+- **Date opened:** 2026-09-27
+- **Severity:** 2
+- **Process:** P-NOTIFY / WhatsApp provisioning
+- **Description:** Clinic line +91 99900 52082 stored with the Meta phone id of the +1 555 test number; outbound notifications failing (131037 display name, #100 invalid parameter).
+- **Evidence:** Graph: +91 99900 52082 = `1378039178715653`, +1 555-498-8759 = `1288187721051113`, both `name_status: DECLINED`. `whatsapp_numbers` row for 9990052082 held `1288187721051113` (last written at boot 2026-09-26 18:12 UTC; unchanged by 2026-09-27 deploys ⇒ Railway env pins the test id). Webhook chain verified OK (verify handshake, signed POST, probe conversation written to prod DB).
+- **Containment:** Row corrected to `1378039178715653` (approved).
+- **Root cause:** Railway `WHATSAPP_PHONE_NUMBER_ID` / `GLUCOGUIDE_OTP_PHONE_NUMBER_ID` set to the test number id; `pinPlatformMetaPhoneId` re-applies it on every boot. Display name "Docter Point" declined by Meta.
+- **Corrective action:** Set Railway env ids to `1378039178715653`; resubmit a compliant display name in WhatsApp Manager; clinic alerts must not target the clinic's own bot number (#100).
+- **Owner / due:** Ops (Railway env, Meta display name) + Engineering / 2026-09-28
+- **Verification:** Pending — after redeploy, row keeps `1378…`; notifications SENT.
+- **Status:** Open
+- **Docs updated:** —
+
 ### NC-20260927-03
 - **Date opened:** 2026-09-27
 - **Severity:** 2
