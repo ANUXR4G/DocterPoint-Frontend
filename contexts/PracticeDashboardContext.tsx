@@ -64,6 +64,8 @@ export type PracticePatientRow = {
   bookingCount: number
   lastVisitAt: string | null
   lastStatus: string | null
+  /** Set for registered profiles with no booking at this practice yet. */
+  registeredAt?: string | null
   providerNames: string[]
   recentBookings: Array<{
     id: string

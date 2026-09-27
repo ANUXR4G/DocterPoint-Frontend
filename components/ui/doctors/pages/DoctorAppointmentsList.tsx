@@ -11,9 +11,11 @@ import {
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
 import {
+  chiefComplaintOf,
   formatBookingWhenDetailed,
   sortBookingsByWhen,
 } from "@/lib/bookingDisplay"
+import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import {
   APPOINTMENT_RANGE_PRESETS,
   MAX_CUSTOM_RANGE_DAYS,
@@ -30,7 +32,10 @@ import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import ClinicBookAppointmentModal from "@/components/ui/procto/ClinicBookAppointmentModal"
 import AppointmentChatModal from "@/components/ui/procto/AppointmentChatModal"
-import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
+import {
+  bookingDateIso,
+  usePracticeDashboard,
+} from "@/contexts/PracticeDashboardContext"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 
 function bookingPeerUserId(b: ProctoBooking): string | null {
@@ -90,6 +95,9 @@ export default function DoctorAppointmentsList({
     memberships,
     patchBooking,
     refresh,
+    bookings: cachedBookings,
+    bookingTick,
+    liveConnected,
   } = usePracticeDashboard()
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
   const [rangePreset, setRangePreset] =
@@ -172,7 +180,47 @@ export default function DoctorAppointmentsList({
     void loadRows()
   }, [loadRows])
 
+  // New WhatsApp / web bookings arrive as socket events — re-fetch the range
+  // from the backend (rows stay on screen while it loads).
+  const lastTick = useRef(bookingTick)
+  useEffect(() => {
+    if (bookingTick === lastTick.current) return
+    lastTick.current = bookingTick
+    const t = setTimeout(() => void loadRows(), 700)
+    return () => clearTimeout(t)
+  }, [bookingTick, loadRows])
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadRows()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+    }
+  }, [loadRows])
+
+  useEffect(() => {
+    if (liveConnected) return
+    const id = setInterval(() => void loadRows(), 60_000)
+    return () => clearInterval(id)
+  }, [liveConnected, loadRows])
+
   const rangeRows = remoteRows ?? []
+
+  const upcomingAfterToday = useMemo(() => {
+    if (rangePreset !== "today") return 0
+    const today = practiceTodayIso()
+    return cachedBookings.filter((b) => {
+      const d = bookingDateIso(b)
+      if (!d || d <= today) return false
+      if (providerId && bookingProviderId(b) !== providerId) return false
+      const s = String(b.status || "").toUpperCase()
+      return s !== "CANCELED" && s !== "CANCELLED" && s !== "COMPLETED" && s !== "NO_SHOW"
+    }).length
+  }, [rangePreset, cachedBookings, providerId])
 
   const doctorOptions = useMemo(() => {
     if (!isClinic) return []
@@ -352,6 +400,20 @@ export default function DoctorAppointmentsList({
         className="mt-3"
       />
 
+      {upcomingAfterToday > 0 ? (
+        <p className="mt-3 text-sm text-neutral-700 dark:text-slate-300">
+          {upcomingAfterToday} more upcoming appointment
+          {upcomingAfterToday === 1 ? "" : "s"} after today.{" "}
+          <button
+            type="button"
+            onClick={() => setRangePreset("upcoming")}
+            className="font-semibold text-[var(--theme-primary)] hover:underline"
+          >
+            View upcoming
+          </button>
+        </p>
+      ) : null}
+
       {showLoading ? (
         <p className="mt-4 text-sm text-neutral-500">Loading…</p>
       ) : rangeError ? null : filtered.length === 0 ? (
@@ -407,6 +469,12 @@ export default function DoctorAppointmentsList({
                     Doctor: {b.provider?.name?.trim() || "—"}
                   </p>
                 ) : null}
+                {chiefComplaintOf(b) ? (
+                  <p className="mt-1 line-clamp-2 text-xs text-neutral-700 dark:text-slate-300">
+                    <span className="opacity-60">Chief complaint: </span>
+                    {chiefComplaintOf(b)}
+                  </p>
+                ) : null}
                 <div className="mt-3 flex items-center gap-2">
                   <BookingStatusControls
                     status={b.status || "SCHEDULED"}
@@ -433,13 +501,14 @@ export default function DoctorAppointmentsList({
           </ul>
 
           <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-neutral-300 bg-white dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] md:block">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-[var(--solune-elevated)] dark:text-neutral-300">
                 <tr>
                   <th className="px-4 py-3">Patient</th>
                   <th className="px-4 py-3">MRN</th>
                   {isClinic ? <th className="px-4 py-3">Doctor</th> : null}
                   <th className="px-4 py-3">When</th>
+                  <th className="min-w-[180px] px-4 py-3">Chief complaint</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Chat</th>
                   <th className="px-4 py-3 text-right">Visit</th>
@@ -467,6 +536,9 @@ export default function DoctorAppointmentsList({
                     ) : null}
                     <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
                       {formatBookingWhenDetailed(b)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <ChiefComplaintCell text={chiefComplaintOf(b)} />
                     </td>
                     <td className="px-4 py-3">
                       <BookingStatusControls

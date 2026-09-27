@@ -20,7 +20,9 @@ import {
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
+import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import { chiefComplaintOf } from "@/lib/bookingDisplay"
 import {
   formatPracticeDate,
   formatPracticeTime,
@@ -374,6 +376,12 @@ export default function DoctorQueue({
                         {when}
                         {b.provider?.name ? ` · ${b.provider.name}` : ""}
                       </p>
+                      {chiefComplaintOf(b) ? (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-neutral-700 dark:text-slate-300">
+                          <span className="opacity-60">Chief complaint: </span>
+                          {chiefComplaintOf(b)}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <span
@@ -415,6 +423,9 @@ export default function DoctorQueue({
                   Appointment
                 </th>
                 <th className="min-w-[140px] px-3 py-3 font-semibold">Name</th>
+                <th className="min-w-[180px] px-3 py-3 font-semibold">
+                  Chief complaint
+                </th>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
                   MRN
                 </th>
@@ -466,6 +477,9 @@ export default function DoctorQueue({
                         />
                         <p className="font-medium">{name}</p>
                       </div>
+                    </td>
+                    <td className="px-3 py-3 align-middle">
+                      <ChiefComplaintCell text={chiefComplaintOf(b)} />
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 align-middle font-semibold tabular-nums tracking-wide">
                       {p?.mrn?.trim() || "—"}
