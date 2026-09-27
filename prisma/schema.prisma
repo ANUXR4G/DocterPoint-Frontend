@@ -472,6 +472,14 @@ model PracticeBooking {
   documents        Json?
   /// When the patient reached the clinic (first move to WAITING / IN_PROGRESS / COMPLETED).
   arrivedAt        DateTime?      @map("arrived_at") @db.Timestamptz(6)
+  /// Pre-visit payment: null = not asked, PENDING (link sent), PAID, EXPIRED, CANCELLED, DECLINED (pay at clinic).
+  paymentStatus    String?        @map("payment_status") @db.VarChar(16)
+  /// Amount requested, in paise.
+  paymentAmount    Int?           @map("payment_amount")
+  paymentLinkId    String?        @map("payment_link_id")
+  paymentLinkUrl   String?        @map("payment_link_url")
+  paymentId        String?        @map("payment_id")
+  paidAt           DateTime?      @map("paid_at") @db.Timestamptz(6)
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -484,6 +492,7 @@ model PracticeBooking {
   @@index([practiceId, providerId, sessionDate, status])
   @@index([patientPhone])
   @@index([patientId])
+  @@index([paymentLinkId])
   @@map("practice_bookings")
 }
 

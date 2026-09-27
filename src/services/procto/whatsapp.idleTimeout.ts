@@ -74,6 +74,9 @@ export function idleActivityLabel(
   if (step.startsWith("awaiting_message_doctor_")) {
     return { en: "messaging your doctor", hi: "डॉक्टर को संदेश भेजते समय" };
   }
+  if (step === "awaiting_pay_offer") {
+    return { en: "choosing how to pay", hi: "भुगतान चुनते समय" };
+  }
   if (
     step.startsWith("awaiting_document_") ||
     step.startsWith("awaiting_report") ||

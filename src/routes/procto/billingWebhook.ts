@@ -30,6 +30,14 @@ router.post("/", async (req: Request, res: Response, next: NextFunction) => {
       return ResponseHandler.unsuccessful(res, 401, "Invalid Razorpay signature");
     }
 
+    const event = String((req.body as { event?: string })?.event ?? "");
+    if (event.startsWith("payment_link.")) {
+      const { BookingPaymentService } = await import(
+        "../../services/procto/bookingPayment.service.js"
+      );
+      const data = await BookingPaymentService.handleWebhookEvent(req.body ?? {});
+      return ResponseHandler.fetchSuccessful(res, "Payment link webhook processed", data);
+    }
     const data = await BillingService.handleWebhookEvent(req.body ?? {});
     return ResponseHandler.fetchSuccessful(res, "Billing webhook processed", data);
   } catch (e) {

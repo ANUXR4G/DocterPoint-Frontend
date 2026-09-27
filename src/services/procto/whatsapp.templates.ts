@@ -1374,6 +1374,42 @@ export const BotPrompts = {
     );
   },
 
+  askPayBeforeVisit(amountLabel: string, lang?: WaLang): string {
+    return L(
+      lang,
+      `💳 Would you like to *pay the consultation fee (${amountLabel})* now, before your appointment?\n\n` +
+        "Tap *Yes* to get a secure Razorpay link, or *No* to pay at the clinic.",
+      `💳 क्या आप अपॉइंटमेंट से पहले *परामर्श शुल्क (${amountLabel})* अभी भरना चाहेंगे?\n\n` +
+        "सुरक्षित Razorpay लिंक के लिए *Yes*, या क्लिनिक पर भुगतान के लिए *No* दबाएँ।",
+    );
+  },
+
+  paymentLinkSent(url: string, amountLabel: string, lang?: WaLang): string {
+    return L(
+      lang,
+      `Here is your secure payment link for *${amountLabel}*:\n${url}\n\n` +
+        "Pay by UPI, card or netbanking. You'll get a confirmation here once it's paid. The link works until your appointment time.",
+      `*${amountLabel}* के लिए आपका सुरक्षित भुगतान लिंक:\n${url}\n\n` +
+        "UPI, कार्ड या नेटबैंकिंग से भुगतान करें। भुगतान होते ही यहाँ पुष्टि मिलेगी। लिंक अपॉइंटमेंट के समय तक मान्य है।",
+    );
+  },
+
+  paymentLinkFailed(lang?: WaLang): string {
+    return L(
+      lang,
+      "Sorry — we couldn't create the payment link right now. You can pay at the clinic.",
+      "क्षमा करें — अभी भुगतान लिंक नहीं बन पाया। आप क्लिनिक पर भुगतान कर सकते हैं।",
+    );
+  },
+
+  payAtClinic(lang?: WaLang): string {
+    return L(
+      lang,
+      "No problem — you can pay at the clinic.",
+      "कोई बात नहीं — आप क्लिनिक पर भुगतान कर सकते हैं।",
+    );
+  },
+
   askAttachDocumentNow(lang?: WaLang): string {
     return BotPrompts.askAttachDocumentUpload(lang);
   },

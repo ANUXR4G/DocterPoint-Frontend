@@ -10,6 +10,11 @@ import { randomInt } from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { publicWebOrigin } from "../../config/index.js";
 import { BookingService } from "./booking.service.js";
+import {
+  BookingPaymentService,
+  formatRupees,
+  prepayAmountPaise,
+} from "./bookingPayment.service.js";
 import { PatientService } from "../patient.js";
 import { BotPrompts, firstGivenName } from "./whatsapp.templates.js";
 import {
@@ -111,6 +116,8 @@ export type ConversationStep =
   | "awaiting_register_relationship"
   | "awaiting_register_family_details"
   | "awaiting_register_confirm"
+  /** After booking — pay the consultation fee now (Razorpay link)? Yes / No. */
+  | "awaiting_pay_offer"
   | "awaiting_attach_offer"
   | "awaiting_report_booking"
   | "awaiting_report"
@@ -196,6 +203,8 @@ export type ConversationState = {
   careSessionHintsShownAt?: string;
   failedTurns?: number;
   handedOff?: boolean;
+  /** Consultation fee (paise) offered at `awaiting_pay_offer`. */
+  payOfferAmount?: number;
   /** Branch D — when patient tapped Talk to Support / Agent. */
   supportRequestedAt?: string;
   supportLabel?: string;
@@ -454,6 +463,11 @@ function repromptHintForStep(state: ConversationState, lang: WaLang): string {
       return BotPrompts.askChiefComplaintOpt(state.bookPatientName, lang);
     case "awaiting_chief_complaint":
       return BotPrompts.askChiefComplaint(state.bookPatientName, lang);
+    case "awaiting_pay_offer":
+      return BotPrompts.askPayBeforeVisit(
+        formatRupees(state.payOfferAmount ?? 0),
+        lang,
+      );
     case "awaiting_confirm":
       return state.pendingSummary
         ? BotPrompts.bookingSummary(
@@ -687,6 +701,10 @@ async function continueFlowPrompt(
       return withDocumentLinkButtons(repromptHintForStep(state, lang));
     case "awaiting_document_patient":
       return documentPatientPicker(patients, lang);
+    case "awaiting_pay_offer":
+      return withYesNo(
+        BotPrompts.askPayBeforeVisit(formatRupees(state.payOfferAmount ?? 0), lang),
+      );
     case "awaiting_attach_offer":
       return withYesNo(BotPrompts.askAttachDocument(lang));
     case "awaiting_nlu_book_confirm":
@@ -3896,10 +3914,16 @@ async function confirmBooking(
       `[whatsapp] booking confirmed id=${verified.id} practice=${verified.practiceId} phone=${phone}`,
     );
     invalidateUpcomingCache(practice.id, phone);
+    const payOfferAmount = BookingPaymentService.canOfferPrepay(
+      practice.consultationFee,
+    )
+      ? (prepayAmountPaise(practice.consultationFee) ?? undefined)
+      : undefined;
     await saveState(convId, {
       ...idleState(state),
       lastBookingId: verified.id,
-      step: "awaiting_attach_offer",
+      step: payOfferAmount ? "awaiting_pay_offer" : "awaiting_attach_offer",
+      payOfferAmount,
     });
 
     const location =
@@ -3941,10 +3965,12 @@ async function confirmBooking(
         icsUrl: invite.icsUrl,
       },
     );
-    const attachPrompt = BotPrompts.askAttachDocument(lang);
+    const nextPrompt = payOfferAmount
+      ? BotPrompts.askPayBeforeVisit(formatRupees(payOfferAmount), lang)
+      : BotPrompts.askAttachDocument(lang);
     return {
-      ...withYesNo(`${confirmText}\n\n${attachPrompt}`),
-      buttonPrompt: attachPrompt,
+      ...withYesNo(`${confirmText}\n\n${nextPrompt}`),
+      buttonPrompt: nextPrompt,
       calendarInvite: {
         icsFilename: invite.icsFilename,
         icsContent: invite.icsContent,
@@ -5089,6 +5115,47 @@ async function runOrchestratorCore(input: {
         reply: `${BotPrompts.idleContinueAck(lang)}\n\n${again.reply}`,
       };
     }
+  }
+
+  // After booking — pay the consultation fee now? (before the attach offer)
+  if (state.step === "awaiting_pay_offer") {
+    const yes = /^(yes|y|pay|ok|हाँ|हां|जी)$/i.test(text.trim());
+    const no = /^(no|n|nope|skip|later|बाद में|नहीं)$/i.test(text.trim());
+    if (!yes && !no) {
+      return withYesNo(
+        BotPrompts.askPayBeforeVisit(formatRupees(state.payOfferAmount ?? 0), lang),
+      );
+    }
+    let head: string;
+    if (!state.lastBookingId) {
+      head = BotPrompts.payAtClinic(lang);
+    } else if (yes) {
+      try {
+        const link = await BookingPaymentService.createLink(state.lastBookingId);
+        head = BotPrompts.paymentLinkSent(link.url, formatRupees(link.amount), lang);
+      } catch (err) {
+        console.warn(
+          `[whatsapp] payment link failed booking=${state.lastBookingId}:`,
+          err instanceof Error ? err.message : err,
+        );
+        head = BotPrompts.paymentLinkFailed(lang);
+      }
+    } else {
+      await BookingPaymentService.markDeclined(state.lastBookingId).catch(
+        () => undefined,
+      );
+      head = BotPrompts.payAtClinic(lang);
+    }
+    await saveState(convId, {
+      ...state,
+      step: "awaiting_attach_offer",
+      payOfferAmount: undefined,
+    });
+    const attachPrompt = BotPrompts.askAttachDocument(lang);
+    return {
+      ...withYesNo(`${head}\n\n${attachPrompt}`),
+      buttonPrompt: attachPrompt,
+    };
   }
 
   // After booking — Yes/No attach-document offer (before menu shortcuts)
