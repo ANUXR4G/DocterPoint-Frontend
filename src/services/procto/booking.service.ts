@@ -123,6 +123,8 @@ function normalizeBookingDocuments(
     .filter((d) => d.url.length > 0);
 }
 
+const MAX_GENERAL_DOCUMENTS = 30;
+
 export const BookingService = {
   async createBooking(data: {
     practiceId: string;
@@ -903,6 +905,128 @@ export const BookingService = {
       .catch(() => undefined);
 
     return this.enrichBooking(updated);
+  },
+
+  /**
+   * Patient-level General Documents for the visit page. Only resolves a patient
+   * the booking is tied to (patientId, or a single account on that phone) —
+   * never guesses on a shared number.
+   */
+  async resolveBookingPatientForDocs(bookingId: string, actorUserId: string) {
+    const booking = await prisma.practiceBooking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        practiceId: true,
+        providerId: true,
+        patientId: true,
+        patientPhone: true,
+        status: true,
+      },
+    });
+    if (!booking) ResponseHandler.notFoundError("booking not found.");
+    const b = booking!;
+    const { PracticeService } = await import("./practice.service.js");
+    await PracticeService.assertCanViewBooking(b.practiceId, actorUserId, b.providerId);
+
+    let patientId: string | null = null;
+    if (b.patientId) {
+      const p = await prisma.patient.findUnique({
+        where: { id: b.patientId },
+        select: { id: true },
+      });
+      patientId = p?.id ?? null;
+    }
+    if (!patientId) {
+      const digits = String(b.patientPhone || "").replace(/\D/g, "").slice(-10);
+      if (digits.length === 10) {
+        const matches = await prisma.user.findMany({
+          where: {
+            role: "user",
+            patient: { isNot: null },
+            OR: [
+              { phone: { endsWith: digits } },
+              { patient: { is: { contactNumber: { endsWith: digits } } } },
+            ],
+          },
+          select: { id: true },
+          take: 2,
+        });
+        if (matches.length === 1) patientId = matches[0]!.id;
+      }
+    }
+    return { booking: b, patientId };
+  },
+
+  async listGeneralDocuments(bookingId: string, actorUserId: string) {
+    const { patientId } = await this.resolveBookingPatientForDocs(bookingId, actorUserId);
+    if (!patientId) return { patientLinked: false, documents: [] };
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { documents: true },
+    });
+    return {
+      patientLinked: true,
+      documents: normalizeBookingDocuments(
+        Array.isArray(patient?.documents)
+          ? (patient!.documents as Array<{ name?: string; url?: string; uploadedAt?: string }>)
+          : [],
+      ),
+    };
+  },
+
+  async addGeneralDocument(
+    bookingId: string,
+    doc: { name?: string; url?: string },
+    actorUserId: string,
+  ) {
+    const { booking, patientId } = await this.resolveBookingPatientForDocs(
+      bookingId,
+      actorUserId,
+    );
+    const member = await prisma.practiceMember.findUnique({
+      where: { practiceId_userId: { practiceId: booking.practiceId, userId: actorUserId } },
+    });
+    const isAdmin =
+      member?.role === "PRACTICE_OWNER" || member?.role === "PRACTICE_ADMIN";
+    if (!member?.isActive || (!isAdmin && booking.providerId !== actorUserId)) {
+      throw new AppError(
+        403,
+        "You can only add documents to visits assigned to you.",
+      );
+    }
+    if (!patientId) {
+      throw new AppError(
+        400,
+        "This visit is not linked to a registered patient, so there is no patient record to save to.",
+      );
+    }
+    const [item] = normalizeBookingDocuments([doc]);
+    if (!item) throw new AppError(400, "document url is required.");
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: { documents: true },
+    });
+    const existing = normalizeBookingDocuments(
+      Array.isArray(patient?.documents)
+        ? (patient!.documents as Array<{ name?: string; url?: string; uploadedAt?: string }>)
+        : [],
+    );
+    if (existing.length >= MAX_GENERAL_DOCUMENTS) {
+      throw new AppError(
+        400,
+        `At most ${MAX_GENERAL_DOCUMENTS} general documents per patient.`,
+      );
+    }
+    const next = [...existing, item];
+    await prisma.patient.update({
+      where: { id: patientId },
+      data: { documents: next as unknown as Prisma.InputJsonValue },
+    });
+    void import("../opsSocket.js")
+      .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
+      .catch(() => undefined);
+    return { patientLinked: true, documents: next };
   },
 
   async getById(bookingId: string) {

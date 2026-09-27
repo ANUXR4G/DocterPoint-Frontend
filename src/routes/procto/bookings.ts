@@ -287,6 +287,39 @@ router.patch(
 );
 
 router.get(
+  "/:id/general-documents",
+  requireAuth("booking:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await BookingService.listGeneralDocuments(
+        param(req.params.id),
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "general documents fetched.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/:id/general-documents",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await BookingService.addGeneralDocument(
+        param(req.params.id),
+        { name: req.body?.name, url: req.body?.url },
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "general document saved.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
   "/:id",
   attachSessionIfPresent(),
   async (req: Request, res: Response, next: NextFunction) => {
