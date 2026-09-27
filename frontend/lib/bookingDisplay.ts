@@ -19,6 +19,12 @@ export function isActiveBooking(booking: ProctoBooking): boolean {
   return ACTIVE_BOOKING_STATUSES.has((booking.status || "").toUpperCase())
 }
 
+/** Patient's chief complaint / reason for visit (`disease`); "" when not given. */
+export function chiefComplaintOf(booking: { disease?: string | null }): string {
+  const d = booking.disease?.trim() || ""
+  return d && !/^general\s+consultation$/i.test(d) ? d : ""
+}
+
 /** Milliseconds for sorting — prefers slot time, then token session day, then created. */
 export function bookingWhenMs(booking: ProctoBooking): number {
   const slot = booking.slotStart ?? booking.slot_start

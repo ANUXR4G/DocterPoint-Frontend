@@ -26,6 +26,71 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-06
+- **Date opened:** 2026-09-28
+- **Severity:** 2 (includes a booking-safety defect found during the change)
+- **Process:** P-BOOK (WhatsApp booking flow; Queue / Appointments UI)
+- **Description:** (a) Ask *"Add chief complaint? Yes / No"* before collecting it; (b) show the chief complaint in its own column on the Queue and Appointments tables and on the visit page. **Defect found in testing:** a stale `complaint:yes` button tap arriving at `awaiting_confirm` was classified by NLU as `confirm_yes` and called `confirmBooking` — a booking could be created without the patient pressing *Confirm*.
+- **Evidence:** Local smoke (`runOrchestrator`, temp conversation, date with no schedule) returned "no schedule configured" from `confirmBooking` after a `complaint:yes` tap; no booking created (count 7 → 7).
+- **Containment:** Not deployed; found before release.
+- **Root cause:** `awaiting_confirm` fell through to NLU for any non-`confirm:*` payload; affirmative button IDs mapped to `confirm_yes`.
+- **Corrective action:** New step `awaiting_chief_complaint_opt` (Yes / No buttons; direct 2+ word complaint accepted; vague replies re-asked). At `awaiting_confirm`, any interactive payload that is not `confirm:*` re-shows the Confirm card and never books. Shared `chiefComplaintOf` + `ChiefComplaintCell`; "Chief complaint" column after *Name* (Queue) and after *When* (Appointments); line on mobile cards.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** Smoke: Yes → complaint prompt → saved; No → summary without complaint; direct complaint at opt step → saved; stale `complaint:no` at confirm → Confirm card re-shown, no booking (7 → 7). Browser (dr.solo, 1440 px): Queue headers `… Name | Chief complaint | MRN …`, Appointments `… When | Chief complaint | Status …`. Backend tsc, frontend tsc, 145/145 procto tests.
+- **Status:** Verified (local)
+- **Docs updated:** `documentation/flow.md` (book flow + chief complaint paragraph)
+
+### NC-20260928-05
+- **Date opened:** 2026-09-28
+- **Severity:** 2
+- **Process:** P-BOOK (Appointments page ← WhatsApp bookings)
+- **Description:** WhatsApp bot bookings "not showing" on the Appointments page. Page defaults to *Today* (range fetched from backend); a WA booking for a later date (Roopa Satheesh, booked 00:12 IST for 30 Sep) was invisible with no hint, and a booking made while the page was open never appeared (no refetch on socket events).
+- **Evidence:** DB has the booking (`WHATSAPP_AI`, ACCEPTED); `listForPractice` returns it for 28 Sep–4 Oct but not for today-only; production commit `27bfbde` has no refetch on `bookingTick`.
+- **Containment:** Use *This week* / *Custom* filter until deploy.
+- **Root cause:** Range-only fetch (introduced with date filters) dropped the live-update path and gave no signal that future bookings exist outside *Today*.
+- **Corrective action:** Refetch the selected range on `booking_created/updated` socket ticks (debounced), on tab focus, and every 60 s when the socket is down; *Upcoming* preset (today → +90 days); on *Today*, "N more upcoming appointment(s) after today · View upcoming".
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** Browser (dr.solo): Today → Rathul 10:40 + "1 more upcoming… View upcoming"; Upcoming → Rathul + Roopa (30 Sep); This week → both. Backend `listForPractice` checked with TZ=UTC (Railway) for today/week/month. Frontend tsc.
+- **Status:** Verified (local)
+- **Docs updated:** capa-log
+
+### CR-20260928-04 (change request — booking flow)
+- **Date opened:** 2026-09-28
+- **Process:** P-BOOK (WhatsApp booking)
+- **Change:** Ask the patient's chief complaint (typed or voice note, *Skip* allowed) after slot/token selection and before the booking summary; save to `practice_bookings.disease`; show on doctor queue + visit page.
+- **Risk review:** No clinical advice sent (collects patient words only); complaint text bypasses NLU; outbound-guard trigger words are not echoed ("Noted ✓") so the summary is never replaced; bare "ok/yes" re-asked. Tenant/booking engine unchanged (single `BookingService.createBooking`).
+- **Verification:** DB smoke on temp conversation (slot tap → prompt + Skip; "ok" → re-ask; voice transcript → summary line; "need diagnosis…" → "Noted ✓"; Skip → no line; bookings 7 → 7, temp conv deleted); `whatsapp.chiefComplaint.test.ts`; tsc backend + frontend; 144/144 procto tests.
+- **Status:** Verified (local; not deployed)
+- **Docs updated:** flow.md, capa-log
+
+### NC-20260928-03
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-BOOK (WhatsApp booking confirmation → attach document)
+- **Description:** After booking, the Yes/No "attach document" card showed only "Tap *Yes* or *No* below." — the question ("Would you like to send a report or document to your doctor?") was missing; the .ics file arrived after the card, burying it.
+- **Evidence:** Patient report 2026-09-28; `processInbound` long-confirm path built the button body from `reply.split("\n\n").slice(-1)`, and `askAttachDocument` is two paragraphs.
+- **Containment:** N/A (full text was in the preceding message; Yes/No still worked).
+- **Root cause:** Card body derived by guessing the last paragraph of a combined reply instead of an explicit prompt.
+- **Corrective action:** `OrchestratorResult.buttonPrompt` carries the attach question; `splitReplyForButtonCard` sends confirmation (without the question) → .ics → card with the full question + Yes / No / Main Menu. `.ics` sent once via `sendIcsOnce`.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** `whatsapp.confirmCard.test.ts` (EN + HI full question on card, fallback); tsc; 140/140 procto tests.
+- **Status:** Verified
+- **Docs updated:** capa-log
+
+### NC-20260928-02
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-BOOK (Practice Patients roster)
+- **Description:** Patients tab listed only people with a booking; patients who registered (WhatsApp self/family, or with the practice MRN prefix) but had not booked yet were invisible to the clinic.
+- **Evidence:** `PracticeService.listPatients` built rows only from `practiceBooking`; profile "123" (MR00000004, registered via WhatsApp 2026-09-25, no bookings) missing on both practices whose lines it messaged.
+- **Containment:** N/A (data intact; list-only gap).
+- **Root cause:** Roster derived from bookings; there is no patient→practice link other than practice MRN prefix and WhatsApp conversation phone.
+- **Corrective action:** `listRegisteredWithoutBookings` adds profiles whose MRN starts with `{practice.mrnPrefix}MR` or whose phone/contact number matches a WhatsApp conversation on this practice (last 10 digits), deduped against booked rows by patientId and phone+name. Shown to clinic owners/admins and solo doctors; clinic staff doctors keep booking-scoped lists. UI shows a "Registered" badge, 0 visits, and registration date.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** DB run: Dr. Priya Nair Clinic (solo) 6 rows incl. "123" (0 visits); Dr. Ananya Sharma Clinic owner 3 rows incl. "123", staff doctor 0 registered-only rows; no duplicates for booked profiles. Browser check as dr.solo: "Registered" badge + Phone/Registered details. tsc (backend + frontend), 137/137 procto tests.
+- **Status:** Verified
+- **Docs updated:** capa-log
+
 ### NC-20260928-01
 - **Date opened:** 2026-09-28
 - **Severity:** 3

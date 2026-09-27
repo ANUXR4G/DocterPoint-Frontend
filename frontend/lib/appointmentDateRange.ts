@@ -6,6 +6,7 @@ import {
 
 export type AppointmentRangePreset =
   | "today"
+  | "upcoming"
   | "yesterday"
   | "this_week"
   | "last_week"
@@ -19,6 +20,7 @@ export const APPOINTMENT_RANGE_PRESETS: Array<{
   label: string
 }> = [
   { key: "today", label: "Today" },
+  { key: "upcoming", label: "Upcoming" },
   { key: "yesterday", label: "Yesterday" },
   { key: "this_week", label: "This week" },
   { key: "last_week", label: "Last week" },
@@ -30,6 +32,9 @@ export const APPOINTMENT_RANGE_PRESETS: Array<{
 
 /** Custom ranges are capped so one request cannot pull years of visits. */
 export const MAX_CUSTOM_RANGE_DAYS = 366
+
+/** "Upcoming" = today through this many clinic days ahead. */
+export const UPCOMING_RANGE_DAYS = 90
 
 export type IsoRange = { from: string; to: string }
 
@@ -63,6 +68,8 @@ export function resolvePresetRange(
   switch (preset) {
     case "today":
       return { from: today, to: today }
+    case "upcoming":
+      return { from: today, to: practiceShiftDays(today, UPCOMING_RANGE_DAYS) }
     case "yesterday": {
       const y = practiceShiftDays(today, -1)
       return { from: y, to: y }

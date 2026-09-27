@@ -1168,6 +1168,8 @@ export function stepUsesLlm(step?: string): boolean {
     "awaiting_provider",
     "awaiting_mode",
     "awaiting_slot",
+    "awaiting_chief_complaint_opt",
+    "awaiting_chief_complaint",
     "awaiting_confirm",
     "awaiting_cancel_confirm",
     "awaiting_cancel_booking",
@@ -1239,6 +1241,8 @@ export function shouldUseLlmForMessage(
     return stepUsesLlm(step);
   }
   const confirmish = new Set([
+    "awaiting_chief_complaint_opt",
+    "awaiting_chief_complaint",
     "awaiting_confirm",
     "awaiting_attach_offer",
     "awaiting_cancel_confirm",

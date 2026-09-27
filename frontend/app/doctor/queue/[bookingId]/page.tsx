@@ -18,6 +18,7 @@ import {
   bookingStatusClass,
   bookingStatusLabel,
 } from "@/lib/bookingStatus"
+import { chiefComplaintOf } from "@/lib/bookingDisplay"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
@@ -391,6 +392,7 @@ export default function VisitPage() {
       ? formatPracticeDate(booking.sessionDate)
       : "—"
   const isCompleted = String(booking.status || "").toUpperCase() === "COMPLETED"
+  const chiefComplaint = chiefComplaintOf(booking)
   const selfId = getSessionUserId()
   const peerId = booking.patient?.id
 
@@ -484,6 +486,22 @@ export default function VisitPage() {
           ) : null}
         </dl>
       </section>
+
+      {chiefComplaint ? (
+        <section className="dashboard-panel !p-5">
+          <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
+            Chief complaint
+          </h2>
+          <p className="mt-1 text-xs opacity-60">
+            {booking.channel === "WHATSAPP_AI"
+              ? "In the patient's words (typed or voice note on WhatsApp)."
+              : "Reason for visit given at booking."}
+          </p>
+          <p className="mt-3 whitespace-pre-wrap rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm leading-relaxed text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-slate-100">
+            {chiefComplaint}
+          </p>
+        </section>
+      ) : null}
 
       {/* Remarks */}
       <section className="dashboard-panel !p-5">

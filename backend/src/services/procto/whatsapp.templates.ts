@@ -797,23 +797,63 @@ export const BotPrompts = {
       doctor: string;
       dateTime: string;
       location: string;
+      complaint?: string | null;
     },
     lang?: WaLang,
   ): string {
+    const complaint = details.complaint?.trim();
     return L(
       lang,
       `*Appointment details*\n` +
         `• Patient: ${details.patient}\n` +
         `• Doctor: ${details.doctor}\n` +
         `• Date & Time: ${details.dateTime}\n` +
-        `• Location: ${details.location}\n\n` +
-        `Tap a button below to continue.`,
+        `• Location: ${details.location}\n` +
+        (complaint ? `• Chief complaint: ${complaint}\n` : "") +
+        `\nTap a button below to continue.`,
       `*अपॉइंटमेंट विवरण*\n` +
         `• मरीज़: ${details.patient}\n` +
         `• डॉक्टर: ${details.doctor}\n` +
         `• तारीख और समय: ${details.dateTime}\n` +
-        `• स्थान: ${details.location}\n\n` +
-        `जारी रखने के लिए नीचे बटन दबाएँ।`,
+        `• स्थान: ${details.location}\n` +
+        (complaint ? `• मुख्य समस्या: ${complaint}\n` : "") +
+        `\nजारी रखने के लिए नीचे बटन दबाएँ।`,
+    );
+  },
+
+  /** After slot/token — offer to add a chief complaint (Yes / No). */
+  askChiefComplaintOpt(patientName?: string | null, lang?: WaLang): string {
+    const who = patientName?.trim();
+    return L(
+      lang,
+      `Would you like to add the *chief complaint* (main problem) for ${who ? `*${who}*'s` : "your"} visit?\n` +
+        `It helps the doctor prepare.\n\n` +
+        `Tap *Yes* or *No*.`,
+      `क्या आप ${who ? `*${who}* की` : "अपनी"} विज़िट के लिए *मुख्य समस्या* बताना चाहेंगे?\n` +
+        `इससे डॉक्टर को तैयारी में मदद मिलती है।\n\n` +
+        `*हाँ* या *नहीं* दबाएँ।`,
+    );
+  },
+
+  /** After "Yes" — chief complaint text or voice note, before the booking summary. */
+  askChiefComplaint(patientName?: string | null, lang?: WaLang): string {
+    const who = patientName?.trim();
+    return L(
+      lang,
+      `${who ? `What is *${who}*'s` : "What is your"} main problem for this visit (chief complaint)?\n` +
+        `For example: _fever for 3 days_, _knee pain_, _diabetes follow-up_.\n\n` +
+        `You can *type* it or send a *voice note* 🎤.`,
+      `इस विज़िट की मुख्य समस्या ${who ? `(*${who}* के लिए) ` : ""}क्या है?\n` +
+        `जैसे: _3 दिन से बुखार_, _घुटने में दर्द_, _डायबिटीज़ फ़ॉलो-अप_।\n\n` +
+        `आप *लिखकर* या *वॉइस नोट* 🎤 भेज सकते हैं।`,
+    ).replace(/ {2,}/g, " ");
+  },
+
+  chiefComplaintTooShort(lang?: WaLang): string {
+    return L(
+      lang,
+      "Please describe the problem in a few words (or send a voice note 🎤), or tap *Skip*.",
+      "कृपया समस्या कुछ शब्दों में बताएँ (या वॉइस नोट 🎤 भेजें), या *छोड़ें* दबाएँ।",
     );
   },
 

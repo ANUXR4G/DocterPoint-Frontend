@@ -103,6 +103,21 @@ function statusClass(status: string): string {
   return bookingStatusClass(status)
 }
 
+function viaLabel(p: PracticePatientRow) {
+  return p.bookingCount > 0 ? "Booked via" : "Phone"
+}
+
+function RegisteredBadge() {
+  return (
+    <span
+      className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+      title="Registered — no appointment yet"
+    >
+      Registered
+    </span>
+  )
+}
+
 function genderTone(gender?: string | null) {
   const g = (gender || "").toLowerCase()
   if (g === "female") {
@@ -214,7 +229,7 @@ export default function DoctorPatientsList() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-base font-bold text-neutral-900 dark:text-white">
           {practiceName} · {filtered.length} patient
-          {filtered.length === 1 ? "" : "s"} from clinic bookings
+          {filtered.length === 1 ? "" : "s"}
         </p>
         <input
           type="search"
@@ -260,7 +275,7 @@ export default function DoctorPatientsList() {
                           </p>
                         ) : null}
                         <p className="mt-0.5 text-sm font-medium">
-                          Booked via {via}
+                          {viaLabel(p)} {via}
                         </p>
                         {p.mrn?.trim() ? (
                           <p className="mt-0.5 text-xs font-semibold tabular-nums tracking-wide opacity-70">
@@ -289,7 +304,7 @@ export default function DoctorPatientsList() {
                           {bookingStatusLabel(p.lastStatus)}
                         </span>
                       ) : (
-                        <span className="text-xs opacity-50">—</span>
+                        <RegisteredBadge />
                       )}
                     </div>
                   </div>
@@ -316,9 +331,15 @@ export default function DoctorPatientsList() {
                           </p>
                         ) : null}
                         <p>
-                          <span className="opacity-50">Booked via: </span>
+                          <span className="opacity-50">{viaLabel(p)}: </span>
                           {via}
                         </p>
+                        {p.registeredAt ? (
+                          <p>
+                            <span className="opacity-50">Registered: </span>
+                            {formatPracticeDateTime(p.registeredAt)}
+                          </p>
+                        ) : null}
                         {p.relationship?.trim() ? (
                           <p>
                             <span className="opacity-50">Relation: </span>
@@ -499,7 +520,7 @@ export default function DoctorPatientsList() {
                               {bookingStatusLabel(p.lastStatus)}
                             </span>
                           ) : (
-                            "—"
+                            <RegisteredBadge />
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -529,9 +550,15 @@ export default function DoctorPatientsList() {
                                 </span>
                               </p>
                               <p>
-                                <span className="opacity-50">Booked via: </span>
+                                <span className="opacity-50">{viaLabel(p)}: </span>
                                 {via}
                               </p>
+                              {p.registeredAt ? (
+                                <p>
+                                  <span className="opacity-50">Registered: </span>
+                                  {formatPracticeDateTime(p.registeredAt)}
+                                </p>
+                              ) : null}
                               <div className="sm:col-span-2">
                                 <p className="opacity-50">Attachments</p>
                                 <div className="mt-1">
@@ -641,7 +668,7 @@ export default function DoctorPatientsList() {
         <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-10 text-center text-sm font-medium text-neutral-600 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
           {query
             ? "No patients match your search."
-            : "No clinic bookings yet. Patients appear here after they book."}
+            : "No patients yet. Patients appear here after they register or book."}
         </div>
       )}
 

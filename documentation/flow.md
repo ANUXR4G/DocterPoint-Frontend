@@ -260,7 +260,9 @@ Or send `audioBase64` + `mimeType` to exercise live STT.
 
 **Register flow (standalone):** `REGISTER` → name → gender → email Yes/No → (email if Yes) → **phone Yes/No** (`+91 …` WhatsApp sender) → (type mobile if No) → YES
 **Doctors list:** `DOCTORS` (or “list doctors” / “who are the doctors”)  
-**Book flow (registered):** `BOOK` → date (**Dates** list = next 7 working days) → (doctor if needed) → (mode buttons if needed) → slot (**time buttons** or *Slots* list) → **Yes/No** buttons
+**Book flow (registered):** `BOOK` → date (**Dates** list = next 7 working days) → (doctor if needed) → (mode buttons if needed) → slot (**time buttons** or *Slots* list) → **"Add chief complaint?" Yes / No** → (Yes) chief complaint (type or voice note; *Skip* button) → summary (shows *Chief complaint*) → **Confirm / Change / Cancel** buttons
+
+**Chief complaint** (`awaiting_chief_complaint_opt` → `awaiting_chief_complaint`): after the slot/token the bot first asks *Would you like to add the chief complaint?* with **Yes / No** buttons. *No* goes straight to the summary; *Yes* (or ok / haan) asks for the complaint. A patient who types a real complaint (2+ words) at the Yes/No step skips the extra question; vague replies ("maybe") re-show the buttons. Asked once per summary; picking a new slot via *Change* asks again. A stale button tap from an earlier card at the confirm step only re-shows the Confirm card — it never books. Voice notes use the same STT path; the text bypasses NLU so symptoms are never re-classified as commands (exact *Menu* / *Cancel* / *Help* still work). Stored as the patient's own words (≤500 chars) in `practice_bookings.disease` (same field as the clinic modal's "Reason for visit"); shown to the doctor in a **Chief complaint** column on the Queue and Appointments tables (a line on mobile cards) and on the visit page. No AI brief or advice is generated. If the text contains words that trip the outbound clinical guard (e.g. "diagnosis"), the summary shows "Noted ✓" instead of echoing it; the full text is still saved.
 
 Local test (no Meta account):
 

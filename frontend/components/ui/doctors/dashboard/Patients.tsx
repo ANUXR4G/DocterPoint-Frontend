@@ -52,9 +52,9 @@ export default function Patients() {
         </p>
       ) : filtered.length > 0 ? (
         <ul className="mt-3 space-y-2">
-          {filtered.map((p) => (
+          {filtered.map((p, index) => (
             <li
-              key={p.phone}
+              key={`${p.patientId || p.phone}|${(p.name || "").toLowerCase()}|${index}`}
               className="rounded-2xl border border-neutral-300 bg-white px-4 py-3 dark:border-neutral-600 dark:bg-neutral-800"
             >
               <p className="font-semibold">{p.name || p.phone}</p>
@@ -64,8 +64,9 @@ export default function Patients() {
                 </p>
               ) : null}
               <p className="text-xs opacity-70">
-                {bookingStatusLabel(p.lastStatus || "")} · {p.bookingCount}{" "}
-                visit{p.bookingCount === 1 ? "" : "s"}
+                {p.lastStatus
+                  ? `${bookingStatusLabel(p.lastStatus)} · ${p.bookingCount} visit${p.bookingCount === 1 ? "" : "s"}`
+                  : "Registered · no visits yet"}
               </p>
             </li>
           ))}
