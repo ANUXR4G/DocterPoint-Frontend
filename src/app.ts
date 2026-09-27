@@ -69,6 +69,12 @@ app.use(
   attachRawJsonBody,
 );
 
+app.use(
+  "/api/v1/procto/payments/razorpay/webhook",
+  express.raw({ type: "application/json" }),
+  attachRawJsonBody,
+);
+
 app.use(express.json({ limit: "10mb" }));
 app.use(rateLimiter);
 

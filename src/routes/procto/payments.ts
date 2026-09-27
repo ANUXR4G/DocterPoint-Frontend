@@ -2,6 +2,8 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import { ResponseHandler } from "../../core/response.js";
 import { param } from "../../core/params.js";
 import { requireAuth } from "../../middleware/auth.js";
+import { verifyRazorpayWebhook } from "../../lib/razorpay.js";
+import { PaymentAccountService } from "../../services/procto/paymentAccount.service.js";
 import { formatRupees } from "../../services/procto/paymentHelpers.js";
 import { PaymentRequestService } from "../../services/procto/paymentRequest.service.js";
 
@@ -64,6 +66,47 @@ router.get("/razorpay/callback", async (req: Request, res: Response) => {
     return res
       .status(500)
       .send(page("Something went wrong", "Please contact the clinic."));
+  }
+});
+
+/**
+ * Webhook for a clinic's own Razorpay account (URL shown in Settings).
+ * Verified with that clinic's webhook secret; only its own links are touched.
+ */
+router.post("/razorpay/webhook/:practiceId", async (req: Request, res: Response) => {
+  try {
+    const practiceId = param(req.params.practiceId);
+    const account = await PaymentAccountService.webhookSecret(practiceId).catch(() => null);
+    if (!account) {
+      return ResponseHandler.fetchSuccessful(res, "webhook ignored", {
+        ok: false,
+        reason: "webhook_secret_not_configured",
+      });
+    }
+    const rawBody =
+      (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {});
+    if (
+      !verifyRazorpayWebhook(
+        account.secret,
+        rawBody,
+        req.header("x-razorpay-signature") ?? undefined,
+      )
+    ) {
+      return ResponseHandler.unsuccessful(res, 401, "Invalid Razorpay signature");
+    }
+    const event = String((req.body as { event?: string })?.event ?? "");
+    if (!event.startsWith("payment_link.")) {
+      return ResponseHandler.fetchSuccessful(res, "webhook ignored", { ok: true, event });
+    }
+    const data = await PaymentRequestService.handleWebhookEvent(req.body ?? {}, {
+      kind: "PRACTICE",
+      practiceId,
+      keyId: account.keyId,
+    });
+    return ResponseHandler.fetchSuccessful(res, "payment link webhook processed", data);
+  } catch (err) {
+    console.warn("[payment] clinic webhook failed:", err);
+    return ResponseHandler.unsuccessful(res, 500, "webhook failed");
   }
 });
 

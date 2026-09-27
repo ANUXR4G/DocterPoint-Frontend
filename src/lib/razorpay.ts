@@ -37,6 +37,123 @@ export type RazorpayPaymentLink = {
   notes?: Record<string, string> | string;
 };
 
+export type RazorpayCredentials = { keyId: string; keySecret: string };
+
+/** Razorpay rejected the key pair (HTTP 401 from Razorpay — not a user-session 401). */
+export class RazorpayAuthError extends AppError {
+  constructor(message: string) {
+    super(502, message);
+  }
+}
+
+async function rzpFetch<T>(
+  creds: RazorpayCredentials,
+  path: string,
+  init: RazorpayRequestInit = {},
+): Promise<T> {
+  const auth = Buffer.from(`${creds.keyId}:${creds.keySecret}`).toString("base64");
+  const res = await fetch(`https://api.razorpay.com/v1${path}`, {
+    method: init.method ?? "GET",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/json",
+    },
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+  });
+  const json = (await res.json().catch(() => ({}))) as T & {
+    error?: { description?: string };
+  };
+  if (res.status === 401) {
+    throw new RazorpayAuthError(
+      json.error?.description ?? "Razorpay authentication failed",
+    );
+  }
+  if (!res.ok) {
+    throw new AppError(
+      502,
+      json.error?.description ?? `Razorpay request failed (${res.status})`,
+    );
+  }
+  return json;
+}
+
+function hmacHexEqual(secret: string, data: string, signature: string | undefined) {
+  if (!secret || !signature) return false;
+  const expected = crypto.createHmac("sha256", secret).update(data).digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch {
+    return false;
+  }
+}
+
+export type CreatePaymentLinkBody = {
+  amount: number;
+  currency?: string;
+  description: string;
+  reference_id?: string;
+  expire_by?: number;
+  customer?: { name?: string; contact?: string; email?: string };
+  notify?: { sms?: boolean; email?: boolean };
+  reminder_enable?: boolean;
+  callback_url?: string;
+  callback_method?: "get";
+  notes?: Record<string, string>;
+};
+
+/** Payment Links on any Razorpay account (clinic-owned or the platform's). */
+export function createRazorpayClient(creds: RazorpayCredentials) {
+  return {
+    keyId: creds.keyId,
+    request<T>(path: string, init?: RazorpayRequestInit) {
+      return rzpFetch<T>(creds, path, init);
+    },
+    createPaymentLink(body: CreatePaymentLinkBody) {
+      return rzpFetch<RazorpayPaymentLink>(creds, "/payment_links", {
+        method: "POST",
+        body: { currency: "INR", accept_partial: false, ...body },
+      });
+    },
+    getPaymentLink(paymentLinkId: string) {
+      return rzpFetch<RazorpayPaymentLink>(
+        creds,
+        `/payment_links/${encodeURIComponent(paymentLinkId)}`,
+      );
+    },
+    cancelPaymentLink(paymentLinkId: string) {
+      return rzpFetch<RazorpayPaymentLink>(
+        creds,
+        `/payment_links/${encodeURIComponent(paymentLinkId)}/cancel`,
+        { method: "POST" },
+      );
+    },
+    /** Redirect after a Payment Link is paid (`callback_url`, GET params). */
+    verifyPaymentLinkSignature(params: {
+      paymentLinkId: string;
+      referenceId: string;
+      status: string;
+      paymentId: string;
+      signature: string | undefined;
+    }) {
+      return hmacHexEqual(
+        creds.keySecret,
+        `${params.paymentLinkId}|${params.referenceId}|${params.status}|${params.paymentId}`,
+        params.signature,
+      );
+    },
+  };
+}
+
+export type RazorpayClient = ReturnType<typeof createRazorpayClient>;
+
+export function verifyRazorpayWebhook(
+  secret: string,
+  rawBody: string,
+  signature: string | undefined,
+): boolean {
+  return hmacHexEqual(secret, rawBody, signature);
+}
+
 export type RazorpayPlan = {
   id: string;
   period: string;
@@ -61,31 +178,24 @@ export const razorpay = {
     return settings.razorpayWebhookSecret;
   },
 
+  /** Platform account as a Payment Links client; null when env keys are missing. */
+  platformClient(): RazorpayClient | null {
+    if (!this.isConfigured()) return null;
+    return createRazorpayClient({
+      keyId: settings.razorpayKeyId,
+      keySecret: settings.razorpayKeySecret,
+    });
+  },
+
   async request<T>(path: string, init: RazorpayRequestInit = {}): Promise<T> {
     if (!this.isConfigured()) {
       throw new AppError(503, "Razorpay keys are not configured");
     }
-    const auth = Buffer.from(
-      `${settings.razorpayKeyId}:${settings.razorpayKeySecret}`,
-    ).toString("base64");
-    const res = await fetch(`https://api.razorpay.com/v1${path}`, {
-      method: init.method ?? "GET",
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/json",
-      },
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-    });
-    const json = (await res.json().catch(() => ({}))) as T & {
-      error?: { description?: string };
-    };
-    if (!res.ok) {
-      throw new AppError(
-        502,
-        json.error?.description ?? `Razorpay request failed (${res.status})`,
-      );
-    }
-    return json;
+    return rzpFetch<T>(
+      { keyId: settings.razorpayKeyId, keySecret: settings.razorpayKeySecret },
+      path,
+      init,
+    );
   },
 
   verifyWebhookSignature(

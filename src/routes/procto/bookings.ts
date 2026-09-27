@@ -344,7 +344,12 @@ router.get(
           practiceId: true,
           providerId: true,
           practice: {
-            select: { consultationFee: true, advanceBookingAmount: true },
+            select: {
+              consultationFee: true,
+              advanceBookingAmount: true,
+              razorpayKeyId: true,
+              razorpayKeySecretEnc: true,
+            },
           },
         },
       });
@@ -357,11 +362,11 @@ router.get(
       const [
         { BookingPaymentService, paymentView, prepayAmountPaise },
         { PaymentRequestService },
-        { razorpay },
+        { practicePaymentsEnabled },
       ] = await Promise.all([
         import("../../services/procto/bookingPayment.service.js"),
         import("../../services/procto/paymentRequest.service.js"),
-        import("../../lib/razorpay.js"),
+        import("../../services/procto/paymentAccount.service.js"),
       ]);
       const booking =
         req.query.refresh === "1"
@@ -372,7 +377,7 @@ router.get(
         clinicFee: prepayAmountPaise(found.practice.consultationFee),
         advanceAmount: prepayAmountPaise(found.practice.advanceBookingAmount),
         requests: await PaymentRequestService.listForBooking(id),
-        paymentsEnabled: razorpay.isConfigured(),
+        paymentsEnabled: practicePaymentsEnabled(found.practice),
       });
     } catch (error) {
       next(error);

@@ -23,6 +23,10 @@ export const prisma = new PrismaClient({
       url: withPoolLimits(databaseUrl),
     },
   },
+  // Encrypted clinic Razorpay secrets load only via an explicit `select`.
+  omit: {
+    practice: { razorpayKeySecretEnc: true, razorpayWebhookSecretEnc: true },
+  },
 });
 
 export async function getPatientSession(userId: string) {
