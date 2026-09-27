@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-07
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-BOOK (WhatsApp Branch F — attach document)
+- **Description:** Clinic could not find the *Select Appointment / General Document* choice: it only appeared after a file was uploaded, never after post-booking *Yes* (auto-attached to the new visit) and never with no upcoming visits. Requested: ask the choice before asking for the document.
+- **Evidence:** User report; code path `startReportAttachFlow` → `awaiting_document_upload`; post-booking Yes set `lastBookingId` → `attach_preferred`.
+- **Containment:** n/a (behaviour change).
+- **Root cause:** Upload-first design of Branch F.
+- **Corrective action:** Menu → Attach and post-booking *Yes* now go to `awaiting_document_link` with no file: buttons first. *General* → (shared number) patient pick → `docTarget: "general"` + `docPatientUserId` → upload saved to that record only (`receiveWhatsAppBranchFDocument({ general })` skips visit lookup; patient id re-validated). *Select Appointment* → visit (list if 2+) → upload prompt names the visit. *No* before upload cancels.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** Smoke on temp conversation (no uploads): attach → buttons; General → picker → "saved to *Rathul Satheesh*'s record"; reminder keeps General prompt; No → cancelled + state cleared; Select Appointment → visit prompt with label; post-booking Yes → buttons. Backend tsc; 147/147 procto tests.
+- **Status:** Verified (local)
+- **Docs updated:** `documentation/flow.md`, `documentation/decisions.md`
+
 ### CR-20260928-06
 - **Date opened:** 2026-09-28
 - **Severity:** 2 (includes a booking-safety defect found during the change)
