@@ -1734,7 +1734,10 @@ function withPatientPicker(
       reply,
       replyButtons: choices.map((c, i) => ({
         id: `patient:${i + 1}`,
-        title: c.label.slice(0, 20),
+        title: (c.label.length > 20
+          ? c.label.replace(/\s·\s.*$/, "")
+          : c.label
+        ).slice(0, 20),
       })),
     };
   }
@@ -5330,56 +5333,41 @@ async function runOrchestratorCore(input: {
       };
     }
 
-    // Family member / dependent
-    if (!familyChoices.length) {
+    // Family member / dependent — always re-read, never trust a stale saved list.
+    const liveFamily = (
+      await PatientService.listLinkedToWhatsApp(patientPhone)
+    )
+      .filter((p) => !p.isSelf)
+      .map((p) => ({ id: p.id, label: p.name, isSelf: false as boolean }));
+    if (!liveFamily.length) {
       const selfName =
         selfChoice?.label.replace(/^Self\s*[·.\-:]+\s*/i, "").trim() ||
         (await findPatientByPhoneCached(patientPhone))?.name ||
         "";
       return startFamilyRegisterForBook(convId, nextSlots, state, selfName);
     }
-    if (familyChoices.length === 1) {
-      const only = familyChoices[0]!;
-      const bookReply = await startBookFlow(convId, practice, nextSlots, {
-        ...state,
-        bookPatientId: only.id,
-        bookPatientName: only.label,
-        patientChoices: undefined,
-        pendingBookSlots: undefined,
-        step: "idle",
-      });
-      return {
-        reply:
-          BotPrompts.bookPatientSelected(only.label, false, lang) +
-          "\n\n" +
-          bookReply.reply,
-        doctorList: bookReply.doctorList,
-        replyButtons: bookReply.replyButtons,
-        dateList: bookReply.dateList,
-        slotList: bookReply.slotList,
-        bookingList: bookReply.bookingList,
-        patientList: bookReply.patientList,
-        specialtyList: bookReply.specialtyList,
-        menuList: bookReply.menuList,
-      };
-    }
 
+    const bookFamilyChoices = [
+      ...liveFamily,
+      { id: FAMILY_ADD_ID, label: "Add family member", isSelf: false as boolean },
+    ];
     await saveState(convId, {
       ...keepPrefs(state),
       step: "awaiting_book_patient",
-      patientChoices: familyChoices,
+      patientChoices: bookFamilyChoices,
       pendingBookSlots: nextSlots,
       bookPatientId: undefined,
       bookPatientName: undefined,
     });
     return withPatientPicker(
       BotPrompts.askBookFamilyPick(
-        familyChoices.map((c, i) => ({ index: i + 1, label: c.label })),
+        liveFamily.map((c, i) => ({ index: i + 1, label: c.label })),
         lang,
       ),
-      familyChoices.map((c) => ({
+      bookFamilyChoices.map((c) => ({
         label: c.label,
-        description: "Family member",
+        description:
+          c.id === FAMILY_ADD_ID ? "Register a new member" : "Book for them",
       })),
     );
   }
@@ -5475,6 +5463,14 @@ async function runOrchestratorCore(input: {
           ? choices[idx - 1]
           : null;
       })() ?? null;
+    if (
+      !choice &&
+      /^(family:add|add|add\s*family(\s*member)?|new|new\s*member)$/i.test(
+        text.trim(),
+      )
+    ) {
+      choice = choices.find((c) => c.id === FAMILY_ADD_ID) ?? null;
+    }
     // Allow typing the profile name ("Priya" / "you")
     if (!choice) {
       const raw = text.trim().toLowerCase().replace(/^you\s*[·.\-:]+\s*/i, "");
@@ -5493,15 +5489,37 @@ async function runOrchestratorCore(input: {
       }
     }
     if (!choice) {
+      const hasAdd = choices.some((c) => c.id === FAMILY_ADD_ID);
+      const profilesOnly = choices.filter((c) => c.id !== FAMILY_ADD_ID);
       return withPatientPicker(
-        BotPrompts.askBookPatientPick(
-          choices.map((c, i) => ({ index: i + 1, label: c.label })),
-          lang,
-        ),
+        hasAdd
+          ? BotPrompts.askBookFamilyPick(
+              profilesOnly.map((c, i) => ({ index: i + 1, label: c.label })),
+              lang,
+            )
+          : BotPrompts.askBookPatientPick(
+              choices.map((c, i) => ({ index: i + 1, label: c.label })),
+              lang,
+            ),
         choices.map((c) => ({
           label: c.label,
-          description: c.isSelf ? "Yourself" : "Family member",
+          description:
+            c.id === FAMILY_ADD_ID
+              ? "Register a new member"
+              : c.isSelf
+                ? "Yourself"
+                : "Family member",
         })),
+      );
+    }
+    if (choice.id === FAMILY_ADD_ID) {
+      const selfName =
+        (await findPatientByPhoneCached(patientPhone))?.name || "";
+      return startFamilyRegisterForBook(
+        convId,
+        state.pendingBookSlots ?? {},
+        state,
+        selfName,
       );
     }
     const picked = await prisma.user.findUnique({

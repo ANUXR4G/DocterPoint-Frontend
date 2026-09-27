@@ -1003,8 +1003,8 @@ export const BotPrompts = {
     const lines = options.map((o) => `${o.index}. ${o.label}`).join("\n");
     return L(
       lang,
-      `Which *family member / dependent*?\n${lines}\n\nTap a profile below, or reply with a *number* or *name*.`,
-      `कौन सा *परिवार सदस्य / आश्रित*?\n${lines}\n\nनीचे प्रोफ़ाइल चुनें, या *संख्या* / *नाम* लिखें।`,
+      `Whom is this booking for?\n${lines}\n\nTap a name below (or reply with a *number* / *name*), or tap *Add family member* to register someone new.`,
+      `यह बुकिंग किसके लिए है?\n${lines}\n\nनीचे नाम चुनें (या *संख्या* / *नाम* लिखें), या नया सदस्य जोड़ने के लिए *Add family member* दबाएँ।`,
     );
   },
 
