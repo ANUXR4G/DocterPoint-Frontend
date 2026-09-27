@@ -158,6 +158,8 @@ export type QueueStatusFilter =
   | "waiting"
   | "in_appointment"
   | "done"
+  | "canceled"
+  | "no_show"
 
 export function matchesQueueStatusFilter(
   status: string,
@@ -181,7 +183,11 @@ export function matchesQueueStatusFilter(
     case "in_appointment":
       return s === "IN_PROGRESS"
     case "done":
-      return ["COMPLETED", "CANCELED", "CANCELLED", "NO_SHOW"].includes(s)
+      return s === "COMPLETED"
+    case "canceled":
+      return s === "CANCELED" || s === "CANCELLED"
+    case "no_show":
+      return s === "NO_SHOW"
     default:
       return true
   }
@@ -199,6 +205,8 @@ export function queueFilterLabel(
     waiting: "In waiting",
     in_appointment: "Started",
     done: "Finished",
+    canceled: "Canceled",
+    no_show: "No-show",
   }
   return `${titles[key]} (${count})`
 }
@@ -214,6 +222,8 @@ export function countQueueStatusFilters(
     waiting: 0,
     in_appointment: 0,
     done: 0,
+    canceled: 0,
+    no_show: 0,
   }
   for (const status of statuses) {
     if (matchesQueueStatusFilter(String(status || ""), "booked")) c.booked += 1
@@ -224,6 +234,12 @@ export function countQueueStatusFilters(
       c.in_appointment += 1
     }
     if (matchesQueueStatusFilter(String(status || ""), "done")) c.done += 1
+    if (matchesQueueStatusFilter(String(status || ""), "canceled")) {
+      c.canceled += 1
+    }
+    if (matchesQueueStatusFilter(String(status || ""), "no_show")) {
+      c.no_show += 1
+    }
   }
   return c
 }

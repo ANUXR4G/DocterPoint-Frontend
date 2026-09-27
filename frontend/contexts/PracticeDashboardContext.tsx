@@ -127,6 +127,9 @@ const PracticeDashboardContext = createContext<PracticeDashboardValue | null>(
   null,
 )
 
+/** Shared booking cache covers today ± this many clinic days. */
+export const BOOKINGS_CACHE_DAYS = 90
+
 export function bookingDateIso(b: ProctoBooking): string | null {
   const slot = b.slotStart ?? (b as { slot_start?: string }).slot_start
   if (slot) {
@@ -216,8 +219,8 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
     try {
       const todayIso = practiceTodayIso()
       const boot = await proctoService.getPracticeBootstrap({
-        from: practiceShiftDays(todayIso, -90),
-        to: practiceShiftDays(todayIso, 90),
+        from: practiceShiftDays(todayIso, -BOOKINGS_CACHE_DAYS),
+        to: practiceShiftDays(todayIso, BOOKINGS_CACHE_DAYS),
       })
 
       let mem: PracticeMembership[] = []

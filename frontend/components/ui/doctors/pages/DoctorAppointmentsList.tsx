@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { MessageCircle } from "lucide-react"
+import { MessageCircle, RefreshCw } from "lucide-react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
@@ -10,7 +10,21 @@ import {
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
-import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
+import {
+  formatBookingWhenDetailed,
+  sortBookingsByWhen,
+} from "@/lib/bookingDisplay"
+import {
+  APPOINTMENT_RANGE_PRESETS,
+  MAX_CUSTOM_RANGE_DAYS,
+  daysBetween,
+  formatIsoRange,
+  resolvePresetRange,
+  type AppointmentRangePreset,
+  type IsoRange,
+} from "@/lib/appointmentDateRange"
+import { practiceTodayIso } from "@/lib/practiceTime"
+import AppointmentDateRangeFilter from "@/components/ui/procto/AppointmentDateRangeFilter"
 import { PatientNameHover } from "@/components/ui/procto/PatientBookingHover"
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
@@ -22,6 +36,14 @@ import { formatPhoneDisplay } from "@/lib/formatPhone"
 function bookingPeerUserId(b: ProctoBooking): string | null {
   const id = (b.patient?.id || b.patientId || "").trim()
   return id || null
+}
+
+function bookingProviderId(b: ProctoBooking): string | null {
+  return (
+    b.provider?.id ||
+    (b as { providerId?: string | null }).providerId ||
+    null
+  )
 }
 
 function ChatIconButton({
@@ -61,46 +83,169 @@ export default function DoctorAppointmentsList({
 } = {}) {
   const {
     ready,
-    hydrated,
     loading,
     error: loadError,
+    practiceId,
     practiceName,
-    bookings: rows,
+    memberships,
     patchBooking,
     refresh,
   } = usePracticeDashboard()
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
+  const [rangePreset, setRangePreset] =
+    useState<AppointmentRangePreset>("today")
+  const [customRange, setCustomRange] = useState<IsoRange>(() => {
+    const today = practiceTodayIso()
+    return { from: today, to: today }
+  })
+  const [doctorFilter, setDoctorFilter] = useState<string>("all")
+  const [remoteRows, setRemoteRows] = useState<ProctoBooking[] | null>(null)
+  const [remoteLoading, setRemoteLoading] = useState(false)
+  const [remoteError, setRemoteError] = useState("")
+  const remoteReq = useRef(0)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionError, setActionError] = useState("")
   const [bookOpen, setBookOpen] = useState(false)
   const [chatBooking, setChatBooking] = useState<ProctoBooking | null>(null)
 
-  const showLoading = (!ready && loading) || (ready && !hydrated)
   const isClinic = portal === "clinic"
 
+  const { range, rangeError } = useMemo((): {
+    range: IsoRange | null
+    rangeError: string | null
+  } => {
+    if (rangePreset !== "custom") {
+      return { range: resolvePresetRange(rangePreset), rangeError: null }
+    }
+    const { from, to } = customRange
+    if (!from || !to) {
+      return { range: null, rangeError: "Pick both From and To dates." }
+    }
+    if (from > to) {
+      return {
+        range: null,
+        rangeError: "From date must be on or before the To date.",
+      }
+    }
+    if (daysBetween(from, to) >= MAX_CUSTOM_RANGE_DAYS) {
+      return {
+        range: null,
+        rangeError: `Pick a range of up to ${MAX_CUSTOM_RANGE_DAYS} days.`,
+      }
+    }
+    return { range: { from, to }, rangeError: null }
+  }, [rangePreset, customRange])
+
+  const rangeFrom = range?.from ?? null
+  const rangeTo = range?.to ?? null
+  const providerId = isClinic && doctorFilter !== "all" ? doctorFilter : null
+
+  const loadRows = useCallback(async () => {
+    const req = ++remoteReq.current
+    if (!rangeFrom || !rangeTo || !practiceId) {
+      setRemoteRows(null)
+      setRemoteLoading(false)
+      setRemoteError("")
+      return
+    }
+    setRemoteLoading(true)
+    setRemoteError("")
+    const res = await proctoService.listPracticeBookings(practiceId, {
+      from: rangeFrom,
+      to: rangeTo,
+      ...(providerId ? { providerId } : {}),
+    })
+    if (req !== remoteReq.current) return
+    setRemoteLoading(false)
+    if (res.status === "successful" && Array.isArray(res.data)) {
+      setRemoteRows(sortBookingsByWhen(res.data as ProctoBooking[], "asc"))
+    } else {
+      setRemoteRows([])
+      setRemoteError(
+        res.message || "Could not load appointments for this date range.",
+      )
+    }
+  }, [rangeFrom, rangeTo, providerId, practiceId])
+
+  useEffect(() => {
+    setRemoteRows(null)
+    void loadRows()
+  }, [loadRows])
+
+  const rangeRows = remoteRows ?? []
+
+  const doctorOptions = useMemo(() => {
+    if (!isClinic) return []
+    const byId = new Map<string, string>()
+    for (const m of memberships[0]?.practice?.members ?? []) {
+      if (
+        m.userId &&
+        m.isActive !== false &&
+        (m.role === "DOCTOR" ||
+          m.role === "PRACTICE_OWNER" ||
+          m.role === "PRACTICE_ADMIN")
+      ) {
+        byId.set(
+          m.userId,
+          m.user?.name?.trim() || m.user?.email?.trim() || "Doctor",
+        )
+      }
+    }
+    for (const b of rangeRows) {
+      const id = bookingProviderId(b)
+      if (id && !byId.has(id)) {
+        byId.set(id, b.provider?.name?.trim() || "Doctor")
+      }
+    }
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [isClinic, memberships, rangeRows])
+
+  const doctorRows = rangeRows
+
+  const showLoading =
+    (!ready && loading) || (remoteLoading && remoteRows === null)
+
+  const rangeLabel =
+    rangePreset === "custom"
+      ? range
+        ? formatIsoRange(range)
+        : "the selected dates"
+      : (APPOINTMENT_RANGE_PRESETS.find((p) => p.key === rangePreset)?.label ??
+        "").toLowerCase()
+
   async function onStatus(id: string, status: string) {
-    const previous = rows.find((b) => b.id === id)?.status
+    const previous = rangeRows.find((b) => b.id === id)?.status
     if (isTerminalVisitStatus(previous || "")) {
       setActionError("Completed appointments cannot change status.")
       return
     }
+    const patchRemote = (next: string) =>
+      setRemoteRows((prev) =>
+        prev ? prev.map((b) => (b.id === id ? { ...b, status: next } : b)) : prev,
+      )
     setBusyId(id)
     setActionError("")
     patchBooking(id, { status })
+    patchRemote(status)
     const res = await proctoService.updateBookingStatus(id, status)
     setBusyId(null)
     if (res.status !== "successful") {
-      if (previous) patchBooking(id, { status: previous })
+      if (previous) {
+        patchBooking(id, { status: previous })
+        patchRemote(previous)
+      }
       setActionError(res.message || "Could not update status")
     }
   }
 
   const filtered = useMemo(
     () =>
-      rows.filter((b) =>
+      doctorRows.filter((b) =>
         matchesQueueStatusFilter(b.status || "", statusFilter),
       ),
-    [rows, statusFilter],
+    [doctorRows, statusFilter],
   )
 
   return (
@@ -112,11 +257,11 @@ export default function DoctorAppointmentsList({
         subtitle={
           practiceName
             ? isClinic
-              ? `All visits for ${practiceName} — book for any doctor or update patient status.`
-              : `All visits for ${practiceName} (updates live).`
+              ? `Visits for all doctors at ${practiceName} — book for any doctor or update patient status.`
+              : `Visits for ${practiceName}.`
             : isClinic
-              ? "Book visits for your doctors or update patient status."
-              : "All visits (updates live)."
+              ? "Visits for all your doctors — book or update patient status."
+              : "Your visits."
         }
         action={
           isClinic ? (
@@ -137,6 +282,7 @@ export default function DoctorAppointmentsList({
           onClose={() => setBookOpen(false)}
           onBooked={() => {
             void refresh({ silent: true })
+            void loadRows()
           }}
         />
       ) : null}
@@ -147,24 +293,70 @@ export default function DoctorAppointmentsList({
         </p>
       ) : null}
 
-      {loadError && !rows.length ? (
+      {loadError && !practiceId ? (
         <p className="text-sm text-red-700 dark:text-red-400" role="alert">
           {loadError}
         </p>
       ) : null}
 
+      {remoteError ? (
+        <p className="text-sm text-red-700 dark:text-red-400" role="alert">
+          {remoteError}
+        </p>
+      ) : null}
+
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <AppointmentDateRangeFilter
+          preset={rangePreset}
+          onPresetChange={setRangePreset}
+          custom={customRange}
+          onCustomChange={setCustomRange}
+          range={range}
+          error={rangeError}
+        />
+        {isClinic && doctorOptions.length > 1 ? (
+          <label className="flex items-center gap-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+            Doctor
+            <select
+              className="rounded-xl border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-800 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+              value={doctorFilter}
+              onChange={(e) => setDoctorFilter(e.target.value)}
+            >
+              <option value="all">All doctors</option>
+              {doctorOptions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void loadRows()}
+          disabled={remoteLoading || !range}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800"
+        >
+          <RefreshCw
+            className={`size-3.5 ${remoteLoading ? "animate-spin" : ""}`}
+            aria-hidden
+          />
+          Refresh
+        </button>
+      </div>
+
       <BookingStatusFilterBar
         value={statusFilter}
         onChange={setStatusFilter}
-        statuses={rows.map((b) => b.status)}
-        className="mt-2"
+        statuses={doctorRows.map((b) => b.status)}
+        className="mt-3"
       />
 
       {showLoading ? (
         <p className="mt-4 text-sm text-neutral-500">Loading…</p>
-      ) : filtered.length === 0 ? (
+      ) : rangeError ? null : filtered.length === 0 ? (
         <p className="mt-4 text-sm text-neutral-500">
-          No appointments in this filter.
+          No appointments for {rangeLabel} in this filter.
           {isClinic ? (
             <>
               {" "}
@@ -210,6 +402,11 @@ export default function DoctorAppointmentsList({
                 <p className="mt-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                   {formatBookingWhenDetailed(b)}
                 </p>
+                {isClinic ? (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Doctor: {b.provider?.name?.trim() || "—"}
+                  </p>
+                ) : null}
                 <div className="mt-3 flex items-center gap-2">
                   <BookingStatusControls
                     status={b.status || "SCHEDULED"}
@@ -241,6 +438,7 @@ export default function DoctorAppointmentsList({
                 <tr>
                   <th className="px-4 py-3">Patient</th>
                   <th className="px-4 py-3">MRN</th>
+                  {isClinic ? <th className="px-4 py-3">Doctor</th> : null}
                   <th className="px-4 py-3">When</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Chat</th>
@@ -262,6 +460,11 @@ export default function DoctorAppointmentsList({
                     <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums tracking-wide">
                       {b.patient?.mrn?.trim() || "—"}
                     </td>
+                    {isClinic ? (
+                      <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
+                        {b.provider?.name?.trim() || "—"}
+                      </td>
+                    ) : null}
                     <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
                       {formatBookingWhenDetailed(b)}
                     </td>
