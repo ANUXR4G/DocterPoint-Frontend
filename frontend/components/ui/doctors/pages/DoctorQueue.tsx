@@ -22,7 +22,11 @@ import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBa
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
-import { chiefComplaintOf, isEmergencyWalkIn } from "@/lib/bookingDisplay"
+import {
+  chiefComplaintOf,
+  formatArrival,
+  isEmergencyWalkIn,
+} from "@/lib/bookingDisplay"
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import {
   formatPracticeDate,
@@ -167,7 +171,11 @@ export default function DoctorQueue({
     setBusyId(null)
     if (res.status !== "successful") {
       if (previous) patchBooking(id, { status: previous })
+      return
     }
+    const arrivedAt = (res.data as { arrivedAt?: string | null } | undefined)
+      ?.arrivedAt
+    if (arrivedAt !== undefined) patchBooking(id, { arrivedAt })
   }
 
   const showLoading = (!ready && loading) || (ready && !hydrated)
@@ -378,6 +386,11 @@ export default function DoctorQueue({
                         {when}
                         {b.provider?.name ? ` · ${b.provider.name}` : ""}
                       </p>
+                      {formatArrival(b) ? (
+                        <p className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
+                          Arrived: {formatArrival(b)}
+                        </p>
+                      ) : null}
                       {chiefComplaintOf(b) ? (
                         <p className="mt-0.5 line-clamp-2 text-xs text-neutral-700 dark:text-slate-300">
                           <span className="opacity-60">Chief complaint: </span>
@@ -415,7 +428,7 @@ export default function DoctorQueue({
         </ul>
 
         <div className="hidden md:block">
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead className="sticky top-0 z-20 bg-neutral-100 text-xs uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
               <tr>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
@@ -423,6 +436,9 @@ export default function DoctorQueue({
                 </th>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
                   Appointment
+                </th>
+                <th className="whitespace-nowrap px-3 py-3 font-semibold">
+                  Arrival
                 </th>
                 <th className="min-w-[140px] px-3 py-3 font-semibold">Name</th>
                 <th className="min-w-[180px] px-3 py-3 font-semibold">
@@ -469,6 +485,11 @@ export default function DoctorQueue({
                     <td className="whitespace-nowrap px-3 py-3 align-middle">
                       <p className="font-medium">{appointmentDateLabel(b)}</p>
                       <p className="text-xs opacity-60">{slotLabel(b)}</p>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 align-middle text-xs font-semibold tabular-nums">
+                      {formatArrival(b) || (
+                        <span className="text-neutral-400">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-3 align-middle">
                       <div className="flex items-center gap-2.5">

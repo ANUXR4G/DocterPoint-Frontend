@@ -18,7 +18,11 @@ import {
   bookingStatusClass,
   bookingStatusLabel,
 } from "@/lib/bookingStatus"
-import { chiefComplaintOf, isEmergencyWalkIn } from "@/lib/bookingDisplay"
+import {
+  chiefComplaintOf,
+  formatArrival,
+  isEmergencyWalkIn,
+} from "@/lib/bookingDisplay"
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
@@ -49,6 +53,7 @@ type VisitBooking = {
   slotStart?: string | null
   tokenNumber?: number | null
   sessionDate?: string | null
+  arrivedAt?: string | null
   createdAt?: string | null
   created_at?: string | null
   practice?: {
@@ -518,6 +523,7 @@ export default function VisitPage() {
       : "—"
   const isCompleted = String(booking.status || "").toUpperCase() === "COMPLETED"
   const chiefComplaint = chiefComplaintOf(booking)
+  const arrival = formatArrival(booking)
   const selfId = getSessionUserId()
   const peerId = booking.patient?.id
 
@@ -554,6 +560,20 @@ export default function VisitPage() {
                     <span>
                       Age {ageFromDob(p?.dateOfBirth, p?.age)}
                       {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
+                    </span>
+                    <span className="opacity-40" aria-hidden>
+                      ·
+                    </span>
+                    <span>
+                      Arrival{" "}
+                      <span className="font-semibold tabular-nums text-neutral-900 dark:text-white">
+                        {arrival ||
+                          (["SCHEDULED", "REQUESTED", "ACCEPTED"].includes(
+                            String(booking.status || "").toUpperCase(),
+                          )
+                            ? "not yet"
+                            : "—")}
+                      </span>
                     </span>
                   </p>
                 </div>

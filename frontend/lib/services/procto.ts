@@ -572,6 +572,8 @@ export type ProctoBooking = {
   consultationType?: string | null;
   consultation_type?: string | null;
   disease?: string | null;
+  arrivedAt?: string | null;
+  arrived_at?: string | null;
   createdAt?: string | null;
   created_at?: string | null;
   practice?: { name: string; slug: string; specialty?: string | null };

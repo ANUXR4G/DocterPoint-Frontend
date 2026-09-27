@@ -28,6 +28,7 @@ import {
   TIME_SLOT_CAPACITY,
   timeSlotsForProviderDay,
 } from "./slotEngine.js";
+import { arrivalPatch } from "./bookingArrival.js";
 import { NotificationService } from "./notification.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 
@@ -529,6 +530,7 @@ export const BookingService = {
         patientName,
         mode: ScheduleMode.TIME_BASED,
         status: BookingStatus.WAITING,
+        arrivedAt: now,
         channel: BookingChannel.PROVIDER_APP,
         slotStart: now,
         slotEnd: new Date(now.getTime() + 15 * 60 * 1000),
@@ -607,7 +609,10 @@ export const BookingService = {
 
     const updated = await prisma.practiceBooking.update({
       where: { id: bookingId },
-      data: { status: normalized },
+      data: {
+        status: normalized,
+        ...arrivalPatch(existing.arrivedAt, normalized),
+      },
     });
 
     if (normalized === BookingStatus.CANCELED) {
@@ -943,6 +948,7 @@ export const BookingService = {
         ...(medicines !== undefined ? { medicines } : {}),
         ...(documents !== undefined ? { documents } : {}),
         ...(nextStatus ? { status: nextStatus } : {}),
+        ...arrivalPatch(existing.arrivedAt, nextStatus),
       },
       include: {
         practice: {
@@ -1480,6 +1486,7 @@ export const BookingService = {
         doctorRemarks: true,
         medicines: true,
         documents: true,
+        arrivedAt: true,
         createdAt: true,
         updatedAt: true,
         location: {

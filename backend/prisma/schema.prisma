@@ -470,6 +470,8 @@ model PracticeBooking {
   doctorRemarks    String?        @map("doctor_remarks")
   medicines        Json?
   documents        Json?
+  /// When the patient reached the clinic (first move to WAITING / IN_PROGRESS / COMPLETED).
+  arrivedAt        DateTime?      @map("arrived_at") @db.Timestamptz(6)
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

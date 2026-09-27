@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-10
+- **Date opened:** 2026-09-28
+- **Severity:** 3
+- **Process:** P-BOOK (queue / visit)
+- **Description:** Requested: patient **Arrival time** in the appointment tables and on the visit (inner) page. No arrival timestamp existed — only status.
+- **Evidence:** User request; `PracticeBooking` had no arrival field.
+- **Containment:** n/a.
+- **Root cause:** Status changes were not time-stamped.
+- **Corrective action:** Additive migration `20260350000000_booking_arrived_at` (`arrived_at TIMESTAMPTZ NULL`, applied to Supabase before backend deploy). `arrivalPatch` stamps on first move to WAITING / IN_PROGRESS / COMPLETED in `updateStatus` and `updateVisit`, clears on revert to SCHEDULED / REQUESTED / ACCEPTED or NO_SHOW; walk-ins stamped at creation. `listForPractice` selects it; socket `arrived_at`; `patchBookingFields` merges it; lists patch it from the status response. UI: *Arrival* column (Appointments + Queue), mobile "Arrived:" line, visit header *Arrival …*.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** 5 new `arrivalPatch` unit tests (152/152 pass). Column present in DB (`information_schema`); local API list returns `arrivedAt` on all 7 rows. Browser (dr.solo): Appointments headers "When · Arrival · Chief complaint", Queue headers "Appointment · Arrival · Name", visit header "Arrival not yet" (Accepted) / "Arrival —" (Finished, pre-change). No real booking status changed for the test. Backend + frontend tsc clean.
+
 ### CR-20260928-09
 - **Date opened:** 2026-09-28
 - **Severity:** 3
