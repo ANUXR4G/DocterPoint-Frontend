@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260927-01
+- **Date opened:** 2026-09-27
+- **Severity:** 2
+- **Process:** P-AUTH / WhatsApp booking identity
+- **Description:** WhatsApp "Hi" / Book showed a family dependent (Rathul · Child) as *Self* instead of the account owner (Satheesh).
+- **Evidence:** Dependent row created with synthetic phone (`wa8…` placeholder email) later had `user.phone` rewritten to the owner's WA MSISDN; `listLinkedToWhatsApp` marked every phone match as self and sorted by name.
+- **Containment:** Self detection now excludes dependents; OTP login picks the owner.
+- **Root cause:** `verifyOtp` used unordered `findFirst` over `phone OR patient.contactNumber` (dependents share contactNumber), logged in as the dependent and overwrote its phone. Self = "phone matches" with no dependent guard.
+- **Corrective action:** `pickPrimaryPatientUser` (no `patient.relationship`, real email first, oldest) used by `findByPhone`, `listLinkedToWhatsApp` (exactly one self) and `phoneOtpAuth.verifyOtp`.
+- **Owner / due:** Engineering / 2026-09-27
+- **Verification:** `yarn build`; live read-only check on 971507801104 → self = Satheesh, Rathul = family. Data repair (approved): Rathul `user.phone` restored to `815078011041`, name → "Rathul Satheesh".
+- **Status:** Closed 2026-09-27
+- **Docs updated:** qms/risk-register.md (R14)
+
 ### NC-20260912-01
 - **Date opened:** 2026-09-12
 - **Severity:** 2

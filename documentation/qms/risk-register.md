@@ -18,5 +18,6 @@ Score: **Impact** (1–5) × **Likelihood** (1–5). Treat ≥12 as needing acti
 | R11 | Shared platform WABA OTP rate limits / wrong-number claim | 4 | 3 | 12 | In-app OTP only for VERIFYING own Tel; Meta request_code rate limits; practice membership gate | Eng + Ops | Open |
 | R12 | `QA_EXPOSE_OTP` leaks codes in non-prod API/UI | 3 | 2 | 6 | Env-gated; never set in production; Playwright webServer only | Eng | Mitigated |
 | R13 | Supabase session pooler `EMAXCONNSESSION` under E2E/admin fan-out | 3 | 4 | 12 | Transaction pooler + Prisma `connection_limit`; workers=1 in Playwright | Eng | Open |
+| R14 | Shared WA number: OTP login / bot "Self" resolves to a family dependent | 4 | 3 | 12 | `pickPrimaryPatientUser` (dependents with `relationship` never owner) in OTP verify, `findByPhone`, `listLinkedToWhatsApp` | Eng | Mitigated |
 
-**Last reviewed:** 2026-09-20
+**Last reviewed:** 2026-09-27
