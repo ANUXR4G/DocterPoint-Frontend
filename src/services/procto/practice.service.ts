@@ -1386,7 +1386,7 @@ export const PracticeService = {
       return Boolean(x) && x === y;
     };
 
-    return [...byPerson.values()]
+    const bookedRows = [...byPerson.values()]
       .sort((a, b) => (b.lastVisitAt?.getTime() ?? 0) - (a.lastVisitAt?.getTime() ?? 0))
       .map((row) => {
         const bookingName = (row.name || "").trim() || null;
@@ -1456,6 +1456,135 @@ export const PracticeService = {
             documents: b.documents,
             createdAt: b.createdAt,
           })),
+          registeredAt: null as Date | null,
+        };
+      });
+
+    // Clinic staff doctors only see patients booked with them; a solo doctor owns the roster.
+    if (providerScope) {
+      const practice = await prisma.practice.findUnique({
+        where: { id: practiceId },
+        select: { type: true },
+      });
+      if (practice?.type !== "SOLO") return bookedRows;
+    }
+
+    const registered = await this.listRegisteredWithoutBookings(
+      practiceId,
+      bookedRows,
+    );
+    if (!registered.length) return bookedRows;
+
+    const sortAt = (r: { lastVisitAt: Date | null; registeredAt: Date | null }) =>
+      (r.lastVisitAt ?? r.registeredAt)?.getTime() ?? 0;
+    return [...bookedRows, ...registered].sort((a, b) => sortAt(b) - sortAt(a));
+  },
+
+  /**
+   * Profiles registered via this practice (practice MRN prefix) or on its
+   * WhatsApp line (self + family sharing the number) that have no booking yet.
+   */
+  async listRegisteredWithoutBookings(
+    practiceId: string,
+    bookedRows: Array<{
+      phone: string;
+      name: string | null;
+      patientId: string | null;
+    }>,
+  ) {
+    const last10 = (raw: string | null | undefined) =>
+      String(raw || "").replace(/\D/g, "").slice(-10);
+
+    const [practice, conversations] = await Promise.all([
+      prisma.practice.findUnique({
+        where: { id: practiceId },
+        select: { mrnPrefix: true },
+      }),
+      prisma.whatsAppConversation.findMany({
+        where: { practiceId },
+        orderBy: { updatedAt: "desc" },
+        take: 500,
+        select: { patientPhone: true },
+      }),
+    ]);
+
+    const convPhones = [
+      ...new Set(
+        conversations
+          .map((c) => last10(c.patientPhone))
+          .filter((d) => d.length >= 8),
+      ),
+    ];
+    const prefix = practice?.mrnPrefix?.trim();
+    const or: Prisma.UserWhereInput[] = [
+      ...(prefix ? [{ patient: { mrn: { startsWith: `${prefix}MR` } } }] : []),
+      ...convPhones.flatMap((d) => [
+        { phone: { endsWith: d } },
+        { patient: { contactNumber: { endsWith: d } } },
+      ]),
+    ];
+    if (!or.length) return [];
+
+    const users = await prisma.user.findMany({
+      where: { role: "user", patient: { isNot: null }, OR: or },
+      orderBy: { createdAt: "desc" },
+      take: 1000,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        gender: true,
+        address: true,
+        imgSrc: true,
+        createdAt: true,
+        patient: {
+          select: {
+            mrn: true,
+            dateOfBirth: true,
+            contactNumber: true,
+            relationship: true,
+            documents: true,
+          },
+        },
+      },
+    });
+
+    const bookedIds = new Set(
+      bookedRows.map((r) => r.patientId).filter((id): id is string => !!id),
+    );
+    const personKey = (phone: string | null | undefined, name: string | null | undefined) =>
+      `${last10(phone)}|${(name || "").trim().toLowerCase()}`;
+    const bookedKeys = new Set(bookedRows.map((r) => personKey(r.phone, r.name)));
+
+    return users
+      .filter((u) => {
+        if (bookedIds.has(u.id)) return false;
+        const phone = u.patient?.contactNumber || u.phone;
+        return !bookedKeys.has(personKey(phone, u.name));
+      })
+      .map((u) => {
+        const phone = u.patient?.contactNumber || u.phone || "";
+        return {
+          phone,
+          bookedViaPhone: phone,
+          name: u.name?.trim() || null,
+          patientId: u.id,
+          mrn: u.patient?.mrn ?? null,
+          relationship: u.patient?.relationship?.trim() || null,
+          email: publicPatientEmail(u.email),
+          gender: u.gender ?? null,
+          address: publicPatientAddress(u.address),
+          imgSrc: u.imgSrc ?? null,
+          dateOfBirth: u.patient?.dateOfBirth ?? null,
+          age: ageFromDob(u.patient?.dateOfBirth),
+          attachments: readPatientGeneralDocuments(u.patient?.documents),
+          bookingCount: 0,
+          lastVisitAt: null as Date | null,
+          lastStatus: null as string | null,
+          providerNames: [] as string[],
+          recentBookings: [] as never[],
+          registeredAt: u.createdAt as Date | null,
         };
       });
   },

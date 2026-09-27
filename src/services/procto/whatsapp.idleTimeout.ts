@@ -91,6 +91,8 @@ export function idleActivityLabel(
       "awaiting_date",
       "awaiting_mode",
       "awaiting_slot",
+      "awaiting_chief_complaint_opt",
+      "awaiting_chief_complaint",
       "awaiting_confirm",
       "awaiting_nlu_book_confirm",
     ].includes(step)

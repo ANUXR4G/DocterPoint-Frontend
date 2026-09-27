@@ -57,6 +57,7 @@ import {
   looksClinical,
   optInAck,
   optOutAck,
+  triggersOutboundGuard,
   wantsHuman,
 } from "./whatsapp.policy.js";
 import type { IdScanFields } from "../idScan.js";
@@ -81,6 +82,10 @@ export type ConversationStep =
   | "awaiting_provider"
   | "awaiting_mode"
   | "awaiting_slot"
+  /** After slot/token — "Add a chief complaint?" Yes / No. */
+  | "awaiting_chief_complaint_opt"
+  /** Chief complaint text or voice note, before summary. */
+  | "awaiting_chief_complaint"
   | "awaiting_confirm"
   | "awaiting_cancel_confirm"
   | "awaiting_cancel_booking"
@@ -130,6 +135,13 @@ export type ConversationState = {
   slotStart?: string;
   sessionDate?: string;
   tokenPreview?: number;
+  /**
+   * Chief complaint for the in-progress booking. `""` = asked and skipped;
+   * undefined = not asked yet.
+   */
+  chiefComplaint?: string;
+  /** Slot/token details to show on the summary after the complaint step. */
+  pendingConfirmOpts?: BookingConfirmOpts;
   cancelBookingId?: string;
   rescheduleBookingId?: string;
   pendingSummary?: string;
@@ -248,6 +260,11 @@ export type OrchestratorResult = {
     icsContent: string;
     caption?: string;
   };
+  /**
+   * Body for the reply-button card when a long `reply` (confirmation + links)
+   * is sent as text first. Must be the trailing part of `reply`.
+   */
+  buttonPrompt?: string;
   /**
    * Send full `reply` as a text message before any Menu interactive list.
    * Required for language-switch acks — Meta list bodies truncate and can fail
@@ -418,6 +435,10 @@ function repromptHintForStep(state: ConversationState, lang: WaLang): string {
         lang,
       );
     }
+    case "awaiting_chief_complaint_opt":
+      return BotPrompts.askChiefComplaintOpt(state.bookPatientName, lang);
+    case "awaiting_chief_complaint":
+      return BotPrompts.askChiefComplaint(state.bookPatientName, lang);
     case "awaiting_confirm":
       return state.pendingSummary
         ? BotPrompts.bookingSummary(
@@ -600,6 +621,10 @@ async function continueFlowPrompt(
       return withDateButtons(BotPrompts.askDate(lang), state.date);
     case "awaiting_mode":
       return withModeButtons(BotPrompts.askMode(true, true, lang), true, true);
+    case "awaiting_chief_complaint_opt":
+      return withChiefComplaintOptButtons(state, lang);
+    case "awaiting_chief_complaint":
+      return withChiefComplaintPrompt(state, lang);
     case "awaiting_confirm":
       return state.pendingSummary
         ? withBookingConfirmButtons(state.pendingSummary, lang)
@@ -1121,34 +1146,90 @@ async function resolveDoctorDisplayName(
   return formatDoctorDisplayName(hit?.name || "Doctor");
 }
 
+export type BookingConfirmOpts = {
+  date: string;
+  slotStart?: string | null;
+  timeLabel?: string | null;
+  token?: number | null;
+  sessionStart?: string | null;
+  sessionEnd?: string | null;
+};
+
+const CHIEF_COMPLAINT_MAX = 500;
+
+function withChiefComplaintOptButtons(
+  state: ConversationState,
+  lang: WaLang,
+): OrchestratorResult {
+  return {
+    reply: BotPrompts.askChiefComplaintOpt(state.bookPatientName, lang),
+    replyButtons: [
+      { id: "complaint:yes", title: lang === "hi" ? "हाँ" : "Yes" },
+      { id: "complaint:no", title: lang === "hi" ? "नहीं" : "No" },
+    ],
+  };
+}
+
+function withChiefComplaintPrompt(
+  state: ConversationState,
+  lang: WaLang,
+): OrchestratorResult {
+  return {
+    reply: BotPrompts.askChiefComplaint(state.bookPatientName, lang),
+    replyButtons: [
+      { id: "complaint:skip", title: lang === "hi" ? "छोड़ें" : "Skip" },
+    ],
+  };
+}
+
 async function presentBookingConfirm(
   convId: string,
   practice: PracticeCtx,
   state: ConversationState,
-  opts: {
-    date: string;
-    slotStart?: string | null;
-    timeLabel?: string | null;
-    token?: number | null;
-    sessionStart?: string | null;
-    sessionEnd?: string | null;
-  },
+  opts: BookingConfirmOpts,
 ): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
+  // Offer the chief complaint once per booking, right after the slot/token.
+  if (state.chiefComplaint === undefined) {
+    const next: ConversationState = {
+      ...state,
+      step: "awaiting_chief_complaint_opt",
+      pendingConfirmOpts: opts,
+      failedTurns: 0,
+    };
+    await saveState(convId, next);
+    return withChiefComplaintOptButtons(next, lang);
+  }
   const patient =
     state.bookPatientName?.trim() ||
     (lang === "hi" ? "आप" : "You");
   const doctor = await resolveDoctorDisplayName(practice, state);
   const dateTime = formatBookingDateTimeLabel(opts);
   const location = locationDisplayLabel(practice, state.locationId);
+  const complaint = state.chiefComplaint.trim();
   const summary = BotPrompts.bookingSummary(
-    { patient, doctor, dateTime, location },
+    {
+      patient,
+      doctor,
+      dateTime,
+      location,
+      // Outbound guard would swap the whole summary for words like "diagnosis".
+      complaint:
+        complaint && !triggersOutboundGuard(complaint)
+          ? complaint.length > 160
+            ? `${complaint.slice(0, 157)}…`
+            : complaint
+          : complaint
+            ? L(lang, "Noted ✓", "दर्ज ✓")
+            : null,
+    },
     lang,
   );
   await saveState(convId, {
     ...state,
     step: "awaiting_confirm",
     pendingSummary: summary,
+    pendingConfirmOpts: opts,
   });
   return withBookingConfirmButtons(summary, lang);
 }
@@ -3745,6 +3826,7 @@ async function confirmBooking(
       slotStart: state.slotStart,
       sessionDate: state.sessionDate ?? state.date,
       channel: BookingChannel.WHATSAPP_AI,
+      disease: state.chiefComplaint?.trim() || undefined,
       skipPatientNotification: true,
     });
 
@@ -3814,10 +3896,10 @@ async function confirmBooking(
         icsUrl: invite.icsUrl,
       },
     );
+    const attachPrompt = BotPrompts.askAttachDocument(lang);
     return {
-      ...withYesNo(
-        `${confirmText}\n\n${BotPrompts.askAttachDocument(lang)}`,
-      ),
+      ...withYesNo(`${confirmText}\n\n${attachPrompt}`),
+      buttonPrompt: attachPrompt,
       calendarInvite: {
         icsFilename: invite.icsFilename,
         icsContent: invite.icsContent,
@@ -4630,6 +4712,7 @@ export async function runOrchestrator(input: {
     menuList: result.menuList,
     textBeforeMenu: result.textBeforeMenu,
     calendarInvite: result.calendarInvite,
+    buttonPrompt: result.buttonPrompt,
   };
 }
 
@@ -5273,6 +5356,77 @@ async function runOrchestratorCore(input: {
         ),
       );
     }
+  }
+
+  // Chief complaint (typed or voice transcript) — before NLU so symptoms are not re-classified.
+  if (
+    state.step === "awaiting_chief_complaint_opt" ||
+    state.step === "awaiting_chief_complaint"
+  ) {
+    const raw = text.trim();
+    const opts: BookingConfirmOpts | null =
+      state.pendingConfirmOpts ??
+      (state.date || state.sessionDate
+        ? {
+            date: (state.date ?? state.sessionDate)!,
+            slotStart: state.slotStart ?? null,
+            token: state.tokenPreview ?? null,
+          }
+        : null);
+    if (!opts) {
+      await saveState(convId, idleState(state));
+      return {
+        reply: BotPrompts.tryBookAgain(
+          "Booking details expired. Tap Menu → Book and choose a slot again.",
+          lang,
+        ),
+      };
+    }
+    const skipped =
+      /^(complaint:skip|complaint:no|skip|no|n|nope|nah|none|nothing|na|n\/a|later|nahi|nahin|छोड़ें|छोडें|नहीं|कुछ नहीं)$/i.test(
+        raw,
+      );
+    const isOtherTap = /^[a-z_]+:/i.test(raw);
+    const hasRealContent = /[A-Za-z\u0900-\u097F]/.test(raw);
+    const bareAck =
+      /^(ok|okay|k|yes|y|yeah|yep|sure|add|haan|han|hi|hello|hey|thanks|thank you|confirm|हाँ|हां|जी|ठीक है)$/i.test(
+        raw,
+      );
+    const looksLikeComplaint =
+      !skipped && !isOtherTap && hasRealContent && !bareAck && raw.length >= 2;
+
+    if (state.step === "awaiting_chief_complaint_opt" && !skipped) {
+      const wantsToAdd = /^complaint:yes$/i.test(raw) || bareAck;
+      if (wantsToAdd) {
+        const next: ConversationState = {
+          ...state,
+          step: "awaiting_chief_complaint",
+          pendingConfirmOpts: opts,
+          failedTurns: 0,
+        };
+        await saveState(convId, next);
+        return withChiefComplaintPrompt(next, lang);
+      }
+      // Typed / spoken the problem straight away (2+ words) — take it as the complaint.
+      const unsure = /^(maybe|not sure|dont know|don't know|idk|pata nahi|पता नहीं)$/i.test(raw);
+      if (!looksLikeComplaint || unsure || raw.split(/\s+/).length < 2) {
+        return withChiefComplaintOptButtons(state, lang);
+      }
+    } else if (!skipped && !looksLikeComplaint) {
+      return {
+        ...withChiefComplaintPrompt(state, lang),
+        reply: BotPrompts.chiefComplaintTooShort(lang),
+      };
+    }
+    const chiefComplaint = skipped
+      ? ""
+      : raw.replace(/\s+/g, " ").slice(0, CHIEF_COMPLAINT_MAX);
+    return presentBookingConfirm(
+      convId,
+      practice,
+      { ...state, chiefComplaint, failedTurns: 0 },
+      opts,
+    );
   }
 
   // Branch E — collect message body before NLU (so free text is not re-classified).
@@ -6086,6 +6240,16 @@ async function runOrchestratorCore(input: {
   // Confirm / change / cancel
   if (state.step === "awaiting_confirm") {
     const raw = text.trim();
+    // A stale tap from an earlier message (e.g. complaint:yes) must never confirm or cancel.
+    const foreignTap = /^[a-z_]+:/i.test(raw) && !/^confirm:/i.test(raw);
+    if (foreignTap) {
+      return withBookingConfirmButtons(
+        state.pendingSummary?.trim()
+          ? BotPrompts.askConfirm(state.pendingSummary, lang)
+          : BotPrompts.askConfirm("this appointment", lang),
+        lang,
+      );
+    }
     const isConfirm =
       nlu.intent === "confirm_yes" ||
       /^(yes|y|confirm|ok|confirm:yes|हाँ|हां|जी)$/i.test(raw) ||

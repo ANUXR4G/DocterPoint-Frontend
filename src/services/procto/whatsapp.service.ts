@@ -77,6 +77,26 @@ function replyButtonsAsListRows(
   return withMainMenuListRow(rows);
 }
 
+/**
+ * Long reply sent as text before a reply-button card: the trailing
+ * `buttonPrompt` moves onto the card so the question is shown in full, once.
+ */
+export function splitReplyForButtonCard(
+  reply: string,
+  buttonPrompt?: string | null,
+): { textFirst: string; cardBody: string } {
+  const prompt = buttonPrompt?.trim() || "";
+  const body = reply.trimEnd();
+  if (prompt && body.endsWith(prompt) && body.length > prompt.length) {
+    return {
+      textFirst: body.slice(0, -prompt.length).trimEnd(),
+      cardBody: prompt.slice(0, 1024),
+    };
+  }
+  // Full reply (incl. any question) already went out as text.
+  return { textFirst: reply, cardBody: "Please choose an option below." };
+}
+
 /** Short TTL caches — WhatsApp traffic is bursty; avoid repeat DB on every tap. */
 const PRACTICE_RESOLVE_TTL_MS = 300_000;
 const STAFF_CHECK_TTL_MS = 600_000;
@@ -1148,14 +1168,37 @@ export const WhatsAppService = {
         }
       }
 
+      let icsSent = false;
+      const sendIcsOnce = async () => {
+        const invite = result.calendarInvite;
+        if (icsSent || !invite?.icsContent) return;
+        icsSent = true;
+        const docSent = await sendWhatsAppDocument(
+          item.from,
+          {
+            filename: invite.icsFilename || "appointment.ics",
+            mimeType: "text/calendar",
+            buffer: Buffer.from(invite.icsContent, "utf8"),
+            caption: invite.caption,
+          },
+          item.phoneNumberId,
+        );
+        if (!docSent.ok) {
+          console.warn(
+            `[WhatsApp] calendar .ics document failed: ${docSent.error}`,
+          );
+        }
+      };
+
       if (result.replyButtons && result.replyButtons.length > 0) {
         // Long confirmation + calendar links exceed Meta's 1024-char button body —
-        // send full text first, then short Yes/No for attach / confirm chips.
+        // send confirmation text + .ics first, then the full question on the card last.
         const longConfirm = Boolean(result.calendarInvite?.icsContent);
+        const split = splitReplyForButtonCard(result.reply, result.buttonPrompt);
         if (longConfirm) {
           const textSent = await sendWhatsAppText(
             item.from,
-            result.reply,
+            split.textFirst,
             item.phoneNumberId,
           );
           if (!textSent.ok) {
@@ -1163,10 +1206,10 @@ export const WhatsAppService = {
               `[WhatsApp] confirm text-first failed: ${textSent.error}`,
             );
           }
+          await sendIcsOnce();
         }
         const buttonBody = longConfirm
-          ? result.reply.split(/\n\n/).slice(-1)[0]?.slice(0, 1024) ||
-            "Would you like to send a report?"
+          ? split.cardBody
           : result.reply.slice(0, 1024);
 
         const rawButtons = result.replyButtons.map((b) => ({
@@ -1192,23 +1235,7 @@ export const WhatsAppService = {
             item.phoneNumberId,
           );
           if (listSent.ok && !listSent.simulated) {
-            if (result.calendarInvite?.icsContent) {
-              const docSent = await sendWhatsAppDocument(
-                item.from,
-                {
-                  filename:
-                    result.calendarInvite.icsFilename || "appointment.ics",
-                  mimeType: "text/calendar",
-                  buffer: Buffer.from(result.calendarInvite.icsContent, "utf8"),
-                },
-                item.phoneNumberId,
-              );
-              if (!docSent.ok) {
-                console.warn(
-                  `[WhatsApp] calendar .ics send failed: ${docSent.error}`,
-                );
-              }
-            }
+            await sendIcsOnce();
             continue;
           }
           if (!listSent.ok) {
@@ -1227,23 +1254,7 @@ export const WhatsAppService = {
           item.phoneNumberId,
         );
         if (btnSent.ok && !btnSent.simulated) {
-          if (result.calendarInvite?.icsContent) {
-            const docSent = await sendWhatsAppDocument(
-              item.from,
-              {
-                filename: result.calendarInvite.icsFilename || "appointment.ics",
-                mimeType: "text/calendar",
-                buffer: Buffer.from(result.calendarInvite.icsContent, "utf8"),
-                caption: result.calendarInvite.caption,
-              },
-              item.phoneNumberId,
-            );
-            if (!docSent.ok) {
-              console.warn(
-                `[WhatsApp] calendar .ics document failed: ${docSent.error}`,
-              );
-            }
-          }
+          await sendIcsOnce();
           continue;
         }
         if (!btnSent.ok) {
@@ -1270,23 +1281,7 @@ export const WhatsAppService = {
         );
       }
 
-      if (result.calendarInvite?.icsContent) {
-        const docSent = await sendWhatsAppDocument(
-          item.from,
-          {
-            filename: result.calendarInvite.icsFilename || "appointment.ics",
-            mimeType: "text/calendar",
-            buffer: Buffer.from(result.calendarInvite.icsContent, "utf8"),
-            caption: result.calendarInvite.caption,
-          },
-          item.phoneNumberId,
-        );
-        if (!docSent.ok) {
-          console.warn(
-            `[WhatsApp] calendar .ics document failed: ${docSent.error}`,
-          );
-        }
-      }
+      await sendIcsOnce();
     }
   },
 
@@ -1321,6 +1316,7 @@ export const WhatsAppService = {
       icsContent: string;
       caption?: string;
     };
+    buttonPrompt?: string;
   }> {
     const practice = await this.resolvePracticeByNumber(
       payload.to,

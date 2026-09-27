@@ -37,6 +37,11 @@ function looksLikeBotMenu(reply: string): boolean {
 }
 
 /** Strip / block medical-advice style outbound content. */
+/** True when `guardOutbound` would replace a reply containing this text. */
+export function triggersOutboundGuard(text: string): boolean {
+  return CLINICAL_ADVICE_OUT_RE.test(text);
+}
+
 export function guardOutbound(reply: string, lang?: WaLang): string {
   if (looksLikeBotMenu(reply)) return reply;
   if (!CLINICAL_ADVICE_OUT_RE.test(reply)) return reply;
