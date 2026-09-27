@@ -2,6 +2,8 @@ import type { ProctoBooking } from "@/lib/services/procto"
 import {
   formatPracticeDate,
   formatPracticeDateTime,
+  formatPracticeTime,
+  practiceDateIso,
   PRACTICE_TIMEZONE,
 } from "@/lib/practiceTime"
 
@@ -23,6 +25,34 @@ export function isActiveBooking(booking: ProctoBooking): boolean {
 export function chiefComplaintOf(booking: { disease?: string | null }): string {
   const d = booking.disease?.trim() || ""
   return d && !/^general\s+consultation$/i.test(d) ? d : ""
+}
+
+/**
+ * When the patient reached the clinic, e.g. "10:42 AM" — with the date
+ * prefixed when it isn't the appointment day. "" when not arrived yet.
+ */
+export function formatArrival(booking: {
+  arrivedAt?: string | null
+  arrived_at?: string | null
+  slotStart?: string | null
+  slot_start?: string | null
+  sessionDate?: string | null
+  session_date?: string | null
+}): string {
+  const at = booking.arrivedAt ?? booking.arrived_at
+  if (!at) return ""
+  const time = formatPracticeTime(at, "")
+  if (!time) return ""
+  const visitDay = practiceDateIso(
+    booking.slotStart ??
+      booking.slot_start ??
+      booking.sessionDate ??
+      booking.session_date,
+  )
+  const arrivalDay = practiceDateIso(at)
+  return visitDay && arrivalDay && visitDay !== arrivalDay
+    ? `${formatPracticeDate(at)}, ${time}`
+    : time
 }
 
 export const EMERGENCY_WALK_IN = "EMERGENCY_WALK_IN"

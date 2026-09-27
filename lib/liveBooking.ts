@@ -56,6 +56,7 @@ export function patchBookingFields<T extends { id: string }>(
     incoming.consultation_type,
     incoming.consultationType,
   )
+  const arrivedAt = optionalStr(incoming.arrived_at, incoming.arrivedAt)
 
   return {
     ...existing,
@@ -85,6 +86,7 @@ export function patchBookingFields<T extends { id: string }>(
     ...(consultationType !== undefined
       ? { consultationType, consultation_type: consultationType }
       : {}),
+    ...(arrivedAt !== undefined ? { arrivedAt, arrived_at: arrivedAt } : {}),
   } as T
 }
 

@@ -12,6 +12,7 @@ import {
 } from "@/lib/bookingStatus"
 import {
   chiefComplaintOf,
+  formatArrival,
   formatBookingWhenDetailed,
   isEmergencyWalkIn,
   sortBookingsByWhen,
@@ -289,6 +290,15 @@ export default function DoctorAppointmentsList({
         patchRemote(previous)
       }
       setActionError(res.message || "Could not update status")
+      return
+    }
+    const arrivedAt = (res.data as { arrivedAt?: string | null } | undefined)
+      ?.arrivedAt
+    if (arrivedAt !== undefined) {
+      patchBooking(id, { arrivedAt })
+      setRemoteRows((prev) =>
+        prev ? prev.map((b) => (b.id === id ? { ...b, arrivedAt } : b)) : prev,
+      )
     }
   }
 
@@ -479,6 +489,11 @@ export default function DoctorAppointmentsList({
                   {formatBookingWhenDetailed(b)}
                   {isEmergencyWalkIn(b) ? <EmergencyWalkInBadge /> : null}
                 </p>
+                {formatArrival(b) ? (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Arrived: {formatArrival(b)}
+                  </p>
+                ) : null}
                 {isClinic ? (
                   <p className="mt-1 text-xs text-neutral-500">
                     Doctor: {b.provider?.name?.trim() || "—"}
@@ -516,13 +531,14 @@ export default function DoctorAppointmentsList({
           </ul>
 
           <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-neutral-300 bg-white dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] md:block">
-            <table className="w-full min-w-[820px] text-left text-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-[var(--solune-elevated)] dark:text-neutral-300">
                 <tr>
                   <th className="px-4 py-3">Patient</th>
                   <th className="px-4 py-3">MRN</th>
                   {isClinic ? <th className="px-4 py-3">Doctor</th> : null}
                   <th className="px-4 py-3">When</th>
+                  <th className="px-4 py-3">Arrival</th>
                   <th className="min-w-[180px] px-4 py-3">Chief complaint</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Chat</th>
@@ -556,6 +572,11 @@ export default function DoctorAppointmentsList({
                           <EmergencyWalkInBadge />
                         </div>
                       ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold tabular-nums">
+                      {formatArrival(b) || (
+                        <span className="text-neutral-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <ChiefComplaintCell text={chiefComplaintOf(b)} />
