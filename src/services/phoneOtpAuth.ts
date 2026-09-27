@@ -10,6 +10,7 @@ import { AppError, ResponseHandler } from "../core/response.js";
 import { generateHash, getUserToken, setTokenCookies } from "../core/security.js";
 import { allocatePatientMrn } from "../core/patientMrn.js";
 import { getRedis } from "../db/redis.js";
+import { pickPrimaryPatientUser } from "./patient.js";
 import { sendWhatsAppText } from "./procto/whatsapp.client.js";
 
 const OTP_TTL_SEC = 5 * 60;
@@ -264,20 +265,34 @@ export class PhoneOtpAuthService {
 
     await clearOtp(phone);
 
-    let user = await prisma.user.findFirst({
-      where: {
-        role: "user",
-        OR: [
-          { phone: { endsWith: phone } },
-          { patient: { contactNumber: { endsWith: phone } } },
-        ],
-      },
-      include: { patient: true },
-    });
+    // Family dependents share contactNumber with the WA owner — log in as the
+    // owner, never as a child/spouse profile.
+    const [byPhone, byContact] = await Promise.all([
+      prisma.user.findMany({
+        where: { role: "user", phone: { endsWith: phone } },
+        include: { patient: true },
+        orderBy: { createdAt: "asc" },
+        take: 10,
+      }),
+      prisma.user.findMany({
+        where: {
+          role: "user",
+          patient: { contactNumber: { endsWith: phone } },
+        },
+        include: { patient: true },
+        orderBy: { createdAt: "asc" },
+        take: 10,
+      }),
+    ]);
+    let user =
+      pickPrimaryPatientUser(byPhone) ?? pickPrimaryPatientUser(byContact);
 
     if (!user) {
       const name = input.name?.trim() || `Patient ${phone.slice(-4)}`;
-      const email = `wa${phone}@patients.glucoguide.local`;
+      let email = `wa${phone}@patients.glucoguide.local`;
+      if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
+        email = `wa${phone}.${Date.now()}@patients.glucoguide.local`;
+      }
       const tempPassword = await generateHash(
         `otp-${phone}-${Date.now()}-${Math.random()}`,
       );

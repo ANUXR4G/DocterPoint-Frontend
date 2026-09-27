@@ -42,6 +42,29 @@ function normalizePanInput(value: unknown): string | null {
   return pan;
 }
 
+const PROVISIONAL_PATIENT_EMAIL = "@patients.glucoguide.local";
+
+/**
+ * Account owner among users sharing a WhatsApp number: never a dependent
+ * (patient.relationship set); prefer a real email, then oldest account.
+ * Callers must pass users already sorted by createdAt asc.
+ */
+export function pickPrimaryPatientUser<
+  T extends {
+    email?: string | null;
+    patient?: { relationship?: string | null } | null;
+  },
+>(users: T[]): T | null {
+  const owners = users.filter((u) => !u.patient?.relationship?.trim());
+  return (
+    owners.find(
+      (u) => !String(u.email || "").toLowerCase().endsWith(PROVISIONAL_PATIENT_EMAIL),
+    ) ??
+    owners[0] ??
+    null
+  );
+}
+
 function profileData(data: Record<string, unknown>) {
   const { id, ...rest } = data;
   return {
@@ -333,52 +356,39 @@ export class PatientService {
     if (digits.length < 10) return null;
     const last10 = digits.slice(-10);
 
-    const primary = await prisma.user.findFirst({
-      where: {
-        role: "user",
-        OR: [{ phone: digits }, { phone: { endsWith: last10 } }],
-        NOT: { email: { endsWith: "@patients.glucoguide.local" } },
-      },
-      include: { patient: true },
-      orderBy: { createdAt: "asc" },
-    });
-    if (primary) return primary;
+    // Dependents (patient.relationship set) can share the WA number — never
+    // treat them as the account owner while a primary profile exists.
+    const [byPhone, byContact] = await Promise.all([
+      prisma.user.findMany({
+        where: {
+          role: "user",
+          OR: [{ phone: digits }, { phone: { endsWith: last10 } }],
+        },
+        include: { patient: true },
+        orderBy: { createdAt: "asc" },
+        take: 10,
+      }),
+      prisma.user.findMany({
+        where: {
+          role: "user",
+          OR: [
+            { patient: { contactNumber: digits } },
+            { patient: { contactNumber: { endsWith: last10 } } },
+          ],
+        },
+        include: { patient: true },
+        orderBy: { createdAt: "asc" },
+        take: 10,
+      }),
+    ]);
 
-    const primaryAny = await prisma.user.findFirst({
-      where: {
-        role: "user",
-        OR: [{ phone: digits }, { phone: { endsWith: last10 } }],
-      },
-      include: { patient: true },
-      orderBy: { createdAt: "asc" },
-    });
-    if (primaryAny) return primaryAny;
-
-    const byContact = await prisma.user.findFirst({
-      where: {
-        role: "user",
-        OR: [
-          { patient: { contactNumber: digits } },
-          { patient: { contactNumber: { endsWith: last10 } } },
-        ],
-        NOT: { email: { endsWith: "@patients.glucoguide.local" } },
-      },
-      include: { patient: true },
-      orderBy: { createdAt: "asc" },
-    });
-    if (byContact) return byContact;
-
-    return prisma.user.findFirst({
-      where: {
-        role: "user",
-        OR: [
-          { patient: { contactNumber: digits } },
-          { patient: { contactNumber: { endsWith: last10 } } },
-        ],
-      },
-      include: { patient: true },
-      orderBy: { createdAt: "asc" },
-    });
+    return (
+      pickPrimaryPatientUser(byPhone) ??
+      pickPrimaryPatientUser(byContact) ??
+      byPhone[0] ??
+      byContact[0] ??
+      null
+    );
   }
 
   /**
@@ -415,6 +425,13 @@ export class PatientService {
       take: 20,
     });
 
+    // Exactly one owner: phone matches this chat AND not a dependent.
+    const phoneMatches = (u: (typeof users)[number]) => {
+      const p = String(u.phone || "").replace(/\D/g, "");
+      return p === digits || (p.length >= 10 && p.slice(-10) === last10);
+    };
+    const owner = pickPrimaryPatientUser(users.filter(phoneMatches));
+
     const seen = new Set<string>();
     const rows: Array<{
       id: string;
@@ -428,12 +445,15 @@ export class PatientService {
       if (seen.has(u.id)) continue;
       seen.add(u.id);
       const phoneDigits = String(u.phone || "").replace(/\D/g, "");
-      const isSelf =
-        phoneDigits === digits ||
-        (phoneDigits.length >= 10 && phoneDigits.slice(-10) === last10);
+      const isSelf = owner?.id === u.id;
       const relationship = u.patient?.relationship?.trim() || null;
+      const rawName = (u.name || "").trim();
+      const strippedName =
+        relationship && rawName.toLowerCase().endsWith(` · ${relationship.toLowerCase()}`)
+          ? rawName.slice(0, -(` · ${relationship}`.length)).trim()
+          : rawName;
       const baseName =
-        (u.name || "").trim() || (isSelf ? "You" : "Family member");
+        strippedName || (isSelf ? "You" : "Family member");
       rows.push({
         id: u.id,
         name:
