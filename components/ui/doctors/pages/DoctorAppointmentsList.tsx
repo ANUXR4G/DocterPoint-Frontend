@@ -20,6 +20,7 @@ import {
 import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import EmergencyWalkInModal from "@/components/ui/procto/EmergencyWalkInModal"
+import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
 import {
   APPOINTMENT_RANGE_PRESETS,
   MAX_CUSTOM_RANGE_DAYS,
@@ -302,6 +303,20 @@ export default function DoctorAppointmentsList({
     }
   }
 
+  function onPaymentUpdate(
+    id: string,
+    patch: {
+      paymentStatus: string | null
+      paymentAmount: number | null
+      paidAt: string | null
+    },
+  ) {
+    patchBooking(id, patch)
+    setRemoteRows((prev) =>
+      prev ? prev.map((b) => (b.id === id ? { ...b, ...patch } : b)) : prev,
+    )
+  }
+
   const filtered = useMemo(
     () =>
       doctorRows.filter((b) =>
@@ -519,6 +534,13 @@ export default function DoctorAppointmentsList({
                     patientName={b.patientName || b.patient?.name}
                     onOpen={() => setChatBooking(b)}
                   />
+                  <PaymentStatusButton
+                    bookingId={b.id}
+                    status={b.paymentStatus ?? b.payment_status}
+                    amount={b.paymentAmount ?? b.payment_amount}
+                    compact
+                    onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
+                  />
                 </div>
                 <Link
                   href={`/doctor/queue/${b.id}`}
@@ -531,7 +553,7 @@ export default function DoctorAppointmentsList({
           </ul>
 
           <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-neutral-300 bg-white dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] md:block">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[1020px] text-left text-sm">
               <thead className="bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-[var(--solune-elevated)] dark:text-neutral-300">
                 <tr>
                   <th className="px-4 py-3">Patient</th>
@@ -541,6 +563,7 @@ export default function DoctorAppointmentsList({
                   <th className="px-4 py-3">Arrival</th>
                   <th className="min-w-[180px] px-4 py-3">Chief complaint</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Payment</th>
                   <th className="px-4 py-3">Chat</th>
                   <th className="px-4 py-3 text-right">Visit</th>
                 </tr>
@@ -589,6 +612,15 @@ export default function DoctorAppointmentsList({
                         showActionButtons={false}
                         ariaLabel={`Update status for ${b.patientName || "patient"}`}
                         onChange={(status) => void onStatus(b.id, status)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <PaymentStatusButton
+                        bookingId={b.id}
+                        status={b.paymentStatus ?? b.payment_status}
+                        amount={b.paymentAmount ?? b.payment_amount}
+                        compact
+                        onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
                       />
                     </td>
                     <td className="px-4 py-3">

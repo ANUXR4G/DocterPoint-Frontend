@@ -24,6 +24,7 @@ import {
   isEmergencyWalkIn,
 } from "@/lib/bookingDisplay"
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
+import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
@@ -54,6 +55,9 @@ type VisitBooking = {
   tokenNumber?: number | null
   sessionDate?: string | null
   arrivedAt?: string | null
+  paymentStatus?: string | null
+  paymentAmount?: number | null
+  paidAt?: string | null
   createdAt?: string | null
   created_at?: string | null
   practice?: {
@@ -585,6 +589,14 @@ export default function VisitPage() {
                   {bookingStatusLabel(booking.status)}
                 </span>
                 {isEmergencyWalkIn(booking) ? <EmergencyWalkInBadge /> : null}
+                <PaymentStatusButton
+                  bookingId={booking.id}
+                  status={booking.paymentStatus}
+                  amount={booking.paymentAmount}
+                  onUpdate={(patch) =>
+                    setBooking((prev) => (prev ? { ...prev, ...patch } : prev))
+                  }
+                />
               </div>
             </div>
           </div>
