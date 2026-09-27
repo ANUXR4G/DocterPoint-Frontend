@@ -280,6 +280,25 @@ export const proctoService = {
     return row.practiceId || row.practice?.id || row.id || null;
   },
 
+  getRazorpaySettings: (practiceId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/razorpay`) as Promise<
+      ProctoResult<RazorpaySettings>
+    >,
+
+  saveRazorpaySettings: (
+    practiceId: string,
+    body: { keyId: string; keySecret?: string; webhookSecret?: string | null },
+  ) =>
+    proctoFetch(`/procto/practices/${practiceId}/razorpay`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }) as Promise<ProctoResult<RazorpaySettings>>,
+
+  removeRazorpaySettings: (practiceId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/razorpay`, {
+      method: "DELETE",
+    }) as Promise<ProctoResult<RazorpaySettings>>,
+
   updatePracticeProfile: (practiceId: string, body: Record<string, unknown>) =>
     proctoFetch(`/procto/practices/${practiceId}/profile`, {
       method: "PATCH",
@@ -730,6 +749,20 @@ export type PaymentRequestRow = {
   waDelivery: "SENT" | "FAILED" | "SIMULATED" | null;
   waError: string | null;
 };
+
+export type RazorpaySettings = {
+  connected: boolean;
+  keyId: string | null;
+  mode: "LIVE" | "TEST" | null;
+  secretLast4: string | null;
+  hasWebhookSecret: boolean;
+  verifiedAt: string | null;
+  webhookUrl: string;
+  /** No clinic keys, but the platform account collects payments. */
+  platformFallback: boolean;
+};
+
+type ProctoResult<T> = { status: string; message?: string; data?: T };
 
 export type PaymentsListResponse = {
   items: PaymentRequestRow[];

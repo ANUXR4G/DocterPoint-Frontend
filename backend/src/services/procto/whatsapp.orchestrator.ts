@@ -2290,7 +2290,7 @@ function parseSlotChoiceIndex(text: string, fallback?: number): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-type PracticeCtx = Practice & {
+type PracticeCtx = Omit<Practice, "razorpayKeySecretEnc" | "razorpayWebhookSecretEnc"> & {
   locations: ClinicLocation[];
   members: Array<PracticeMember & { user?: { id: string; name: string | null } | null }>;
 };

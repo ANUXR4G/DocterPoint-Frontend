@@ -7,6 +7,7 @@ import { Button, Icon, IconInput, ThemeUI } from "@/components"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { PracticeManagementPanel } from "@/components/ui/doctors/pages/PracticeManagementPanel"
 import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal"
+import RazorpayAccountPanel from "@/components/ui/procto/RazorpayAccountPanel"
 import { PracticeDashboardProvider } from "@/contexts/PracticeDashboardContext"
 import { useRole } from "@/hooks/useRole"
 import { proctoService } from "@/lib/services/procto"
@@ -269,14 +270,22 @@ function DoctorOrClinicAccountSettings() {
     )
   }
 
-  if (showClinicForm) {
-    return (
-      <ClinicAccountForm membership={membership} onReload={reload} />
-    )
-  }
+  const canManagePayments =
+    membership.role === "PRACTICE_OWNER" ||
+    membership.role === "PRACTICE_ADMIN" ||
+    (membership.practice.type === "SOLO" && membership.practice.members.length <= 1)
 
   return (
-    <DoctorAccountForm membership={membership} userId={membership.userId} />
+    <>
+      {showClinicForm ? (
+        <ClinicAccountForm membership={membership} onReload={reload} />
+      ) : (
+        <DoctorAccountForm membership={membership} userId={membership.userId} />
+      )}
+      {canManagePayments ? (
+        <RazorpayAccountPanel practiceId={membership.practice.id} />
+      ) : null}
+    </>
   )
 }
 

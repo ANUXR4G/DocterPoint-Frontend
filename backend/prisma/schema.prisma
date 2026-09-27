@@ -25,31 +25,39 @@ model User {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  patient                 Patient?
-  doctor                  Doctor?
-  sentMessages            Message[] @relation("SenderMessages")
-  receivedMessages        Message[] @relation("ReceiverMessages")
-  practiceMembers         PracticeMember[]
-  assistantConversations  AssistantConversation[]
+  patient                Patient?
+  doctor                 Doctor?
+  sentMessages           Message[]               @relation("SenderMessages")
+  receivedMessages       Message[]               @relation("ReceiverMessages")
+  practiceMembers        PracticeMember[]
+  assistantConversations AssistantConversation[]
 
   @@map("users")
 }
 
 model Patient {
-  id              String @id @db.Uuid
-  /** Globally unique Medical Record Number, e.g. MR00000001 or PCMR00000001 */
-  mrn             String @unique @map("mrn") @db.VarChar(32)
+  id              String  @id @db.Uuid
+  /**
+   * Globally unique Medical Record Number, e.g. MR00000001 or PCMR00000001
+   */
+  mrn             String  @unique @map("mrn") @db.VarChar(32)
   profession      String?
   dateOfBirth     String? @map("date_of_birth")
   contactNumber   String? @map("contact_number")
   emergencyNumber String? @map("emergency_number")
-  /** Aadhaar / Emirates ID / other national ID (digits or formatted). */
+  /**
+   * Aadhaar / Emirates ID / other national ID (digits or formatted).
+   */
   aadharNumber    String? @map("aadhar_number") @db.VarChar(32)
   panNumber       String? @map("pan_number") @db.VarChar(10)
   aadharCardSrc   String? @map("aadhar_card_src")
-  /** WhatsApp / portal general documents (lab, insurance, ID photos) not tied to a visit. */
+  /**
+   * WhatsApp / portal general documents (lab, insurance, ID photos) not tied to a visit.
+   */
   documents       Json?   @map("documents")
-  /** Relationship to the WhatsApp primary (Spouse, Child, Parent, …). */
+  /**
+   * Relationship to the WhatsApp primary (Spouse, Child, Parent, …).
+   */
   relationship    String? @map("relationship") @db.VarChar(64)
 
   user          User           @relation(fields: [id], references: [id], onDelete: Cascade)
@@ -61,15 +69,15 @@ model Patient {
 }
 
 model Doctor {
-  id                       String @id @db.Uuid
+  id                       String    @id @db.Uuid
   description              String
-  hospitalId               String @map("hospital_id") @db.Uuid
-  availableTimes           String @map("available_times")
+  hospitalId               String    @map("hospital_id") @db.Uuid
+  availableTimes           String    @map("available_times")
   experience               Int
   emails                   Json
-  contactNumbers           Json   @map("contact_numbers")
-  appointmentValidityDays  Int    @default(7) @map("appointment_validity_days")
-  licenseNo                String? @map("license_no")
+  contactNumbers           Json      @map("contact_numbers")
+  appointmentValidityDays  Int       @default(7) @map("appointment_validity_days")
+  licenseNo                String?   @map("license_no")
   /// Deferred booking-mode switch (TIME↔TOKEN). Applied on/after this local date.
   pendingSchedule          Json?     @map("pending_schedule")
   pendingScheduleEffective DateTime? @map("pending_schedule_effective") @db.Date
@@ -221,7 +229,7 @@ model AssistantConversation {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages AssistantMessage[]
 
   @@index([userId, updatedAt(sort: Desc)])
@@ -330,42 +338,49 @@ enum MessageTemplateStatus {
 }
 
 model Practice {
-  id                     String       @id @default(uuid()) @db.Uuid
-  name                   String
-  slug                   String       @unique
-  type                   PracticeType @default(SOLO)
-  specialty              String?
-  consultationFee        Float?       @map("consultation_fee")
+  id                       String       @id @default(uuid()) @db.Uuid
+  name                     String
+  slug                     String       @unique
+  type                     PracticeType @default(SOLO)
+  specialty                String?
+  consultationFee          Float?       @map("consultation_fee")
   /// Optional advance (₹) the WhatsApp bot asks for before a visit; null = ask for the full consultation fee.
-  advanceBookingAmount   Float?       @map("advance_booking_amount")
-  registrationNo         String?      @map("registration_no")
-  phone                  String?      @db.VarChar(20)
-  email                  String?      @db.VarChar(256)
-  /** Initials used in patient MRNs, e.g. PC → PCMR00000001 for Priya Clinic. */
-  mrnPrefix              String?      @unique @map("mrn_prefix") @db.VarChar(6)
-  whatsappBusinessNumber String?      @map("whatsapp_business_number")
-  whatsappWebhookSecret  String?      @map("whatsapp_webhook_secret")
+  advanceBookingAmount     Float?       @map("advance_booking_amount")
+  /// Clinic's own Razorpay account for patient payments (null = platform account). Secrets are AES-GCM encrypted.
+  razorpayKeyId            String?      @map("razorpay_key_id") @db.VarChar(64)
+  razorpayKeySecretEnc     String?      @map("razorpay_key_secret_enc")
+  razorpayWebhookSecretEnc String?      @map("razorpay_webhook_secret_enc")
+  razorpayVerifiedAt       DateTime?    @map("razorpay_verified_at") @db.Timestamptz(6)
+  registrationNo           String?      @map("registration_no")
+  phone                    String?      @db.VarChar(20)
+  email                    String?      @db.VarChar(256)
+  /**
+   * Initials used in patient MRNs, e.g. PC → PCMR00000001 for Priya Clinic.
+   */
+  mrnPrefix                String?      @unique @map("mrn_prefix") @db.VarChar(6)
+  whatsappBusinessNumber   String?      @map("whatsapp_business_number")
+  whatsappWebhookSecret    String?      @map("whatsapp_webhook_secret")
   /// Structured FAQ answers for the WhatsApp bot (DocLine §9.2 / §11) — never free-form medical knowledge.
-  faqKb                  Json?        @map("faq_kb")
+  faqKb                    Json?        @map("faq_kb")
   /// When false, directory listing is hidden (e.g. subscription suspended).
-  isDirectoryListed      Boolean      @default(true) @map("is_directory_listed")
-  bgSrc                  String?      @map("bg_src")
-  isActive               Boolean      @default(true) @map("is_active")
-  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  isDirectoryListed        Boolean      @default(true) @map("is_directory_listed")
+  bgSrc                    String?      @map("bg_src")
+  isActive                 Boolean      @default(true) @map("is_active")
+  createdAt                DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  locations      ClinicLocation[]
-  members        PracticeMember[]
-  schedules      ProviderSchedule[]
-  bookings       PracticeBooking[]
-  overrides      ScheduleOverride[]
-  conversations  WhatsAppConversation[]
-  notifications  NotificationEvent[]
-  whatsappNumber WhatsAppNumber?
-  subscription   PracticeSubscription?
+  locations        ClinicLocation[]
+  members          PracticeMember[]
+  schedules        ProviderSchedule[]
+  bookings         PracticeBooking[]
+  overrides        ScheduleOverride[]
+  conversations    WhatsAppConversation[]
+  notifications    NotificationEvent[]
+  whatsappNumber   WhatsAppNumber?
+  subscription     PracticeSubscription?
   messageTemplates MessageTemplate[]
-  reviews        PracticeReview[]
-  paymentRequests PaymentRequest[]
+  reviews          PracticeReview[]
+  paymentRequests  PaymentRequest[]
 
   @@map("practices")
 }
@@ -486,10 +501,10 @@ model PracticeBooking {
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  practice      Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  location      ClinicLocation      @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  notifications NotificationEvent[]
-  review        PracticeReview?
+  practice        Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  location        ClinicLocation      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  notifications   NotificationEvent[]
+  review          PracticeReview?
   paymentRequests PaymentRequest[]
 
   @@index([practiceId, providerId, status, slotStart])
@@ -526,6 +541,8 @@ model PaymentRequest {
   channel       String    @db.VarChar(16)
   requestedById String?   @map("requested_by_id") @db.Uuid
   /// WhatsApp delivery of the link: SENT | FAILED | SIMULATED | null (shared in-chat by the bot).
+  /// Razorpay key that created the link (null = platform account, pre-dates per-clinic keys).
+  razorpayKeyId String?   @map("razorpay_key_id") @db.VarChar(64)
   waDelivery    String?   @map("wa_delivery") @db.VarChar(16)
   waError       String?   @map("wa_error")
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -614,7 +631,7 @@ model DocLinePlan {
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   subscriptions        PracticeSubscription[]
-  pendingSubscriptions   PracticeSubscription[] @relation("PendingPlan")
+  pendingSubscriptions PracticeSubscription[] @relation("PendingPlan")
 
   @@map("docline_plans")
 }
@@ -626,16 +643,16 @@ model PracticeSubscription {
   pendingPlanId                 String?                    @map("pending_plan_id") @db.Uuid
   status                        PracticeSubscriptionStatus @default(TRIALING)
   razorpaySubscriptionId        String?                    @unique @map("razorpay_subscription_id")
-  pendingRazorpaySubscriptionId String?                  @unique @map("pending_razorpay_subscription_id")
+  pendingRazorpaySubscriptionId String?                    @unique @map("pending_razorpay_subscription_id")
   razorpayCustomerId            String?                    @map("razorpay_customer_id")
-  currentPeriodStart     DateTime?                  @map("current_period_start") @db.Timestamptz(6)
-  currentPeriodEnd       DateTime?                  @map("current_period_end") @db.Timestamptz(6)
-  gracePeriodEnd         DateTime?                  @map("grace_period_end") @db.Timestamptz(6)
-  cancelAtPeriodEnd      Boolean                    @default(false) @map("cancel_at_period_end")
-  cancelledAt            DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
-  notes                  String?
-  createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  currentPeriodStart            DateTime?                  @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd              DateTime?                  @map("current_period_end") @db.Timestamptz(6)
+  gracePeriodEnd                DateTime?                  @map("grace_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd             Boolean                    @default(false) @map("cancel_at_period_end")
+  cancelledAt                   DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
+  notes                         String?
+  createdAt                     DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   practice    Practice     @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   plan        DocLinePlan  @relation(fields: [planId], references: [id])
@@ -686,4 +703,3 @@ model PracticeReview {
   @@index([providerId, isPublished])
   @@map("practice_reviews")
 }
-

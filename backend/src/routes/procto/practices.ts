@@ -104,6 +104,65 @@ router.patch(
 );
 
 router.get(
+  "/:practiceId/razorpay",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { PaymentAccountService } = await import(
+        "../../services/procto/paymentAccount.service.js"
+      );
+      const data = await PaymentAccountService.getSettings(
+        param(req.params.practiceId),
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "razorpay settings fetched.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.put(
+  "/:practiceId/razorpay",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { PaymentAccountService } = await import(
+        "../../services/procto/paymentAccount.service.js"
+      );
+      const b = req.body ?? {};
+      const data = await PaymentAccountService.saveSettings(
+        param(req.params.practiceId),
+        req.sessionUser!.id,
+        { keyId: b.keyId, keySecret: b.keySecret, webhookSecret: b.webhookSecret },
+      );
+      return ResponseHandler.fetchSuccessful(res, "razorpay keys saved.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.delete(
+  "/:practiceId/razorpay",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { PaymentAccountService } = await import(
+        "../../services/procto/paymentAccount.service.js"
+      );
+      const data = await PaymentAccountService.removeSettings(
+        param(req.params.practiceId),
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "razorpay keys removed.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
   "/:practiceId/schedules",
   requireAuth("schedule:read"),
   async (req: Request, res: Response, next: NextFunction) => {

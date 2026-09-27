@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-14
+- **Date opened:** 2026-09-28
+- **Severity:** 3 (change control — billing)
+- **Process:** P-BILL (patient payments) / Settings
+- **Description:** Clinics and solo doctors asked to collect patient payments into **their own Razorpay account** instead of the platform account (settlement was manual).
+- **Evidence:** User request; all Payment Links (WA advance / fee, custom requests) used the platform `RAZORPAY_KEY_ID` (CR-20260928-11 / -12).
+- **Containment:** n/a (new capability; platform account remains the fallback so existing flows are unchanged).
+- **Root cause:** Single platform key hard-wired in `lib/razorpay.ts`; no per-practice credentials.
+- **Corrective action:** Settings → **Online payments (Razorpay)** (owner / admin, or the solo doctor): Key ID + Key Secret + optional webhook secret, verified live with Razorpay (`GET /payments?count=1`) before saving; secrets AES-256-GCM encrypted (`core/security.encrypt`), excluded from every default Prisma read (global `omit`) and never returned (only `••••last4`). Payment Links use the clinic's account when connected, else the platform account; each `payment_requests` row stores the `razorpay_key_id` it was created with so callbacks / refresh / cancel use the right secret. Per-clinic webhook `POST /procto/payments/razorpay/webhook/:practiceId` verified with the clinic's webhook secret and limited to that clinic's links (platform webhook can't touch clinic-account links). Razorpay 401 mapped to 502 / a clear 400 so it is not mistaken for session expiry. Subscription billing stays on the platform account.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** 176/176 procto tests (new: key ID format / mode, per-account callback signature, webhook secret HMAC). Browser (dr.solo): panel shows *Not connected* + platform fallback + webhook URL; malformed Key ID → "Enter a valid Razorpay Key ID…"; well-formed fake keys → "Razorpay rejected this Key ID / Key Secret…" (session kept). Server script: save with real keys → connected, secret absent from response, DB values are ciphertext, default practice read has no secret columns; clinic webhook bad signature → 401, good signature → 200, no secret → 200 ignored; keys removed afterwards (practice back to platform fallback). Backend tsc + build, frontend tsc + build, provider tsc clean.
+
 ### CR-20260928-13
 - **Date opened:** 2026-09-28
 - **Severity:** 2

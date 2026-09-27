@@ -1,7 +1,10 @@
 import type { PracticeBooking } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../core/response.js";
-import { razorpay } from "../../lib/razorpay.js";
+import {
+  practicePaymentsEnabled,
+  type PracticeRazorpayFields,
+} from "./paymentAccount.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 import {
   kindLabel,
@@ -32,7 +35,7 @@ function broadcast(booking: PracticeBooking) {
     .catch(() => undefined);
 }
 
-type PrepayPractice = {
+type PrepayPractice = PracticeRazorpayFields & {
   consultationFee?: number | null;
   advanceBookingAmount?: number | null;
 };
@@ -40,7 +43,7 @@ type PrepayPractice = {
 export const BookingPaymentService = {
   /** True when the WhatsApp bot should offer "pay before the appointment". */
   canOfferPrepay(practice: PrepayPractice): boolean {
-    return razorpay.isConfigured() && prepayOffer(practice) != null;
+    return practicePaymentsEnabled(practice) && prepayOffer(practice) != null;
   },
 
   /**

@@ -3,6 +3,11 @@ import type { PaymentRequest, Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../core/response.js";
 import { razorpay, type RazorpayPaymentLink } from "../../lib/razorpay.js";
+import {
+  accountForLink,
+  accountForPractice,
+  practicePaymentsEnabled,
+} from "./paymentAccount.service.js";
 import { publicApiOrigin } from "./bookingCalendar.js";
 import { PracticeService } from "./practice.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
@@ -179,7 +184,15 @@ export const PaymentRequestService = {
     requestedById?: string | null;
   }): Promise<PaymentRequest> {
     const label = kindLabel(input.kind, input.purpose);
-    const link = await razorpay.createPaymentLink({
+    const practice = await prisma.practice.findUnique({
+      where: { id: input.practiceId },
+      select: { razorpayKeyId: true, razorpayKeySecretEnc: true },
+    });
+    const account = practice ? accountForPractice(practice) : null;
+    if (!account) {
+      throw new AppError(503, "Online payments are not set up yet.");
+    }
+    const link = await account.client.createPaymentLink({
       amount: input.amount,
       description: `${label} · ${input.practiceName}`.slice(0, 250),
       reference_id: `pr-${Date.now().toString(36)}-${randomBytes(4).toString("hex")}`,
@@ -212,13 +225,14 @@ export const PaymentRequestService = {
         status: "PENDING",
         linkId: link.id,
         linkUrl: link.short_url,
+        razorpayKeyId: account.client.keyId,
         expiresAt: input.expireAt,
         channel: input.channel,
         requestedById: input.requestedById ?? null,
       },
     });
     console.log(
-      `[payment] link ${link.id} request=${row.id} kind=${input.kind} amount=${input.amount}`,
+      `[payment] link ${link.id} request=${row.id} kind=${input.kind} amount=${input.amount} account=${account.source}`,
     );
     void broadcastPayment(row);
     return row;
@@ -243,9 +257,6 @@ export const PaymentRequestService = {
     const practiceId = input.practiceId;
     if (!practiceId) throw new AppError(400, "practiceId is required.");
     const member = await PracticeService.assertMember(practiceId, actorUserId);
-    if (!razorpay.isConfigured()) {
-      throw new AppError(503, "Online payments are not set up yet.");
-    }
     const amount = parseCustomAmountPaise(input.amount);
     if (amount == null) {
       throw new AppError(400, "Enter an amount between ₹1 and ₹5,00,000.");
@@ -255,9 +266,20 @@ export const PaymentRequestService = {
 
     const practice = await prisma.practice.findUnique({
       where: { id: practiceId },
-      select: { name: true, isActive: true },
+      select: {
+        name: true,
+        isActive: true,
+        razorpayKeyId: true,
+        razorpayKeySecretEnc: true,
+      },
     });
     if (!practice?.isActive) throw new AppError(404, "practice not found.");
+    if (!practicePaymentsEnabled(practice)) {
+      throw new AppError(
+        503,
+        "Online payments are not set up yet. Add your Razorpay keys in Settings.",
+      );
+    }
 
     let providerId: string | null;
     let bookingId: string | null = null;
@@ -380,8 +402,15 @@ export const PaymentRequestService = {
     if (row.status !== "PENDING" || !row.linkId) {
       throw new AppError(400, "Only pending payment requests can be cancelled.");
     }
+    const client = await accountForLink(row.practiceId, row.razorpayKeyId);
+    if (!client) {
+      throw new AppError(
+        409,
+        "This link was created with Razorpay keys that are no longer saved. Cancel it in your Razorpay dashboard.",
+      );
+    }
     try {
-      await razorpay.cancelPaymentLink(row.linkId);
+      await client.cancelPaymentLink(row.linkId);
     } catch (err) {
       // Paid / expired meanwhile — record Razorpay's actual state instead.
       await this.refreshRow(row);
@@ -408,10 +437,10 @@ export const PaymentRequestService = {
 
   /** Ask Razorpay for the latest link state (used when no webhook arrived). */
   async refreshRow(row: PaymentRequest) {
-    if (row.status !== "PENDING" || !row.linkId || !razorpay.isConfigured()) {
-      return row;
-    }
-    const link = await razorpay.getPaymentLink(row.linkId);
+    if (row.status !== "PENDING" || !row.linkId) return row;
+    const client = await accountForLink(row.practiceId, row.razorpayKeyId);
+    if (!client) return row;
+    const link = await client.getPaymentLink(row.linkId);
     const next = statusFromLink(link);
     if (next === "PENDING") return row;
     const paid =
@@ -491,7 +520,7 @@ export const PaymentRequestService = {
         ? { ...base, status }
         : base;
 
-    const [rows, grouped] = await Promise.all([
+    const [rows, grouped, practiceKeys] = await Promise.all([
       prisma.paymentRequest.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -502,6 +531,10 @@ export const PaymentRequestService = {
         where: base,
         _sum: { amount: true },
         _count: { _all: true },
+      }),
+      prisma.practice.findUnique({
+        where: { id: practiceId },
+        select: { razorpayKeyId: true, razorpayKeySecretEnc: true },
       }),
     ]);
     const names = await userNames(
@@ -520,7 +553,7 @@ export const PaymentRequestService = {
           (bucket("CANCELLED")?._count._all ?? 0),
         total: grouped.reduce((n, g) => n + g._count._all, 0),
       },
-      paymentsEnabled: razorpay.isConfigured(),
+      paymentsEnabled: practiceKeys ? practicePaymentsEnabled(practiceKeys) : false,
     };
   },
 
@@ -615,9 +648,16 @@ export const PaymentRequestService = {
     const signature = query.razorpay_signature
       ? String(query.razorpay_signature)
       : undefined;
+    if (!paymentLinkId) return { ok: false as const };
+    const known = await prisma.paymentRequest.findUnique({
+      where: { linkId: paymentLinkId },
+      select: { practiceId: true, razorpayKeyId: true },
+    });
+    const client = known
+      ? await accountForLink(known.practiceId, known.razorpayKeyId)
+      : razorpay.platformClient();
     if (
-      !paymentLinkId ||
-      !razorpay.verifyPaymentLinkSignature({
+      !client?.verifyPaymentLinkSignature({
         paymentLinkId,
         referenceId,
         status,
@@ -640,18 +680,36 @@ export const PaymentRequestService = {
     };
   },
 
-  /** `payment_link.*` events on the shared Razorpay webhook. */
-  async handleWebhookEvent(body: {
-    event?: string;
-    payload?: {
-      payment_link?: { entity?: RazorpayPaymentLink };
-      payment?: { entity?: { id?: string } };
-    };
-  }) {
+  /**
+   * `payment_link.*` events. `source` is the verified webhook's account: the
+   * platform webhook, or one clinic's own webhook (its practice + key only).
+   */
+  async handleWebhookEvent(
+    body: {
+      event?: string;
+      payload?: {
+        payment_link?: { entity?: RazorpayPaymentLink };
+        payment?: { entity?: { id?: string } };
+      };
+    },
+    source: { kind: "PLATFORM" } | { kind: "PRACTICE"; practiceId: string; keyId: string } = {
+      kind: "PLATFORM",
+    },
+  ) {
     const link = body.payload?.payment_link?.entity;
     if (!link?.id) return { handled: false };
     const next = statusFromLink(link);
     if (next === "PENDING") return { handled: false };
+    const row = await prisma.paymentRequest.findUnique({
+      where: { linkId: link.id },
+      select: { practiceId: true, razorpayKeyId: true },
+    });
+    if (!row) return { handled: false };
+    const belongs =
+      source.kind === "PLATFORM"
+        ? !row.razorpayKeyId || row.razorpayKeyId === razorpay.keyId
+        : row.practiceId === source.practiceId && row.razorpayKeyId === source.keyId;
+    if (!belongs) return { handled: false, reason: "account_mismatch" };
     await this.applyLinkState(
       link.id,
       next,
