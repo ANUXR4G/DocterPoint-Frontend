@@ -111,8 +111,9 @@ export function bookingStatusControlValue(status: string): string {
 }
 
 /**
- * Queue actions (auto-accepted on book — no manual Accept step):
- * Accepted → Arrived (Waiting) → Appointment started → Appointment finished
+ * Queue / Appointments list actions (auto-accepted on book — no manual Accept step):
+ * Accepted → Arrived (Waiting) → Appointment started.
+ * Finishing is only done on the visit page (saves remarks + medicines with it).
  */
 export function bookingNextActions(
   status: string,
@@ -136,10 +137,7 @@ export function bookingNextActions(
         { status: "CANCELED", label: "Cancel" },
       ]
     case "IN_PROGRESS":
-      return [
-        { status: "COMPLETED", label: "Finish appointment" },
-        { status: "NO_SHOW", label: "No-show" },
-      ]
+      return [{ status: "NO_SHOW", label: "No-show" }]
     case "COMPLETED":
     case "CANCELED":
     case "CANCELLED":
