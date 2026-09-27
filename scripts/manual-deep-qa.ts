@@ -327,7 +327,7 @@ async function main() {
           "P0",
         );
 
-        const complete = await api(`/procto/bookings/${newId}/status`, {
+        const complete = await api(`/procto/bookings/${newId}/visit`, {
           method: "PATCH",
           headers: auth(doctorA.token),
           body: JSON.stringify({ status: "COMPLETED" }),
