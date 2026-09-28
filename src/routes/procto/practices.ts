@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { listAudit } from "../../services/procto/practiceAudit.js";
+import { registerDeskPatient, searchDeskPatients } from "../../services/procto/deskPatients.service.js";
 import type { Request, Response, NextFunction } from "express";
 import { ResponseHandler } from "../../core/response.js";
 import { requireAuth } from "../../middleware/auth.js";
@@ -447,6 +449,62 @@ router.get(
         req.sessionUser!.id,
       );
       return ResponseHandler.fetchSuccessful(res, "permissions fetched.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  "/:practiceId/audit",
+  requireAuth("practice:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+      const providerId = str(req.query.providerId);
+      const data = await listAudit(requireUuid(param(req.params.practiceId), "practiceId"), req.sessionUser!.id, {
+        action: str(req.query.action),
+        providerId: providerId ? requireUuid(providerId, "providerId") : undefined,
+        from: str(req.query.from),
+        to: str(req.query.to),
+        before: str(req.query.before),
+        limit: Number(req.query.limit) || undefined,
+      });
+      return ResponseHandler.fetchSuccessful(res, "audit log fetched.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  "/:practiceId/desk-patients",
+  requireAuth("patient:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await searchDeskPatients(
+        requireUuid(param(req.params.practiceId), "practiceId"),
+        req.sessionUser!.id,
+        req.query.q,
+      );
+      return ResponseHandler.fetchSuccessful(res, "patients found.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/:practiceId/desk-patients",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await registerDeskPatient(
+        requireUuid(param(req.params.practiceId), "practiceId"),
+        req.sessionUser!.id,
+        req.body ?? {},
+      );
+      return ResponseHandler.createSuccessful(res, `Registered ${data.name} — MRN ${data.mrn}.`, data);
     } catch (error) {
       next(error);
     }

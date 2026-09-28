@@ -1,3 +1,4 @@
+import { isUuid } from "../../core/params.js";
 import {
   BookingChannel,
   BookingStatus,
@@ -466,26 +467,37 @@ export const BookingService = {
    * pick, no schedule or capacity check (must never be refused for lack of a
    * free slot). Starts "now", goes straight to WAITING, tagged
    * `consultationType = EMERGENCY_WALK_IN`. No patient WhatsApp confirmation.
+   * Always tied to a registered patient (MRN): pick one from the desk search or register first.
    */
   async createWalkIn(
     data: {
       practiceId: string;
       providerId: string;
       locationId?: string;
+      patientId?: string;
+      /** Mobile of the picked patient — must match their record. */
       patientPhone: string;
-      patientName: string;
       disease?: string;
     },
     actorUserId: string,
   ) {
-    const digits = String(data.patientPhone || "").replace(/\D/g, "");
-    const patientPhone =
-      digits.length >= 11 && digits.length <= 15 ? digits : digits.slice(-10);
-    if (patientPhone.length < 10) {
-      throw new AppError(400, "Enter a valid patient mobile number.");
+    const patientId = String(data.patientId || "").trim();
+    if (!isUuid(patientId)) {
+      throw new AppError(400, "Search for the patient or register them first — every walk-in needs a Patient ID (MRN).");
     }
-    const patientName = String(data.patientName || "").trim().slice(0, 120);
-    if (!patientName) throw new AppError(400, "Enter the patient name.");
+    const patient = await prisma.user.findFirst({
+      where: { id: patientId, role: "user", patient: { isNot: null } },
+      select: { name: true, phone: true, patient: { select: { mrn: true, contactNumber: true } } },
+    });
+    const typed = String(data.patientPhone || "").replace(/\D/g, "").slice(-10);
+    const onRecord = [patient?.patient?.contactNumber, patient?.phone].map((p) =>
+      String(p || "").replace(/\D/g, ""),
+    );
+    if (!patient || typed.length < 10 || !onRecord.some((p) => p.slice(-10) === typed)) {
+      throw new AppError(400, "That patient record doesn't match. Search for the patient again.");
+    }
+    const patientPhone = onRecord.find((p) => p.length >= 10) ?? typed;
+    const patientName = patient.name?.trim().slice(0, 120) || "Patient";
 
     const actor = await prisma.practiceMember.findUnique({
       where: {
@@ -534,6 +546,7 @@ export const BookingService = {
         practiceId: data.practiceId,
         locationId: location.id,
         providerId: data.providerId,
+        patientId,
         patientPhone,
         patientName,
         mode: ScheduleMode.TIME_BASED,
@@ -561,8 +574,26 @@ export const BookingService = {
       .catch(() => undefined);
 
     console.log(
-      `[createWalkIn] id=${booking.id} practice=${booking.practiceId} provider=${booking.providerId} by=${actorUserId}`,
+      `[createWalkIn] id=${booking.id} practice=${booking.practiceId} provider=${booking.providerId} patient=${patientId} by=${actorUserId}`,
     );
+    void (async () => {
+      const [{ recordAudit }, doctor] = await Promise.all([
+        import("./practiceAudit.js"),
+        prisma.user.findUnique({ where: { id: data.providerId }, select: { name: true } }),
+      ]);
+      const dr = doctor?.name?.trim() || "the doctor";
+      await recordAudit({
+        practiceId: booking.practiceId,
+        actorUserId,
+        action: "WALK_IN_ADDED",
+        headline: "Emergency walk-in added",
+        detail: `${patientName} (MRN ${patient.patient?.mrn ?? "—"}) to ${/^dr\b/i.test(dr) ? dr : `Dr ${dr}`}'s waiting list${booking.disease ? ` · ${booking.disease}` : ""}`,
+        entityType: "booking",
+        entityId: booking.id,
+        providerId: booking.providerId,
+        meta: { patientId, mrn: patient.patient?.mrn ?? null },
+      });
+    })().catch(() => undefined);
     return booking;
   },
 

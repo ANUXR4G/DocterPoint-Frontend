@@ -1410,7 +1410,7 @@ function cacheFresh<T extends { at: number }>(
   return hit;
 }
 
-function invalidatePatientPhoneCache(patientPhone: string) {
+export function invalidatePatientPhoneCache(patientPhone: string) {
   patientByPhoneCache.delete(normalizePhone(patientPhone).slice(-10));
 }
 

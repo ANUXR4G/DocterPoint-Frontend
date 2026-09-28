@@ -388,6 +388,7 @@ model Practice {
   messageTemplates MessageTemplate[]
   reviews          PracticeReview[]
   paymentRequests  PaymentRequest[]
+  auditEvents      PracticeAuditEvent[]
 
   @@map("practices")
 }
@@ -480,6 +481,8 @@ model ScheduleOverride {
   capacity   Int?
   /// EXTRA_SLOT created together by "Extend · repeat" (one row per day).
   seriesId   String?      @map("series_id") @db.Uuid
+  /// Staff member who added the row from the calendar / settings (null = older rows).
+  createdBy  String?      @map("created_by") @db.Uuid
   createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
@@ -487,6 +490,32 @@ model ScheduleOverride {
   @@index([practiceId, providerId, date])
   @@index([seriesId])
   @@map("schedule_overrides")
+}
+
+/// Append-only staff action log for administrative reporting (slots, walk-ins, desk registrations).
+model PracticeAuditEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  practiceId  String   @map("practice_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  /// Name and clinic role at the time of the action (kept if the member later leaves).
+  actorName   String?  @map("actor_name") @db.VarChar(160)
+  actorRole   String?  @map("actor_role") @db.VarChar(32)
+  /// SLOT_CREATED | SLOT_REMOVED | OVERRIDE_CREATED | WALK_IN_ADDED | PATIENT_REGISTERED
+  action      String   @db.VarChar(48)
+  entityType  String?  @map("entity_type") @db.VarChar(32)
+  entityId    String?  @map("entity_id") @db.Uuid
+  /// Doctor whose calendar / list the action touched.
+  providerId  String?  @map("provider_id") @db.Uuid
+  summary     String
+  meta        Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([practiceId, createdAt(sort: Desc)])
+  @@index([practiceId, action, createdAt(sort: Desc)])
+  @@index([practiceId, providerId, createdAt(sort: Desc)])
+  @@map("practice_audit_events")
 }
 
 model PracticeBooking {

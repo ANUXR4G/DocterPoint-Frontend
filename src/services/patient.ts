@@ -495,6 +495,8 @@ export class PatientService {
     practiceId?: string | null;
     /** Optional override; otherwise loaded/derived from practice. */
     mrnPrefix?: string | null;
+    /** Who created the account: the WhatsApp bot (default) or clinic staff at the desk. */
+    source?: "whatsapp" | "clinic_desk";
   }) {
     // Keep full WhatsApp MSISDN (e.g. 9715… / 9198…) — do not strip to last 10 / force +91.
     const phone = data.phone.replace(/\D/g, "");
@@ -627,7 +629,7 @@ export class PatientService {
         gender,
         phone,
         address: data.address?.trim() || null,
-        createdBy: "whatsapp_bot",
+        createdBy: data.source === "clinic_desk" ? "clinic_desk" : "whatsapp_bot",
         patient: {
           create: {
             mrn,

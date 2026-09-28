@@ -12,7 +12,9 @@ export type ProctoLiveEvent =
       event: "notification_created";
       notification: Record<string, unknown>;
     }
-  | { event: "payment_updated"; payment: Record<string, unknown> };
+  | { event: "payment_updated"; payment: Record<string, unknown> }
+  /** Extra slots / blocks / leave changed for a doctor on these clinic dates (YYYY-MM-DD). */
+  | { event: "calendar_updated"; providerId: string; dates: string[] };
 
 export function proctoRoomId(practiceId: string): string {
   return `${practiceId}_PROCTO`;
