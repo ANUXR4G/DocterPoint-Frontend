@@ -389,25 +389,29 @@ export const proctoService = {
     }),
 
   /** Quick-create bookable time from the calendar (no patient is messaged). */
-  addExtraSlots: (
-    practiceId: string,
-    body: {
-      providerId: string
-      date: string
-      startTime: string
-      endTime: string
-      reason?: string
-    },
-  ) =>
+  addExtraSlots: (practiceId: string, body: ExtraSlotsRequest) =>
     proctoFetch(`/procto/practices/${practiceId}/overrides`, {
       method: "POST",
       body: JSON.stringify({ ...body, type: "EXTRA_SLOT" }),
     }) as Promise<ProctoResult<ExtraSlotsResult>>,
 
-  removeExtraSlots: (practiceId: string, overrideId: string) =>
-    proctoFetch(`/procto/practices/${practiceId}/overrides/${overrideId}`, {
-      method: "DELETE",
-    }) as Promise<ProctoResult<{ removed: boolean; message: string }>>,
+  /** Days a repeat would add / skip, without saving. */
+  previewExtraSlots: (practiceId: string, body: ExtraSlotsRequest) =>
+    proctoFetch(`/procto/practices/${practiceId}/overrides`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, type: "EXTRA_SLOT", dryRun: true }),
+    }) as Promise<ProctoResult<ExtraSlotsPlan>>,
+
+  /** `series` removes every upcoming day of a repeat that has no booked visit. */
+  removeExtraSlots: (
+    practiceId: string,
+    overrideId: string,
+    scope: "one" | "series" = "one",
+  ) =>
+    proctoFetch(
+      `/procto/practices/${practiceId}/overrides/${overrideId}${scope === "series" ? "?scope=series" : ""}`,
+      { method: "DELETE" },
+    ) as Promise<ProctoResult<{ removed: boolean; message: string }>>,
 
   getCalendarDay: (practiceId: string, providerId: string, date: string) =>
     proctoFetch(
@@ -864,9 +868,18 @@ export type ScheduleConflict = {
 export type TimeWindow = { start: string; end: string };
 
 /** A doctor's day for the calendar grid (all times HH:MM clinic wall clock). */
+export type ExtraWindow = TimeWindow & {
+  id: string;
+  note: string | null;
+  slotIntervalMin: number;
+  /** Patients per slot (1 = normal, more = shared queue slot). */
+  capacity: number;
+  seriesId: string | null;
+};
+
 export type DayWindows = {
   hours: TimeWindow[];
-  extra: Array<TimeWindow & { id: string; note: string | null }>;
+  extra: ExtraWindow[];
   blocked: Array<TimeWindow & { type: string; reason: string | null }>;
   dayOff: { type: string; reason: string | null } | null;
   mode: "TIME_BASED" | "TOKEN_BASED" | null;
@@ -886,13 +899,35 @@ export type CalendarDay = {
   windows?: DayWindows;
 };
 
-export type ExtraSlotsResult = {
+export type ExtraSlotsRequest = {
+  providerId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  reason?: string;
+  /** Omit for the doctor's own slot length. */
+  slotIntervalMin?: number;
+  capacity?: number;
+  /** "Extend · repeat": these weekdays (0 = Sun) from `date` until `until`. */
+  repeat?: { weekdays: number[]; until: string };
+};
+
+export type ExtraSlotsPlan = {
+  dates: Array<{ date: string; slots: number; slotIntervalMin: number }>;
+  skipped: Array<{ date: string; reason: string; error: string }>;
+  message: string;
+};
+
+export type ExtraSlotsResult = ExtraSlotsPlan & {
   id: string;
+  ids: string[];
+  seriesId: string | null;
   startTime: string;
   endTime: string;
   slots: number;
   slotIntervalMin: number;
-  message: string;
+  capacity: number;
+  created: number;
 };
 
 export type ScheduleNotice = {
