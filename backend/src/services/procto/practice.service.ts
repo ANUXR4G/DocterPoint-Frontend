@@ -34,6 +34,8 @@ import {
   type ScheduleConflict,
   summarizeImpact,
   addDaysIso,
+  bookingDayIso,
+  bookingFitsSchedule,
   dateKey,
   dbDate,
   earliestSafeDate,
@@ -2137,6 +2139,7 @@ export const PracticeService = {
     console.log(
       `[schedule] pending version activated from ${plan.effectiveFrom} provider=${providerId} by=${actorUserId} conflicts=${conflicts.length}`,
     );
+    await this.clearRedundantOverrides(practiceId, providerId, pending.locationId);
 
     if (plan.modeChanging && plan.currentMode) {
       const provider = await prisma.user.findUnique({
@@ -2169,12 +2172,46 @@ export const PracticeService = {
   /** Throw away the pending version; the current schedule is unchanged. */
   async discardPendingSchedule(practiceId: string, providerId: string, actorUserId: string) {
     await this.assertCanManageProvider(practiceId, actorUserId, providerId);
+    const pending = await this.loadPendingVersion(practiceId, providerId);
     const res = await prisma.providerSchedule.deleteMany({
       where: { practiceId, providerId, status: ScheduleVersionStatus.PENDING_VERIFICATION },
     });
     if (!res.count) throw new AppError(404, "No schedule is waiting for verification.");
     console.log(`[schedule] pending version discarded provider=${providerId} by=${actorUserId}`);
+    if (pending) await this.clearRedundantOverrides(practiceId, providerId, pending.locationId);
     return { discarded: true };
+  },
+
+  /**
+   * Drop the Override-slot flag from upcoming visits the active schedule now
+   * offers anyway (e.g. kept for a pending version that was discarded).
+   */
+  async clearRedundantOverrides(practiceId: string, providerId: string, locationId: string) {
+    const kept = await prisma.practiceBooking.findMany({
+      where: {
+        practiceId,
+        providerId,
+        locationId,
+        overrideSlot: true,
+        status: { in: ACTIVE_BOOKING_STATUSES },
+      },
+      select: { id: true, mode: true, slotStart: true, sessionDate: true, tokenNumber: true },
+    });
+    if (!kept.length) return 0;
+    const rows = await prisma.providerSchedule.findMany({
+      where: { practiceId, providerId, locationId, ...ACTIVE_VERSION },
+    });
+    const fits = kept.filter((b) => {
+      const day = bookingDayIso(b);
+      return day != null && bookingFitsSchedule(b, pickEffectiveVersion(rows, day));
+    });
+    if (fits.length) {
+      await prisma.practiceBooking.updateMany({
+        where: { id: { in: fits.map((b) => b.id) } },
+        data: { overrideSlot: false, overrideNote: null },
+      });
+    }
+    return fits.length;
   },
 
   async getOverrides(
@@ -2666,6 +2703,7 @@ export const PracticeService = {
           providerId,
           locationId,
           status: { in: ACTIVE_BOOKING_STATUSES },
+          overrideSlot: false,
           OR: [
             { slotStart: { gte: parseLocalDate(fromIso) } },
             { sessionDate: { gte: parseLocalDate(addDaysIso(fromIso, -1)) } },

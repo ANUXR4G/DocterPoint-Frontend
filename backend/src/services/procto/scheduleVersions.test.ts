@@ -3,16 +3,23 @@ import assert from "node:assert/strict";
 import { BookingStatus, ScheduleMode, type ProviderSchedule } from "@prisma/client";
 import {
   assessBooking,
+  autoMatchSlots,
   bookingFitsSchedule,
   dbDate,
   earliestSafeDate,
   findConflicts,
   localDayOfSessionDate,
   pickEffectiveVersion,
+  rankSuggestions,
   summarizeImpact,
   upcomingVersionKeys,
 } from "./scheduleVersions.js";
-import { parseLocalDate, zonedDateTime } from "./slotEngine.js";
+import {
+  countBookingsOccupying,
+  generateTimeSlots,
+  parseLocalDate,
+  zonedDateTime,
+} from "./slotEngine.js";
 import { PracticeService } from "./practice.service.js";
 
 const LOC = "loc-1";
@@ -234,6 +241,73 @@ describe("impact assessment reasons", () => {
     assert.deepEqual(s.byCode, { OUTSIDE_HOURS: 2, IN_BREAK: 1 });
     assert.equal(s.firstDay, "2026-10-05");
     assert.equal(s.lastDay, "2026-10-12");
+  });
+});
+
+describe("conflict resolution", () => {
+  test("override-slot bookings are never flagged", () => {
+    const next = [row(1, "2026-10-01", { startTime: "11:00" })];
+    const kept = { ...timeBooking("k", "2026-10-05", "10:20"), overrideSlot: true };
+    const open = timeBooking("o", "2026-10-05", "10:40");
+    const conflicts = findConflicts([kept, open], baseline, next, "2026-10-01");
+    assert.deepEqual(conflicts.map((c) => c.bookingId), ["o"]);
+  });
+
+  test("suggestions rank same day nearest time first, then nearby days (later wins a tie)", () => {
+    const c = (day: string, minute: number) => ({ day, minute });
+    const ranked = rankSuggestions("2026-10-05", 620, [
+      c("2026-10-06", 620),
+      c("2026-10-05", 700),
+      c("2026-10-04", 620),
+      c("2026-10-05", 640),
+    ]);
+    assert.deepEqual(ranked, [
+      c("2026-10-05", 640),
+      c("2026-10-05", 700),
+      c("2026-10-06", 620),
+      c("2026-10-04", 620),
+    ]);
+  });
+
+  test("auto-match never gives two visits the same time slot; token sessions share capacity", () => {
+    const slot = (key: string, capacity = 1) => ({ key, capacity });
+    const a = slot("T 10:40");
+    const b = slot("T 11:00");
+    const tok = slot("K day", 2);
+    const m = autoMatchSlots([
+      { bookingId: "1", ranked: [a, b] },
+      { bookingId: "2", ranked: [a, b] },
+      { bookingId: "3", ranked: [a, b] },
+      { bookingId: "4", ranked: [tok] },
+      { bookingId: "5", ranked: [tok] },
+      { bookingId: "6", ranked: [tok] },
+    ]);
+    assert.equal(m.get("1"), a);
+    assert.equal(m.get("2"), b);
+    assert.equal(m.get("3"), null);
+    assert.equal(m.get("4"), tok);
+    assert.equal(m.get("5"), tok);
+    assert.equal(m.get("6"), null);
+  });
+
+  test("a kept off-grid visit blocks the grid slots it overlaps, not the next free one", () => {
+    const day = "2026-10-05";
+    const kept = {
+      ...timeBooking("k", day, "10:20"),
+      slotEnd: zonedDateTime(day, "10:40"),
+    };
+    const grid = row(1, "2026-10-01", { slotIntervalMin: 15 });
+    const slots = generateTimeSlots(grid, parseLocalDate(day), [kept as never], [], 0);
+    const at = (hhmm: string) =>
+      slots.find((s) => s.start.getTime() === zonedDateTime(day, hhmm).getTime());
+    assert.equal(at("10:15")?.available, false);
+    assert.equal(at("10:30")?.available, false);
+    assert.equal(at("10:00")?.available, true);
+    assert.equal(at("10:45")?.available, true);
+    assert.equal(
+      countBookingsOccupying([kept], zonedDateTime(day, "10:40"), zonedDateTime(day, "11:00")),
+      0,
+    );
   });
 });
 

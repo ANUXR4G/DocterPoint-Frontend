@@ -1,4 +1,10 @@
-import { BookingChannel, BookingStatus, ScheduleMode, Prisma } from "@prisma/client";
+import {
+  BookingChannel,
+  BookingStatus,
+  ScheduleMode,
+  Prisma,
+  type ProviderSchedule,
+} from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError, ResponseHandler } from "../../core/response.js";
 import { ageFromDob } from "../../core/dob.js";
@@ -29,7 +35,7 @@ import {
   timeSlotsForProviderDay,
 } from "./slotEngine.js";
 import { arrivalPatch } from "./bookingArrival.js";
-import { loadSchedulesOn } from "./scheduleVersions.js";
+import { loadSchedulesOn, localDayOfSessionDate } from "./scheduleVersions.js";
 import { NotificationService } from "./notification.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 
@@ -563,7 +569,7 @@ export const BookingService = {
     bookingId: string,
     status: BookingStatus,
     actorUserId?: string,
-    opts?: { skipPatientNotification?: boolean },
+    opts?: { skipPatientNotification?: boolean; cancelReason?: string },
   ) {
     const normalized = parseBookingStatus(status);
     const booking = await prisma.practiceBooking.findUnique({ where: { id: bookingId } });
@@ -613,6 +619,9 @@ export const BookingService = {
       data: {
         status: normalized,
         ...arrivalPatch(existing.arrivedAt, normalized),
+        ...(normalized === BookingStatus.CANCELED && opts?.cancelReason
+          ? { cancelReason: opts.cancelReason.slice(0, 250) }
+          : {}),
       },
     });
 
@@ -672,12 +681,22 @@ export const BookingService = {
       patientId?: string;
       skipPatientNotification?: boolean;
     },
+    /**
+     * Schedule-change resolution only: validate against the version that will
+     * apply on the target day (may be a pending one) and allow the visit to
+     * take that version's booking type.
+     */
+    internal?: {
+      schedulesOn?: (dayIso: string) => Promise<ProviderSchedule[]>;
+      mode?: ScheduleMode;
+    },
   ) {
     const booking = await prisma.practiceBooking.findUnique({
       where: { id: bookingId },
     });
     if (!booking) ResponseHandler.notFoundError("booking not found.");
     const existing = booking!;
+    const mode = internal?.mode ?? existing.mode;
 
     if (
       data.phone &&
@@ -726,7 +745,7 @@ export const BookingService = {
           : "";
 
     let date: Date;
-    if (existing.mode === ScheduleMode.TOKEN_BASED) {
+    if (mode === ScheduleMode.TOKEN_BASED) {
       if (!data.sessionDate) {
         throw new AppError(400, "sessionDate is required for token reschedule.");
       }
@@ -745,18 +764,20 @@ export const BookingService = {
     const dayStart = startOfLocalDay(date);
     const dayEnd = endOfLocalDay(date);
 
-    const allSchedules = await loadSchedulesOn(
-      {
-        practiceId: existing.practiceId,
-        providerId: existing.providerId,
-        locationId: existing.locationId,
-      },
-      formatLocalDate(date),
-    );
+    const allSchedules = internal?.schedulesOn
+      ? await internal.schedulesOn(formatLocalDate(date))
+      : await loadSchedulesOn(
+          {
+            practiceId: existing.practiceId,
+            providerId: existing.providerId,
+            locationId: existing.locationId,
+          },
+          formatLocalDate(date),
+        );
     const schedule = allSchedules.find(
-      (s) => s.dayOfWeek === dayOfWeek && s.mode === existing.mode,
+      (s) => s.dayOfWeek === dayOfWeek && s.mode === mode,
     );
-    if (!schedule && existing.mode === ScheduleMode.TOKEN_BASED) {
+    if (!schedule && mode === ScheduleMode.TOKEN_BASED) {
       throw new AppError(404, "no schedule configured for this day.");
     }
 
@@ -766,7 +787,7 @@ export const BookingService = {
       let tokenNumber: number | null = null;
       let sessionDate: Date | null = null;
 
-      if (existing.mode === ScheduleMode.TIME_BASED) {
+      if (mode === ScheduleMode.TIME_BASED) {
         slotStart = new Date(data.slotStart!);
         if (!isSlotStartBookable(slotStart)) {
           throw new AppError(400, "That time slot has already passed. Pick a later time.");
@@ -796,7 +817,7 @@ export const BookingService = {
         }),
       ]);
 
-      if (existing.mode === ScheduleMode.TIME_BASED) {
+      if (mode === ScheduleMode.TIME_BASED) {
         assertTimeSlotExclusive(existingBookings, slotStart!);
         if (
           !schedule &&
@@ -832,11 +853,14 @@ export const BookingService = {
       return tx.practiceBooking.update({
         where: { id: bookingId },
         data: {
+          mode,
           slotStart,
           slotEnd,
           tokenNumber,
           sessionDate,
           status: BookingStatus.ACCEPTED,
+          overrideSlot: false,
+          overrideNote: null,
         },
         include: { practice: true, location: true },
       });
@@ -856,6 +880,128 @@ export const BookingService = {
       updated.patientId ?? existing.patientId,
     ).catch(() => undefined);
 
+    return updated;
+  },
+
+  /**
+   * Move an upcoming visit to another doctor at the same clinic, same time
+   * (time slot) or same day's token queue. The new doctor must be free then.
+   */
+  async reassignProvider(
+    bookingId: string,
+    toProviderId: string,
+    opts?: { skipPatientNotification?: boolean },
+  ) {
+    const existing = await prisma.practiceBooking.findUnique({ where: { id: bookingId } });
+    if (!existing) throw new AppError(404, "booking not found.");
+    if (existing.providerId === toProviderId) {
+      throw new AppError(400, "The appointment is already with this doctor.");
+    }
+    if (
+      ![BookingStatus.SCHEDULED, BookingStatus.REQUESTED, BookingStatus.ACCEPTED].includes(
+        existing.status as "SCHEDULED" | "REQUESTED" | "ACCEPTED",
+      ) ||
+      !isBookingStillUpcoming(existing)
+    ) {
+      throw new AppError(400, "Only upcoming scheduled or accepted appointments can be reassigned.");
+    }
+    const [member, fromDoctor, toDoctor] = await Promise.all([
+      prisma.practiceMember.findUnique({
+        where: { practiceId_userId: { practiceId: existing.practiceId, userId: toProviderId } },
+      }),
+      prisma.user.findUnique({ where: { id: existing.providerId }, select: { name: true } }),
+      prisma.user.findUnique({ where: { id: toProviderId }, select: { name: true } }),
+    ]);
+    if (!member?.isActive || !toDoctor) {
+      throw new AppError(400, "That doctor is not an active member of this clinic.");
+    }
+
+    const date =
+      existing.mode === ScheduleMode.TIME_BASED
+        ? startOfLocalDay(existing.slotStart!)
+        : parseLocalDate(localDayOfSessionDate(existing.sessionDate!));
+    const dayStart = startOfLocalDay(date);
+    const dayEnd = endOfLocalDay(date);
+    const schedules = await loadSchedulesOn(
+      { practiceId: existing.practiceId, providerId: toProviderId, locationId: existing.locationId },
+      formatLocalDate(date),
+    );
+    const doctorName = toDoctor.name || "the other doctor";
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (existing.mode === ScheduleMode.TIME_BASED) {
+        await lockProviderTimeSlot(tx, toProviderId, existing.slotStart!);
+      }
+      const [overrides, dayBookings] = await Promise.all([
+        tx.scheduleOverride.findMany({
+          where: { practiceId: existing.practiceId, providerId: toProviderId, date: dayStart },
+        }),
+        tx.practiceBooking.findMany({
+          where: {
+            practiceId: existing.practiceId,
+            providerId: toProviderId,
+            status: { notIn: [BookingStatus.CANCELED, BookingStatus.NO_SHOW] },
+            OR: [{ slotStart: { gte: dayStart, lte: dayEnd } }, { sessionDate: dayStart }],
+          },
+        }),
+      ]);
+
+      let tokenNumber = existing.tokenNumber;
+      if (existing.mode === ScheduleMode.TIME_BASED) {
+        const slot = timeSlotsForProviderDay(schedules, date, dayBookings, overrides).find((s) =>
+          sameLocalSlot(s.start, existing.slotStart!),
+        );
+        if (!slot?.available) {
+          throw new AppError(409, `${doctorName} isn't free at ${formatPracticeTime(existing.slotStart!)}.`);
+        }
+      } else {
+        const schedule = schedules.find(
+          (s) => s.dayOfWeek === practiceWeekday(date) && s.mode === ScheduleMode.TOKEN_BASED,
+        );
+        const next = schedule ? assignNextToken(schedule, dayStart, dayBookings, overrides) : null;
+        if (next === null) {
+          throw new AppError(409, `${doctorName} has no open token queue that day.`);
+        }
+        tokenNumber = next;
+      }
+
+      await tx.paymentRequest.updateMany({
+        where: { bookingId },
+        data: { providerId: toProviderId },
+      });
+      return tx.practiceBooking.update({
+        where: { id: bookingId },
+        data: { providerId: toProviderId, tokenNumber, overrideSlot: false, overrideNote: null },
+      });
+    });
+
+    const oldWhen =
+      (existing.mode === ScheduleMode.TOKEN_BASED
+        ? `Token #${existing.tokenNumber ?? "?"} on ${formatLocalDate(date)}`
+        : formatPracticeDateTime(existing.slotStart!)) +
+      (fromDoctor?.name ? ` with ${fromDoctor.name}` : "");
+    void NotificationService.enqueueReschedule(bookingId, oldWhen, {
+      skipPatientTemplate: Boolean(opts?.skipPatientNotification),
+    }).catch((err) => console.warn("reassign notification failed (non-fatal):", err));
+    void broadcastProctoEvent(
+      existing.practiceId,
+      { event: "booking_updated", booking: serializeBooking(updated) },
+      updated.patientId,
+    ).catch(() => undefined);
+    return updated;
+  },
+
+  /** Keep a visit valid outside the doctor's (new) schedule — an "Override slot". */
+  async keepAsOverride(bookingId: string, note?: string | null) {
+    const updated = await prisma.practiceBooking.update({
+      where: { id: bookingId },
+      data: { overrideSlot: true, overrideNote: note?.trim().slice(0, 250) || null },
+    });
+    void broadcastProctoEvent(
+      updated.practiceId,
+      { event: "booking_updated", booking: serializeBooking(updated) },
+      updated.patientId,
+    ).catch(() => undefined);
     return updated;
   },
 
@@ -1491,6 +1637,9 @@ export const BookingService = {
         paymentStatus: true,
         paymentAmount: true,
         paidAt: true,
+        overrideSlot: true,
+        overrideNote: true,
+        cancelReason: true,
         createdAt: true,
         updatedAt: true,
         location: {

@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-18
+- **Date opened:** 2026-09-28
+- **Severity:** 2
+- **Process:** P-BOOK (slots / schedules) / P-NOTIFY
+- **Description:** User asked for a conflict resolution workflow for reception / doctors when a schedule change clashes with bookings: reschedule suggestions (closest equivalent slots under the new schedule), bulk actions (reschedule with Email / WhatsApp alert, reassign to another doctor, cancel with reason), and override exceptions that keep specific visits valid outside the new hours.
+- **Evidence:** After CR-17 the pending panel only listed clashes; staff had to reschedule / cancel each visit elsewhere, one by one, with no suggestions, no reassignment, no cancel reason, and no way to mark a visit as an accepted exception. Slot engine counted a slot as taken only by a visit with the *same* start, so an off-grid visit kept after a slot-length change would not block overlapping new slots.
+- **Containment:** n/a (proactive).
+- **Root cause:** Impact assessment had no resolution step; bookings had no exception / cancel-reason fields.
+- **Corrective action:** `practice_bookings.override_slot` / `override_note` / `cancel_reason` (additive migration). `scheduleResolution.service.ts`: plan (ranked + auto-matched slots under the schedule each day will have, doctors free at the same time, email availability) and resolve (per-visit RESCHEDULE / REASSIGN / CANCEL / KEEP, `dryRun`, batch slot claims). `BookingService.reschedule` accepts the target day's (pending) schedule and booking-type switch; new `reassignProvider`, `keepAsOverride`; `updateStatus` stores the cancel reason. Conflict checks skip override visits; discard / activate clear redundant flags; `countBookingsOccupying` makes overlapped grid slots unavailable. Resolver dialog (bulk bar, alert toggles, review → confirm, per-visit outcome) opened from the pending panel on Settings and Practice → Hours; *Override slot* badge on the calendar.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** 204/204 procto tests (4 new: override visits never flagged, suggestion ranking, auto-match uniqueness / token capacity, overlap blocking). Local smoke on demo dr.solo with a *Wednesday off* pending version (2 real Sep-30 visits): plan auto-matched Fri 2 Oct 10:20 and 11:00 with nearby alternatives; dry runs — reschedule both OK, same slot twice → second rejected, keep + cancel-with-reason OK, missing reason / slot outside new schedule / duplicate / stale booking rejected, reassign refused for a doctor account, bad input 400; alerts reported *email not configured* locally. Browser: resolver opened from the panel, review showed per-visit outcomes; closed with *Back*. One real write: *Keep* on one visit (no message, status unchanged) → clashes 2 → 1, calendar API returned `overrideSlot: true`; discarding the pending version cleared the flag. Both visits unchanged (ACCEPTED, same times, no cancel reason), 0 notifications created, schedule back to Mon/Wed/Fri 10:00–14:00.
+
 ### CR-20260928-17
 - **Date opened:** 2026-09-28
 - **Severity:** 2

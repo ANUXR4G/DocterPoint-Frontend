@@ -281,13 +281,18 @@ export const ACTIVE_BOOKING_STATUSES = [
  * tells the clinic who needs a call / reschedule.
  */
 export function findConflicts(
-  bookings: Array<BookingShape & Pick<PracticeBooking, "id" | "patientName" | "locationId">>,
+  bookings: Array<
+    BookingShape &
+      Pick<PracticeBooking, "id" | "patientName" | "locationId"> &
+      Partial<Pick<PracticeBooking, "overrideSlot">>
+  >,
   currentRows: Array<ProviderSchedule>,
   next: ScheduleShape[],
   fromIso: string,
 ): ScheduleConflict[] {
   const out: ScheduleConflict[] = [];
   for (const b of bookings) {
+    if (b.overrideSlot) continue;
     const day = bookingDayIso(b);
     if (!day || day < fromIso) continue;
     const current = pickEffectiveVersion(
@@ -330,6 +335,57 @@ export function summarizeImpact(conflicts: ScheduleConflict[]): ImpactSummary {
     lastDay: days[days.length - 1] ?? null,
     byCode,
   };
+}
+
+/** A free place a conflicting visit could move to under the schedule that will apply that day. */
+export type SlotCandidate = {
+  mode: ScheduleMode;
+  day: string;
+  /** Minutes after clinic midnight: slot start, or token session start. */
+  minute: number;
+  slotStart?: string;
+  sessionDate?: string;
+  label: string;
+  /** Visits sharing a key compete for `capacity` places (1 per time slot, free tokens per session). */
+  key: string;
+  capacity: number;
+};
+
+function dayDistance(fromIso: string, toIso: string): number {
+  return Math.round((dbDate(toIso).getTime() - dbDate(fromIso).getTime()) / DAY_MS);
+}
+
+/** Closest first: same day at the nearest time, then nearby days; a later day wins a tie. */
+export function rankSuggestions<T extends Pick<SlotCandidate, "day" | "minute">>(
+  originalDay: string,
+  originalMinute: number,
+  candidates: T[],
+): T[] {
+  const score = (c: T) => {
+    const d = dayDistance(originalDay, c.day);
+    return Math.abs(d) * 1440 + Math.abs(c.minute - originalMinute) + (d < 0 ? 0.5 : 0);
+  };
+  return candidates
+    .map((c) => ({ c, s: score(c) }))
+    .sort((a, b) => a.s - b.s)
+    .map((x) => x.c);
+}
+
+/**
+ * Auto-match: in order, each visit takes its best-ranked candidate that earlier
+ * visits have not already used up, so two patients are never offered one slot.
+ */
+export function autoMatchSlots<T extends Pick<SlotCandidate, "key" | "capacity">>(
+  items: Array<{ bookingId: string; ranked: T[] }>,
+): Map<string, T | null> {
+  const used = new Map<string, number>();
+  const out = new Map<string, T | null>();
+  for (const item of items) {
+    const pick = item.ranked.find((c) => (used.get(c.key) ?? 0) < c.capacity) ?? null;
+    if (pick) used.set(pick.key, (used.get(pick.key) ?? 0) + 1);
+    out.set(item.bookingId, pick);
+  }
+  return out;
 }
 
 /** First day on/after `minIso` with no conflicting booking on or after it. */

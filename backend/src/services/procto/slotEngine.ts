@@ -269,6 +269,28 @@ export function countBookingsForSlot(
   ).length;
 }
 
+/**
+ * Visits holding a slot: same start, or a visit that overlaps it — e.g. a kept
+ * 10:20–10:40 override blocks 10:15 and 10:30 on a new 15-minute grid.
+ */
+export function countBookingsOccupying(
+  bookings: Array<{
+    mode: ScheduleMode;
+    slotStart: Date | null;
+    slotEnd?: Date | null;
+    status?: BookingStatus;
+  }>,
+  slotStart: Date,
+  slotEnd: Date,
+): number {
+  return bookings.filter((b) => {
+    if (b.mode !== ScheduleMode.TIME_BASED || b.slotStart == null) return false;
+    if (b.status === BookingStatus.CANCELED || b.status === BookingStatus.NO_SHOW) return false;
+    if (sameLocalSlot(b.slotStart, slotStart)) return true;
+    return b.slotEnd != null && b.slotStart < slotEnd && b.slotEnd > slotStart;
+  }).length;
+}
+
 /** Inclusive bookable window: today .. today + (validityDays - 1). */
 export function getValidityBounds(appointmentValidityDays: number): {
   today: Date;
@@ -354,7 +376,7 @@ export function generateTimeSlots(
     const blocked = isBlockedByOverride(overrides, cursor, slotEnd);
     const isPast = !isSlotStartBookable(cursor, nowMs);
 
-    const booked = countBookingsForSlot(bookings, cursor);
+    const booked = countBookingsOccupying(bookings, cursor, slotEnd);
 
     const available = !inBreak && !blocked && !isPast && booked < capacity;
 
@@ -406,7 +428,7 @@ export function generateExtraSlotsFromOverrides(
       const slotEnd = new Date(cursor.getTime() + interval * 60_000);
       if (slotEnd > windowEnd) break;
 
-      const booked = countBookingsForSlot(bookings, cursor);
+      const booked = countBookingsOccupying(bookings, cursor, slotEnd);
 
       // Never list past EXTRA_SLOT starts (same as regular hours)
       if (isSlotStartBookable(cursor, nowMs)) {
