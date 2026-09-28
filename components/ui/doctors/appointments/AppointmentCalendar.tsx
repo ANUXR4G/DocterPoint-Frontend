@@ -73,6 +73,12 @@ type CalBooking = ProctoBooking & {
   disease?: string | null
   provider?: { id: string; name: string | null } | null
   providerId?: string | null
+  overrideSlot?: boolean
+  override_slot?: boolean
+}
+
+function isOverrideSlot(b: CalBooking): boolean {
+  return Boolean(b.overrideSlot ?? b.override_slot)
 }
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8) // 08:00–20:00
@@ -263,6 +269,14 @@ function BookingCard({
           <>
             <p className="text-sm font-semibold leading-tight">
               {timeLabel(booking)} · {patientLabel(booking)}
+              {isOverrideSlot(booking) ? (
+                <span
+                  title="Kept outside the doctor's schedule after a schedule change"
+                  className="ml-1.5 rounded-full border border-amber-400 bg-amber-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-amber-900 dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-100"
+                >
+                  Override slot
+                </span>
+              ) : null}
             </p>
             <p className="mt-0.5 truncate text-xs opacity-80">
               {booking.provider?.name

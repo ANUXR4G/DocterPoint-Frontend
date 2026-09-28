@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
+import { ScheduleConflictResolver } from "./ScheduleConflictResolver"
 import type {
   PendingScheduleVerification,
   ScheduleConflict,
@@ -121,15 +122,26 @@ export function PendingVerificationPanel({
   busy = false,
   onActivate,
   onDiscard,
+  resolver,
+  openResolverSignal = 0,
 }: {
   pending: PendingScheduleVerification | null
   busy?: boolean
   onActivate: (effectiveFrom?: string) => void
   onDiscard: () => void
+  /** Enables the "Resolve appointments" step (reschedule / reassign / cancel / keep). */
+  resolver?: { practiceId: string; providerId: string; onResolved: (message: string) => void }
+  /** Bump to open the resolver, e.g. right after a clashing save. */
+  openResolverSignal?: number
 }) {
   const [confirming, setConfirming] = useState(false)
   const [showList, setShowList] = useState(false)
+  const [resolving, setResolving] = useState(false)
   useEffect(() => setConfirming(false), [pending?.effectiveFrom, pending?.impact.total])
+  useEffect(() => {
+    if (openResolverSignal && resolver) setResolving(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openResolverSignal])
   if (!pending) return null
   const n = pending.impact.total
   const canShift = pending.safeEffectiveFrom > pending.effectiveFrom
@@ -159,11 +171,23 @@ export function PendingVerificationPanel({
         </div>
       ) : null}
       <p className="text-xs opacity-80">
-        No appointment is cancelled or moved. Reschedule the listed patients first, or
-        activate anyway and contact them.
+        No appointment is cancelled or moved yet.{" "}
+        {resolver
+          ? "Resolve them (reschedule, reassign, cancel, or keep as override slots), or activate anyway and contact the patients."
+          : "Reschedule the listed patients first, or activate anyway and contact them."}
         {pending.submittedBy ? ` Submitted by ${pending.submittedBy}.` : ""}
       </p>
       <div className="flex flex-wrap gap-2">
+        {n && resolver ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setResolving(true)}
+            className="min-h-9 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            Resolve {n} appointment{n === 1 ? "" : "s"}
+          </button>
+        ) : null}
         {canShift ? (
           <button
             type="button"
@@ -210,6 +234,15 @@ export function PendingVerificationPanel({
           Discard
         </button>
       </div>
+      {resolver ? (
+        <ScheduleConflictResolver
+          open={resolving}
+          practiceId={resolver.practiceId}
+          providerId={resolver.providerId}
+          onClose={() => setResolving(false)}
+          onResolved={resolver.onResolved}
+        />
+      ) : null}
     </div>
   )
 }

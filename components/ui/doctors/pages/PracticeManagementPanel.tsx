@@ -1287,6 +1287,7 @@ function SchedulePanel({
   const [effectiveFrom, setEffectiveFrom] = useState(clinicTodayIso);
   const [cancellingDate, setCancellingDate] = useState<string | null>(null);
   const [pendingBusy, setPendingBusy] = useState(false);
+  const [resolverSignal, setResolverSignal] = useState(0);
   const [conflictReview, setConflictReview] = useState<{
     preview: SchedulePreview;
     opts?: PanelSaveOpts;
@@ -1435,7 +1436,10 @@ function SchedulePanel({
       effectiveFrom: date ?? preview.effectiveFrom,
       skipPreview: true,
     });
-    if (ok) setConflictReview(null);
+    if (ok) {
+      setConflictReview(null);
+      if (!date) setResolverSignal((s) => s + 1);
+    }
   }
 
   async function cancelUpcoming(date: string) {
@@ -1490,6 +1494,8 @@ function SchedulePanel({
           busy={pendingBusy}
           onActivate={(date) => void activatePending(date)}
           onDiscard={() => void discardPending()}
+          openResolverSignal={resolverSignal}
+          resolver={{ practiceId, providerId, onResolved: (message) => onSaved({ message }) }}
         />
 
         <UpcomingScheduleChanges

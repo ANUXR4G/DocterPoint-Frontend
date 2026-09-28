@@ -346,6 +346,23 @@ export const proctoService = {
       { method: "DELETE" },
     ),
 
+  /** Clashing visits with auto-matched slots, free doctors, and alert options (read-only). */
+  getScheduleResolution: (practiceId: string, providerId: string) =>
+    proctoFetch(
+      `/procto/practices/${practiceId}/schedules/pending/resolution?providerId=${encodeURIComponent(providerId)}`,
+    ) as Promise<ProctoResult<ScheduleResolutionPlan>>,
+
+  resolveScheduleConflicts: (
+    practiceId: string,
+    providerId: string,
+    actions: ScheduleResolutionAction[],
+    dryRun = false,
+  ) =>
+    proctoFetch(`/procto/practices/${practiceId}/schedules/pending/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ providerId, actions, dryRun }),
+    }) as Promise<ProctoResult<ScheduleResolutionOutcome>>,
+
   cancelUpcomingSchedule: (practiceId: string, providerId: string, effectiveFrom: string) =>
     proctoFetch(
       `/procto/practices/${practiceId}/schedules/upcoming?providerId=${encodeURIComponent(providerId)}&effectiveFrom=${encodeURIComponent(effectiveFrom)}`,
@@ -840,6 +857,62 @@ export type PendingScheduleVerification = {
   conflicts: ScheduleConflict[];
   impact: ScheduleImpact;
   safeEffectiveFrom: string;
+};
+
+export type ScheduleSlotSuggestion = {
+  mode: "TIME_BASED" | "TOKEN_BASED";
+  day: string;
+  slotStart?: string;
+  sessionDate?: string;
+  label: string;
+};
+
+export type ScheduleResolutionItem = ScheduleConflict & {
+  mode: "TIME_BASED" | "TOKEN_BASED" | null;
+  autoMatch: ScheduleSlotSuggestion | null;
+  suggestions: ScheduleSlotSuggestion[];
+  reassignTo: Array<{ providerId: string; name: string }>;
+  hasEmail: boolean;
+};
+
+export type ScheduleResolutionPlan = {
+  effectiveFrom: string;
+  summary: UpcomingScheduleChange;
+  impact: ScheduleImpact;
+  canReassign: boolean;
+  emailEnabled: boolean;
+  items: ScheduleResolutionItem[];
+};
+
+export type ScheduleResolutionActionType = "RESCHEDULE" | "REASSIGN" | "CANCEL" | "KEEP";
+
+export type ScheduleResolutionAction = {
+  bookingId: string;
+  type: ScheduleResolutionActionType;
+  slotStart?: string;
+  sessionDate?: string;
+  toProviderId?: string;
+  reason?: string;
+  note?: string;
+  notifyWhatsApp?: boolean;
+  notifyEmail?: boolean;
+};
+
+export type ScheduleAlertStatus = "queued" | "off" | "no_email" | "not_configured" | "n/a";
+
+export type ScheduleResolutionOutcome = {
+  dryRun: boolean;
+  ok: number;
+  failed: number;
+  results: Array<{
+    bookingId: string;
+    type: ScheduleResolutionActionType;
+    ok: boolean;
+    message: string;
+    whatsapp: ScheduleAlertStatus;
+    email: ScheduleAlertStatus;
+  }>;
+  pendingVerification: PendingScheduleVerification | null;
 };
 
 /** A saved schedule version that starts after today. */
