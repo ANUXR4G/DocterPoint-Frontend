@@ -8,7 +8,7 @@ import {
   type ProviderSchedule,
   type ScheduleOverride,
 } from "@prisma/client";
-import { checkExtraWindow, dayWindows, hm12 } from "./calendarSlots.js";
+import { checkExtraWindow, dayWindows, hm12, parseSlotOptions, planExtraSlots } from "./calendarSlots.js";
 import {
   generateExtraSlotsFromOverrides,
   generateTimeSlots,
@@ -39,6 +39,7 @@ function row(dayOfWeek: number, over: Partial<ProviderSchedule> = {}): ProviderS
     breakStartTime: null,
     breakEndTime: null,
     isActive: true,
+    effectiveFrom: new Date("2000-01-01T00:00:00.000Z"),
     createdAt: new Date(0),
     updatedAt: new Date(0),
     ...over,
@@ -77,7 +78,17 @@ describe("calendar quick slots", () => {
       { start: "10:00", end: "12:00" },
       { start: "12:40", end: "14:00" },
     ]);
-    assert.deepEqual(d.extra, [{ id: "x1", start: "17:00", end: "18:00", note: "Evening" }]);
+    assert.deepEqual(d.extra, [
+      {
+        id: "x1",
+        start: "17:00",
+        end: "18:00",
+        note: "Evening",
+        slotIntervalMin: 20,
+        capacity: 1,
+        seriesId: null,
+      },
+    ]);
     assert.equal(d.blocked.length, 1);
     assert.equal(d.dayOff, null);
     assert.equal(d.slotIntervalMin, 20);
@@ -163,6 +174,88 @@ describe("calendar quick slots", () => {
     const session = getTokenSession(tokenRow, nov5, booked, []);
     assert.equal(session?.issued, 1);
     assert.equal(session?.nextToken, 5);
+  });
+
+  test("slot options: length in 5-min steps, 1–20 patients, 1 patient stored as default", () => {
+    assert.deepEqual(parseSlotOptions({}), { slotIntervalMin: null, capacity: null });
+    assert.deepEqual(parseSlotOptions({ slotIntervalMin: "15", capacity: 3 }), { slotIntervalMin: 15, capacity: 3 });
+    assert.deepEqual(parseSlotOptions({ capacity: 1 }), { slotIntervalMin: null, capacity: null });
+    assert.ok("error" in parseSlotOptions({ slotIntervalMin: 12 }));
+    assert.ok("error" in parseSlotOptions({ slotIntervalMin: 0 }));
+    assert.ok("error" in parseSlotOptions({ capacity: 21 }));
+    assert.ok("error" in parseSlotOptions({ capacity: 1.5 }));
+  });
+
+  test("an extra window can use its own slot length and be a shared queue slot", () => {
+    const d = dayWindows(weekRows, [], parseLocalDate(WED));
+    assert.deepEqual(checkExtraWindow({ start: "17:00", end: "18:00" }, d, undefined, 15), { ok: true, slots: 4 });
+    const short = checkExtraWindow({ start: "17:00", end: "17:10" }, d, undefined, 15);
+    assert.ok(!short.ok && short.code === "short" && /at least 15 minutes/.test(short.error));
+
+    const stored = new Date("2026-11-04T00:00:00.000Z");
+    const nov5 = parseLocalDate("2026-11-05");
+    const queue = override(OverrideType.EXTRA_SLOT, "2026-11-05", {
+      date: stored,
+      startTime: "17:00",
+      endTime: "18:00",
+      slotIntervalMin: 15,
+      capacity: 3,
+    });
+    const past = Date.parse("2026-10-01T00:00:00Z");
+    const at5 = (n: number) =>
+      Array.from({ length: n }, () => ({
+        mode: ScheduleMode.TIME_BASED,
+        status: BookingStatus.ACCEPTED,
+        slotStart: new Date("2026-11-05T11:30:00.000Z"),
+        slotEnd: new Date("2026-11-05T11:45:00.000Z"),
+      })) as unknown as PracticeBooking[];
+    const two = generateExtraSlotsFromOverrides([queue], nov5, at5(2), 20, 1, past);
+    assert.equal(two.length, 4);
+    assert.deepEqual(
+      { capacity: two[0].capacity, booked: two[0].booked, available: two[0].available },
+      { capacity: 3, booked: 2, available: true },
+    );
+    const full = generateExtraSlotsFromOverrides([queue], nov5, at5(3), 20, 1, past);
+    assert.equal(full[0].available, false);
+    assert.equal(full[1].available, true);
+  });
+
+  test("repeat plan: chosen weekdays until the end date, skipping days that don't fit", () => {
+    const newVersion = row(3, {
+      id: "v2",
+      endTime: "18:00",
+      effectiveFrom: new Date("2026-11-18T00:00:00.000Z"),
+    });
+    const plan = planExtraSlots({
+      from: "2026-11-04",
+      repeat: { weekdays: [3], until: "2026-11-25" },
+      window: { start: "17:00", end: "18:00" },
+      rows: [...weekRows, newVersion],
+      // Leave on Wed 11 Nov, as read back from the DATE column.
+      overrides: [override(OverrideType.EMERGENCY_LEAVE, "2026-11-11", { date: new Date("2026-11-10T00:00:00.000Z") })],
+      today: "2026-11-01",
+      nowMin: 0,
+    });
+    assert.deepEqual(plan.dates, [{ date: "2026-11-04", slots: 3, slotIntervalMin: 20 }]);
+    assert.deepEqual(
+      plan.skipped.map((s) => [s.date, s.reason]),
+      [
+        ["2026-11-11", "on leave"],
+        ["2026-11-18", "overlaps regular hours"],
+        ["2026-11-25", "overlaps regular hours"],
+      ],
+    );
+
+    const single = planExtraSlots({
+      from: "2026-11-05",
+      window: { start: "17:00", end: "18:00" },
+      slotIntervalMin: 30,
+      rows: weekRows,
+      overrides: [],
+      today: "2026-11-01",
+      nowMin: 0,
+    });
+    assert.deepEqual(single, { dates: [{ date: "2026-11-05", slots: 2, slotIntervalMin: 30 }], skipped: [] });
   });
 
   test("hm12 formats clinic times", () => {

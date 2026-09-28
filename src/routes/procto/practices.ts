@@ -403,6 +403,7 @@ router.delete(
         requireUuid(param(req.params.practiceId), "practiceId"),
         param(req.params.overrideId),
         req.sessionUser!.id,
+        req.query.scope === "series" ? "series" : "one",
       );
       return ResponseHandler.fetchSuccessful(res, data.message, data);
     } catch (error) {

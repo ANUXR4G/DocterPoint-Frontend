@@ -409,8 +409,6 @@ export function generateExtraSlotsFromOverrides(
   _maxPerSlot: number,
   nowMs: number = Date.now(),
 ): TimeSlot[] {
-  const interval = Math.max(5, slotIntervalMin || 15);
-  const capacity = TIME_SLOT_CAPACITY;
   const slots: TimeSlot[] = [];
 
   for (const override of overrides) {
@@ -422,6 +420,9 @@ export function generateExtraSlotsFromOverrides(
     ) {
       continue;
     }
+    const interval = Math.max(5, override.slotIntervalMin || slotIntervalMin || 15);
+    // Regular hours stay one patient per slot; an extra window may be a shared queue slot.
+    const capacity = Math.max(TIME_SLOT_CAPACITY, override.capacity ?? TIME_SLOT_CAPACITY);
 
     const windowStart = parseTimeOnDate(date, override.startTime);
     const windowEnd = parseTimeOnDate(date, override.endTime);
