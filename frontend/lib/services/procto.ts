@@ -393,7 +393,12 @@ export const proctoService = {
     proctoFetch(`/procto/practices/${practiceId}/overrides`, {
       method: "POST",
       body: JSON.stringify({ ...body, type: "EXTRA_SLOT" }),
-    }) as Promise<ProctoResult<ExtraSlotsResult>>,
+    }) as Promise<ProctoResult<ExtraSlotsResult | ExtraSlotsNeedsConfirmation>>,
+
+  getMyPracticePermissions: (practiceId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/permissions`) as Promise<
+      ProctoResult<MyPracticePermissions>
+    >,
 
   /** Days a repeat would add / skip, without saving. */
   previewExtraSlots: (practiceId: string, body: ExtraSlotsRequest) =>
@@ -878,7 +883,11 @@ export type ExtraWindow = TimeWindow & {
 };
 
 export type DayWindows = {
+  /** Clinic weekday, 0 = Sunday. */
+  weekday: number;
   hours: TimeWindow[];
+  /** The doctor's break inside regular hours. */
+  breaks: TimeWindow[];
   extra: ExtraWindow[];
   blocked: Array<TimeWindow & { type: string; reason: string | null }>;
   dayOff: { type: string; reason: string | null } | null;
@@ -910,12 +919,35 @@ export type ExtraSlotsRequest = {
   capacity?: number;
   /** "Extend · repeat": these weekdays (0 = Sun) from `date` until `until`. */
   repeat?: { weekdays: number[]; until: string };
+  /** Create even though the window runs into a break, blocked time, leave or an off-duty day. */
+  confirm?: boolean;
+};
+
+/** Non-blocking conflict the user can confirm past. */
+export type SlotWarning = {
+  code: "leave" | "offDay" | "break" | "blocked";
+  message: string;
+  detail: string;
 };
 
 export type ExtraSlotsPlan = {
-  dates: Array<{ date: string; slots: number; slotIntervalMin: number }>;
+  dates: Array<{ date: string; slots: number; slotIntervalMin: number; warnings: SlotWarning[] }>;
   skipped: Array<{ date: string; reason: string; error: string }>;
   message: string;
+};
+
+/** Nothing saved yet: repeat the request with `confirm: true` to create anyway. */
+export type ExtraSlotsNeedsConfirmation = ExtraSlotsPlan & {
+  needsConfirmation: true;
+  warnings: Array<SlotWarning & { date: string }>;
+};
+
+export type PracticePermissionScope = "ANY" | "OWN" | null;
+
+export type MyPracticePermissions = {
+  userId: string;
+  role: string;
+  permissions: { MANAGE_SLOTS_INLINE: PracticePermissionScope };
 };
 
 export type ExtraSlotsResult = ExtraSlotsPlan & {

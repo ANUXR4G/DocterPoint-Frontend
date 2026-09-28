@@ -38,8 +38,12 @@ export type ExtraWindow = TimeWindow & {
 };
 
 export type DayWindows = {
+  /** Clinic weekday, 0 = Sunday. */
+  weekday: number;
   /** Regular hours for the day, split around the break. */
   hours: TimeWindow[];
+  /** The doctor's break inside regular hours. */
+  breaks: TimeWindow[];
   /** Quick-created / admin extra bookable windows (EXTRA_SLOT overrides). */
   extra: ExtraWindow[];
   blocked: Array<TimeWindow & { type: string; reason: string | null }>;
@@ -86,6 +90,7 @@ export function dayWindows(
   const mode = active[0]?.mode ?? null;
   const weekday = practiceWeekday(date);
   const hours: TimeWindow[] = [];
+  const breaks: TimeWindow[] = [];
   for (const r of active) {
     if (r.dayOfWeek !== weekday || r.mode !== ScheduleMode.TIME_BASED || !r.startTime || !r.endTime) continue;
     const s = minutesOf(r.startTime);
@@ -95,6 +100,7 @@ export function dayWindows(
     if (!Number.isNaN(bs) && !Number.isNaN(be) && bs < be && bs < e && be > s) {
       if (bs > s) hours.push({ start: r.startTime, end: formatHHMM(bs) });
       if (be < e) hours.push({ start: formatHHMM(be), end: r.endTime });
+      breaks.push({ start: formatHHMM(Math.max(bs, s)), end: formatHHMM(Math.min(be, e)) });
     } else {
       hours.push({ start: r.startTime, end: r.endTime });
     }
@@ -124,7 +130,43 @@ export function dayWindows(
   }
   extra.sort((a, b) => minutesOf(a.start) - minutesOf(b.start));
 
-  return { hours, extra, blocked, dayOff, mode, slotIntervalMin };
+  return { weekday, hours, breaks, extra, blocked, dayOff, mode, slotIntervalMin };
+}
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export type WarningCode = "leave" | "offDay" | "break" | "blocked";
+
+/** Non-blocking conflict: the slot can still be created after the user confirms. */
+export type SlotWarning = { code: WarningCode; message: string; detail: string };
+
+/** Break, blocked time, leave and non-working days the window runs into. */
+export function slotWarnings(win: TimeWindow, day: DayWindows): SlotWarning[] {
+  const out: SlotWarning[] = [];
+  if (day.dayOff) {
+    out.push({
+      code: "leave",
+      message: "Doctor is on leave this day.",
+      detail: day.dayOff.reason?.trim() || (day.dayOff.type === OverrideType.EMERGENCY_LEAVE ? "Emergency leave" : "Day off"),
+    });
+  } else if (day.mode && !day.hours.length) {
+    out.push({
+      code: "offDay",
+      message: `Doctor is off duty on ${WEEKDAY_NAMES[day.weekday]}s.`,
+      detail: "No regular hours that day",
+    });
+  }
+  const brk = day.breaks.find((b) => overlaps(win, b));
+  if (brk) out.push({ code: "break", message: "Doctor is marked on break during this time.", detail: `Break ${range(brk)}` });
+  const block = day.blocked.find((b) => overlaps(win, b));
+  if (block) {
+    out.push({
+      code: "blocked",
+      message: "This time is blocked on the doctor's calendar.",
+      detail: `Blocked ${range(block)}${block.reason?.trim() ? ` · ${block.reason.trim()}` : ""}`,
+    });
+  }
+  return out;
 }
 
 export const MAX_SLOT_CAPACITY = 20;
@@ -149,19 +191,26 @@ export function parseSlotOptions(raw: {
   return { slotIntervalMin: interval, capacity: capacity === 1 ? null : capacity };
 }
 
-export type SkipCode = "format" | "order" | "token" | "leave" | "short" | "hours" | "extra" | "blocked" | "past";
+/** Hard conflicts — the day can't take the window. Break / blocked / leave are warnings instead. */
+export type SkipCode = "format" | "order" | "token" | "short" | "hours" | "extra" | "past";
 
 /** Short label for a skipped day in a repeat range. */
 export const SKIP_LABEL: Record<SkipCode, string> = {
   format: "invalid time",
   order: "invalid time",
   token: "token queue day",
-  leave: "on leave",
   short: "shorter than one slot",
   hours: "overlaps regular hours",
   extra: "already has extra slots",
-  blocked: "time is blocked",
   past: "already passed",
+};
+
+/** Short label for a warned day in a repeat range. */
+export const WARNING_LABEL: Record<WarningCode, string> = {
+  leave: "on leave",
+  offDay: "off duty",
+  break: "break time",
+  blocked: "blocked time",
 };
 
 /**
@@ -173,7 +222,9 @@ export function checkExtraWindow(
   day: DayWindows,
   nowMin?: number,
   slotIntervalMin?: number | null,
-): { ok: true; slots: number } | { ok: false; error: string; code: SkipCode } {
+):
+  | { ok: true; slots: number; warnings: SlotWarning[] }
+  | { ok: false; error: string; code: SkipCode } {
   const fail = (code: SkipCode, error: string) => ({ ok: false as const, error, code });
   const s = minutesOf(win.start);
   const e = minutesOf(win.end);
@@ -182,7 +233,6 @@ export function checkExtraWindow(
   if (day.mode === ScheduleMode.TOKEN_BASED) {
     return fail("token", "This doctor uses a token queue — extra time slots only work for time-slot booking.");
   }
-  if (day.dayOff) return fail("leave", "The doctor is on leave that day. Remove the leave first.");
   const interval = slotIntervalMin || day.slotIntervalMin;
   if (e - s < interval) {
     return fail("short", `Pick at least ${interval} minutes — one slot is ${interval} minutes.`);
@@ -191,15 +241,13 @@ export function checkExtraWindow(
   if (hit) return fail("hours", `${range(win)} overlaps regular hours ${range(hit)}. Pick a time outside them.`);
   const extra = day.extra.find((x) => overlaps(win, x));
   if (extra) return fail("extra", `Extra slots already cover ${range(extra)}.`);
-  const block = day.blocked.find((b) => overlaps(win, b));
-  if (block) return fail("blocked", `${range(block)} is blocked on this day.`);
 
   let slots = 0;
   for (let t = s; t + interval <= e; t += interval) {
     if (nowMin == null || t > nowMin) slots++;
   }
   if (!slots) return fail("past", "That time has already passed. Pick a later time.");
-  return { ok: true, slots };
+  return { ok: true, slots, warnings: slotWarnings(win, day) };
 }
 
 /** Clinic weekday (0=Sun) of a YYYY-MM-DD calendar date. */
@@ -210,7 +258,7 @@ export function weekdayOfIso(iso: string): number {
 export type RepeatRule = { weekdays: number[]; until: string };
 
 export type ExtraSlotPlan = {
-  dates: Array<{ date: string; slots: number; slotIntervalMin: number }>;
+  dates: Array<{ date: string; slots: number; slotIntervalMin: number; warnings: SlotWarning[] }>;
   skipped: Array<{ date: string; code: SkipCode; reason: string; error: string }>;
 };
 
@@ -263,7 +311,12 @@ export function planExtraSlots(input: {
             input.slotIntervalMin,
           );
     if (check.ok) {
-      plan.dates.push({ date: iso, slots: check.slots, slotIntervalMin: input.slotIntervalMin || day.slotIntervalMin });
+      plan.dates.push({
+        date: iso,
+        slots: check.slots,
+        slotIntervalMin: input.slotIntervalMin || day.slotIntervalMin,
+        warnings: check.warnings,
+      });
     } else {
       plan.skipped.push({ date: iso, code: check.code, reason: SKIP_LABEL[check.code], error: check.error });
     }

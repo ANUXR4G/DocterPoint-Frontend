@@ -387,6 +387,9 @@ router.post(
         req.body,
         req.sessionUser!.id,
       );
+      if (data && typeof data === "object" && ("needsConfirmation" in data || "dryRun" in data)) {
+        return ResponseHandler.fetchSuccessful(res, String(data.message), data);
+      }
       return ResponseHandler.createSuccessful(res, "override created.", data);
     } catch (error) {
       next(error);
@@ -428,6 +431,22 @@ router.get(
         req.sessionUser!.id,
       );
       return ResponseHandler.fetchSuccessful(res, "calendar fetched.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  "/:practiceId/permissions",
+  requireAuth("practice:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await PracticeService.getMyPermissions(
+        requireUuid(param(req.params.practiceId), "practiceId"),
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "permissions fetched.", data);
     } catch (error) {
       next(error);
     }

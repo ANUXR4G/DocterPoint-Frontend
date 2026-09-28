@@ -183,13 +183,7 @@ export default function CalendarDayGrid({
 
   function creatable(providerId: string) {
     const w = windows[providerId]
-    return (
-      !isPast &&
-      canCreate(providerId) &&
-      !!w &&
-      w.mode !== "TOKEN_BASED" &&
-      !w.dayOff
-    )
+    return !isPast && canCreate(providerId) && !!w && w.mode !== "TOKEN_BASED"
   }
 
   function minAt(el: HTMLElement, clientY: number) {
@@ -470,6 +464,25 @@ export default function CalendarDayGrid({
                     />
                   ))}
 
+                  {w?.breaks?.map((br) => (
+                    <div
+                      key={`br-${br.start}`}
+                      className="pointer-events-none absolute inset-x-1 rounded-md border border-amber-200 bg-amber-50/90 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                      style={{
+                        top: y(toMin(br.start)),
+                        height: (toMin(br.end) - toMin(br.start)) * PX_PER_MIN,
+                      }}
+                    >
+                      Break {windowLabel(br)}
+                    </div>
+                  ))}
+
+                  {w?.dayOff ? (
+                    <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-red-50/60 pt-6 text-sm font-semibold text-red-800 dark:bg-red-950/30 dark:text-red-200">
+                      On leave{w.dayOff.reason ? ` — ${w.dayOff.reason}` : ""}
+                    </div>
+                  ) : null}
+
                   {w?.blocked.map((bw) => (
                     <div
                       key={`b-${bw.start}`}
@@ -565,12 +578,6 @@ export default function CalendarDayGrid({
                       ) : null}
                     </div>
                   ))}
-
-                  {w?.dayOff ? (
-                    <div className="pointer-events-none absolute inset-0 flex items-start justify-center bg-red-50/60 pt-6 text-sm font-semibold text-red-800 dark:bg-red-950/30 dark:text-red-200">
-                      On leave{w.dayOff.reason ? ` — ${w.dayOff.reason}` : ""}
-                    </div>
-                  ) : null}
 
                   {isPast || (isToday && nowMin > gridStart) ? (
                     <div
