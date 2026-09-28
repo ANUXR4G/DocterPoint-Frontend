@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260929-20
+- **Date opened:** 2026-09-29
+- **Severity:** 2
+- **Process:** P-BOOK (slots / schedules) / P-NOTIFY / tenant isolation
+- **Description:** User asked receptionists to create or extend schedule slots directly on the calendar — drag over an unallocated window, or a hover *+ Slot* on a doctor's column header / empty time — with an inline quick-create popover pre-filled with doctor and time. Building it exposed three existing defects: (1) override and token-session `DATE` columns (written from clinic midnight, stored under the previous UTC date) were compared in clinic time by `slotEngine#sameDay`, so `EXTRA_SLOT` windows never produced slots, leave / blocked days did not block slots, and token counts restarted at #1 (duplicate tokens); (2) creating any override — including `EXTRA_SLOT` — sent the *doctor's schedule changed* WhatsApp to every booked patient that day; (3) `GET …/calendar` did not check that the caller belongs to the practice.
+- **Evidence:** Local smoke: an extra 5–6 PM window on Thu 5 Nov was stored but `timeSlots` stayed empty; the server log dated the row 2026-11-04. Read-only DB check: no override rows and no token bookings exist yet, so no stored data or real patient was affected. Code review of `createOverride` (notification loop not filtered by type) and the calendar route (no membership check).
+- **Containment:** None needed in data (zero override / token rows). Fixed before any clinic used extra slots, leave overrides or token mode.
+- **Root cause:** Two conventions for DATE columns (clinic midnight vs UTC midnight) with a comparator that assumed the other; override notification written for leave and applied to every type; calendar route relied on the scope check alone.
+- **Corrective action:** `sameDay` compares the stored UTC date key (same convention as `isBookingStillUpcoming` / `localDayOfSessionDate`); override list returns the real `day`. `calendarSlots.ts` (`dayWindows`, `checkExtraWindow`, `DESK_ROLES`); `createExtraSlots` (reception / admin any doctor, doctor own; active doctor; not past / leave / overlapping; ≥ 1 slot; no patient message) and `deleteExtraSlots` (refused while booked); calendar returns `windows`, uses the booking path's slot length on days off, and requires membership. Frontend: Day view rebuilt as a doctor-column time grid (`CalendarDayGrid`) with drag-select, hover *+ Slot*, header *+ Slot*, extra / blocked / leave bands, now line; `QuickSlotPopover`; Week-view *+ Slot*; success notice with **Undo**.
+- **Owner / due:** Engineering / 2026-09-29
+- **Verification:** 215/215 procto tests (6 new: day windows / break split, day-off slot length, valid windows, every rejection rule, DB round-trip dates for extra slots + leave blocking + token numbering, 12-hour labels). Local API smoke (demo dr.solo, empty Thu 5 Nov): add 5–6 PM → 3 slots (5:00 / 5:20 / 5:40 PM listed); overlap, inside hours, past day, 15-min window → 400 with clear messages; foreign practice calendar → 403; delete → 200, again → 404, day empty. Browser: Day grid showed hours 10 AM–2 PM with both real Sep-30 visits in place; hover ghost *+ Slot 5:00 PM*; drag 5–6 PM → popover pre-filled (Dr. Priya Nair, 17:00–18:00, *3 bookable 20-min slots*); *Add 3 slots* → violet band + notice; **Undo** → band gone, API 0 extra / 0 slots; header *+ Slot* on Sep 30 suggested 2:00–2:20 PM (closed without saving); click inside hours opened nothing; Week-view *+ Slot* opened the popover for that day. No booking touched, no message sent.
+
 ### CR-20260928-19
 - **Date opened:** 2026-09-28
 - **Severity:** 2

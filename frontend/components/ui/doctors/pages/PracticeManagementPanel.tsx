@@ -1904,7 +1904,7 @@ function OverridesPanel({
       <div className="rounded-xl border dark:border-neutral-700 p-4">
         <h2 className="font-semibold mb-3">Recent overrides</h2>
         <ul className="text-sm space-y-2">
-          {(overrides as Array<{ id: string; type: string; date: string; reason: string | null }>).map(
+          {(overrides as Array<{ id: string; type: string; date: string; day?: string; reason: string | null }>).map(
             (o) => (
               <li key={o.id} className="rounded-lg border dark:border-neutral-700 px-3 py-2">
                 <span className="font-medium">
@@ -1912,7 +1912,7 @@ function OverridesPanel({
                     ? "Extra slot"
                     : o.type.replace(/_/g, " ")}
                 </span>
-                <span className="opacity-70 ml-2">{o.date.slice(0, 10)}</span>
+                <span className="opacity-70 ml-2">{o.day ?? o.date.slice(0, 10)}</span>
                 {o.reason && <p className="text-xs opacity-60 mt-1">{o.reason}</p>}
               </li>
             ),

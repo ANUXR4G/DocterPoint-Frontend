@@ -53,6 +53,14 @@ import {
   upcomingVersionKeys,
 } from "./scheduleVersions.js";
 import { ScheduleAlertService } from "./scheduleAlerts.service.js";
+import {
+  checkExtraWindow,
+  clinicMinutesNow,
+  dayWindows,
+  DESK_ROLES,
+  drName,
+  hm12,
+} from "./calendarSlots.js";
 
 type NoticePlan = {
   hours: number;
@@ -1894,24 +1902,10 @@ export const PracticeService = {
     actorUserId: string,
   ) {
     const overrideType = data.type as OverrideType;
-
     if (overrideType === OverrideType.EXTRA_SLOT) {
-      await this.assertAdmin(practiceId, actorUserId);
-      if (!data.startTime || !data.endTime) {
-        throw new AppError(400, "Start and end time are required for extra slots.");
-      }
-      try {
-        assertValidTimeRange(data.startTime, data.endTime, "extra slot window");
-      } catch (e) {
-        throw new AppError(400, e instanceof Error ? e.message : "Invalid extra slot window.");
-      }
-      const schedules = await loadSchedulesOn({ practiceId, providerId }, data.date);
-      if (resolveProviderBookingMode(schedules) !== ScheduleMode.TIME_BASED) {
-        throw new AppError(400, "Extra slots are only available for time-based booking.");
-      }
-    } else {
-      await this.assertCanManageProvider(practiceId, actorUserId, providerId);
+      return this.createExtraSlots(practiceId, providerId, data, actorUserId);
     }
+    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
 
     const dayStart = startOfLocalDay(parseLocalDate(data.date));
     const dayEnd = endOfLocalDay(dayStart);
@@ -1971,6 +1965,120 @@ export const PracticeService = {
     }
 
     return override;
+  },
+
+  /** Desk roles for any active doctor of the practice; a doctor for their own calendar. */
+  async assertCanManageSlots(practiceId: string, actorUserId: string, providerId: string) {
+    if (!isUuid(providerId)) throw new AppError(400, "Pick a doctor.");
+    const member = await this.assertMember(practiceId, actorUserId);
+    if (!DESK_ROLES.has(member.role) && providerId !== actorUserId) {
+      throw new AppError(403, "Doctors can only add slots to their own calendar. Reception and clinic admins can add them for any doctor.");
+    }
+    const provider = await prisma.practiceMember.findUnique({
+      where: { practiceId_userId: { practiceId, userId: providerId } },
+      select: { isActive: true, user: { select: { name: true } } },
+    });
+    if (!provider?.isActive) throw new AppError(404, "That doctor is not active in this clinic.");
+    return { member, providerName: provider.user?.name?.trim() || "the doctor" };
+  },
+
+  async loadDayWindows(practiceId: string, providerId: string, dateIso: string) {
+    const date = parseLocalDate(dateIso);
+    const [rows, overrides] = await Promise.all([
+      loadSchedulesOn({ practiceId, providerId }, dateIso),
+      prisma.scheduleOverride.findMany({
+        where: { practiceId, providerId, date: startOfLocalDay(date) },
+      }),
+    ]);
+    return dayWindows(rows, overrides, date);
+  },
+
+  /**
+   * Quick-create bookable time from the calendar (EXTRA_SLOT override). Adds availability
+   * only, so no patient is messaged.
+   */
+  async createExtraSlots(
+    practiceId: string,
+    providerId: string,
+    data: { date: string; startTime?: string; endTime?: string; reason?: string },
+    actorUserId: string,
+  ) {
+    const { providerName } = await this.assertCanManageSlots(practiceId, actorUserId, providerId);
+    const dateIso = data.date?.trim();
+    if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+      throw new AppError(400, "Date must be YYYY-MM-DD.");
+    }
+    const today = todayIso();
+    if (dateIso < today) throw new AppError(400, "That day has already passed.");
+    if (dateIso > addDaysIso(today, 366)) {
+      throw new AppError(400, "Slots can be added at most one year ahead.");
+    }
+    const startTime = data.startTime?.trim() ?? "";
+    const endTime = data.endTime?.trim() ?? "";
+    const day = await this.loadDayWindows(practiceId, providerId, dateIso);
+    const check = checkExtraWindow(
+      { start: startTime, end: endTime },
+      day,
+      dateIso === today ? clinicMinutesNow() : undefined,
+    );
+    if (!check.ok) throw new AppError(400, check.error);
+
+    const override = await prisma.scheduleOverride.create({
+      data: {
+        practiceId,
+        providerId,
+        date: startOfLocalDay(parseLocalDate(dateIso)),
+        type: OverrideType.EXTRA_SLOT,
+        startTime,
+        endTime,
+        reason: data.reason?.trim().slice(0, 200) || null,
+      },
+    });
+    console.log(
+      `[calendar] extra slots ${dateIso} ${startTime}-${endTime} provider=${providerId} by=${actorUserId} slots=${check.slots}`,
+    );
+    return {
+      ...override,
+      slots: check.slots,
+      slotIntervalMin: day.slotIntervalMin,
+      message: `Added ${check.slots} bookable ${day.slotIntervalMin}-min slot${check.slots === 1 ? "" : "s"} for ${drName(providerName)}, ${hm12(startTime)}–${hm12(endTime)}.`,
+    };
+  },
+
+  /** Remove a quick-created window; refused while any visit is booked inside it. */
+  async deleteExtraSlots(practiceId: string, overrideId: string, actorUserId: string) {
+    if (!isUuid(overrideId)) throw new AppError(400, "Invalid slot window.");
+    const override = await prisma.scheduleOverride.findFirst({
+      where: { id: overrideId, practiceId },
+    });
+    if (!override || override.type !== OverrideType.EXTRA_SLOT || !override.startTime || !override.endTime) {
+      throw new AppError(404, "Those extra slots no longer exist.");
+    }
+    await this.assertCanManageSlots(practiceId, actorUserId, override.providerId);
+    const dateIso = localDayOfSessionDate(override.date);
+    const booked = await prisma.practiceBooking.count({
+      where: {
+        practiceId,
+        providerId: override.providerId,
+        status: { in: ACTIVE_BOOKING_STATUSES },
+        overrideSlot: false,
+        slotStart: {
+          gte: zonedDateTime(dateIso, override.startTime),
+          lt: zonedDateTime(dateIso, override.endTime),
+        },
+      },
+    });
+    if (booked) {
+      throw new AppError(
+        409,
+        `${booked} visit${booked === 1 ? " is" : "s are"} booked in these slots. Reschedule or cancel ${booked === 1 ? "it" : "them"} first.`,
+      );
+    }
+    await prisma.scheduleOverride.delete({ where: { id: override.id } });
+    console.log(
+      `[calendar] extra slots removed ${dateIso} ${override.startTime}-${override.endTime} provider=${override.providerId} by=${actorUserId}`,
+    );
+    return { removed: true, message: `Removed extra slots ${hm12(override.startTime)}–${hm12(override.endTime)}.` };
   },
 
   async getSchedules(practiceId: string, providerId?: string, actorUserId?: string) {
@@ -2287,7 +2395,7 @@ export const PracticeService = {
             providerId,
           )
         : providerId;
-    return prisma.scheduleOverride.findMany({
+    const rows = await prisma.scheduleOverride.findMany({
       where: {
         practiceId,
         ...(scoped ? { providerId: scoped } : {}),
@@ -2295,6 +2403,7 @@ export const PracticeService = {
       },
       orderBy: { date: "desc" },
     });
+    return rows.map((o) => ({ ...o, day: localDayOfSessionDate(o.date) }));
   },
 
   async updatePractice(
@@ -3163,17 +3272,20 @@ export const PracticeService = {
     practiceId: string,
     providerId: string,
     dateStr: string,
+    actorUserId: string,
   ) {
+    const member = await this.assertMember(practiceId, actorUserId);
+    if (!DESK_ROLES.has(member.role) && providerId !== actorUserId) {
+      throw new AppError(403, "Clinic staff doctors can only view their own calendar.");
+    }
     await this.applyDuePendingSchedule(providerId);
     const date = parseLocalDate(dateStr);
     const dayOfWeek = practiceWeekday(date);
     const dayStart = startOfLocalDay(date);
     const dayEnd = endOfLocalDay(date);
 
-    const [schedules, bookings, overrides] = await Promise.all([
-      loadSchedulesOn({ practiceId, providerId }, formatLocalDate(date)).then((rows) =>
-        rows.filter((s) => s.dayOfWeek === dayOfWeek),
-      ),
+    const [allRows, bookings, overrides] = await Promise.all([
+      loadSchedulesOn({ practiceId, providerId }, formatLocalDate(date)),
       prisma.practiceBooking.findMany({
         where: {
           practiceId,
@@ -3191,10 +3303,11 @@ export const PracticeService = {
       }),
     ]);
 
-    const activeSchedules = schedulesForActiveMode(schedules);
-    const configuredMode = resolveProviderBookingMode(schedules);
+    const activeRows = schedulesForActiveMode(allRows);
+    const configuredMode = resolveProviderBookingMode(allRows);
+    const activeSchedules = activeRows.filter((s) => s.dayOfWeek === dayOfWeek);
 
-    const timeSlots = timeSlotsForProviderDay(activeSchedules, date, bookings, overrides);
+    const timeSlots = timeSlotsForProviderDay(activeRows, date, bookings, overrides);
 
     const tokenSessions = activeSchedules
       .filter((s) => s.mode === "TOKEN_BASED")
@@ -3208,6 +3321,7 @@ export const PracticeService = {
       tokenSessions,
       overrides,
       configuredMode,
+      windows: dayWindows(allRows, overrides, date),
     };
   },
 

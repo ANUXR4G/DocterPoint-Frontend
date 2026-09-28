@@ -313,10 +313,13 @@ export function isDateWithinValidity(
   return day >= today && day <= maxDay;
 }
 
-function sameDay(a: Date, b: Date): boolean {
-  const pa = zonedParts(a);
-  const pb = zonedParts(b);
-  return pa.year === pb.year && pa.month === pb.month && pa.day === pb.day;
+/**
+ * `column` is a Postgres DATE (override date / token session date) written from clinic
+ * midnight, so it is stored under the UTC date of that instant — compare that key, not
+ * the clinic-zone date of the value read back.
+ */
+function sameDay(column: Date, day: Date): boolean {
+  return column.toISOString().slice(0, 10) === startOfLocalDay(day).toISOString().slice(0, 10);
 }
 
 function overlapsBreak(

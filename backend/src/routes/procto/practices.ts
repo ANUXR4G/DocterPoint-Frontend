@@ -394,6 +394,23 @@ router.post(
   },
 );
 
+router.delete(
+  "/:practiceId/overrides/:overrideId",
+  requireAuth("schedule:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await PracticeService.deleteExtraSlots(
+        requireUuid(param(req.params.practiceId), "practiceId"),
+        param(req.params.overrideId),
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, data.message, data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get(
   "/:practiceId/calendar",
   requireAuth("schedule:read"),
@@ -407,6 +424,7 @@ router.get(
         requireUuid(param(req.params.practiceId), "practiceId"),
         requireUuid(String(providerId), "providerId"),
         String(date),
+        req.sessionUser!.id,
       );
       return ResponseHandler.fetchSuccessful(res, "calendar fetched.", data);
     } catch (error) {
