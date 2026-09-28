@@ -8,6 +8,7 @@ import {
   type ExtraSlotsPlan,
   type ExtraSlotsRequest,
   type ExtraSlotsResult,
+  type SlotWarning,
 } from "@/lib/services/procto"
 import { practiceMinutesOfDay, practiceTodayIso } from "@/lib/practiceTime"
 import {
@@ -36,6 +37,12 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
 const REASON_TAGS = ["Overtime", "Walk-in overflow", "VIP session"]
 const MAX_CAPACITY = 20
+const WARNING_LABEL: Record<SlotWarning["code"], string> = {
+  leave: "on leave",
+  offDay: "off duty",
+  break: "break time",
+  blocked: "blocked time",
+}
 
 function isoDate(iso: string) {
   return new Date(`${iso}T12:00:00.000Z`)
@@ -136,6 +143,11 @@ export default function QuickSlotPopover({
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+  const [confirming, setConfirming] = useState<{
+    message: string
+    details: string[]
+  } | null>(null)
+  const confirmRef = useRef<HTMLButtonElement>(null)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const panelRef = useRef<HTMLDivElement>(null)
   const firstField = useRef<HTMLButtonElement>(null)
@@ -232,6 +244,13 @@ export default function QuickSlotPopover({
     until,
   ])
 
+  useEffect(() => {
+    setConfirming(null)
+  }, [body])
+  useEffect(() => {
+    if (confirming) confirmRef.current?.focus()
+  }, [confirming])
+
   const repeatKey =
     mode === "repeat"
       ? JSON.stringify({ ...body, reason: undefined, capacity: undefined })
@@ -293,18 +312,41 @@ export default function QuickSlotPopover({
   const canSubmit =
     !saving && (mode === "single" ? check.ok : Boolean(plan?.dates.length))
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
+  async function save(confirm: boolean) {
     if (!canSubmit) return
     setSaving(true)
     setError("")
-    const res = await proctoService.addExtraSlots(practiceId, body)
+    const res = await proctoService.addExtraSlots(practiceId, {
+      ...body,
+      confirm: confirm || undefined,
+    })
     setSaving(false)
     if (res.status === "successful" && res.data) {
-      onCreated(res.data, { providerId, date })
+      const data = res.data
+      if ("needsConfirmation" in data) {
+        const repeat = mode === "repeat"
+        setConfirming({
+          message: data.message,
+          details: [
+            ...new Set(
+              data.warnings.map((w) =>
+                repeat ? `${formatDay(w.date)} — ${w.detail}` : w.detail,
+              ),
+            ),
+          ].slice(0, 6),
+        })
+        return
+      }
+      onCreated(data, { providerId, date })
       return
     }
+    setConfirming(null)
     setError(res.message || "Could not add the slots.")
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!confirming) void save(false)
   }
 
   const lengths: Array<[string, number]> = [
@@ -637,6 +679,14 @@ export default function QuickSlotPopover({
               {check.slots} bookable {length}-min slot
               {check.slots === 1 ? "" : "s"} · {hm12(start)}–{hm12(end)}
               {perSlot}
+              {check.warnings.map((w) => (
+                <span
+                  key={w.code}
+                  className="mt-1 block text-xs font-medium text-amber-800 dark:text-amber-200"
+                >
+                  ⚠ {w.message} {w.detail}.
+                </span>
+              ))}
             </p>
           ) : (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
@@ -679,6 +729,25 @@ export default function QuickSlotPopover({
                 {plan.dates.length > 6 ? ` +${plan.dates.length - 6} more` : ""}
               </p>
             ) : null}
+            {plan.dates.some((d) => d.warnings.length) ? (
+              <ul className="mt-1 space-y-0.5 text-xs text-amber-800 dark:text-amber-200">
+                {plan.dates
+                  .filter((d) => d.warnings.length)
+                  .slice(0, 4)
+                  .map((d) => (
+                    <li key={d.date}>
+                      ⚠ {formatDay(d.date)} —{" "}
+                      {d.warnings.map((w) => WARNING_LABEL[w.code]).join(", ")}
+                    </li>
+                  ))}
+                {plan.dates.filter((d) => d.warnings.length).length > 4 ? (
+                  <li>
+                    +{plan.dates.filter((d) => d.warnings.length).length - 4}{" "}
+                    more to confirm
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
             {plan.skipped.length ? (
               <ul className="mt-1 space-y-0.5 text-xs text-amber-800 dark:text-amber-200">
                 {plan.skipped.slice(0, 4).map((s) => (
@@ -710,7 +779,42 @@ export default function QuickSlotPopover({
           is messaged.
         </p>
 
-        <div className="flex justify-end gap-2">
+        {confirming ? (
+          <div
+            role="alertdialog"
+            aria-label="Confirm conflict"
+            className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-50"
+          >
+            <p className="font-bold">⚠ {confirming.message}</p>
+            {confirming.details.length ? (
+              <ul className="space-y-0.5 text-xs opacity-90">
+                {confirming.details.map((d) => (
+                  <li key={d}>{d}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirming(null)}
+                className="rounded-xl border border-amber-400 px-3 py-1.5 text-sm font-semibold dark:border-amber-600"
+              >
+                Go back
+              </button>
+              <button
+                ref={confirmRef}
+                type="button"
+                disabled={saving}
+                onClick={() => void save(true)}
+                className="rounded-xl bg-amber-600 px-3 py-1.5 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Create anyway"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className={`flex justify-end gap-2 ${confirming ? "hidden" : ""}`}>
           <button
             type="button"
             onClick={onClose}

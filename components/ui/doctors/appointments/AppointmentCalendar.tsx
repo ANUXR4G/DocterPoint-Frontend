@@ -29,6 +29,7 @@ import {
 import {
   proctoService,
   type DayWindows,
+  type PracticePermissionScope,
   type ProctoBooking,
   type TimeWindow,
 } from "@/lib/services/procto"
@@ -450,9 +451,27 @@ export default function AppointmentCalendar() {
     return match.length ? match : [{ id: providerId, name: "You" }]
   }, [doctors, providerId])
 
+  const [slotScope, setSlotScope] = useState<
+    PracticePermissionScope | undefined
+  >(undefined)
+  useEffect(() => {
+    if (!practiceId) return
+    let alive = true
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (alive && res.status === "successful" && res.data?.permissions)
+        setSlotScope(res.data.permissions.MANAGE_SLOTS_INLINE ?? null)
+    })
+    return () => {
+      alive = false
+    }
+  }, [practiceId])
+
+  // Until the server answers, fall back to the membership role; save is enforced server-side.
+  const scope =
+    slotScope === undefined ? (isFrontDesk ? "ANY" : "OWN") : slotScope
   const canCreateFor = useCallback(
-    (id: string) => isFrontDesk || id === actorUserId,
-    [isFrontDesk, actorUserId],
+    (id: string) => scope === "ANY" || (scope === "OWN" && id === actorUserId),
+    [scope, actorUserId],
   )
   const creatableDoctors = useMemo(
     () => doctors.filter((d) => canCreateFor(d.id)),
