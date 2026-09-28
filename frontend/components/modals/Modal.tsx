@@ -2,7 +2,8 @@
 
 import { useClickOutside } from "@/hooks/useClickOutside"
 import { AnimatePresence } from "framer-motion"
-import React, { useRef } from "react"
+import React, { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { motion } from "framer-motion"
 import { fadingAnimation } from "@/lib/animations"
 import Icon from "../icons"
@@ -39,12 +40,18 @@ export default function PopupModal({
   // handle exit on escape button press on keyboard
   useKeyPress("Escape", () => handler && handler())
 
-  return (
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
+
+  // Portal to the dashboard root so the overlay sits above the fixed sidebar and header
+  // while `.dark .dashboard-app` theme overrides still apply.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <React.Fragment>
           <div
-            className={`full w-full fixed inset-0 z-[70] p-2 center prevent-scroll`}
+            className={`full w-full fixed inset-0 z-[210] p-2 center prevent-scroll`}
           >
             {/* modal inner */}
             <motion.div
@@ -114,7 +121,7 @@ export default function PopupModal({
 
           {/* overlay */}
           <motion.div
-            className="size-full bg-black/80 backdrop-blur-sm inset-0 fixed z-50"
+            className="size-full bg-black/80 backdrop-blur-sm inset-0 fixed z-[200]"
             variants={fadingAnimation}
             initial="initial"
             animate="animate"
@@ -122,6 +129,7 @@ export default function PopupModal({
           />
         </React.Fragment>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.querySelector(".dashboard-app") ?? document.body,
   )
 }
