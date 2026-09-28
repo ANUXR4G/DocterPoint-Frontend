@@ -14,6 +14,8 @@ import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 import { formatPracticeDateTime } from "./slotEngine.js";
 import { sendNotificationWhatsApp } from "./whatsapp.client.js";
 import {
+  appointmentWhenLabel,
+  balanceDuePaise,
   customLinkExpiry,
   e164,
   formatRupees,
@@ -74,6 +76,8 @@ export function paymentRequestView(
     channel: r.channel as PaymentChannel,
     waDelivery: r.waDelivery,
     waError: r.waError,
+    receiptDelivery: r.receiptDelivery,
+    receiptError: r.receiptError,
   };
 }
 
@@ -136,6 +140,97 @@ async function receiptPurpose(req: PaymentRequest): Promise<string> {
     return `${label} · Token #${booking.tokenNumber}`;
   }
   return label;
+}
+
+const CLOSED_BOOKING_STATUSES = new Set(["CANCELED", "NO_SHOW", "COMPLETED"]);
+
+/** Advance / fee for an upcoming visit → appointment confirmation; anything else → plain receipt. */
+async function receiptMessage(
+  req: PaymentRequest,
+): Promise<{ templateKey: string; payload: Record<string, unknown> }> {
+  const practice = await prisma.practice.findUnique({
+    where: { id: req.practiceId },
+    select: { name: true, consultationFee: true },
+  });
+  const practiceName = practice?.name ?? "your clinic";
+  const amountLabel = formatRupees(req.amount);
+  const paymentId = req.paymentId ?? "—";
+  const booking =
+    isPrepay(req) && req.bookingId
+      ? await prisma.practiceBooking.findUnique({
+          where: { id: req.bookingId },
+          select: {
+            status: true,
+            providerId: true,
+            slotStart: true,
+            sessionDate: true,
+            tokenNumber: true,
+          },
+        })
+      : null;
+  const when = booking ? appointmentWhenLabel(booking) : null;
+  if (booking && when && !CLOSED_BOOKING_STATUSES.has(booking.status)) {
+    const names = await userNames([booking.providerId]);
+    const due = balanceDuePaise(req.kind, req.amount, practice?.consultationFee);
+    return {
+      templateKey: "PAYMENT_BOOKING_CONFIRMED",
+      payload: {
+        amountLabel,
+        practiceName,
+        providerName: names.get(booking.providerId) ?? "your doctor",
+        appointmentTime: when,
+        balanceDue: due == null ? "as advised by the clinic" : formatRupees(due),
+        paymentId,
+      },
+    };
+  }
+  return {
+    templateKey: "PAYMENT_RECEIVED",
+    payload: {
+      amountLabel,
+      practiceName,
+      purpose: await receiptPurpose(req),
+      paymentId,
+    },
+  };
+}
+
+/** WhatsApp confirmation after PAID — claimed once per row, outcome stored for staff. */
+async function sendReceipt(req: PaymentRequest): Promise<void> {
+  const claimed = await prisma.paymentRequest.updateMany({
+    where: { id: req.id, status: "PAID", receiptDelivery: null },
+    data: { receiptDelivery: "SENDING" },
+  });
+  if (!claimed.count) return;
+  let res: { ok: boolean; simulated?: boolean; error?: string };
+  let templateKey = "PAYMENT_RECEIVED";
+  try {
+    const msg = await receiptMessage(req);
+    templateKey = msg.templateKey;
+    const phoneId = await practicePhoneNumberId(req.practiceId);
+    res = await sendNotificationWhatsApp(
+      req.patientPhone,
+      msg.templateKey,
+      msg.payload,
+      phoneId,
+    );
+  } catch (err) {
+    res = { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  const receiptDelivery = res.simulated ? "SIMULATED" : res.ok ? "SENT" : "FAILED";
+  const updated = await prisma.paymentRequest.update({
+    where: { id: req.id },
+    data: {
+      receiptDelivery,
+      receiptError: res.ok ? null : (res.error ?? "send failed").slice(0, 500),
+    },
+  });
+  void broadcastPayment(updated);
+  if (res.ok) {
+    console.log(`[payment] confirmation ${templateKey} ${receiptDelivery} request=${req.id}`);
+  } else {
+    console.warn(`[payment] confirmation ${templateKey} failed request=${req.id}: ${res.error}`);
+  }
 }
 
 async function sendRequestMessage(req: PaymentRequest, practiceName: string) {
@@ -453,6 +548,44 @@ export const PaymentRequestService = {
     if (row) await this.refreshRow(row);
   },
 
+  /**
+   * Background safety net: catch payments whose callback / webhook never
+   * arrived, and send confirmations that were never attempted.
+   */
+  async pollPending(now = new Date()) {
+    const pending = await prisma.paymentRequest.findMany({
+      where: {
+        status: "PENDING",
+        linkId: { not: null },
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date(now.getTime() - 60 * 60 * 1000) } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    let paid = 0;
+    for (const row of pending) {
+      try {
+        const next = await this.refreshRow(row);
+        if (next.status === "PAID") paid += 1;
+      } catch (err) {
+        console.warn(`[payment] poll request=${row.id} failed:`, err instanceof Error ? err.message : err);
+      }
+    }
+    const unsent = await prisma.paymentRequest.findMany({
+      where: {
+        status: "PAID",
+        receiptDelivery: null,
+        paidAt: { gt: new Date(now.getTime() - 6 * 60 * 60 * 1000) },
+      },
+      take: 20,
+    });
+    for (const row of unsent) await sendReceipt(row);
+    return { checked: pending.length, paid, receipts: unsent.length };
+  },
+
   /** Pending links past their Razorpay expiry can no longer be paid. */
   async expireStale(practiceId: string, now = new Date()) {
     const stale = await prisma.paymentRequest.findMany({
@@ -598,26 +731,9 @@ export const PaymentRequestService = {
       });
       void broadcastPayment(updated);
       if (res.count) {
-        const practice = await prisma.practice.findUnique({
-          where: { id: updated.practiceId },
-          select: { name: true },
-        });
-        const purpose = await receiptPurpose(updated);
-        void practicePhoneNumberId(updated.practiceId)
-          .then((phoneId) =>
-            sendNotificationWhatsApp(
-              updated.patientPhone,
-              "PAYMENT_RECEIVED",
-              {
-                amountLabel: formatRupees(updated.amount),
-                practiceName: practice?.name ?? "your clinic",
-                purpose,
-                paymentId: paymentId ?? "—",
-              },
-              phoneId,
-            ),
-          )
-          .catch(() => undefined);
+        void sendReceipt(updated).catch((err) =>
+          console.warn(`[payment] confirmation request=${updated.id} crashed:`, err),
+        );
         console.log(
           `[payment] PAID request=${updated.id} booking=${updated.bookingId ?? "-"} payment=${paymentId ?? "-"}`,
         );

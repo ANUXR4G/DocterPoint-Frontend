@@ -45,4 +45,15 @@ server.listen(port, "0.0.0.0", () => {
       console.warn("[wa-idle] worker failed to start:", err),
     );
   }
+
+  // Local `yarn dev` shares the production DB, so the poller is opt-in there.
+  const isLocalDev =
+    process.env.npm_lifecycle_event === "dev" ||
+    process.env.NODE_ENV === "development";
+  const paymentPoll = process.env.PAYMENT_POLL_WORKER ?? (isLocalDev ? "0" : "1");
+  if (paymentPoll !== "0") {
+    void import("./workers/paymentPollWorker.js").catch((err) =>
+      console.warn("[payment-poll] worker failed to start:", err),
+    );
+  }
 });

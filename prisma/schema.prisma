@@ -540,11 +540,14 @@ model PaymentRequest {
   /// WHATSAPP_BOT | WEB_PORTAL | PROVIDER_APP
   channel       String    @db.VarChar(16)
   requestedById String?   @map("requested_by_id") @db.Uuid
-  /// WhatsApp delivery of the link: SENT | FAILED | SIMULATED | null (shared in-chat by the bot).
   /// Razorpay key that created the link (null = platform account, pre-dates per-clinic keys).
   razorpayKeyId String?   @map("razorpay_key_id") @db.VarChar(64)
+  /// WhatsApp delivery of the link: SENT | FAILED | SIMULATED | null (shared in-chat by the bot).
   waDelivery    String?   @map("wa_delivery") @db.VarChar(16)
   waError       String?   @map("wa_error")
+  /// WhatsApp payment confirmation after PAID: SENDING | SENT | FAILED | SIMULATED | null (not sent yet).
+  receiptDelivery String? @map("receipt_delivery") @db.VarChar(16)
+  receiptError    String? @map("receipt_error")
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
