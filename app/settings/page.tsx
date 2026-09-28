@@ -10,17 +10,20 @@ import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModa
 import RazorpayAccountPanel from "@/components/ui/procto/RazorpayAccountPanel"
 import {
   EffectiveFromField,
+  PendingVerificationPanel,
   ScheduleConflictModal,
   UpcomingScheduleChanges,
   addDaysIso,
   clinicTodayIso,
   formatScheduleDay,
+  normalizePendingVerification,
   normalizeUpcomingChanges,
 } from "@/components/ui/procto/ScheduleChangeControls"
 import { PracticeDashboardProvider } from "@/contexts/PracticeDashboardContext"
 import { useRole } from "@/hooks/useRole"
 import {
   proctoService,
+  type PendingScheduleVerification,
   type SchedulePreview,
   type UpcomingScheduleChange,
 } from "@/lib/services/procto"
@@ -886,6 +889,9 @@ function DoctorAccountForm({
   const [effectiveFrom, setEffectiveFrom] = useState(clinicTodayIso)
   const [upcomingChanges, setUpcomingChanges] = useState<UpcomingScheduleChange[]>([])
   const [cancellingDate, setCancellingDate] = useState<string | null>(null)
+  const [pendingVerification, setPendingVerification] =
+    useState<PendingScheduleVerification | null>(null)
+  const [pendingBusy, setPendingBusy] = useState(false)
   const [conflictReview, setConflictReview] = useState<{
     preview: SchedulePreview
     opts?: SaveOpts
@@ -907,7 +913,40 @@ function DoctorAccountForm({
     if (Array.isArray(data)) setSchedules(data as typeof schedules)
     else if (data && Array.isArray(data.schedules)) setSchedules(data.schedules)
     setUpcomingChanges(normalizeUpcomingChanges(res.data))
+    setPendingVerification(normalizePendingVerification(res.data))
     setScheduleLoadError("")
+  }
+
+  async function activatePending(date?: string) {
+    setPendingBusy(true)
+    setError("")
+    const res = await proctoService.activatePendingSchedule(
+      membership.practice.id,
+      userId,
+      date,
+    )
+    setPendingBusy(false)
+    if (res.status !== "successful") {
+      setError(res.message || "Could not activate the pending schedule.")
+      return
+    }
+    setMessage(
+      (res.data as { message?: string } | null)?.message || "New schedule activated.",
+    )
+    await refreshSchedules()
+  }
+
+  async function discardPending() {
+    setPendingBusy(true)
+    setError("")
+    const res = await proctoService.discardPendingSchedule(membership.practice.id, userId)
+    setPendingBusy(false)
+    if (res.status !== "successful") {
+      setError(res.message || "Could not discard the pending schedule.")
+      return
+    }
+    setMessage("Pending schedule discarded. The current schedule is unchanged.")
+    await refreshSchedules()
   }
 
   useEffect(() => {
@@ -1160,7 +1199,7 @@ function DoctorAccountForm({
         preview={conflictReview?.preview ?? null}
         busy={saving}
         onApplyFrom={(date) => void resolveConflicts(date)}
-        onApplyAnyway={() => void resolveConflicts()}
+        onSavePending={() => void resolveConflicts()}
         onCancel={() => setConflictReview(null)}
       />
       <p className={sectionLabel}>Doctor profile</p>
@@ -1223,6 +1262,16 @@ function DoctorAccountForm({
         Change in Settings here (not registration). A switch starts tomorrow at
         the earliest, or on the &ldquo;Changes apply from&rdquo; date below.
       </p>
+      {pendingVerification ? (
+        <div className="mb-2">
+          <PendingVerificationPanel
+            pending={pendingVerification}
+            busy={pendingBusy}
+            onActivate={(date) => void activatePending(date)}
+            onDiscard={() => void discardPending()}
+          />
+        </div>
+      ) : null}
       {upcomingChanges.length ? (
         <div className="mb-2">
           <UpcomingScheduleChanges

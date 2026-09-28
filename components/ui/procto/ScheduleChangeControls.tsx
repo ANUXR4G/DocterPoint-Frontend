@@ -1,8 +1,24 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
-import type { SchedulePreview, UpcomingScheduleChange } from "@/lib/services/procto"
+import type {
+  PendingScheduleVerification,
+  ScheduleConflict,
+  ScheduleConflictCode,
+  ScheduleImpact,
+  SchedulePreview,
+  UpcomingScheduleChange,
+} from "@/lib/services/procto"
+
+const CONFLICT_LABELS: Record<ScheduleConflictCode, string> = {
+  OUTSIDE_HOURS: "outside new hours",
+  DAY_OFF: "on a day off",
+  IN_BREAK: "in the new break",
+  OFF_GRID: "off the new slot grid",
+  MODE_CHANGED: "booking type changes",
+  OVER_CAPACITY: "over the token limit",
+}
 
 const CLINIC_TZ = "Asia/Kolkata"
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -35,6 +51,167 @@ export function normalizeUpcomingChanges(data: unknown): UpcomingScheduleChange[
   if (!data || typeof data !== "object" || Array.isArray(data)) return []
   const list = (data as { upcomingChanges?: unknown }).upcomingChanges
   return Array.isArray(list) ? (list as UpcomingScheduleChange[]) : []
+}
+
+export function normalizePendingVerification(data: unknown): PendingScheduleVerification | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null
+  const p = (data as { pendingVerification?: PendingScheduleVerification | null })
+    .pendingVerification
+  return p && typeof p === "object" && Array.isArray(p.conflicts) ? p : null
+}
+
+function impactOf(conflicts: ScheduleConflict[], impact?: ScheduleImpact): ScheduleImpact {
+  if (impact) return impact
+  const byCode: ScheduleImpact["byCode"] = {}
+  for (const c of conflicts) byCode[c.code] = (byCode[c.code] ?? 0) + 1
+  const days = [...new Set(conflicts.map((c) => c.day))].sort()
+  return {
+    total: conflicts.length,
+    days: days.length,
+    firstDay: days[0] ?? null,
+    lastDay: days[days.length - 1] ?? null,
+    byCode,
+  }
+}
+
+export function ImpactChips({ impact }: { impact: ScheduleImpact }) {
+  const entries = Object.entries(impact.byCode) as [ScheduleConflictCode, number][]
+  if (!entries.length) return null
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {entries.map(([code, n]) => (
+        <span
+          key={code}
+          className="rounded-full border border-amber-300 bg-amber-100/70 px-2.5 py-0.5 text-xs font-semibold text-amber-950 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100"
+        >
+          {n} {CONFLICT_LABELS[code] ?? code}
+        </span>
+      ))}
+      {impact.days > 1 && impact.firstDay && impact.lastDay ? (
+        <span className="px-1 py-0.5 text-xs opacity-70">
+          across {impact.days} days ({formatScheduleDay(impact.firstDay)} –{" "}
+          {formatScheduleDay(impact.lastDay)})
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function ConflictList({ conflicts }: { conflicts: ScheduleConflict[] }) {
+  return (
+    <ul className="min-h-0 flex-1 divide-y overflow-y-auto rounded-xl border text-sm dark:divide-neutral-800 dark:border-neutral-700">
+      {conflicts.map((c) => (
+        <li key={c.bookingId} className="px-3 py-2">
+          <p className="font-semibold text-neutral-900 dark:text-white">
+            {c.patientName || "Patient"} · {c.when}
+          </p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">{c.reason}</p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * A saved schedule held back because it clashes with booked visits. The slot
+ * engine keeps the current schedule until someone activates it here.
+ */
+export function PendingVerificationPanel({
+  pending,
+  busy = false,
+  onActivate,
+  onDiscard,
+}: {
+  pending: PendingScheduleVerification | null
+  busy?: boolean
+  onActivate: (effectiveFrom?: string) => void
+  onDiscard: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [showList, setShowList] = useState(false)
+  useEffect(() => setConfirming(false), [pending?.effectiveFrom, pending?.impact.total])
+  if (!pending) return null
+  const n = pending.impact.total
+  const canShift = pending.safeEffectiveFrom > pending.effectiveFrom
+  return (
+    <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+      <p className="text-xs font-bold uppercase tracking-[0.12em]">Pending verification</p>
+      <p>
+        New schedule from <strong>{formatScheduleDay(pending.effectiveFrom)}</strong>:{" "}
+        {summary(pending.summary)}.{" "}
+        {n
+          ? `It clashes with ${n} booked appointment${n === 1 ? "" : "s"}, so the current schedule stays in force until you activate it.`
+          : "No booked appointment clashes any more — it is ready to activate."}
+      </p>
+      {n ? <ImpactChips impact={pending.impact} /> : null}
+      {n ? (
+        <button
+          type="button"
+          onClick={() => setShowList((v) => !v)}
+          className="text-xs font-semibold underline underline-offset-2"
+        >
+          {showList ? "Hide appointments" : `Show ${n} appointment${n === 1 ? "" : "s"}`}
+        </button>
+      ) : null}
+      {showList && n ? (
+        <div className="flex max-h-64 flex-col bg-white/60 dark:bg-neutral-900/60">
+          <ConflictList conflicts={pending.conflicts} />
+        </div>
+      ) : null}
+      <p className="text-xs opacity-80">
+        No appointment is cancelled or moved. Reschedule the listed patients first, or
+        activate anyway and contact them.
+        {pending.submittedBy ? ` Submitted by ${pending.submittedBy}.` : ""}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {canShift ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onActivate(pending.safeEffectiveFrom)}
+            className="min-h-9 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            Activate from {formatScheduleDay(pending.safeEffectiveFrom)} (no clashes)
+          </button>
+        ) : null}
+        {n && !confirming ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setConfirming(true)}
+            className="min-h-9 rounded-lg border border-amber-500 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+          >
+            Activate from {formatScheduleDay(pending.effectiveFrom)} anyway
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onActivate()}
+            className={`min-h-9 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+              n
+                ? "bg-amber-600 text-white"
+                : "bg-blue-600 text-white"
+            }`}
+          >
+            {busy
+              ? "Activating…"
+              : n
+                ? `Confirm — ${n} visit${n === 1 ? " stays" : "s stay"} booked outside hours`
+                : `Activate from ${formatScheduleDay(pending.effectiveFrom)}`}
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onDiscard}
+          className="min-h-9 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-200"
+        >
+          Discard
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function summary(c: UpcomingScheduleChange): string {
@@ -129,13 +306,13 @@ export function ScheduleConflictModal({
   preview,
   busy = false,
   onApplyFrom,
-  onApplyAnyway,
+  onSavePending,
   onCancel,
 }: {
   preview: SchedulePreview | null
   busy?: boolean
   onApplyFrom: (iso: string) => void
-  onApplyAnyway: () => void
+  onSavePending: () => void
   onCancel: () => void
 }) {
   const open = Boolean(preview)
@@ -172,19 +349,16 @@ export function ScheduleConflictModal({
         </h2>
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
           Starting {formatScheduleDay(preview.effectiveFrom)}, these visits would no
-          longer match the working days or hours. They stay booked either way —
-          nothing is cancelled or moved.
+          longer match the schedule. Nothing is cancelled or moved: start later, or
+          save it as <strong>Pending verification</strong> — the current schedule
+          stays in force until you activate it.
         </p>
-        <ul className="mt-3 min-h-0 flex-1 divide-y overflow-y-auto rounded-xl border text-sm dark:divide-neutral-800 dark:border-neutral-700">
-          {preview.conflicts.map((c) => (
-            <li key={c.bookingId} className="px-3 py-2">
-              <p className="font-semibold text-neutral-900 dark:text-white">
-                {c.patientName || "Patient"} · {c.when}
-              </p>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">{c.reason}</p>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3">
+          <ImpactChips impact={impactOf(preview.conflicts, preview.impact)} />
+        </div>
+        <div className="mt-3 flex min-h-0 flex-1 flex-col">
+          <ConflictList conflicts={preview.conflicts} />
+        </div>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
           <button
             type="button"
@@ -196,11 +370,11 @@ export function ScheduleConflictModal({
           </button>
           <button
             type="button"
-            onClick={onApplyAnyway}
+            onClick={onSavePending}
             disabled={busy}
             className="min-h-11 rounded-xl border border-amber-400 px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50 dark:border-amber-600 dark:text-amber-100"
           >
-            Apply anyway
+            Save as pending verification
           </button>
           {canShift ? (
             <button

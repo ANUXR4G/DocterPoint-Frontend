@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   proctoService,
+  type PendingScheduleVerification,
   type ProctoBooking,
   type SchedulePreview,
   type UpcomingScheduleChange,
@@ -26,11 +27,13 @@ import { formatPracticeTime } from "@/lib/practiceTime";
 import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal";
 import {
   EffectiveFromField,
+  PendingVerificationPanel,
   ScheduleConflictModal,
   UpcomingScheduleChanges,
   addDaysIso,
   clinicTodayIso,
   formatScheduleDay,
+  normalizePendingVerification,
   normalizeUpcomingChanges,
 } from "@/components/ui/procto/ScheduleChangeControls";
 
@@ -124,9 +127,10 @@ type ScheduleRow = {
 function normalizeSchedulesResponse(data: unknown): {
   schedules: ScheduleRow[]
   upcomingChanges: UpcomingScheduleChange[]
+  pendingVerification: PendingScheduleVerification | null
 } {
   if (Array.isArray(data)) {
-    return { schedules: data as ScheduleRow[], upcomingChanges: [] }
+    return { schedules: data as ScheduleRow[], upcomingChanges: [], pendingVerification: null }
   }
   if (data && typeof data === "object") {
     const obj = data as { schedules?: ScheduleRow[] }
@@ -134,10 +138,11 @@ function normalizeSchedulesResponse(data: unknown): {
       return {
         schedules: obj.schedules,
         upcomingChanges: normalizeUpcomingChanges(data),
+        pendingVerification: normalizePendingVerification(data),
       }
     }
   }
-  return { schedules: [], upcomingChanges: [] }
+  return { schedules: [], upcomingChanges: [], pendingVerification: null }
 }
 
 
@@ -223,6 +228,8 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
   const [calendar, setCalendar] = useState<CalendarData | null>(null);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [upcomingChanges, setUpcomingChanges] = useState<UpcomingScheduleChange[]>([]);
+  const [pendingVerification, setPendingVerification] =
+    useState<PendingScheduleVerification | null>(null);
   const [overrides, setOverrides] = useState<unknown[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -278,6 +285,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
       const normalized = normalizeSchedulesResponse(res.data);
       setSchedules(normalized.schedules);
       setUpcomingChanges(normalized.upcomingChanges);
+      setPendingVerification(normalized.pendingVerification);
     }
   }, [practice, providerId]);
 
@@ -599,6 +607,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
               locationId={locationId}
               schedules={schedules}
               upcomingChanges={upcomingChanges}
+              pendingVerification={pendingVerification}
               providerUser={
                 practice.members.find((m) => m.userId === providerId)?.user ?? {
                   id: providerId,
@@ -1218,6 +1227,7 @@ function SchedulePanel({
   locationId,
   schedules,
   upcomingChanges = [],
+  pendingVerification = null,
   providerUser,
   onSaved,
 }: {
@@ -1226,6 +1236,7 @@ function SchedulePanel({
   locationId: string;
   schedules: ScheduleRow[];
   upcomingChanges?: UpcomingScheduleChange[];
+  pendingVerification?: PendingScheduleVerification | null;
   providerUser: {
     id: string;
     name: string | null;
@@ -1275,10 +1286,37 @@ function SchedulePanel({
   const [modeConfirm, setModeConfirm] = useState<"TIME" | "TOKEN" | null>(null);
   const [effectiveFrom, setEffectiveFrom] = useState(clinicTodayIso);
   const [cancellingDate, setCancellingDate] = useState<string | null>(null);
+  const [pendingBusy, setPendingBusy] = useState(false);
   const [conflictReview, setConflictReview] = useState<{
     preview: SchedulePreview;
     opts?: PanelSaveOpts;
   } | null>(null);
+
+  async function activatePending(date?: string) {
+    setPendingBusy(true);
+    setError("");
+    const res = await proctoService.activatePendingSchedule(practiceId, providerId, date);
+    setPendingBusy(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not activate the pending schedule.");
+      return;
+    }
+    onSaved({
+      message: (res.data as { message?: string } | null)?.message || "New schedule activated.",
+    });
+  }
+
+  async function discardPending() {
+    setPendingBusy(true);
+    setError("");
+    const res = await proctoService.discardPendingSchedule(practiceId, providerId);
+    setPendingBusy(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not discard the pending schedule.");
+      return;
+    }
+    onSaved({ message: "Pending schedule discarded. The current schedule is unchanged." });
+  }
 
   useEffect(() => {
     setName(providerUser.name ?? "");
@@ -1437,7 +1475,7 @@ function SchedulePanel({
         preview={conflictReview?.preview ?? null}
         busy={saving}
         onApplyFrom={(date) => void resolveConflicts(date)}
-        onApplyAnyway={() => void resolveConflicts()}
+        onSavePending={() => void resolveConflicts()}
         onCancel={() => setConflictReview(null)}
       />
       <div className="rounded-xl border dark:border-neutral-700 p-4 space-y-5">
@@ -1446,6 +1484,13 @@ function SchedulePanel({
           Per doctor — changes start on the &ldquo;Changes apply from&rdquo;
           date; days before it keep the current schedule.
         </p>
+
+        <PendingVerificationPanel
+          pending={pendingVerification}
+          busy={pendingBusy}
+          onActivate={(date) => void activatePending(date)}
+          onDiscard={() => void discardPending()}
+        />
 
         <UpcomingScheduleChanges
           changes={upcomingChanges}
