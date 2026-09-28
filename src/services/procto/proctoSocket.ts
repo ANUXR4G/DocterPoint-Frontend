@@ -45,6 +45,9 @@ export function serializeBooking(booking: {
   paymentStatus?: string | null;
   paymentAmount?: number | null;
   paidAt?: Date | null;
+  overrideSlot?: boolean;
+  overrideNote?: string | null;
+  cancelReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): Record<string, unknown> {
@@ -75,6 +78,9 @@ export function serializeBooking(booking: {
           paid_at: booking.paidAt?.toISOString() ?? null,
         }
       : {}),
+    override_slot: booking.overrideSlot ?? false,
+    override_note: booking.overrideNote ?? null,
+    cancel_reason: booking.cancelReason ?? null,
     created_at: booking.createdAt.toISOString(),
     updated_at: booking.updatedAt.toISOString(),
   };

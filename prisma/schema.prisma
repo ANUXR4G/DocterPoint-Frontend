@@ -511,6 +511,10 @@ model PracticeBooking {
   paymentLinkUrl   String?        @map("payment_link_url")
   paymentId        String?        @map("payment_id")
   paidAt           DateTime?      @map("paid_at") @db.Timestamptz(6)
+  /// Kept valid outside the doctor's schedule after a schedule change ("Override slot"); skipped by conflict checks.
+  overrideSlot     Boolean        @default(false) @map("override_slot")
+  overrideNote     String?        @map("override_note") @db.VarChar(250)
+  cancelReason     String?        @map("cancel_reason") @db.VarChar(250)
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

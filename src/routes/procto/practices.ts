@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import { ResponseHandler } from "../../core/response.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { PracticeService } from "../../services/procto/practice.service.js";
+import { ScheduleResolutionService } from "../../services/procto/scheduleResolution.service.js";
 import { param, requireUuid } from "../../core/params.js";
 import { prisma } from "../../db/prisma.js";
 
@@ -241,6 +242,46 @@ router.post(
         req.sessionUser!.id,
       );
       return ResponseHandler.fetchSuccessful(res, "schedule change preview.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  "/:practiceId/schedules/pending/resolution",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await ScheduleResolutionService.getPlan(
+        param(req.params.practiceId),
+        (req.query.providerId as string | undefined) ?? req.sessionUser!.id,
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "schedule conflict resolution plan.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/:practiceId/schedules/pending/resolve",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await ScheduleResolutionService.resolve(
+        param(req.params.practiceId),
+        req.body.providerId ?? req.sessionUser!.id,
+        req.sessionUser!.id,
+        req.body.actions,
+        req.body.dryRun === true,
+      );
+      return ResponseHandler.fetchSuccessful(
+        res,
+        data.dryRun ? "resolution checked." : "schedule conflicts resolved.",
+        data,
+      );
     } catch (error) {
       next(error);
     }
