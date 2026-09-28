@@ -125,19 +125,34 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = { ...req.body };
-    // Attach logged-in patient when cookie/bearer is present
-    if (req.sessionUser?.id && req.sessionUser.role === "user") {
-      body.patientId = body.patientId || req.sessionUser.id;
-      if (!body.patientPhone) {
-        const patient = await prisma.patient.findUnique({
-          where: { id: req.sessionUser.id },
-          select: { contactNumber: true, user: { select: { phone: true, name: true } } },
-        });
-        body.patientPhone =
-          patient?.contactNumber || patient?.user?.phone || body.patientPhone;
-        body.patientName =
-          body.patientName || patient?.user?.name || undefined;
-      }
+    if (!req.sessionUser?.id) {
+      return ResponseHandler.unsuccessful(
+        res,
+        401,
+        "Sign in or create an account to book — every visit is saved under your Patient ID (MRN).",
+      );
+    }
+    if (req.sessionUser.role !== "user") {
+      const data = await BookingService.createDeskBooking(
+        {
+          ...body,
+          patientId: body.patientId ? String(body.patientId) : undefined,
+          patientPhone: String(body.patientPhone || ""),
+        },
+        req.sessionUser.id,
+      );
+      return ResponseHandler.createSuccessful(res, "booking created.", data);
+    }
+    body.patientId = req.sessionUser.id;
+    if (!body.patientPhone) {
+      const patient = await prisma.patient.findUnique({
+        where: { id: req.sessionUser.id },
+        select: { contactNumber: true, user: { select: { phone: true, name: true } } },
+      });
+      body.patientPhone =
+        patient?.contactNumber || patient?.user?.phone || body.patientPhone;
+      body.patientName =
+        body.patientName || patient?.user?.name || undefined;
     }
     if (!body.patientPhone) {
       return ResponseHandler.unsuccessful(

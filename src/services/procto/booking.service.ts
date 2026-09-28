@@ -137,25 +137,83 @@ function normalizeBookingDocuments(
 const MAX_GENERAL_DOCUMENTS = 30;
 export const EMERGENCY_WALK_IN = "EMERGENCY_WALK_IN";
 
+export type CreateBookingInput = {
+  practiceId: string;
+  locationId: string;
+  providerId: string;
+  patientPhone: string;
+  patientName?: string;
+  patientId?: string;
+  mode?: ScheduleMode;
+  slotStart?: string;
+  sessionDate?: string;
+  consultationType?: string;
+  channel?: BookingChannel;
+  notes?: string;
+  disease?: string;
+  documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
+  /** WhatsApp bot will send a short session ack — skip duplicate patient template. */
+  skipPatientNotification?: boolean;
+};
+
+type DeskPatientRef = {
+  patientId: string;
+  patientPhone: string;
+  patientName: string;
+  mrn: string | null;
+};
+
+/** Registered patient picked at the desk; the typed mobile must match their record. */
+async function loadDeskPatient(
+  rawPatientId: string | undefined,
+  rawPhone: string | undefined,
+  what: "walk-in" | "booking",
+): Promise<DeskPatientRef> {
+  const patientId = String(rawPatientId || "").trim();
+  if (!isUuid(patientId)) {
+    throw new AppError(
+      400,
+      `Search for the patient or register them first — every ${what} needs a Patient ID (MRN).`,
+    );
+  }
+  const patient = await prisma.user.findFirst({
+    where: { id: patientId, role: "user", patient: { isNot: null } },
+    select: { name: true, phone: true, patient: { select: { mrn: true, contactNumber: true } } },
+  });
+  const typed = String(rawPhone || "").replace(/\D/g, "").slice(-10);
+  const onRecord = [patient?.patient?.contactNumber, patient?.phone].map((p) =>
+    String(p || "").replace(/\D/g, ""),
+  );
+  if (!patient || typed.length < 10 || !onRecord.some((p) => p.slice(-10) === typed)) {
+    throw new AppError(400, "That patient record doesn't match. Search for the patient again.");
+  }
+  return {
+    patientId,
+    patientPhone: onRecord.find((p) => p.length >= 10) ?? typed,
+    patientName: patient.name?.trim().slice(0, 120) || "Patient",
+    mrn: patient.patient?.mrn ?? null,
+  };
+}
+
+/** Active clinic member; a DOCTOR member may act only on their own list. */
+async function assertDeskActor(
+  practiceId: string,
+  providerId: string,
+  actorUserId: string,
+  action: string,
+) {
+  const actor = await prisma.practiceMember.findUnique({
+    where: { practiceId_userId: { practiceId, userId: actorUserId } },
+    select: { role: true, isActive: true },
+  });
+  if (!actor?.isActive) ResponseHandler.noPermission("not authorized.");
+  if (actor!.role === "DOCTOR" && providerId !== actorUserId) {
+    throw new AppError(403, `Doctors can ${action} only for their own list.`);
+  }
+}
+
 export const BookingService = {
-  async createBooking(data: {
-    practiceId: string;
-    locationId: string;
-    providerId: string;
-    patientPhone: string;
-    patientName?: string;
-    patientId?: string;
-    mode?: ScheduleMode;
-    slotStart?: string;
-    sessionDate?: string;
-    consultationType?: string;
-    channel?: BookingChannel;
-    notes?: string;
-    disease?: string;
-    documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
-    /** WhatsApp bot will send a short session ack — skip duplicate patient template. */
-    skipPatientNotification?: boolean;
-  }) {
+  async createBooking(data: CreateBookingInput) {
     const channel = parseBookingChannel(
       data.channel,
       BookingChannel.WEB_PORTAL,
@@ -172,6 +230,16 @@ export const BookingService = {
       throw new AppError(400, "patientPhone must be a valid mobile number.");
     }
     data = { ...data, patientPhone };
+
+    const patientRow = isUuid(String(data.patientId || ""))
+      ? await prisma.patient.findUnique({ where: { id: data.patientId! }, select: { id: true } })
+      : null;
+    if (!patientRow) {
+      throw new AppError(
+        400,
+        "Every booking needs a registered patient (Patient ID / MRN). Sign in or register the patient first.",
+      );
+    }
 
     const { assertBookingQuota } = await import("./planEntitlements.js");
     await assertBookingQuota(data.practiceId);
@@ -481,34 +549,12 @@ export const BookingService = {
     },
     actorUserId: string,
   ) {
-    const patientId = String(data.patientId || "").trim();
-    if (!isUuid(patientId)) {
-      throw new AppError(400, "Search for the patient or register them first — every walk-in needs a Patient ID (MRN).");
-    }
-    const patient = await prisma.user.findFirst({
-      where: { id: patientId, role: "user", patient: { isNot: null } },
-      select: { name: true, phone: true, patient: { select: { mrn: true, contactNumber: true } } },
-    });
-    const typed = String(data.patientPhone || "").replace(/\D/g, "").slice(-10);
-    const onRecord = [patient?.patient?.contactNumber, patient?.phone].map((p) =>
-      String(p || "").replace(/\D/g, ""),
+    const { patientId, patientPhone, patientName, mrn } = await loadDeskPatient(
+      data.patientId,
+      data.patientPhone,
+      "walk-in",
     );
-    if (!patient || typed.length < 10 || !onRecord.some((p) => p.slice(-10) === typed)) {
-      throw new AppError(400, "That patient record doesn't match. Search for the patient again.");
-    }
-    const patientPhone = onRecord.find((p) => p.length >= 10) ?? typed;
-    const patientName = patient.name?.trim().slice(0, 120) || "Patient";
-
-    const actor = await prisma.practiceMember.findUnique({
-      where: {
-        practiceId_userId: { practiceId: data.practiceId, userId: actorUserId },
-      },
-      select: { role: true, isActive: true },
-    });
-    if (!actor?.isActive) ResponseHandler.noPermission("not authorized.");
-    if (actor!.role === "DOCTOR" && data.providerId !== actorUserId) {
-      throw new AppError(403, "Doctors can add walk-ins only to their own list.");
-    }
+    await assertDeskActor(data.practiceId, data.providerId, actorUserId, "add walk-ins");
 
     const { assertBookingQuota } = await import("./planEntitlements.js");
     await assertBookingQuota(data.practiceId);
@@ -587,14 +633,30 @@ export const BookingService = {
         actorUserId,
         action: "WALK_IN_ADDED",
         headline: "Emergency walk-in added",
-        detail: `${patientName} (MRN ${patient.patient?.mrn ?? "—"}) to ${/^dr\b/i.test(dr) ? dr : `Dr ${dr}`}'s waiting list${booking.disease ? ` · ${booking.disease}` : ""}`,
+        detail: `${patientName} (MRN ${mrn ?? "—"}) to ${/^dr\b/i.test(dr) ? dr : `Dr ${dr}`}'s waiting list${booking.disease ? ` · ${booking.disease}` : ""}`,
         entityType: "booking",
         entityId: booking.id,
         providerId: booking.providerId,
-        meta: { patientId, mrn: patient.patient?.mrn ?? null },
+        meta: { patientId, mrn },
       });
     })().catch(() => undefined);
     return booking;
+  },
+
+  /**
+   * Clinic-side appointment from the portal / desk: same slot engine as every channel, but the
+   * patient must be a registered record (MRN) picked from the desk search, never a typed name.
+   */
+  async createDeskBooking(data: CreateBookingInput, actorUserId: string) {
+    const patient = await loadDeskPatient(data.patientId, data.patientPhone, "booking");
+    await assertDeskActor(data.practiceId, data.providerId, actorUserId, "book appointments");
+    return BookingService.createBooking({
+      ...data,
+      patientId: patient.patientId,
+      patientPhone: patient.patientPhone,
+      patientName: patient.patientName,
+      channel: BookingChannel.PROVIDER_APP,
+    });
   },
 
   async updateStatus(
