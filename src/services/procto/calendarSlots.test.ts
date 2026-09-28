@@ -9,6 +9,7 @@ import {
   type ScheduleOverride,
 } from "@prisma/client";
 import { checkExtraWindow, dayWindows, hm12, parseSlotOptions, planExtraSlots } from "./calendarSlots.js";
+import { deniedFor, permissionScope, permissionsFor } from "./practicePermissions.js";
 import {
   generateExtraSlotsFromOverrides,
   generateTimeSlots,
@@ -16,6 +17,7 @@ import {
   hasExtraSlotsForDay,
   parseLocalDate,
   startOfLocalDay,
+  timeSlotsForProviderDay,
 } from "./slotEngine.js";
 
 const WED = "2026-09-30";
@@ -78,6 +80,8 @@ describe("calendar quick slots", () => {
       { start: "10:00", end: "12:00" },
       { start: "12:40", end: "14:00" },
     ]);
+    assert.deepEqual(d.breaks, [{ start: "12:00", end: "12:40" }]);
+    assert.equal(d.weekday, 3);
     assert.deepEqual(d.extra, [
       {
         id: "x1",
@@ -101,14 +105,61 @@ describe("calendar quick slots", () => {
     assert.equal(d.mode, ScheduleMode.TIME_BASED);
   });
 
-  test("valid window outside hours counts whole slots; the break counts as free", () => {
+  test("valid window outside hours counts whole slots; the break is allowed with a warning", () => {
     const d = dayWindows(weekRows, [], parseLocalDate(WED));
-    assert.deepEqual(checkExtraWindow({ start: "17:00", end: "18:00" }, d), { ok: true, slots: 3 });
-    assert.deepEqual(checkExtraWindow({ start: "14:00", end: "14:50" }, d), { ok: true, slots: 2 });
-    assert.deepEqual(checkExtraWindow({ start: "12:00", end: "12:40" }, d), { ok: true, slots: 2 });
+    assert.deepEqual(checkExtraWindow({ start: "17:00", end: "18:00" }, d), { ok: true, slots: 3, warnings: [] });
+    assert.deepEqual(checkExtraWindow({ start: "14:00", end: "14:50" }, d), { ok: true, slots: 2, warnings: [] });
+    assert.deepEqual(checkExtraWindow({ start: "12:00", end: "12:40" }, d), {
+      ok: true,
+      slots: 2,
+      warnings: [
+        { code: "break", message: "Doctor is marked on break during this time.", detail: "Break 12:00 PM–12:40 PM" },
+      ],
+    });
   });
 
-  test("rejects overlap with hours, extra slots, blocks, leave, short or past windows", () => {
+  test("leave, blocked time and off-duty days warn instead of refusing", () => {
+    const codes = (day: ReturnType<typeof dayWindows>, w = { start: "17:00", end: "18:00" }) => {
+      const r = checkExtraWindow(w, day);
+      assert.ok(r.ok, r.ok ? "" : r.error);
+      return r.warnings.map((x) => `${x.code}: ${x.message} ${x.detail}`);
+    };
+    const leave = dayWindows(
+      weekRows,
+      [override(OverrideType.EMERGENCY_LEAVE, WED, { reason: "Conference" })],
+      parseLocalDate(WED),
+    );
+    assert.deepEqual(codes(leave), ["leave: Doctor is on leave this day. Conference"]);
+    const block = dayWindows(
+      weekRows,
+      [override(OverrideType.BLOCK_SLOT, WED, { startTime: "18:00", endTime: "19:00", reason: "Surgery" })],
+      parseLocalDate(WED),
+    );
+    assert.deepEqual(codes(block, { start: "18:30", end: "19:30" }), [
+      "blocked: This time is blocked on the doctor's calendar. Blocked 6:00 PM–7:00 PM · Surgery",
+    ]);
+    assert.deepEqual(codes(dayWindows(weekRows, [], parseLocalDate(THU))), [
+      "offDay: Doctor is off duty on Thursdays. No regular hours that day",
+    ]);
+    assert.deepEqual(codes(dayWindows([], [], parseLocalDate(THU))), [], "no schedule at all → nothing to clash with");
+
+    // Confirmed extra time on a leave day is bookable; regular hours stay closed.
+    const slots = timeSlotsForProviderDay(
+      weekRows,
+      parseLocalDate(WED),
+      [],
+      [
+        override(OverrideType.EMERGENCY_LEAVE, WED),
+        override(OverrideType.EXTRA_SLOT, WED, { id: "x", startTime: "17:00", endTime: "18:00" }),
+      ],
+      Date.parse("2026-09-01T00:00:00Z"),
+    );
+    const at = (hhmmUtc: string) => slots.find((s) => s.start.toISOString().slice(11, 16) === hhmmUtc);
+    assert.equal(at("04:30")?.available, false, "10:00 regular slot blocked by leave");
+    assert.equal(at("11:30")?.available, true, "17:00 extra slot bookable");
+  });
+
+  test("rejects overlap with hours or extra slots, short, past or token-queue windows", () => {
     const d = dayWindows(
       weekRows,
       [override(OverrideType.EXTRA_SLOT, WED, { startTime: "17:00", endTime: "18:00" })],
@@ -124,16 +175,11 @@ describe("calendar quick slots", () => {
     assert.match(err({ start: "15:00", end: "14:00" }), /after the start/);
     assert.match(err({ start: "9am", end: "10:00" }), /HH:MM/);
     assert.match(err({ start: "15:00", end: "16:00" }, 16 * 60), /already passed/);
-    assert.deepEqual(checkExtraWindow({ start: "15:00", end: "16:00" }, d, 15 * 60 + 5), { ok: true, slots: 2 });
-
-    const leave = dayWindows(weekRows, [override(OverrideType.EMERGENCY_LEAVE, WED)], parseLocalDate(WED));
-    assert.match(err({ start: "17:00", end: "18:00" }, undefined, leave), /on leave/);
-    const block = dayWindows(
-      weekRows,
-      [override(OverrideType.BLOCK_SLOT, WED, { startTime: "18:00", endTime: "19:00" })],
-      parseLocalDate(WED),
-    );
-    assert.match(err({ start: "18:30", end: "19:30" }, undefined, block), /blocked/);
+    assert.deepEqual(checkExtraWindow({ start: "15:00", end: "16:00" }, d, 15 * 60 + 5), {
+      ok: true,
+      slots: 2,
+      warnings: [],
+    });
     const token = dayWindows([row(3, { mode: ScheduleMode.TOKEN_BASED })], [], parseLocalDate(WED));
     assert.match(err({ start: "17:00", end: "18:00" }, undefined, token), /token queue/);
   });
@@ -188,7 +234,11 @@ describe("calendar quick slots", () => {
 
   test("an extra window can use its own slot length and be a shared queue slot", () => {
     const d = dayWindows(weekRows, [], parseLocalDate(WED));
-    assert.deepEqual(checkExtraWindow({ start: "17:00", end: "18:00" }, d, undefined, 15), { ok: true, slots: 4 });
+    assert.deepEqual(checkExtraWindow({ start: "17:00", end: "18:00" }, d, undefined, 15), {
+      ok: true,
+      slots: 4,
+      warnings: [],
+    });
     const short = checkExtraWindow({ start: "17:00", end: "17:10" }, d, undefined, 15);
     assert.ok(!short.ok && short.code === "short" && /at least 15 minutes/.test(short.error));
 
@@ -220,7 +270,7 @@ describe("calendar quick slots", () => {
     assert.equal(full[1].available, true);
   });
 
-  test("repeat plan: chosen weekdays until the end date, skipping days that don't fit", () => {
+  test("repeat plan: chosen weekdays until the end date, skipping clashes and warning on leave", () => {
     const newVersion = row(3, {
       id: "v2",
       endTime: "18:00",
@@ -236,11 +286,16 @@ describe("calendar quick slots", () => {
       today: "2026-11-01",
       nowMin: 0,
     });
-    assert.deepEqual(plan.dates, [{ date: "2026-11-04", slots: 3, slotIntervalMin: 20 }]);
+    assert.deepEqual(
+      plan.dates.map((d) => [d.date, d.slots, d.warnings.map((w) => w.code)]),
+      [
+        ["2026-11-04", 3, []],
+        ["2026-11-11", 3, ["leave"]],
+      ],
+    );
     assert.deepEqual(
       plan.skipped.map((s) => [s.date, s.reason]),
       [
-        ["2026-11-11", "on leave"],
         ["2026-11-18", "overlaps regular hours"],
         ["2026-11-25", "overlaps regular hours"],
       ],
@@ -255,7 +310,24 @@ describe("calendar quick slots", () => {
       today: "2026-11-01",
       nowMin: 0,
     });
-    assert.deepEqual(single, { dates: [{ date: "2026-11-05", slots: 2, slotIntervalMin: 30 }], skipped: [] });
+    assert.deepEqual(single.skipped, []);
+    assert.deepEqual(
+      single.dates.map((d) => [d.date, d.slots, d.slotIntervalMin, d.warnings.map((w) => w.code)]),
+      [["2026-11-05", 2, 30, ["offDay"]]],
+    );
+  });
+
+  test("MANAGE_SLOTS_INLINE: desk roles for any doctor, a doctor only for themselves", () => {
+    assert.equal(permissionScope("RECEPTIONIST", "MANAGE_SLOTS_INLINE"), "ANY");
+    assert.equal(permissionScope("PRACTICE_OWNER", "MANAGE_SLOTS_INLINE"), "ANY");
+    assert.equal(permissionScope("PRACTICE_ADMIN", "MANAGE_SLOTS_INLINE"), "ANY");
+    assert.equal(permissionScope("DOCTOR", "MANAGE_SLOTS_INLINE"), "OWN");
+    assert.equal(permissionScope("PATIENT", "MANAGE_SLOTS_INLINE"), null);
+    assert.equal(deniedFor("RECEPTIONIST", "MANAGE_SLOTS_INLINE", "desk", "dr-a"), null);
+    assert.equal(deniedFor("DOCTOR", "MANAGE_SLOTS_INLINE", "dr-a", "dr-a"), null);
+    assert.match(deniedFor("DOCTOR", "MANAGE_SLOTS_INLINE", "dr-a", "dr-b") ?? "", /only change your own calendar/);
+    assert.match(deniedFor("PATIENT", "MANAGE_SLOTS_INLINE", "x", "dr-a") ?? "", /needs MANAGE_SLOTS_INLINE/);
+    assert.deepEqual(permissionsFor("DOCTOR"), { MANAGE_SLOTS_INLINE: "OWN" });
   });
 
   test("hm12 formats clinic times", () => {

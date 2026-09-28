@@ -65,8 +65,10 @@ import {
   planExtraSlots,
   type ExtraSlotPlan,
   type RepeatRule,
+  WARNING_LABEL,
   weekdayOfIso,
 } from "./calendarSlots.js";
+import { deniedFor, permissionsFor } from "./practicePermissions.js";
 import { randomUUID } from "node:crypto";
 
 /** "2026-11-05" → "Thu 5 Nov". */
@@ -1919,6 +1921,7 @@ export const PracticeService = {
       capacity?: unknown;
       repeat?: { weekdays?: unknown; until?: unknown } | null;
       dryRun?: unknown;
+      confirm?: unknown;
     },
     actorUserId: string,
   ) {
@@ -1988,12 +1991,16 @@ export const PracticeService = {
     return override;
   },
 
-  /** Desk roles for any active doctor of the practice; a doctor for their own calendar. */
+  /** MANAGE_SLOTS_INLINE: desk roles for any active doctor of the practice; a doctor for their own calendar. */
   async assertCanManageSlots(practiceId: string, actorUserId: string, providerId: string) {
     if (!isUuid(providerId)) throw new AppError(400, "Pick a doctor.");
     const member = await this.assertMember(practiceId, actorUserId);
-    if (!DESK_ROLES.has(member.role) && providerId !== actorUserId) {
-      throw new AppError(403, "Doctors can only add slots to their own calendar. Reception and clinic admins can add them for any doctor.");
+    const denied = deniedFor(member.role, "MANAGE_SLOTS_INLINE", actorUserId, providerId);
+    if (denied) {
+      console.warn(
+        `[calendar] denied MANAGE_SLOTS_INLINE practice=${practiceId} provider=${providerId} by=${actorUserId} role=${member.role}`,
+      );
+      throw new AppError(403, denied);
     }
     const provider = await prisma.practiceMember.findUnique({
       where: { practiceId_userId: { practiceId, userId: providerId } },
@@ -2001,6 +2008,12 @@ export const PracticeService = {
     });
     if (!provider?.isActive) throw new AppError(404, "That doctor is not active in this clinic.");
     return { member, providerName: provider.user?.name?.trim() || "the doctor" };
+  },
+
+  /** The caller's practice permissions (scope per permission) for UI gating; the server re-checks on every write. */
+  async getMyPermissions(practiceId: string, actorUserId: string) {
+    const member = await this.assertMember(practiceId, actorUserId);
+    return { userId: actorUserId, role: member.role, permissions: permissionsFor(member.role) };
   },
 
   async loadDayWindows(practiceId: string, providerId: string, dateIso: string) {
@@ -2015,13 +2028,12 @@ export const PracticeService = {
   },
 
   /**
-   * Quick-create bookable time from the calendar (EXTRA_SLOT override). Adds availability
-   * only, so no patient is messaged.
-   */
-  /**
-   * "Extra slot · this day" (one date) or "Extend · repeat" (chosen weekdays up to an end
-   * date, one EXTRA_SLOT row per day sharing a series id). Regular schedules are untouched.
-   * `dryRun` returns the plan (days added / skipped) without saving.
+   * Quick-create bookable time from the calendar: "Extra slot · this day" (one date) or
+   * "Extend · repeat" (chosen weekdays up to an end date, one EXTRA_SLOT row per day sharing
+   * a series id). Regular schedules are untouched and no patient is messaged.
+   * `dryRun` returns the plan (days added / skipped / warned) without saving. Windows that run
+   * into a break, blocked time, leave or an off-duty day return `needsConfirmation` until the
+   * request is repeated with `confirm: true`.
    */
   async createExtraSlots(
     practiceId: string,
@@ -2035,6 +2047,7 @@ export const PracticeService = {
       capacity?: unknown;
       repeat?: { weekdays?: unknown; until?: unknown } | null;
       dryRun?: unknown;
+      confirm?: unknown;
     },
     actorUserId: string,
   ) {
@@ -2091,10 +2104,13 @@ export const PracticeService = {
       return { dryRun: true as const, ...p, message: this.extraPlanSummary(p, startTime, endTime, perSlot) };
     }
 
+    const confirmed = data.confirm === true || data.confirm === "true";
     const seriesId = repeat ? randomUUID() : null;
-    const { p, ids } = await prisma.$transaction(async (tx) => {
+    const saved = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`extra-slots:${providerId}`}))`;
       const p = await plan(tx);
+      const warned = p.dates.filter((d) => d.warnings.length);
+      if (warned.length && !confirmed) return { p, ids: null };
       if (!p.dates.length) {
         const first = p.skipped[0];
         throw new AppError(
@@ -2123,9 +2139,19 @@ export const PracticeService = {
       return { p, ids };
     });
 
+    const { p, ids } = saved;
+    if (!ids) {
+      return {
+        needsConfirmation: true as const,
+        ...p,
+        warnings: p.dates.flatMap((d) => d.warnings.map((w) => ({ date: d.date, ...w }))),
+        message: this.confirmationPrompt(p, Boolean(repeat)),
+      };
+    }
     const first = p.dates[0];
+    const acknowledged = [...new Set(p.dates.flatMap((d) => d.warnings.map((w) => w.code)))];
     console.log(
-      `[calendar] extra slots ${p.dates.map((d) => d.date).join(",")} ${startTime}-${endTime} provider=${providerId} by=${actorUserId} interval=${first.slotIntervalMin} capacity=${opts.capacity ?? 1}${seriesId ? ` series=${seriesId}` : ""}`,
+      `[calendar] extra slots ${p.dates.map((d) => d.date).join(",")} ${startTime}-${endTime} provider=${providerId} by=${actorUserId} interval=${first.slotIntervalMin} capacity=${opts.capacity ?? 1}${seriesId ? ` series=${seriesId}` : ""}${acknowledged.length ? ` confirmed=${acknowledged.join(",")}` : ""}`,
     );
     const message = repeat
       ? `Added ${hm12(startTime)}–${hm12(endTime)} for ${who} on ${this.extraPlanSummary(p, startTime, endTime, perSlot, true)}`
@@ -2180,9 +2206,30 @@ export const PracticeService = {
       ? ` Skipped ${p.skipped.length}: ${p.skipped
           .slice(0, 3)
           .map((s) => `${shortDay(s.date)} (${s.reason})`)
-          .join(", ")}${p.skipped.length > 3 ? "…" : ""}.`
+          .join(", ")}${p.skipped.length > 3 ? ` and ${p.skipped.length - 3} more` : ""}.`
       : "";
-    return `${created ? span : n ? `Adds on ${span}` : span}.${skipped}`;
+    const warned = p.dates.filter((d) => d.warnings.length);
+    const warnings =
+      warned.length && !created
+        ? ` Needs confirmation on ${warned.length}: ${warned
+            .slice(0, 3)
+            .map((d) => `${shortDay(d.date)} (${d.warnings.map((w) => WARNING_LABEL[w.code]).join(", ")})`)
+            .join(", ")}${warned.length > 3 ? ` and ${warned.length - 3} more` : ""}.`
+        : "";
+    return `${created ? span : n ? `Adds on ${span}` : span}.${skipped}${warnings}`;
+  },
+
+  /** "Doctor is marked on break during this time. Create slot anyway?" */
+  confirmationPrompt(p: ExtraSlotPlan, repeat: boolean) {
+    const warned = p.dates.filter((d) => d.warnings.length);
+    if (!repeat) {
+      return `${warned[0].warnings.map((w) => w.message).join(" ")} Create slot anyway?`;
+    }
+    const list = warned
+      .slice(0, 3)
+      .map((d) => `${shortDay(d.date)} (${d.warnings.map((w) => WARNING_LABEL[w.code]).join(", ")})`)
+      .join(", ");
+    return `${warned.length} of ${p.dates.length} day${p.dates.length === 1 ? "" : "s"} clash with the doctor's calendar: ${list}${warned.length > 3 ? ` and ${warned.length - 3} more` : ""}. Create slots anyway?`;
   },
 
   /**
