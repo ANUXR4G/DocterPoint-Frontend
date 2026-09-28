@@ -29,6 +29,7 @@ import {
   timeSlotsForProviderDay,
 } from "./slotEngine.js";
 import { arrivalPatch } from "./bookingArrival.js";
+import { loadSchedulesOn } from "./scheduleVersions.js";
 import { NotificationService } from "./notification.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
 
@@ -247,14 +248,14 @@ export const BookingService = {
         where: { id: data.providerId },
         select: { appointmentValidityDays: true },
       }),
-      prisma.providerSchedule.findMany({
-        where: {
+      loadSchedulesOn(
+        {
           practiceId: data.practiceId,
           providerId: data.providerId,
           locationId: data.locationId,
-          isActive: true,
         },
-      }),
+        formatLocalDate(date),
+      ),
       prisma.clinicLocation.findFirst({
         where: {
           id: data.locationId,
@@ -744,14 +745,14 @@ export const BookingService = {
     const dayStart = startOfLocalDay(date);
     const dayEnd = endOfLocalDay(date);
 
-    const allSchedules = await prisma.providerSchedule.findMany({
-      where: {
+    const allSchedules = await loadSchedulesOn(
+      {
         practiceId: existing.practiceId,
         providerId: existing.providerId,
         locationId: existing.locationId,
-        isActive: true,
       },
-    });
+      formatLocalDate(date),
+    );
     const schedule = allSchedules.find(
       (s) => s.dayOfWeek === dayOfWeek && s.mode === existing.mode,
     );
@@ -1665,9 +1666,9 @@ export const BookingService = {
         where: { id: providerId },
         select: { appointmentValidityDays: true },
       }),
-      prisma.providerSchedule.findMany({
-        where: { practiceId, providerId, locationId, dayOfWeek, isActive: true },
-      }),
+      loadSchedulesOn({ practiceId, providerId, locationId }, formatLocalDate(date)).then(
+        (rows) => rows.filter((s) => s.dayOfWeek === dayOfWeek),
+      ),
       prisma.practiceBooking.findMany({
         where: {
           practiceId,

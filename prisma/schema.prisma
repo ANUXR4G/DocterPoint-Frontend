@@ -437,13 +437,17 @@ model ProviderSchedule {
   breakStartTime  String?      @map("break_start_time")
   breakEndTime    String?      @map("break_end_time")
   isActive        Boolean      @default(true) @map("is_active")
+  /// Schedule version: rows sharing an effective_from form one weekly schedule.
+  /// A date uses the version with the latest effective_from on or before it (see scheduleVersions.ts).
+  effectiveFrom   DateTime     @default(dbgenerated("'2000-01-01'::date")) @map("effective_from") @db.Date
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   location ClinicLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  @@unique([practiceId, providerId, locationId, dayOfWeek])
+  @@unique([practiceId, providerId, locationId, dayOfWeek, effectiveFrom], map: "provider_schedules_version_day_key")
+  @@index([providerId, effectiveFrom])
   @@index([practiceId, providerId, locationId, dayOfWeek, isActive])
   @@index([providerId, dayOfWeek, isActive])
   @@map("provider_schedules")
