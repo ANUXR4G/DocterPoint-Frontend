@@ -1,4 +1,10 @@
-import type { DayWindows, SlotWarning, TimeWindow } from "@/lib/services/procto"
+import { PRACTICE_TIMEZONE } from "@/lib/practiceTime"
+import type {
+  DayWindows,
+  ExtraWindow,
+  SlotWarning,
+  TimeWindow,
+} from "@/lib/services/procto"
 
 export function toMin(hm: string): number {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hm.trim())
@@ -186,4 +192,32 @@ export function suggestedStart(
   if (nowMin != null && start <= nowMin)
     start = Math.ceil((nowMin + 1) / snap) * snap
   return Math.min(start, 24 * 60 - interval)
+}
+
+export const CLINIC_ROLE_LABEL: Record<string, string> = {
+  PRACTICE_OWNER: "Clinic owner",
+  PRACTICE_ADMIN: "Clinic admin",
+  RECEPTIONIST: "Receptionist",
+  DOCTOR: "Doctor",
+}
+
+/** "Added by Receptionist Asha Rao · Sep 29, 12:40 AM" (clinic time). */
+export function addedByLine(x: ExtraWindow): string {
+  const who = !x.addedBy
+    ? ""
+    : /^dr\b/i.test(x.addedBy.name)
+      ? x.addedBy.name
+      : `${(x.addedBy.role && CLINIC_ROLE_LABEL[x.addedBy.role]) || "Staff"} ${x.addedBy.name}`
+  const when = x.createdAt
+    ? new Date(x.createdAt).toLocaleString("en-US", {
+        timeZone: PRACTICE_TIMEZONE,
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+    : ""
+  if (!who && !when) return "Added manually"
+  return `Added ${who ? `by ${who}` : "manually"}${when ? ` · ${when}` : ""}`
 }

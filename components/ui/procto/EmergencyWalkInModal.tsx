@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 import PopupModal from "@/components/modals/Modal"
-import { proctoService } from "@/lib/services/procto"
+import { proctoService, type DeskPatient } from "@/lib/services/procto"
+import DeskPatientPicker from "@/components/ui/procto/DeskPatientPicker"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 
 type Props = {
@@ -13,7 +14,11 @@ type Props = {
 
 const DOCTOR_ROLES = new Set(["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"])
 
-export default function EmergencyWalkInModal({ open, onClose, onAdded }: Props) {
+export default function EmergencyWalkInModal({
+  open,
+  onClose,
+  onAdded,
+}: Props) {
   const { memberships, practiceId, practiceName } = usePracticeDashboard()
   const membership = memberships[0]
   const myUserId = membership?.userId || ""
@@ -37,8 +42,7 @@ export default function EmergencyWalkInModal({ open, onClose, onAdded }: Props) 
   }, [membership, onlySelf, myUserId])
 
   const [providerId, setProviderId] = useState("")
-  const [patientName, setPatientName] = useState("")
-  const [patientPhone, setPatientPhone] = useState("")
+  const [patient, setPatient] = useState<DeskPatient | null>(null)
   const [disease, setDisease] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState("")
@@ -46,8 +50,7 @@ export default function EmergencyWalkInModal({ open, onClose, onAdded }: Props) 
   useEffect(() => {
     if (!open) return
     setMessage("")
-    setPatientName("")
-    setPatientPhone("")
+    setPatient(null)
     setDisease("")
     setProviderId((prev) => {
       if (prev && doctors.some((d) => d.id === prev)) return prev
@@ -60,13 +63,8 @@ export default function EmergencyWalkInModal({ open, onClose, onAdded }: Props) 
       setMessage("Select the doctor.")
       return
     }
-    if (!patientName.trim()) {
-      setMessage("Enter the patient name.")
-      return
-    }
-    const phone = patientPhone.replace(/\D/g, "")
-    if (phone.length < 10) {
-      setMessage("Enter a valid patient mobile number.")
+    if (!patient) {
+      setMessage("Find the patient or register them first.")
       return
     }
     setSubmitting(true)
@@ -74,8 +72,8 @@ export default function EmergencyWalkInModal({ open, onClose, onAdded }: Props) 
     const res = await proctoService.createWalkIn({
       practiceId,
       providerId,
-      patientName: patientName.trim(),
-      patientPhone: phone,
+      patientId: patient.patientId,
+      patientPhone: patient.phone,
       ...(disease.trim() ? { disease: disease.trim() } : {}),
     })
     setSubmitting(false)
@@ -110,21 +108,15 @@ export default function EmergencyWalkInModal({ open, onClose, onAdded }: Props) 
       primaryBtn={
         <button
           type="button"
-          className="dashboard-btn-primary !bg-red-600 hover:!bg-red-700"
+          className="dashboard-btn-primary !bg-red-600 hover:!bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void submit()}
-          disabled={submitting || !practiceId || !doctors.length}
+          disabled={submitting || !practiceId || !doctors.length || !patient}
         >
           {submitting ? "Adding…" : "Add to waiting list"}
         </button>
       }
     >
-      <form
-        className="space-y-3 px-4 pb-2 text-sm"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void submit()
-        }}
-      >
+      <div className="space-y-3 px-4 pb-2 text-sm">
         <p className="text-neutral-600 dark:text-neutral-400">
           Patient is at{" "}
           <span className="font-semibold text-neutral-900 dark:text-white">
@@ -160,29 +152,14 @@ export default function EmergencyWalkInModal({ open, onClose, onAdded }: Props) 
           </label>
         )}
 
-        <label className="block">
-          <span className="font-semibold">Patient name</span>
-          <input
-            className={fieldClass}
-            value={patientName}
-            onChange={(e) => setPatientName(e.target.value)}
-            placeholder="Full name"
-            autoComplete="off"
+        {open && practiceId ? (
+          <DeskPatientPicker
+            practiceId={practiceId}
+            value={patient}
+            onChange={setPatient}
             autoFocus
           />
-        </label>
-
-        <label className="block">
-          <span className="font-semibold">Patient mobile</span>
-          <input
-            className={fieldClass}
-            value={patientPhone}
-            onChange={(e) => setPatientPhone(e.target.value)}
-            placeholder="10-digit mobile"
-            inputMode="tel"
-            autoComplete="off"
-          />
-        </label>
+        ) : null}
 
         <label className="block">
           <span className="font-semibold">Chief complaint (optional)</span>
@@ -200,8 +177,7 @@ export default function EmergencyWalkInModal({ open, onClose, onAdded }: Props) 
             {message}
           </p>
         ) : null}
-        <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
-      </form>
+      </div>
     </PopupModal>
   )
 }

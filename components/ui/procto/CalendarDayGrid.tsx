@@ -8,6 +8,7 @@ import {
   freeGapAt,
   hm12,
   occupiedWindows,
+  addedByLine,
   snapMinutes,
   toMin,
   windowLabel,
@@ -78,6 +79,7 @@ export default function CalendarDayGrid({
   selection,
   onQuickCreate,
   onRemoveExtra,
+  freshIds,
   renderBooking,
   footer,
 }: {
@@ -95,6 +97,8 @@ export default function CalendarDayGrid({
     extra: TimeWindow & { id: string },
     scope: "one" | "series",
   ) => void
+  /** Just-created extra windows: highlighted and scrolled into view. */
+  freshIds?: string[]
   renderBooking: (bookingId: string) => ReactNode
   footer?: ReactNode
 }) {
@@ -163,6 +167,17 @@ export default function CalendarDayGrid({
     // Scroll once per day / column set, not on every data refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateIso, columns.map((c) => c.id).join(",")])
+
+  const freshKey = (freshIds ?? []).join(",")
+  useEffect(() => {
+    if (!freshKey) return
+    const t = window.setTimeout(() => {
+      scroller.current
+        ?.querySelector("[data-fresh]")
+        ?.scrollIntoView({ block: "center", behavior: "smooth" })
+    }, 150)
+    return () => window.clearTimeout(t)
+  }, [freshKey, windows])
 
   const byProvider = useMemo(() => {
     const map = new Map<string, GridBooking[]>()
@@ -500,13 +515,21 @@ export default function CalendarDayGrid({
                     <div
                       key={`x-${xw.id}`}
                       data-cal-item
-                      className="group/extra absolute inset-x-1 overflow-hidden rounded-md border border-dashed border-violet-400 bg-violet-50/90 px-2 py-1 text-[11px] text-violet-900 dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-100"
+                      data-fresh={freshIds?.includes(xw.id) ? "" : undefined}
+                      className={`group/extra absolute inset-x-1 overflow-hidden rounded-md border border-dashed border-violet-400 bg-violet-50/90 px-2 py-1 text-[11px] text-violet-900 dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-100 ${
+                        freshIds?.includes(xw.id)
+                          ? "z-10 animate-pulse ring-2 ring-violet-500 ring-offset-1 dark:ring-offset-neutral-900"
+                          : ""
+                      }`}
                       style={{
                         top: y(toMin(xw.start)),
                         height: (toMin(xw.end) - toMin(xw.start)) * PX_PER_MIN,
                       }}
                       title={[
-                        xw.seriesId ? "Repeating extra slots" : "Extra slots",
+                        xw.seriesId
+                          ? "Manual repeating slots"
+                          : "Manual slot (not in the weekly schedule)",
+                        addedByLine(xw),
                         `${xw.slotIntervalMin}-min slots`,
                         xw.capacity > 1
                           ? `up to ${xw.capacity} patients each`
@@ -518,6 +541,9 @@ export default function CalendarDayGrid({
                     >
                       <div className="flex items-start justify-between gap-1">
                         <span className="truncate font-bold">
+                          <span className="mr-1 inline-block rounded bg-violet-600 px-1 py-px align-[1px] text-[9px] font-bold uppercase tracking-wide text-white dark:bg-violet-500">
+                            Manual
+                          </span>
                           {xw.seriesId ? (
                             <span aria-label="Repeats">↻ </span>
                           ) : null}

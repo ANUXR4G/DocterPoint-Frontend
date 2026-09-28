@@ -25,12 +25,14 @@ type Props = {
 
 function splitNav(
   role: string | null | undefined,
-  opts: { hideDoctorsNav: boolean },
+  opts: { hideDoctorsNav: boolean; hideAuditNav?: boolean },
 ) {
   const content = role && role in routes ? routes[role] : []
-  const filtered = opts.hideDoctorsNav
-    ? content.filter((r) => r.name !== "Doctors")
-    : content
+  const filtered = content.filter(
+    (r) =>
+      !(opts.hideDoctorsNav && r.name === "Doctors") &&
+      !(opts.hideAuditNav && r.name === "Audit log"),
+  )
   const supportStart = filtered.findIndex((r) => r.name === "Settings")
   const splitAt = supportStart >= 0 ? supportStart : filtered.length
   return {
@@ -55,8 +57,12 @@ export default function Sidebar({ role, logout }: Props) {
   const currentSubtab = searchParams.get("subtab")
   const router = useRouter()
   const { closeMenu, toggleHelp } = useAppContext()
-  const { loading: clinicLoading, isClinicAdmin, hasPractice } =
-    useClinicAdmin()
+  const {
+    loading: clinicLoading,
+    isClinicAdmin,
+    hasPractice,
+    isReceptionOnly,
+  } = useClinicAdmin()
 
   const navRole =
     navRoleFromContext(role, pathname ?? null, cookies.getCookie("gg_portal")) ??
@@ -83,7 +89,10 @@ export default function Sidebar({ role, logout }: Props) {
     toggleHelp()
   }
 
-  const { overview, support } = splitNav(navRole, { hideDoctorsNav })
+  const { overview, support } = splitNav(navRole, {
+    hideDoctorsNav,
+    hideAuditNav: !clinicLoading && isReceptionOnly,
+  })
   const { unreadTotal: supportUnread } = useAdminSupportUnread(navRole === "admin")
   const { openCount: notificationOpen } = usePracticeOpenNotifications(
     navRole === "doctor" || navRole === "clinic",
