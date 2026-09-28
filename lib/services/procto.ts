@@ -388,6 +388,32 @@ export const proctoService = {
       body: JSON.stringify(body),
     }),
 
+  /** Quick-create bookable time from the calendar (no patient is messaged). */
+  addExtraSlots: (
+    practiceId: string,
+    body: {
+      providerId: string
+      date: string
+      startTime: string
+      endTime: string
+      reason?: string
+    },
+  ) =>
+    proctoFetch(`/procto/practices/${practiceId}/overrides`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, type: "EXTRA_SLOT" }),
+    }) as Promise<ProctoResult<ExtraSlotsResult>>,
+
+  removeExtraSlots: (practiceId: string, overrideId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/overrides/${overrideId}`, {
+      method: "DELETE",
+    }) as Promise<ProctoResult<{ removed: boolean; message: string }>>,
+
+  getCalendarDay: (practiceId: string, providerId: string, date: string) =>
+    proctoFetch(
+      `/procto/practices/${practiceId}/calendar?providerId=${providerId}&date=${date}`,
+    ) as Promise<ProctoResult<CalendarDay>>,
+
   updateBookingStatus: (bookingId: string, status: string) =>
     proctoFetch(`/procto/bookings/${bookingId}/status`, {
       method: "PATCH",
@@ -835,6 +861,40 @@ export type ScheduleConflict = {
 };
 
 /** Lead-time rule: a change may not affect booked visits inside the clinic's notice period. */
+export type TimeWindow = { start: string; end: string };
+
+/** A doctor's day for the calendar grid (all times HH:MM clinic wall clock). */
+export type DayWindows = {
+  hours: TimeWindow[];
+  extra: Array<TimeWindow & { id: string; note: string | null }>;
+  blocked: Array<TimeWindow & { type: string; reason: string | null }>;
+  dayOff: { type: string; reason: string | null } | null;
+  mode: "TIME_BASED" | "TOKEN_BASED" | null;
+  slotIntervalMin: number;
+};
+
+export type CalendarDay = {
+  date: string;
+  timeSlots: Array<{
+    start: string;
+    end: string;
+    booked: number;
+    capacity: number;
+    available: boolean;
+  }>;
+  configuredMode: "TIME_BASED" | "TOKEN_BASED" | null;
+  windows?: DayWindows;
+};
+
+export type ExtraSlotsResult = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  slots: number;
+  slotIntervalMin: number;
+  message: string;
+};
+
 export type ScheduleNotice = {
   hours: number;
   endsAt: string;

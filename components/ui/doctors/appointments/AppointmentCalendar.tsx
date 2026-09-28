@@ -24,9 +24,21 @@ import {
   formatPracticeDateTime,
   formatPracticeTime,
   practiceDateIso,
-  practiceHour,
+  practiceTodayIso,
 } from "@/lib/practiceTime"
-import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import {
+  proctoService,
+  type DayWindows,
+  type ProctoBooking,
+  type TimeWindow,
+} from "@/lib/services/procto"
+import { drName, windowLabel } from "@/lib/quickSlots"
+import CalendarDayGrid, {
+  type GridBooking,
+} from "@/components/ui/procto/CalendarDayGrid"
+import QuickSlotPopover, {
+  type QuickSlotRequest,
+} from "@/components/ui/procto/QuickSlotPopover"
 import {
   filterBookingsByRange,
   usePracticeDashboard,
@@ -80,8 +92,6 @@ type CalBooking = ProctoBooking & {
 function isOverrideSlot(b: CalBooking): boolean {
   return Boolean(b.overrideSlot ?? b.override_slot)
 }
-
-const HOURS = Array.from({ length: 13 }, (_, i) => i + 8) // 08:00–20:00
 
 function ymd(d: Date) {
   return format(d, "yyyy-MM-dd")
@@ -179,7 +189,7 @@ function BookingHoverDetails({ booking }: { booking: CalBooking }) {
         <div className="flex justify-between gap-3">
           <dt className="opacity-60">Doctor</dt>
           <dd className="text-right font-semibold">
-            {booking.provider?.name ? `Dr ${booking.provider.name}` : "—"}
+            {booking.provider?.name ? drName(booking.provider.name) : "—"}
           </dd>
         </div>
         <div className="flex justify-between gap-3">
@@ -280,7 +290,7 @@ function BookingCard({
             </p>
             <p className="mt-0.5 truncate text-xs opacity-80">
               {booking.provider?.name
-                ? `Dr ${booking.provider.name}`
+                ? drName(booking.provider.name)
                 : booking.disease || booking.mode.replace(/_/g, " ")}
             </p>
           </>
@@ -310,14 +320,16 @@ export default function AppointmentCalendar() {
     loading: shellLoading,
     error: shellError,
     isClinicAdmin,
+    membershipRole,
     actorUserId,
   } = usePracticeDashboard()
+  const isFrontDesk = isClinicAdmin || membershipRole === "RECEPTIONIST"
   const [error, setError] = useState("")
   const [practiceId, setPracticeId] = useState("")
   const [practiceName, setPracticeName] = useState("")
-  const [doctors, setDoctors] = useState<
-    Array<{ id: string; name: string }>
-  >([])
+  const [doctors, setDoctors] = useState<Array<{ id: string; name: string }>>(
+    [],
+  )
   const [providerId, setProviderId] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
   const [view, setView] = useState<ViewMode>("week")
@@ -325,18 +337,18 @@ export default function AppointmentCalendar() {
   const loading = (!ready && shellLoading) || (ready && !hydrated)
 
   useEffect(() => {
-    if (!ready || isClinicAdmin || !actorUserId) return
+    if (!ready || isFrontDesk || !actorUserId) return
     setProviderId(actorUserId)
-  }, [ready, isClinicAdmin, actorUserId])
-  const [timeSlots, setTimeSlots] = useState<
-    Array<{
-      start: string
-      end: string
-      booked: number
-      capacity: number
-      available: boolean
-    }>
-  >([])
+  }, [ready, isFrontDesk, actorUserId])
+  const [dayWindows, setDayWindows] = useState<
+    Record<string, DayWindows | undefined>
+  >({})
+  const [quick, setQuick] = useState<QuickSlotRequest | null>(null)
+  const [notice, setNotice] = useState<{
+    text: string
+    tone: "ok" | "error"
+    undo?: { providerId: string; extra: TimeWindow & { id: string } }
+  } | null>(null)
 
   const range = useMemo(() => {
     if (view === "day") {
@@ -396,9 +408,7 @@ export default function AppointmentCalendar() {
         name: m.user?.name || m.user?.email || "Doctor",
       }))
 
-    const unique = Array.from(
-      new Map(roster.map((d) => [d.id, d])).values(),
-    )
+    const unique = Array.from(new Map(roster.map((d) => [d.id, d])).values())
     setDoctors(unique)
   }, [ready, memberships, shellError])
 
@@ -430,26 +440,85 @@ export default function AppointmentCalendar() {
     statusFilter,
   ])
 
-  const loadDaySlots = useCallback(async () => {
-    if (!practiceId || view !== "day" || providerId === "all") {
-      setTimeSlots([])
+  const columns = useMemo(() => {
+    if (providerId === "all") return doctors
+    const match = doctors.filter((d) => d.id === providerId)
+    return match.length ? match : [{ id: providerId, name: "You" }]
+  }, [doctors, providerId])
+
+  const canCreateFor = useCallback(
+    (id: string) => isFrontDesk || id === actorUserId,
+    [isFrontDesk, actorUserId],
+  )
+  const creatableDoctors = useMemo(
+    () => doctors.filter((d) => canCreateFor(d.id)),
+    [doctors, canCreateFor],
+  )
+
+  const columnKey = columns.map((c) => c.id).join(",")
+  const loadDayWindows = useCallback(async () => {
+    if (!practiceId || view !== "day" || !columnKey) {
+      setDayWindows({})
       return
     }
-    const res = await proctoService.getCalendar(
-      practiceId,
-      providerId,
-      ymd(anchor),
+    const date = ymd(anchor)
+    const ids = columnKey.split(",")
+    const results = await Promise.all(
+      ids.map((id) => proctoService.getCalendarDay(practiceId, id, date)),
     )
-    if (res.status === "successful" && res.data?.timeSlots) {
-      setTimeSlots(res.data.timeSlots)
-    } else {
-      setTimeSlots([])
-    }
-  }, [practiceId, view, providerId, anchor])
+    const next: Record<string, DayWindows | undefined> = {}
+    ids.forEach((id, i) => {
+      const res = results[i]
+      if (res.status === "successful" && res.data?.windows)
+        next[id] = res.data.windows
+    })
+    setDayWindows(next)
+  }, [practiceId, view, anchor, columnKey])
 
   useEffect(() => {
-    void loadDaySlots()
-  }, [loadDaySlots])
+    setDayWindows({})
+    void loadDayWindows()
+  }, [loadDayWindows])
+
+  const windowSeed = useMemo(() => {
+    const date = ymd(anchor)
+    const seed: Record<string, DayWindows | undefined> = {}
+    for (const [id, w] of Object.entries(dayWindows)) seed[`${id}:${date}`] = w
+    return seed
+  }, [dayWindows, anchor])
+
+  async function removeExtra(
+    targetProviderId: string,
+    extra: TimeWindow & { id: string },
+  ) {
+    const res = await proctoService.removeExtraSlots(practiceId, extra.id)
+    if (res.status === "successful") {
+      setNotice({
+        text: res.data?.message || `Removed extra slots ${windowLabel(extra)}.`,
+        tone: "ok",
+      })
+      void loadDayWindows()
+    } else {
+      setNotice({
+        text: res.message || "Could not remove those slots.",
+        tone: "error",
+      })
+    }
+  }
+
+  function quickCreateFromHeader(date: Date, el: HTMLElement) {
+    const target =
+      providerId !== "all" && canCreateFor(providerId)
+        ? providerId
+        : creatableDoctors[0]?.id
+    if (!target) return
+    const r = el.getBoundingClientRect()
+    setQuick({
+      providerId: target,
+      date: ymd(date),
+      anchor: { left: r.left, top: r.bottom, width: r.width, height: 0 },
+    })
+  }
 
   const visibleBookings = useMemo(
     () =>
@@ -589,7 +658,7 @@ export default function AppointmentCalendar() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-semibold opacity-70">Doctor</span>
-            {isClinicAdmin ? (
+            {isFrontDesk ? (
               <select
                 value={providerId}
                 onChange={(e) => setProviderId(e.target.value)}
@@ -634,13 +703,64 @@ export default function AppointmentCalendar() {
         </p>
       ) : null}
 
+      {notice ? (
+        <div
+          role="status"
+          className={`flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-2.5 text-sm ${
+            notice.tone === "ok"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+              : "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+          }`}
+        >
+          <span className="font-semibold">{notice.text}</span>
+          <span className="flex items-center gap-2">
+            {notice.undo ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const u = notice.undo!
+                  setNotice(null)
+                  void removeExtra(u.providerId, u.extra)
+                }}
+                className="rounded-lg border border-current px-2.5 py-1 text-xs font-bold"
+              >
+                Undo
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss"
+              className="rounded-lg px-2 py-1 text-xs font-bold opacity-70 hover:opacity-100"
+            >
+              ✕
+            </button>
+          </span>
+        </div>
+      ) : null}
+
       <div className="min-h-0 flex-1">
         {view === "day" ? (
           <DayView
             day={anchor}
             bookings={dayBookings}
-            timeSlots={timeSlots}
-            showSlots={providerId !== "all"}
+            columns={columns}
+            windows={dayWindows}
+            canCreate={canCreateFor}
+            selection={
+              quick &&
+              quick.date === ymd(anchor) &&
+              quick.start != null &&
+              quick.end != null
+                ? {
+                    providerId: quick.providerId,
+                    start: quick.start,
+                    end: quick.end,
+                  }
+                : null
+            }
+            onQuickCreate={setQuick}
+            onRemoveExtra={(id, extra) => void removeExtra(id, extra)}
           />
         ) : null}
 
@@ -652,6 +772,9 @@ export default function AppointmentCalendar() {
               setAnchor(d)
               setView("day")
             }}
+            onAddSlot={
+              creatableDoctors.length ? quickCreateFromHeader : undefined
+            }
           />
         ) : null}
 
@@ -667,6 +790,38 @@ export default function AppointmentCalendar() {
           />
         ) : null}
       </div>
+
+      {quick ? (
+        <QuickSlotPopover
+          key={`${quick.providerId}:${quick.date}:${quick.start ?? ""}:${quick.end ?? ""}`}
+          practiceId={practiceId}
+          doctors={
+            creatableDoctors.length
+              ? creatableDoctors
+              : columns.filter((c) => canCreateFor(c.id))
+          }
+          request={quick}
+          seed={windowSeed}
+          onClose={() => setQuick(null)}
+          onCreated={(result, target) => {
+            setQuick(null)
+            setNotice({
+              text: result.message,
+              tone: "ok",
+              undo: {
+                providerId: target.providerId,
+                extra: {
+                  id: result.id,
+                  start: result.startTime,
+                  end: result.endTime,
+                },
+              },
+            })
+            if (view === "day" && target.date === ymd(anchor))
+              void loadDayWindows()
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -674,93 +829,70 @@ export default function AppointmentCalendar() {
 function DayView({
   day,
   bookings,
-  timeSlots,
-  showSlots,
+  columns,
+  windows,
+  canCreate,
+  selection,
+  onQuickCreate,
+  onRemoveExtra,
 }: {
   day: Date
   bookings: CalBooking[]
-  timeSlots: Array<{
-    start: string
-    end: string
-    booked: number
-    capacity: number
-    available: boolean
-  }>
-  showSlots: boolean
+  columns: Array<{ id: string; name: string }>
+  windows: Record<string, DayWindows | undefined>
+  canCreate: (providerId: string) => boolean
+  selection: { providerId: string; start: number; end: number } | null
+  onQuickCreate: (req: QuickSlotRequest) => void
+  onRemoveExtra: (
+    providerId: string,
+    extra: TimeWindow & { id: string },
+  ) => void
 }) {
-  const timed = bookings.filter((b) => b.slotStart || b.slot_start)
+  const dateIso = ymd(day)
+  const today = practiceTodayIso()
+  const byId = useMemo(
+    () => new Map(bookings.map((b) => [b.id, b])),
+    [bookings],
+  )
+  const timed = useMemo(() => {
+    const out: GridBooking[] = []
+    for (const b of bookings) {
+      const slot = b.slotStart ?? b.slot_start
+      const pid = b.providerId ?? b.provider?.id
+      if (!slot || !pid) continue
+      const end = b.slot_end ?? (b as { slotEnd?: string | null }).slotEnd
+      out.push({
+        id: b.id,
+        providerId: pid,
+        start: new Date(slot),
+        end: end ? new Date(end) : null,
+      })
+    }
+    return out
+  }, [bookings])
   const tokens = bookings.filter((b) => !(b.slotStart || b.slot_start))
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900/40">
-      {showSlots && timeSlots.length > 0 ? (
-        <div className="shrink-0 border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
-            Time slots · {format(day, "d MMM")}
-          </p>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(6.25rem,1fr))] gap-2">
-            {timeSlots.map((s) => {
-              const start = new Date(s.start)
-              const label = formatPracticeTime(start)
-              const filled = s.booked > 0
-              return (
-                <span
-                  key={s.start}
-                  title={`${label} · ${s.booked} of ${s.capacity} booked`}
-                  className={`inline-flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-sm font-semibold tabular-nums ${
-                    filled
-                      ? "border-green-500 bg-green-100 text-green-800 dark:border-green-500/60 dark:bg-green-900/40 dark:text-green-200"
-                      : "border-neutral-300 bg-neutral-100 text-neutral-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
-                  }`}
-                >
-                  <span>{label}</span>
-                  <span
-                    className={`text-xs font-bold ${
-                      filled ? "opacity-90" : "opacity-70"
-                    }`}
-                  >
-                    {s.booked}/{s.capacity}
-                  </span>
-                </span>
-              )
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-neutral-100 dark:divide-neutral-800">
-        {HOURS.map((hour) => {
-          const hourBookings = timed.filter((b) => {
-            const start = bookingStart(b)
-            return start ? practiceHour(start) === hour : false
-          })
-          return (
-            <div
-              key={hour}
-              className="grid min-h-[4.5rem] grid-cols-[4.5rem_1fr] gap-3 px-4 py-3"
-            >
-              <p className="pt-1 text-sm font-semibold tabular-nums opacity-60">
-                {String(hour).padStart(2, "0")}:00
-              </p>
-              <div className="flex min-h-10 flex-col gap-2">
-                {hourBookings.length ? (
-                  hourBookings.map((b) => (
-                    <BookingCard key={b.id} booking={b} />
-                  ))
-                ) : (
-                  <div className="rounded-lg border border-dashed border-neutral-200 px-3 py-2 text-xs opacity-40 dark:border-neutral-700">
-                    Open
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })}
-
-        {tokens.length > 0 ? (
-          <div className="px-4 py-4">
+    <CalendarDayGrid
+      dateIso={dateIso}
+      isToday={dateIso === today}
+      isPast={dateIso < today}
+      columns={columns}
+      bookings={timed}
+      windows={windows}
+      canCreate={canCreate}
+      selection={selection}
+      onQuickCreate={onQuickCreate}
+      onRemoveExtra={onRemoveExtra}
+      renderBooking={(id) => {
+        const b = byId.get(id)
+        return b ? <BookingCard booking={b} compact /> : null
+      }}
+      footer={
+        tokens.length > 0 ? (
+          <div className="border-t border-neutral-200 px-4 py-4 dark:border-neutral-700">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
-              Token queue
+              Token queue · {format(day, "d MMM")}
             </p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {tokens.map((b) => (
@@ -768,15 +900,9 @@ function DayView({
               ))}
             </div>
           </div>
-        ) : null}
-
-        {!bookings.length ? (
-          <p className="px-4 py-8 text-center text-sm opacity-60">
-            No appointments on this day.
-          </p>
-        ) : null}
-      </div>
-    </div>
+        ) : null
+      }
+    />
   )
 }
 
@@ -784,10 +910,12 @@ function WeekView({
   days,
   byDay,
   onSelectDay,
+  onAddSlot,
 }: {
   days: Date[]
   byDay: Map<string, CalBooking[]>
   onSelectDay: (d: Date) => void
+  onAddSlot?: (d: Date, el: HTMLElement) => void
 }) {
   const today = startOfToday()
   return (
@@ -799,35 +927,44 @@ function WeekView({
           const isToday = isSameDay(d, today)
           return (
             <div key={key} className="flex h-full min-h-0 flex-col">
-              <button
-                type="button"
-                onClick={() => onSelectDay(d)}
-                className={`flex w-full shrink-0 flex-col items-start border-b border-neutral-100 px-3 py-3 text-left dark:border-neutral-800 ${
-                  isToday ? "bg-[#0099ff]/10" : ""
-                }`}
-              >
-                <span className="text-xs font-semibold uppercase tracking-wide opacity-50">
-                  {format(d, "EEE")}
-                </span>
-                <span
-                  className={`mt-0.5 text-lg font-semibold ${
-                    isToday ? "text-[#0099ff]" : ""
+              <div className="group relative shrink-0">
+                {onAddSlot && d >= today ? (
+                  <button
+                    type="button"
+                    onClick={(e) => onAddSlot(d, e.currentTarget)}
+                    className="absolute right-2 top-2 z-10 rounded-lg border border-[var(--theme-primary)]/40 bg-white px-2 py-1 text-xs font-bold text-[var(--theme-primary)] opacity-0 transition hover:bg-[var(--theme-primary)]/10 focus:opacity-100 group-hover:opacity-100 dark:bg-neutral-900"
+                  >
+                    + Slot
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onSelectDay(d)}
+                  className={`flex w-full shrink-0 flex-col items-start border-b border-neutral-100 px-3 py-3 text-left dark:border-neutral-800 ${
+                    isToday ? "bg-[#0099ff]/10" : ""
                   }`}
                 >
-                  {format(d, "d")}
-                </span>
-                <span className="text-xs opacity-60">
-                  {list.length} slot{list.length === 1 ? "" : "s"}
-                </span>
-              </button>
+                  <span className="text-xs font-semibold uppercase tracking-wide opacity-50">
+                    {format(d, "EEE")}
+                  </span>
+                  <span
+                    className={`mt-0.5 text-lg font-semibold ${
+                      isToday ? "text-[#0099ff]" : ""
+                    }`}
+                  >
+                    {format(d, "d")}
+                  </span>
+                  <span className="text-xs opacity-60">
+                    {list.length} slot{list.length === 1 ? "" : "s"}
+                  </span>
+                </button>
+              </div>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
                 {list.map((b) => (
                   <BookingCard key={b.id} booking={b} />
                 ))}
                 {!list.length ? (
-                  <p className="px-1 py-6 text-center text-xs opacity-40">
-                    —
-                  </p>
+                  <p className="px-1 py-6 text-center text-xs opacity-40">—</p>
                 ) : null}
               </div>
             </div>
