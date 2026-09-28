@@ -313,8 +313,8 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
       )
       return
     }
-    if (!phone.trim() && !isLoggedIn) {
-      setMessage("Enter your mobile number to continue.")
+    if (!isLoggedIn) {
+      setMessage("Sign in with your mobile to book this visit.")
       return
     }
     if (isLoggedIn && !phone.trim()) {
@@ -663,17 +663,18 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
             </p>
           )}
           {!isLoggedIn && (
-            <p className="text-slate-500 dark:text-slate-400 text-xs">
-              Already have an account?{" "}
-              <Link
-                href={`/login/patient?callback=${encodeURIComponent(`/practices/${practice.slug}`)}`}
-                className="text-blue-600 hover:text-blue-700 dark:text-sky-400 font-semibold"
-              >
-                Sign in
-              </Link>{" "}
-              so this visit appears under My bookings.
-            </p>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm dark:border-sky-900 dark:bg-sky-950/40">
+              <p className="font-semibold text-slate-900 dark:text-white">
+                Sign in with your mobile to book
+              </p>
+              <p className="mt-1 text-slate-600 dark:text-slate-300">
+                We send a one-time code on WhatsApp. New patients get a Patient
+                ID (MRN) automatically, and every visit is saved under it.
+              </p>
+            </div>
           )}
+          {isLoggedIn ? (
+            <>
           <label className="text-slate-500 dark:text-slate-400 block text-sm">
             Name
             <input
@@ -705,6 +706,8 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
               className="form-input mt-1 w-full rounded-lg px-3 py-2 disabled:cursor-not-allowed disabled:opacity-80"
             />
           </label>
+            </>
+          ) : null}
           <VoiceTextInput
             ref={diseaseVoiceRef}
             label="What is the problem? *"
@@ -784,6 +787,7 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
             >
               Back
             </button>
+            {isLoggedIn ? (
             <FlipEfButton
               onClick={() => void confirmBooking()}
               disabled={
@@ -796,6 +800,14 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
             >
               {submitting ? "Booking…" : "Confirm booking"}
             </FlipEfButton>
+            ) : (
+              <Link
+                href={`/login/patient?callback=${encodeURIComponent(`/practices/${practice.slug}`)}`}
+                className="flex h-12 flex-1 items-center justify-center rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                Sign in to book
+              </Link>
+            )}
           </div>
         </div>
       )}

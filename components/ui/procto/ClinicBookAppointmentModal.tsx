@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 import PopupModal from "@/components/modals/Modal"
-import { proctoService } from "@/lib/services/procto"
+import { proctoService, type DeskPatient } from "@/lib/services/procto"
+import DeskPatientPicker from "@/components/ui/procto/DeskPatientPicker"
 import { formatPracticeTime, practiceTodayIso } from "@/lib/practiceTime"
 import {
   usePracticeDashboard,
@@ -98,8 +99,7 @@ export default function ClinicBookAppointmentModal({
   const [mode, setMode] = useState<"TIME_BASED" | "TOKEN_BASED">("TIME_BASED")
   const [availability, setAvailability] = useState<Availability | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
-  const [patientName, setPatientName] = useState("")
-  const [patientPhone, setPatientPhone] = useState("")
+  const [patient, setPatient] = useState<DeskPatient | null>(null)
   const [disease, setDisease] = useState("")
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -110,6 +110,7 @@ export default function ClinicBookAppointmentModal({
     setMessage("")
     setSelectedSlot(null)
     setDisease("")
+    setPatient(null)
     if (!providerId && doctors[0]) setProviderId(doctors[0].id)
     if (!locationId && locations[0]) setLocationId(locations[0].id)
   }, [open, doctors, locations, providerId, locationId])
@@ -171,13 +172,8 @@ export default function ClinicBookAppointmentModal({
       setMessage("Select doctor and location.")
       return
     }
-    const phone = patientPhone.replace(/\D/g, "")
-    if (phone.length < 10) {
-      setMessage("Enter a valid patient mobile number.")
-      return
-    }
-    if (!patientName.trim()) {
-      setMessage("Enter the patient name.")
+    if (!patient) {
+      setMessage("Find the patient or register them first.")
       return
     }
     if (mode === "TIME_BASED" && !selectedSlot) {
@@ -206,8 +202,8 @@ export default function ClinicBookAppointmentModal({
       providerId,
       mode,
       channel: "PROVIDER_APP",
-      patientPhone: phone.slice(-10),
-      patientName: patientName.trim(),
+      patientId: patient.patientId,
+      patientPhone: patient.phone,
     }
     if (disease.trim()) body.disease = disease.trim()
     if (mode === "TIME_BASED" && selectedSlot) body.slotStart = selectedSlot
@@ -248,7 +244,7 @@ export default function ClinicBookAppointmentModal({
           type="button"
           className="dashboard-btn-primary"
           onClick={() => void submit()}
-          disabled={submitting || !practiceId}
+          disabled={submitting || !practiceId || !patient}
         >
           {submitting ? "Booking…" : "Confirm booking"}
         </button>
@@ -260,7 +256,7 @@ export default function ClinicBookAppointmentModal({
           <span className="font-semibold text-neutral-900 dark:text-white">
             {practiceName || "this clinic"}
           </span>
-          . Choose a doctor, slot, and patient details.
+          . Choose a doctor, slot and a registered patient (Patient ID / MRN).
         </p>
 
         {!doctors.length ? (
@@ -390,28 +386,13 @@ export default function ClinicBookAppointmentModal({
           </p>
         )}
 
-        <label className="block">
-          <span className="font-semibold">Patient name</span>
-          <input
-            className={fieldClass}
-            value={patientName}
-            onChange={(e) => setPatientName(e.target.value)}
-            placeholder="Full name"
-            autoComplete="name"
+        {open && practiceId ? (
+          <DeskPatientPicker
+            practiceId={practiceId}
+            value={patient}
+            onChange={setPatient}
           />
-        </label>
-
-        <label className="block">
-          <span className="font-semibold">Patient mobile</span>
-          <input
-            className={fieldClass}
-            value={patientPhone}
-            onChange={(e) => setPatientPhone(e.target.value)}
-            placeholder="10-digit mobile"
-            inputMode="tel"
-            autoComplete="tel"
-          />
-        </label>
+        ) : null}
 
         <label className="block">
           <span className="font-semibold">Reason for visit (optional)</span>
