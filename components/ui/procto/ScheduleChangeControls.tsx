@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { ScheduleConflictResolver } from "./ScheduleConflictResolver"
-import type {
-  PendingScheduleVerification,
-  ScheduleConflict,
-  ScheduleConflictCode,
-  ScheduleImpact,
-  SchedulePreview,
-  UpcomingScheduleChange,
+import {
+  proctoService,
+  type PendingScheduleVerification,
+  type ScheduleConflict,
+  type ScheduleConflictCode,
+  type ScheduleImpact,
+  type ScheduleNotice,
+  type SchedulePreview,
+  type UpcomingScheduleChange,
 } from "@/lib/services/procto"
 
 const CONFLICT_LABELS: Record<ScheduleConflictCode, string> = {
@@ -46,6 +48,69 @@ export function formatScheduleDay(iso: string): string {
     month: "short",
     year: "numeric",
   })
+}
+
+export const NOTICE_HOUR_OPTIONS = [24, 48, 72, 168] as const
+
+/** "48 hours'" / "7 days'" */
+export function noticePeriodLabel(hours: number): string {
+  return hours === 168 ? "7 days'" : `${hours} hours'`
+}
+
+export function discardedMessage(data: unknown): string {
+  const sent = (data as { alerts?: { sent?: number } } | null)?.alerts?.sent ?? 0
+  return (
+    "Pending schedule discarded. The current schedule is unchanged." +
+    (sent
+      ? ` ${sent} patient${sent === 1 ? " whose visit was already changed was" : "s whose visits were already changed were"} notified.`
+      : "")
+  )
+}
+
+/** Clinic setting: minimum notice before a schedule change may affect a booked visit. */
+export function NoticePeriodSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string
+  onChange: (hours: string) => void
+  disabled?: boolean
+}) {
+  return (
+    <label className="block min-w-0">
+      <span className="gg-muted text-sm font-bold">Schedule change notice *</span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="form-input mt-1 h-14 w-full px-4 text-base font-semibold"
+      >
+        {NOTICE_HOUR_OPTIONS.map((h) => (
+          <option key={h} value={String(h)}>
+            {h === 168 ? "7 days" : `${h} hours`}
+          </option>
+        ))}
+      </select>
+      <span className="gg-faint mt-1 block text-sm font-medium">
+        A schedule change never affects a booked visit inside this period — it starts later
+        instead.
+      </span>
+    </label>
+  )
+}
+
+function NoticeNote({ notice, effectiveFrom }: { notice?: ScheduleNotice; effectiveFrom: string }) {
+  if (!notice?.adjusted) return null
+  const k = notice.blockedBy.length
+  return (
+    <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+      Starts <strong>{formatScheduleDay(effectiveFrom)}</strong> instead of{" "}
+      {formatScheduleDay(notice.requestedFrom)}: booked patients get{" "}
+      {noticePeriodLabel(notice.hours)} notice, and {k} visit{k === 1 ? "" : "s"} before then
+      would have been affected.
+    </p>
+  )
 }
 
 export function normalizeUpcomingChanges(data: unknown): UpcomingScheduleChange[] {
@@ -137,6 +202,7 @@ export function PendingVerificationPanel({
   const [confirming, setConfirming] = useState(false)
   const [showList, setShowList] = useState(false)
   const [resolving, setResolving] = useState(false)
+  const [sendingAlerts, setSendingAlerts] = useState(false)
   useEffect(() => setConfirming(false), [pending?.effectiveFrom, pending?.impact.total])
   useEffect(() => {
     if (openResolverSignal && resolver) setResolving(true)
@@ -144,7 +210,21 @@ export function PendingVerificationPanel({
   }, [openResolverSignal])
   if (!pending) return null
   const n = pending.impact.total
+  const held = pending.heldAlerts ?? 0
   const canShift = pending.safeEffectiveFrom > pending.effectiveFrom
+
+  async function sendHeldAlerts() {
+    if (!resolver) return
+    setSendingAlerts(true)
+    const res = await proctoService.sendHeldScheduleAlerts(resolver.practiceId, resolver.providerId)
+    setSendingAlerts(false)
+    const sent = res.data?.sent ?? 0
+    resolver.onResolved(
+      res.status === "successful"
+        ? `${sent} patient alert${sent === 1 ? "" : "s"} sent.`
+        : res.message || "Could not send the patient alerts.",
+    )
+  }
   return (
     <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
       <p className="text-xs font-bold uppercase tracking-[0.12em]">Pending verification</p>
@@ -155,6 +235,7 @@ export function PendingVerificationPanel({
           ? `It clashes with ${n} booked appointment${n === 1 ? "" : "s"}, so the current schedule stays in force until you activate it.`
           : "No booked appointment clashes any more — it is ready to activate."}
       </p>
+      <NoticeNote notice={pending.notice} effectiveFrom={pending.effectiveFrom} />
       {n ? <ImpactChips impact={pending.impact} /> : null}
       {n ? (
         <button
@@ -171,12 +252,32 @@ export function PendingVerificationPanel({
         </div>
       ) : null}
       <p className="text-xs opacity-80">
-        No appointment is cancelled or moved yet.{" "}
-        {resolver
-          ? "Resolve them (reschedule, reassign, cancel, or keep as override slots), or activate anyway and contact the patients."
-          : "Reschedule the listed patients first, or activate anyway and contact them."}
+        {n
+          ? resolver
+            ? "Resolve the clashing visits (reschedule, reassign, cancel, or keep as override slots). Patients are messaged only once every clash is resolved; activating anyway asks the remaining patients on WhatsApp / email to pick a new time."
+            : "Reschedule the listed patients first. Activating anyway asks the remaining patients on WhatsApp / email to pick a new time."
+          : ""}
         {pending.submittedBy ? ` Submitted by ${pending.submittedBy}.` : ""}
       </p>
+      {held > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-white/60 px-3 py-2 text-xs dark:bg-neutral-900/60">
+          <span>
+            {held} patient alert{held === 1 ? " is" : "s are"} waiting — sent when every clash is
+            resolved, the schedule is activated or discarded, or at the latest a day before the
+            notice period reaches the visit.
+          </span>
+          {resolver ? (
+            <button
+              type="button"
+              disabled={busy || sendingAlerts}
+              onClick={() => void sendHeldAlerts()}
+              className="min-h-8 rounded-lg border border-amber-500 px-2.5 py-1 font-semibold disabled:opacity-50"
+            >
+              {sendingAlerts ? "Sending…" : "Send now"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {n && resolver ? (
           <button
@@ -221,7 +322,7 @@ export function PendingVerificationPanel({
             {busy
               ? "Activating…"
               : n
-                ? `Confirm — ${n} visit${n === 1 ? " stays" : "s stay"} booked outside hours`
+                ? `Confirm — ask ${n} patient${n === 1 ? "" : "s"} to pick a new time`
                 : `Activate from ${formatScheduleDay(pending.effectiveFrom)}`}
           </button>
         )}
@@ -265,11 +366,14 @@ export function EffectiveFromField({
   onChange,
   disabled,
   compact = false,
+  noticeHours,
 }: {
   value: string
   onChange: (iso: string) => void
   disabled?: boolean
   compact?: boolean
+  /** Clinic's lead time for changes that affect booked visits. */
+  noticeHours?: number
 }) {
   const today = clinicTodayIso()
   return (
@@ -294,6 +398,9 @@ export function EffectiveFromField({
         Days before this keep the current schedule, so appointments already booked
         on them are not affected.
         {value > today ? ` New schedule starts ${formatScheduleDay(value)}.` : ""}
+        {noticeHours
+          ? ` A change that affects booked visits starts only after the clinic's ${noticePeriodLabel(noticeHours)} notice period.`
+          : ""}
       </span>
     </label>
   )
@@ -362,6 +469,55 @@ export function ScheduleConflictModal({
   const n = preview.conflicts.length
   const safe = preview.safeEffectiveFrom
   const canShift = safe > preview.effectiveFrom
+  const notice = preview.notice
+
+  if (!n && notice?.adjusted) {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="schedule-notice-title"
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !busy) onCancel()
+        }}
+      >
+        <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+          <h2 id="schedule-notice-title" className="text-lg font-semibold text-neutral-900 dark:text-white">
+            Booked patients need {noticePeriodLabel(notice.hours)} notice
+          </h2>
+          <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
+            Starting {formatScheduleDay(notice.requestedFrom)} would affect these visits inside the
+            notice period, so the new schedule can start{" "}
+            <strong>{formatScheduleDay(preview.effectiveFrom)}</strong> at the earliest. Nothing is
+            cancelled or moved.
+          </p>
+          <div className="mt-3 flex min-h-0 flex-1 flex-col">
+            <ConflictList conflicts={notice.blockedBy} />
+          </div>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+              className="min-h-11 rounded-xl border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-200"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => onApplyFrom(preview.effectiveFrom)}
+              disabled={busy}
+              className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {busy ? "Saving…" : `Apply from ${formatScheduleDay(preview.effectiveFrom)}`}
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    )
+  }
 
   return createPortal(
     <div
@@ -386,7 +542,8 @@ export function ScheduleConflictModal({
           save it as <strong>Pending verification</strong> — the current schedule
           stays in force until you activate it.
         </p>
-        <div className="mt-3">
+        <div className="mt-3 space-y-2">
+          <NoticeNote notice={notice} effectiveFrom={preview.effectiveFrom} />
           <ImpactChips impact={impactOf(preview.conflicts, preview.impact)} />
         </div>
         <div className="mt-3 flex min-h-0 flex-1 flex-col">

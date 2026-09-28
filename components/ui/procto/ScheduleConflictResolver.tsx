@@ -35,6 +35,7 @@ const ALERT_LABELS: Partial<Record<ScheduleAlertStatus, string>> = {
 
 function alertLabel(s: ScheduleAlertStatus, applied: boolean): string {
   if (s === "queued") return applied ? "sent" : "will send"
+  if (s === "held") return applied ? "waiting for the other clashes" : "sent once every clash is resolved"
   return ALERT_LABELS[s] ?? s
 }
 
@@ -174,12 +175,14 @@ export function ScheduleConflictResolver({
   function finish() {
     if (done) {
       const left = done.pendingVerification?.impact.total ?? 0
+      const released = done.alertsReleased ?? 0
       onResolved(
         `${done.ok} appointment${done.ok === 1 ? "" : "s"} resolved` +
           (done.failed ? `, ${done.failed} could not be changed` : "") +
           (left
-            ? `. ${left} still clash${left === 1 ? "es" : ""} with the new schedule.`
-            : ". No clashes left — you can activate the new schedule."),
+            ? `. ${left} still clash${left === 1 ? "es" : ""} with the new schedule; patient alerts go out once they are resolved.`
+            : ". No clashes left — you can activate the new schedule.") +
+          (released ? ` ${released} patient alert${released === 1 ? "" : "s"} sent.` : ""),
       )
     }
     onClose()
@@ -327,6 +330,13 @@ export function ScheduleConflictResolver({
                     Email alert{plan.emailEnabled ? " (patients with an email on file)" : " — email isn't set up on the server"}
                   </label>
                 </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  Patients are messaged once every clash is resolved, so each hears the final
+                  outcome once. SMS isn&apos;t available; WhatsApp and email only.
+                  {plan.noticeHours
+                    ? ` Suggested times give at least ${plan.noticeHours === 168 ? "7 days'" : `${plan.noticeHours} hours'`} notice.`
+                    : ""}
+                </p>
               </div>
             ) : null}
 

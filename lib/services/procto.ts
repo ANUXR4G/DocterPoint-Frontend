@@ -363,6 +363,14 @@ export const proctoService = {
       body: JSON.stringify({ providerId, actions, dryRun }),
     }) as Promise<ProctoResult<ScheduleResolutionOutcome>>,
 
+  sendHeldScheduleAlerts: (practiceId: string, providerId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/schedules/pending/alerts/send`, {
+      method: "POST",
+      body: JSON.stringify({ providerId }),
+    }) as Promise<
+      ProctoResult<{ sent: number; skipped: number; pendingVerification: PendingScheduleVerification | null }>
+    >,
+
   cancelUpcomingSchedule: (practiceId: string, providerId: string, effectiveFrom: string) =>
     proctoFetch(
       `/procto/practices/${practiceId}/schedules/upcoming?providerId=${encodeURIComponent(providerId)}&effectiveFrom=${encodeURIComponent(effectiveFrom)}`,
@@ -821,8 +829,19 @@ export type ScheduleConflict = {
   patientName: string | null;
   day: string;
   when: string;
+  startsAt?: string;
   code: ScheduleConflictCode;
   reason: string;
+};
+
+/** Lead-time rule: a change may not affect booked visits inside the clinic's notice period. */
+export type ScheduleNotice = {
+  hours: number;
+  endsAt: string;
+  requestedFrom: string;
+  /** The start date was moved later to protect visits inside the notice period. */
+  adjusted: boolean;
+  blockedBy: ScheduleConflict[];
 };
 
 export type ScheduleImpact = {
@@ -841,6 +860,7 @@ export type SchedulePreview = {
   impact?: ScheduleImpact;
   wouldBePending?: boolean;
   safeEffectiveFrom: string;
+  notice?: ScheduleNotice;
 };
 
 /** A saved schedule that clashes with booked visits; not used for booking until activated. */
@@ -857,6 +877,9 @@ export type PendingScheduleVerification = {
   conflicts: ScheduleConflict[];
   impact: ScheduleImpact;
   safeEffectiveFrom: string;
+  notice?: ScheduleNotice;
+  /** Patient alerts from resolved visits, sent once every clash is resolved. */
+  heldAlerts?: number;
 };
 
 export type ScheduleSlotSuggestion = {
@@ -881,6 +904,8 @@ export type ScheduleResolutionPlan = {
   impact: ScheduleImpact;
   canReassign: boolean;
   emailEnabled: boolean;
+  noticeHours?: number;
+  heldAlerts?: number;
   items: ScheduleResolutionItem[];
 };
 
@@ -898,12 +923,13 @@ export type ScheduleResolutionAction = {
   notifyEmail?: boolean;
 };
 
-export type ScheduleAlertStatus = "queued" | "off" | "no_email" | "not_configured" | "n/a";
+export type ScheduleAlertStatus = "queued" | "held" | "off" | "no_email" | "not_configured" | "n/a";
 
 export type ScheduleResolutionOutcome = {
   dryRun: boolean;
   ok: number;
   failed: number;
+  alertsReleased?: number;
   results: Array<{
     bookingId: string;
     type: ScheduleResolutionActionType;
