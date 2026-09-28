@@ -474,11 +474,18 @@ model ScheduleOverride {
   endTime    String?      @map("end_time")
   maxTokens  Int?         @map("max_tokens")
   reason     String?
+  /// EXTRA_SLOT only: slot length for this window (null = the doctor's interval that day).
+  slotIntervalMin Int?    @map("slot_interval_min")
+  /// EXTRA_SLOT only: patients per slot (null = 1). >1 makes a shared queue slot.
+  capacity   Int?
+  /// EXTRA_SLOT created together by "Extend · repeat" (one row per day).
+  seriesId   String?      @map("series_id") @db.Uuid
   createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
   @@index([practiceId, providerId, date])
+  @@index([seriesId])
   @@map("schedule_overrides")
 }
 

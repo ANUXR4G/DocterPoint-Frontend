@@ -56,11 +56,13 @@ async function lockProviderTimeSlot(
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
 }
 
+/** `capacity` comes from the engine's slot: 1 in regular hours, more for a shared extra slot. */
 function assertTimeSlotExclusive(
   bookings: Array<{ mode: ScheduleMode; slotStart: Date | null }>,
   slotStart: Date,
+  capacity: number = TIME_SLOT_CAPACITY,
 ): void {
-  if (countBookingsForSlot(bookings, slotStart) >= TIME_SLOT_CAPACITY) {
+  if (countBookingsForSlot(bookings, slotStart) >= Math.max(TIME_SLOT_CAPACITY, capacity)) {
     throw new AppError(
       409,
       "This time slot is already booked. Please pick another time.",
@@ -353,8 +355,6 @@ export const BookingService = {
       ]);
 
       if (mode === ScheduleMode.TIME_BASED) {
-        assertTimeSlotExclusive(existingBookings, slotStart!);
-
         if (
           !schedule &&
           !hasExtraSlotsForDay(overrides, date)
@@ -369,6 +369,7 @@ export const BookingService = {
           overrides,
         );
         const match = slots.find((s) => sameLocalSlot(s.start, slotStart!));
+        assertTimeSlotExclusive(existingBookings, slotStart!, match?.capacity);
         if (!match?.available) {
           throw new AppError(409, "selected slot is not available.");
         }
@@ -818,7 +819,6 @@ export const BookingService = {
       ]);
 
       if (mode === ScheduleMode.TIME_BASED) {
-        assertTimeSlotExclusive(existingBookings, slotStart!);
         if (
           !schedule &&
           !hasExtraSlotsForDay(overrides, date)
@@ -833,6 +833,7 @@ export const BookingService = {
           overrides,
         );
         const match = slots.find((s) => sameLocalSlot(s.start, slotStart!));
+        assertTimeSlotExclusive(existingBookings, slotStart!, match?.capacity);
         if (!match?.available) {
           throw new AppError(409, "selected slot is not available.");
         }

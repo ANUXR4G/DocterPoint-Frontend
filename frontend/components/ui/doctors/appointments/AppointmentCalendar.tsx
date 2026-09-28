@@ -347,7 +347,11 @@ export default function AppointmentCalendar() {
   const [notice, setNotice] = useState<{
     text: string
     tone: "ok" | "error"
-    undo?: { providerId: string; extra: TimeWindow & { id: string } }
+    undo?: {
+      providerId: string
+      extra: TimeWindow & { id: string }
+      scope: "one" | "series"
+    }
   } | null>(null)
 
   const range = useMemo(() => {
@@ -490,8 +494,13 @@ export default function AppointmentCalendar() {
   async function removeExtra(
     targetProviderId: string,
     extra: TimeWindow & { id: string },
+    scope: "one" | "series" = "one",
   ) {
-    const res = await proctoService.removeExtraSlots(practiceId, extra.id)
+    const res = await proctoService.removeExtraSlots(
+      practiceId,
+      extra.id,
+      scope,
+    )
     if (res.status === "successful") {
       setNotice({
         text: res.data?.message || `Removed extra slots ${windowLabel(extra)}.`,
@@ -720,7 +729,7 @@ export default function AppointmentCalendar() {
                 onClick={() => {
                   const u = notice.undo!
                   setNotice(null)
-                  void removeExtra(u.providerId, u.extra)
+                  void removeExtra(u.providerId, u.extra, u.scope)
                 }}
                 className="rounded-lg border border-current px-2.5 py-1 text-xs font-bold"
               >
@@ -760,7 +769,9 @@ export default function AppointmentCalendar() {
                 : null
             }
             onQuickCreate={setQuick}
-            onRemoveExtra={(id, extra) => void removeExtra(id, extra)}
+            onRemoveExtra={(id, extra, scope) =>
+              void removeExtra(id, extra, scope)
+            }
           />
         ) : null}
 
@@ -811,10 +822,11 @@ export default function AppointmentCalendar() {
               undo: {
                 providerId: target.providerId,
                 extra: {
-                  id: result.id,
+                  id: result.seriesId ?? result.id,
                   start: result.startTime,
                   end: result.endTime,
                 },
+                scope: result.seriesId ? "series" : "one",
               },
             })
             if (view === "day" && target.date === ymd(anchor))
@@ -846,6 +858,7 @@ function DayView({
   onRemoveExtra: (
     providerId: string,
     extra: TimeWindow & { id: string },
+    scope: "one" | "series",
   ) => void
 }) {
   const dateIso = ymd(day)

@@ -93,11 +93,14 @@ export default function CalendarDayGrid({
   onRemoveExtra: (
     providerId: string,
     extra: TimeWindow & { id: string },
+    scope: "one" | "series",
   ) => void
   renderBooking: (bookingId: string) => ReactNode
   footer?: ReactNode
 }) {
   const scroller = useRef<HTMLDivElement>(null)
+  /** Repeat window whose ✕ asks "this day or all upcoming". */
+  const [removing, setRemoving] = useState<string | null>(null)
   const [nowMin, setNowMin] = useState(() => practiceMinutesOfDay(new Date()))
   const [hover, setHover] = useState<{
     providerId: string
@@ -489,32 +492,77 @@ export default function CalendarDayGrid({
                         top: y(toMin(xw.start)),
                         height: (toMin(xw.end) - toMin(xw.start)) * PX_PER_MIN,
                       }}
-                      title={
-                        xw.note ? `Extra slots — ${xw.note}` : "Extra slots"
-                      }
+                      title={[
+                        xw.seriesId ? "Repeating extra slots" : "Extra slots",
+                        `${xw.slotIntervalMin}-min slots`,
+                        xw.capacity > 1
+                          ? `up to ${xw.capacity} patients each`
+                          : "",
+                        xw.note ?? "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     >
                       <div className="flex items-start justify-between gap-1">
                         <span className="truncate font-bold">
-                          Extra slots · {windowLabel(xw)}
-                          {xw.note ? (
-                            <span className="font-normal opacity-80">
-                              {" "}
-                              · {xw.note}
-                            </span>
+                          {xw.seriesId ? (
+                            <span aria-label="Repeats">↻ </span>
                           ) : null}
+                          Extra · {windowLabel(xw)}
+                          <span className="font-normal opacity-80">
+                            {" "}
+                            · {xw.slotIntervalMin} min
+                            {xw.capacity > 1 ? ` · ×${xw.capacity}` : ""}
+                            {xw.note ? ` · ${xw.note}` : ""}
+                          </span>
                         </span>
                         {canCreate(c.id) && !isPast ? (
                           <button
                             type="button"
-                            onClick={() => onRemoveExtra(c.id, xw)}
+                            onClick={() =>
+                              xw.seriesId
+                                ? setRemoving((r) =>
+                                    r === xw.id ? null : xw.id,
+                                  )
+                                : onRemoveExtra(c.id, xw, "one")
+                            }
                             aria-label={`Remove extra slots ${windowLabel(xw)}`}
                             title="Remove these extra slots"
-                            className="shrink-0 rounded px-1 font-bold opacity-0 transition hover:bg-violet-200 focus:opacity-100 group-hover/extra:opacity-100 dark:hover:bg-violet-800"
+                            className={`shrink-0 rounded px-1 font-bold transition hover:bg-violet-200 focus:opacity-100 group-hover/extra:opacity-100 dark:hover:bg-violet-800 ${
+                              removing === xw.id ? "opacity-100" : "opacity-0"
+                            }`}
                           >
                             ✕
                           </button>
                         ) : null}
                       </div>
+                      {removing === xw.id ? (
+                        <div
+                          role="group"
+                          aria-label="Remove repeating slots"
+                          className="mt-1 flex flex-wrap items-center gap-1"
+                        >
+                          <span className="font-semibold">Remove:</span>
+                          {(
+                            [
+                              ["one", "This day"],
+                              ["series", "All upcoming"],
+                            ] as const
+                          ).map(([scope, label]) => (
+                            <button
+                              key={scope}
+                              type="button"
+                              onClick={() => {
+                                setRemoving(null)
+                                onRemoveExtra(c.id, xw, scope)
+                              }}
+                              className="rounded border border-violet-400 bg-white px-1.5 py-0.5 font-semibold hover:bg-violet-100 dark:bg-violet-950 dark:hover:bg-violet-900"
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
 

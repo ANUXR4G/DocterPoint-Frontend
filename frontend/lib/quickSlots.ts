@@ -74,6 +74,7 @@ export function checkWindow(
   win: TimeWindow,
   day: DayWindows | undefined,
   nowMin?: number,
+  slotIntervalMin?: number,
 ): { ok: true; slots: number } | { ok: false; error: string } {
   const s = toMin(win.start)
   const e = toMin(win.end)
@@ -94,7 +95,7 @@ export function checkWindow(
       ok: false,
       error: "The doctor is on leave that day. Remove the leave first.",
     }
-  const interval = day.slotIntervalMin
+  const interval = slotIntervalMin || day.slotIntervalMin
   if (e - s < interval) {
     return {
       ok: false,
