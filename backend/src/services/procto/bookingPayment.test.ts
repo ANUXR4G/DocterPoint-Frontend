@@ -9,6 +9,8 @@ import {
   statusFromLink,
 } from "./bookingPayment.service.js";
 import {
+  appointmentWhenLabel,
+  balanceDuePaise,
   customLinkExpiry,
   kindLabel,
   normalizePatientPhone,
@@ -17,6 +19,62 @@ import {
 } from "./paymentHelpers.js";
 import { razorpay } from "../../lib/razorpay.js";
 import { settings } from "../../config/index.js";
+import {
+  getMetaTemplateByKey,
+  renderUtilityTemplateBody,
+} from "./whatsapp.metaTemplates.js";
+
+describe("payment confirmation message", () => {
+  test("balance due: advance leaves fee minus advance, full fee leaves nothing", () => {
+    assert.equal(balanceDuePaise("ADVANCE", 30000, 700), 40000);
+    assert.equal(balanceDuePaise("ADVANCE", 80000, 700), 0);
+    assert.equal(balanceDuePaise("CONSULTATION", 70000, 700), 0);
+    assert.equal(balanceDuePaise("ADVANCE", 30000, null), null);
+  });
+
+  test("appointment label: slot time, or date + token", () => {
+    const slot = appointmentWhenLabel({
+      slotStart: new Date("2026-09-30T05:00:00Z"),
+      sessionDate: null,
+      tokenNumber: null,
+    });
+    assert.match(slot ?? "", /9\/30\/2026, 10:30 AM/);
+    assert.equal(
+      appointmentWhenLabel({
+        slotStart: null,
+        sessionDate: new Date("2026-09-30T00:00:00Z"),
+        tokenNumber: 12,
+      }),
+      "9/30/2026 (Token #12)",
+    );
+    assert.equal(
+      appointmentWhenLabel({ slotStart: null, sessionDate: null, tokenNumber: 3 }),
+      null,
+    );
+  });
+
+  test("booking confirmation template renders every line and stays UTILITY", () => {
+    const def = getMetaTemplateByKey("PAYMENT_BOOKING_CONFIRMED");
+    assert.equal(def?.category, "UTILITY");
+    assert.equal(def?.metaName, "docline_payment_booking_confirmed");
+    const body = renderUtilityTemplateBody("PAYMENT_BOOKING_CONFIRMED", {
+      amountLabel: "₹300",
+      practiceName: "City Care",
+      providerName: "Dr. Priya Nair",
+      appointmentTime: "9/30/2026, 10:30 AM",
+      balanceDue: "₹400",
+      paymentId: "pay_123",
+    });
+    assert.equal(
+      body,
+      "Payment received: ₹300 to City Care.\n" +
+        "Your appointment with Dr. Priya Nair on 9/30/2026, 10:30 AM is confirmed.\n" +
+        "Amount due at the clinic: ₹400\n" +
+        "Payment ID: pay_123\n" +
+        "Reply STOP to opt out of appointment alerts.",
+    );
+  });
+});
 
 describe("prepayAmountPaise", () => {
   test("rupees → paise", () => {

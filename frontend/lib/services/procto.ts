@@ -748,6 +748,8 @@ export type PaymentRequestRow = {
   channel: "WHATSAPP_BOT" | "WEB_PORTAL" | "PROVIDER_APP";
   waDelivery: "SENT" | "FAILED" | "SIMULATED" | null;
   waError: string | null;
+  receiptDelivery: "SENDING" | "SENT" | "FAILED" | "SIMULATED" | null;
+  receiptError: string | null;
 };
 
 export type RazorpaySettings = {

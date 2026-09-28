@@ -50,6 +50,12 @@ function channelLabel(r: PaymentRequestRow): string {
 }
 
 function deliveryLabel(r: PaymentRequestRow): string | null {
+  if (r.status === "PAID") {
+    if (r.receiptDelivery === "SENT") return "Confirmation sent on WhatsApp"
+    if (r.receiptDelivery === "SIMULATED") return "Confirmation (test mode)"
+    if (r.receiptDelivery === "FAILED") return "Confirmation not delivered"
+    if (r.receiptDelivery === "SENDING") return "Sending confirmation…"
+  }
   if (r.channel === "WHATSAPP_BOT") return "Shared in chat"
   if (r.waDelivery === "SENT") return "Sent on WhatsApp"
   if (r.waDelivery === "SIMULATED") return "WhatsApp (test mode)"
@@ -408,11 +414,16 @@ export default function PaymentsPage({
                         {delivery ? (
                           <div
                             className={`mt-1 text-xs ${
-                              r.waDelivery === "FAILED"
+                              (r.status === "PAID"
+                                ? r.receiptDelivery
+                                : r.waDelivery) === "FAILED"
                                 ? "text-red-600 dark:text-red-400"
                                 : "opacity-60"
                             }`}
-                            title={r.waError || undefined}
+                            title={
+                              (r.status === "PAID" ? r.receiptError : r.waError) ||
+                              undefined
+                            }
                           >
                             {delivery}
                           </div>

@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-15
+- **Date opened:** 2026-09-28
+- **Severity:** 2
+- **Process:** P-BILL (patient payments) / P-NOTIFY (WhatsApp)
+- **Description:** User asked that a WhatsApp confirmation be sent after payment completes. Investigation showed a receipt existed in code but (1) it fired only when Razorpay's redirect / webhook reached us — the platform webhook has no `payment_link` events and clinics may skip theirs, so a patient closing the page got nothing; (2) it was fire-and-forget (no record, failures silent); (3) `docline_payment_request` / `docline_payment_received` had **never been submitted** to the live WABA, so out-of-window sends could not deliver; (4) prepay receipts didn't confirm the appointment.
+- **Evidence:** Meta `message_templates` for WABA 1585598906596861: 8 templates, no payment templates. `applyLinkState` used `void …catch(() => undefined)`. Ledger empty (no paid links yet), so no patient had been affected.
+- **Containment:** n/a (no paid links in production yet).
+- **Root cause:** Confirmation depended on inbound Razorpay events only; template provisioning runs at WABA connect time, so catalog templates added later were never submitted; delivery outcome not persisted.
+- **Corrective action:** `sendReceipt` claims once per row (`receipt_delivery`), stores SENT / FAILED / SIMULATED + error, broadcasts to Payments. New UTILITY template `docline_payment_booking_confirmed` (appointment time, doctor, amount due at clinic) for prepay; custom → `docline_payment_received`. Background `paymentPollWorker` (2 min) refreshes pending links and retries unattempted confirmations. Payments tab / provider app show confirmation status. Submitted the three payment templates to Meta (PENDING review).
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** 179/179 procto tests (new: balance due, appointment label, confirmation template render). Dry run with WhatsApp token cleared (simulated send, dummy phone, temp ledger rows deleted after): ADVANCE on an upcoming booking → `docline_payment_booking_confirmed` "₹300 … Dr. Priya Nair on 9/30/2026, 11:00 AM … Amount due at the clinic: ₹400"; CUSTOM → `docline_payment_received`; both rows `SIMULATED`; second poll sent nothing. Backend tsc + build, frontend tsc + build, provider tsc clean. **Open:** Meta approval of the three payment templates; other catalog templates (clinic alerts, visit summary, prescription) are also not on the WABA.
+
 ### CR-20260928-14
 - **Date opened:** 2026-09-28
 - **Severity:** 3 (change control — billing)

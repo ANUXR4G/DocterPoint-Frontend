@@ -288,6 +288,11 @@ function PaymentCard({
         <Text style={styles.meta}>
           Paid {shortDate(row.paidAt)}
           {row.paymentId ? ` · ${row.paymentId}` : ""}
+          {row.receiptDelivery === "SENT"
+            ? " · Confirmation sent"
+            : row.receiptDelivery === "FAILED"
+              ? " · Confirmation not delivered"
+              : ""}
         </Text>
       ) : pending && row.expiresAt ? (
         <Text style={styles.meta}>Link valid till {shortDate(row.expiresAt)}</Text>

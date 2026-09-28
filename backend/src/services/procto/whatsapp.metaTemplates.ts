@@ -349,6 +349,36 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
     requiresTemplateOutsideWindow: true,
     audience: "patient",
   },
+  {
+    key: "PAYMENT_BOOKING_CONFIRMED",
+    metaName: "docline_payment_booking_confirmed",
+    category: "UTILITY",
+    language: "en",
+    body:
+      "Payment received: {{amount}} to {{practice_name}}.\n" +
+      "Your appointment with {{provider_name}} on {{appointment_time}} is confirmed.\n" +
+      "Amount due at the clinic: {{balance_due}}\n" +
+      "Payment ID: {{payment_id}}\n" +
+      "Reply STOP to opt out of appointment alerts.",
+    examples: {
+      amount: "₹300",
+      practice_name: "City Care Clinic",
+      provider_name: "Dr Anjali Mehta",
+      appointment_time: "9/30/2026, 10:30 AM",
+      balance_due: "₹400",
+      payment_id: "pay_Q1w2e3r4t5y6u7",
+    },
+    paramNames: [
+      "amount",
+      "practice_name",
+      "provider_name",
+      "appointment_time",
+      "balance_due",
+      "payment_id",
+    ],
+    requiresTemplateOutsideWindow: true,
+    audience: "patient",
+  },
 ];
 
 export function getMetaTemplateByKey(key: string): MetaTemplateDef | undefined {
@@ -510,6 +540,15 @@ export function payloadToMetaParams(
         purpose: s("purpose", "Clinic charges"),
         pay_link: s("payLink"),
         valid_until: s("validUntil", "the date shown on the page"),
+      };
+    case "PAYMENT_BOOKING_CONFIRMED":
+      return {
+        amount: s("amountLabel"),
+        practice_name: s("practiceName", "your clinic"),
+        provider_name: s("providerName", "your doctor"),
+        appointment_time: s("appointmentTime", "the booked time"),
+        balance_due: s("balanceDue", "as advised by the clinic"),
+        payment_id: s("paymentId", "—"),
       };
     case "PAYMENT_RECEIVED":
       return {

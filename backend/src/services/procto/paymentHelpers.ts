@@ -1,5 +1,5 @@
 import type { RazorpayPaymentLink } from "../../lib/razorpay.js";
-import { endOfLocalDay } from "./slotEngine.js";
+import { endOfLocalDay, formatPracticeDateTime } from "./slotEngine.js";
 
 /** Booking-level prepay state; DECLINED = patient chose "pay at the clinic". */
 export type BookingPaymentStatus =
@@ -72,6 +72,35 @@ export function kindLabel(kind: string, purpose?: string | null): string {
   if (kind === "ADVANCE") return "Advance booking amount";
   if (kind === "CONSULTATION") return "Consultation fee";
   return purpose?.trim() || "Clinic charges";
+}
+
+/** Left to pay at the clinic after a prepay; null when the clinic fee isn't set. */
+export function balanceDuePaise(
+  kind: string,
+  paidPaise: number,
+  consultationFee: number | null | undefined,
+): number | null {
+  if (kind === "CONSULTATION") return 0;
+  const fee = prepayAmountPaise(consultationFee);
+  if (fee == null) return null;
+  return Math.max(0, fee - paidPaise);
+}
+
+/** Slot time, or visit date + token for token-queue bookings. */
+export function appointmentWhenLabel(b: {
+  slotStart: Date | null;
+  sessionDate: Date | null;
+  tokenNumber: number | null;
+}): string | null {
+  if (b.slotStart) return formatPracticeDateTime(b.slotStart);
+  if (!b.sessionDate) return null;
+  const day = b.sessionDate.toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+  });
+  return b.tokenNumber != null ? `${day} (Token #${b.tokenNumber})` : day;
 }
 
 /** Link lives until the visit starts (end of day for token visits), min 30 min, max 30 days. */
