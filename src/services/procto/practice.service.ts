@@ -4,7 +4,13 @@ import { generateHash } from "../../core/security.js";
 import { isUuid } from "../../core/params.js";
 import type { PracticeType, PracticeMemberRole } from "@prisma/client";
 import { allocateUniquePracticeMrnPrefix } from "../../core/patientMrn.js";
-import { BookingStatus, ScheduleMode, OverrideType, Prisma } from "@prisma/client";
+import {
+  BookingStatus,
+  ScheduleMode,
+  ScheduleVersionStatus,
+  OverrideType,
+  Prisma,
+} from "@prisma/client";
 import { AuthService } from "../auth.js";
 import {
   assertValidTimeRange,
@@ -24,6 +30,9 @@ import {
 } from "./slotEngine.js";
 import {
   ACTIVE_BOOKING_STATUSES,
+  ACTIVE_VERSION,
+  type ScheduleConflict,
+  summarizeImpact,
   addDaysIso,
   dateKey,
   dbDate,
@@ -182,6 +191,25 @@ async function seedDefaultProviderSchedule(opts: {
     })),
   });
 }
+
+type ScheduleRowInput = Omit<
+  ProviderScheduleRow,
+  "id" | "createdAt" | "updatedAt" | "effectiveFrom" | "status" | "submittedById"
+>;
+
+function toRowInput({
+  id: _id,
+  createdAt: _c,
+  updatedAt: _u,
+  effectiveFrom: _e,
+  status: _s,
+  submittedById: _b,
+  ...row
+}: ProviderScheduleRow): ScheduleRowInput {
+  return row;
+}
+
+type ProviderScheduleRow = Awaited<ReturnType<typeof prisma.providerSchedule.findFirstOrThrow>>;
 
 type ProviderScheduleForm = {
   locationId: string;
@@ -610,7 +638,7 @@ export const PracticeService = {
           },
         },
         schedules: {
-          where: { isActive: true, effectiveFrom: { lte: dbDate(todayIso()) } },
+          where: { ...ACTIVE_VERSION, effectiveFrom: { lte: dbDate(todayIso()) } },
           select: {
             mode: true,
             dayOfWeek: true,
@@ -1700,23 +1728,93 @@ export const PracticeService = {
     );
     const carried = base
       .filter((s) => s.dayOfWeek !== data.dayOfWeek && s.mode === data.mode)
-      .map(({ id: _id, createdAt: _c, updatedAt: _u, ...row }) => ({
-        ...row,
-        effectiveFrom: dbDate(effectiveFrom),
-      }));
+      .map(toRowInput);
+    const { effectiveFrom: _pe, ...payloadRow } = payload;
+    const rows = [...carried, payloadRow];
+    const conflicts = await this.scheduleConflicts(
+      practiceId,
+      providerId,
+      data.locationId,
+      rows,
+      effectiveFrom,
+    );
 
-    return prisma.$transaction(async (tx) => {
+    const status = await prisma.$transaction((tx) =>
+      this.writeScheduleVersion(tx, {
+        practiceId,
+        providerId,
+        locationId: data.locationId,
+        rows,
+        effectiveFrom,
+        actorUserId,
+        pending: conflicts.length > 0,
+      }),
+    );
+    const saved = await prisma.providerSchedule.findFirst({
+      where: {
+        practiceId,
+        providerId,
+        locationId: data.locationId,
+        dayOfWeek: data.dayOfWeek,
+        effectiveFrom: dbDate(effectiveFrom),
+        status,
+      },
+    });
+    return { ...saved, conflicts, impact: summarizeImpact(conflicts) };
+  },
+
+  /**
+   * Write one weekly version starting `effectiveFrom`. `pending` (it clashes with
+   * booked visits) → PENDING_VERIFICATION: the slot engine keeps the current
+   * schedule until someone activates it. Otherwise ACTIVE, replacing active
+   * versions that start on/after it. An earlier pending version for this doctor
+   * and location is superseded either way. Bookings are never touched.
+   */
+  async writeScheduleVersion(
+    tx: Prisma.TransactionClient,
+    opts: {
+      practiceId: string;
+      providerId: string;
+      locationId: string;
+      rows: ScheduleRowInput[];
+      effectiveFrom: string;
+      actorUserId: string;
+      pending: boolean;
+    },
+  ): Promise<ScheduleVersionStatus> {
+    const scope = {
+      practiceId: opts.practiceId,
+      providerId: opts.providerId,
+      locationId: opts.locationId,
+    };
+    const status = opts.pending
+      ? ScheduleVersionStatus.PENDING_VERIFICATION
+      : ScheduleVersionStatus.ACTIVE;
+    await tx.providerSchedule.deleteMany({
+      where: { ...scope, status: ScheduleVersionStatus.PENDING_VERIFICATION },
+    });
+    if (!opts.pending) {
       await tx.providerSchedule.deleteMany({
         where: {
-          practiceId,
-          providerId,
-          locationId: data.locationId,
-          effectiveFrom: dbDate(effectiveFrom),
+          ...scope,
+          status: ScheduleVersionStatus.ACTIVE,
+          effectiveFrom: { gte: dbDate(opts.effectiveFrom) },
         },
       });
-      if (carried.length) await tx.providerSchedule.createMany({ data: carried });
-      return tx.providerSchedule.create({ data: payload });
+    }
+    await tx.providerSchedule.createMany({
+      data: opts.rows.map((r) => ({
+        ...r,
+        ...scope,
+        effectiveFrom: dbDate(opts.effectiveFrom),
+        status,
+        submittedById: opts.actorUserId,
+      })),
     });
+    console.log(
+      `[schedule] version ${opts.effectiveFrom} saved ${status} provider=${opts.providerId} by=${opts.actorUserId}`,
+    );
+    return status;
   },
 
   /** Requested start date (YYYY-MM-DD), never before today; default today. */
@@ -1851,7 +1949,7 @@ export const PracticeService = {
       where: {
         practiceId,
         ...(scoped ? { providerId: scoped } : {}),
-        isActive: true,
+        ...ACTIVE_VERSION,
         effectiveFrom: { lte: dbDate(today) },
       },
       include: { location: true },
@@ -1865,7 +1963,7 @@ export const PracticeService = {
   async getUpcomingSchedules(practiceId: string, providerId: string) {
     const today = todayIso();
     const rows = await prisma.providerSchedule.findMany({
-      where: { practiceId, providerId, isActive: true },
+      where: { practiceId, providerId, ...ACTIVE_VERSION },
     });
     return upcomingVersionKeys(rows, today).map((key) => {
       const versionRows = rows.filter((r) => dateKey(r.effectiveFrom) === key);
@@ -1878,7 +1976,7 @@ export const PracticeService = {
     await this.applyDuePendingSchedule(providerId);
     const today = todayIso();
     const rows = await prisma.providerSchedule.findMany({
-      where: { providerId, isActive: true, ...(practiceId ? { practiceId } : {}) },
+      where: { providerId, ...ACTIVE_VERSION, ...(practiceId ? { practiceId } : {}) },
     });
     let mode = resolveProviderBookingMode(pickEffectiveVersion(rows, today));
     for (const key of upcomingVersionKeys(rows, today)) {
@@ -1906,11 +2004,177 @@ export const PracticeService = {
       throw new AppError(409, "This schedule has already started. Save a new schedule instead.");
     }
     const res = await prisma.providerSchedule.deleteMany({
-      where: { practiceId, providerId, effectiveFrom: dbDate(effectiveFrom) },
+      where: {
+        practiceId,
+        providerId,
+        effectiveFrom: dbDate(effectiveFrom),
+        status: ScheduleVersionStatus.ACTIVE,
+      },
     });
     if (!res.count) throw new AppError(404, "No scheduled change on that date.");
     console.log(`[schedule] upcoming version ${effectiveFrom} cancelled provider=${providerId} by=${actorUserId}`);
     return { cancelled: effectiveFrom };
+  },
+
+  async loadPendingVersion(practiceId: string, providerId: string) {
+    const rows = await prisma.providerSchedule.findMany({
+      where: {
+        practiceId,
+        providerId,
+        isActive: true,
+        status: ScheduleVersionStatus.PENDING_VERIFICATION,
+      },
+      orderBy: [{ createdAt: "desc" }, { dayOfWeek: "asc" }],
+    });
+    if (!rows.length) return null;
+    const first = rows[0]!;
+    const versionRows = rows
+      .filter((r) => r.locationId === first.locationId)
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+    return {
+      first,
+      rows: versionRows,
+      locationId: first.locationId,
+      requestedFrom: dateKey(first.effectiveFrom),
+      mode: resolveProviderBookingMode(versionRows) ?? ScheduleMode.TIME_BASED,
+    };
+  },
+
+  /**
+   * The version parked in PENDING_VERIFICATION (if any) with a live impact
+   * assessment — conflicts shrink as the clinic reschedules / cancels visits.
+   */
+  async getPendingVerification(practiceId: string, providerId: string) {
+    const pending = await this.loadPendingVersion(practiceId, providerId);
+    if (!pending) return null;
+    const plan = await this.planScheduleEffectiveFrom(
+      practiceId,
+      providerId,
+      pending.locationId,
+      pending.mode,
+      pending.requestedFrom,
+    );
+    const all = await this.scheduleConflicts(
+      practiceId,
+      providerId,
+      pending.locationId,
+      pending.rows,
+      plan.minIso,
+    );
+    const conflicts = all.filter((c) => c.day >= plan.effectiveFrom);
+    const submitter = pending.first.submittedById
+      ? await prisma.user.findUnique({
+          where: { id: pending.first.submittedById },
+          select: { name: true },
+        })
+      : null;
+    return {
+      status: ScheduleVersionStatus.PENDING_VERIFICATION,
+      effectiveFrom: plan.effectiveFrom,
+      requestedFrom: pending.requestedFrom,
+      minEffectiveFrom: plan.minIso,
+      locationId: pending.locationId,
+      summary: summarizeVersion(pending.rows, plan.effectiveFrom),
+      submittedAt: pending.first.createdAt,
+      submittedBy: submitter?.name ?? null,
+      modeChanging: plan.modeChanging,
+      conflicts,
+      impact: summarizeImpact(conflicts),
+      safeEffectiveFrom: earliestSafeDate(all, plan.effectiveFrom),
+    };
+  },
+
+  /**
+   * Verify a pending version: make it the active schedule from `effectiveFrom`
+   * (default its requested date, never before today / tomorrow for a mode
+   * switch). Clashing visits stay booked; the result lists them.
+   */
+  async activatePendingSchedule(
+    practiceId: string,
+    providerId: string,
+    actorUserId: string,
+    requestedFrom?: string | null,
+  ) {
+    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
+    const pending = await this.loadPendingVersion(practiceId, providerId);
+    if (!pending) throw new AppError(404, "No schedule is waiting for verification.");
+    const plan = await this.planScheduleEffectiveFrom(
+      practiceId,
+      providerId,
+      pending.locationId,
+      pending.mode,
+      requestedFrom || pending.requestedFrom,
+    );
+    const conflicts: ScheduleConflict[] = await this.scheduleConflicts(
+      practiceId,
+      providerId,
+      pending.locationId,
+      pending.rows,
+      plan.effectiveFrom,
+    );
+    const summary = summarizeVersion(pending.rows, plan.effectiveFrom);
+    const startsToday = plan.effectiveFrom <= todayIso();
+
+    await prisma.$transaction(async (tx) => {
+      await this.writeScheduleVersion(tx, {
+        practiceId,
+        providerId,
+        locationId: pending.locationId,
+        rows: pending.rows.map(toRowInput),
+        effectiveFrom: plan.effectiveFrom,
+        actorUserId,
+        pending: false,
+      });
+      if (startsToday && summary.startTime && summary.endTime) {
+        await tx.doctor.updateMany({
+          where: { id: providerId },
+          data: {
+            availableTimes: `${summary.workingDays.join(",")}|${summary.startTime}-${summary.endTime}`,
+          },
+        });
+      }
+    });
+    console.log(
+      `[schedule] pending version activated from ${plan.effectiveFrom} provider=${providerId} by=${actorUserId} conflicts=${conflicts.length}`,
+    );
+
+    if (plan.modeChanging && plan.currentMode) {
+      const provider = await prisma.user.findUnique({
+        where: { id: providerId },
+        select: { name: true },
+      });
+      void this.notifyBookingModeChange({
+        practiceId,
+        providerId,
+        providerName: provider?.name ?? null,
+        fromMode: plan.currentMode,
+        toMode: pending.mode,
+        effectiveDate: plan.effectiveFrom,
+      }).catch((err) => console.warn("mode-change notification skipped:", err));
+    }
+
+    const n = conflicts.length;
+    return {
+      effectiveFrom: plan.effectiveFrom,
+      conflicts,
+      impact: summarizeImpact(conflicts),
+      message:
+        `New schedule is active from ${plan.effectiveFrom}.` +
+        (n
+          ? ` ${n} booked appointment${n === 1 ? " is" : "s are"} outside it and stay${n === 1 ? "s" : ""} booked — contact ${n === 1 ? "that patient" : "those patients"} to reschedule if needed.`
+          : ""),
+    };
+  },
+
+  /** Throw away the pending version; the current schedule is unchanged. */
+  async discardPendingSchedule(practiceId: string, providerId: string, actorUserId: string) {
+    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
+    const res = await prisma.providerSchedule.deleteMany({
+      where: { practiceId, providerId, status: ScheduleVersionStatus.PENDING_VERIFICATION },
+    });
+    if (!res.count) throw new AppError(404, "No schedule is waiting for verification.");
+    console.log(`[schedule] pending version discarded provider=${providerId} by=${actorUserId}`);
+    return { discarded: true };
   },
 
   async getOverrides(
@@ -2414,11 +2678,12 @@ export const PracticeService = {
           mode: true,
           slotStart: true,
           sessionDate: true,
+          tokenNumber: true,
         },
         take: 2000,
       }),
       prisma.providerSchedule.findMany({
-        where: { practiceId, providerId, locationId, isActive: true },
+        where: { practiceId, providerId, locationId, ...ACTIVE_VERSION },
       }),
     ]);
     return findConflicts(bookings, currentRows, nextRows, fromIso);
@@ -2457,6 +2722,9 @@ export const PracticeService = {
       minEffectiveFrom: plan.minIso,
       modeChanging: plan.modeChanging,
       conflicts,
+      impact: summarizeImpact(conflicts),
+      /** Saving as-is would park the version in PENDING_VERIFICATION. */
+      wouldBePending: conflicts.length > 0,
       safeEffectiveFrom: earliestSafeDate(all, plan.effectiveFrom),
     };
   },
@@ -2490,7 +2758,6 @@ export const PracticeService = {
     );
     const effectiveFrom = plan.effectiveFrom;
     const today = todayIso();
-    const startsToday = effectiveFrom <= today;
     const conflicts = await this.scheduleConflicts(
       practiceId,
       providerId,
@@ -2498,6 +2765,8 @@ export const PracticeService = {
       built.rows,
       effectiveFrom,
     );
+    const pending = conflicts.length > 0;
+    const startsToday = !pending && effectiveFrom <= today;
 
     const licenseNo = data.licenseNo?.trim();
     const name = data.name?.trim();
@@ -2539,16 +2808,14 @@ export const PracticeService = {
         });
       }
 
-      await tx.providerSchedule.deleteMany({
-        where: {
-          practiceId,
-          providerId,
-          locationId: data.locationId,
-          effectiveFrom: { gte: dbDate(effectiveFrom) },
-        },
-      });
-      await tx.providerSchedule.createMany({
-        data: built.rows.map((r) => ({ ...r, effectiveFrom: dbDate(effectiveFrom) })),
+      await this.writeScheduleVersion(tx, {
+        practiceId,
+        providerId,
+        locationId: data.locationId,
+        rows: built.rows,
+        effectiveFrom,
+        actorUserId,
+        pending,
       });
 
       return tx.user.findUnique({
@@ -2569,13 +2836,34 @@ export const PracticeService = {
       });
     });
 
-    const [schedules, upcomingChanges] = await Promise.all([
+    const [schedules, upcomingChanges, pendingVerification] = await Promise.all([
       loadSchedulesOn({ practiceId, providerId, locationId: data.locationId }, today).then(
         (rows) => rows.sort((a, b) => a.dayOfWeek - b.dayOfWeek),
       ),
       this.getUpcomingSchedules(practiceId, providerId),
+      pending ? this.getPendingVerification(practiceId, providerId) : Promise.resolve(null),
     ]);
     const activeMode = resolveProviderBookingMode(schedules) ?? built.mode;
+
+    if (pending) {
+      const impact = summarizeImpact(conflicts);
+      return {
+        schedules,
+        provider,
+        status: ScheduleVersionStatus.PENDING_VERIFICATION,
+        effectiveFrom,
+        scheduledChange: false,
+        upcomingChanges,
+        pendingVerification,
+        conflicts,
+        impact,
+        modeChangeDeferred: false,
+        modeChangeEffectiveDate: null,
+        pendingMode: null,
+        activeMode,
+        message: `Profile saved. The new schedule from ${effectiveFrom} clashes with ${impact.total} booked appointment${impact.total === 1 ? "" : "s"}, so it is saved as Pending verification — the current schedule stays in force and no appointment was changed. Review and activate it when ready.`,
+      };
+    }
 
     if (plan.modeChanging) {
       void this.notifyBookingModeChange({
@@ -2591,16 +2879,16 @@ export const PracticeService = {
     }
 
     const modeLabel = built.mode === ScheduleMode.TOKEN_BASED ? "Token queue" : "Time slots";
-    const affected = conflicts.length
-      ? ` ${conflicts.length} booked appointment${conflicts.length === 1 ? " falls" : "s fall"} outside the new schedule and stay booked — contact ${conflicts.length === 1 ? "that patient" : "those patients"} if needed.`
-      : "";
     return {
       schedules,
       provider,
+      status: ScheduleVersionStatus.ACTIVE,
       effectiveFrom,
       scheduledChange: !startsToday,
       upcomingChanges,
+      pendingVerification: null,
       conflicts,
+      impact: summarizeImpact(conflicts),
       modeChangeDeferred: plan.modeChanging,
       modeChangeEffectiveDate: plan.modeChanging ? effectiveFrom : null,
       pendingMode: plan.modeChanging ? built.mode : null,
@@ -2610,8 +2898,7 @@ export const PracticeService = {
           ? `Booking type switch to ${modeLabel} is scheduled from ${effectiveFrom}. Appointments before that keep the current mode.`
           : startsToday
             ? "Provider settings saved."
-            : `New schedule saved. It applies from ${effectiveFrom}; days before that keep the current schedule.`) +
-        affected,
+            : `New schedule saved. It applies from ${effectiveFrom}; days before that keep the current schedule.`),
     };
   },
 
@@ -2679,6 +2966,7 @@ export const PracticeService = {
           practiceId: membership.practiceId,
           providerId,
           locationId,
+          status: ScheduleVersionStatus.ACTIVE,
           effectiveFrom: { gte: dbDate(effectiveFrom) },
         },
       });

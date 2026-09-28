@@ -2,12 +2,14 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { BookingStatus, ScheduleMode, type ProviderSchedule } from "@prisma/client";
 import {
+  assessBooking,
   bookingFitsSchedule,
   dbDate,
   earliestSafeDate,
   findConflicts,
   localDayOfSessionDate,
   pickEffectiveVersion,
+  summarizeImpact,
   upcomingVersionKeys,
 } from "./scheduleVersions.js";
 import { parseLocalDate, zonedDateTime } from "./slotEngine.js";
@@ -144,13 +146,94 @@ describe("findConflicts / earliestSafeDate", () => {
   test("a dropped working day is reported as such", () => {
     const noMonday = [row(3, "2026-10-01")];
     const [c] = findConflicts([bookings[1]!], baseline, noMonday, "2026-10-01");
-    assert.equal(c?.reason, "Day is no longer a working day");
+    assert.equal(c?.code, "DAY_OFF");
+    assert.equal(c?.reason, "Monday is no longer a working day");
   });
   test("safe date is the day after the last conflict", () => {
     const conflicts = findConflicts(bookings, baseline, next, "2026-10-01");
     assert.equal(earliestSafeDate(conflicts, "2026-10-01"), "2026-10-13");
     assert.equal(earliestSafeDate([], "2026-10-01"), "2026-10-01");
     assert.equal(earliestSafeDate(conflicts, "2026-11-01"), "2026-11-01");
+  });
+});
+
+describe("impact assessment reasons", () => {
+  const mon = (hhmm: string) => timeBooking("x", "2026-10-05", hhmm);
+  const tokenRow = (over: Partial<ProviderSchedule> = {}) =>
+    row(1, "2026-10-01", {
+      mode: ScheduleMode.TOKEN_BASED,
+      startTime: null,
+      endTime: null,
+      slotIntervalMin: null,
+      sessionStart: "10:00",
+      sessionEnd: "14:00",
+      maxTokens: 20,
+      ...over,
+    });
+
+  test("fits → no impact", () => {
+    assert.equal(assessBooking(mon("10:20"), baseline), null);
+  });
+  test("newly disabled working day", () => {
+    const a = assessBooking(mon("10:20"), [row(3, "2026-10-01")]);
+    assert.equal(a?.code, "DAY_OFF");
+    assert.match(a!.reason, /Monday is no longer a working day/);
+  });
+  test("outside the new working hours", () => {
+    const a = assessBooking(mon("10:20"), [row(1, "2026-10-01", { startTime: "11:00" })]);
+    assert.equal(a?.code, "OUTSIDE_HOURS");
+    assert.match(a!.reason, /10:20 AM is outside the new hours 11:00–14:00/);
+    assert.equal(
+      assessBooking(mon("13:40"), [row(1, "2026-10-01", { endTime: "13:50" })])?.code,
+      "OUTSIDE_HOURS",
+    );
+  });
+  test("inside a newly introduced break", () => {
+    const a = assessBooking(
+      mon("12:20"),
+      [row(1, "2026-10-01", { breakStartTime: "12:00", breakEndTime: "13:00" })],
+    );
+    assert.equal(a?.code, "IN_BREAK");
+    assert.match(a!.reason, /falls in the new break 12:00–13:00/);
+  });
+  test("slot interval change that no longer lines up", () => {
+    const a = assessBooking(mon("10:20"), [row(1, "2026-10-01", { slotIntervalMin: 15 })]);
+    assert.equal(a?.code, "OFF_GRID");
+    assert.match(a!.reason, /new 15-min slots \(nearest 10:15 \/ 10:30\)/);
+    assert.equal(assessBooking(mon("10:40"), [row(1, "2026-10-01", { slotIntervalMin: 40 })]), null);
+  });
+  test("booking type switched", () => {
+    assert.equal(assessBooking(mon("10:20"), [tokenRow()])?.code, "MODE_CHANGED");
+  });
+  test("token above the new daily cap", () => {
+    const token = {
+      mode: ScheduleMode.TOKEN_BASED,
+      slotStart: null,
+      sessionDate: new Date(`${parseLocalDate("2026-10-05").toISOString().slice(0, 10)}T00:00:00Z`),
+      tokenNumber: 25,
+    };
+    const a = assessBooking(token, [tokenRow()]);
+    assert.equal(a?.code, "OVER_CAPACITY");
+    assert.equal(assessBooking({ ...token, tokenNumber: 5 }, [tokenRow()]), null);
+  });
+  test("summary counts by reason and day", () => {
+    const next = [row(1, "2026-10-01", { endTime: "12:00", breakStartTime: "10:40", breakEndTime: "11:00" })];
+    const conflicts = findConflicts(
+      [
+        timeBooking("a", "2026-10-05", "13:00"),
+        timeBooking("b", "2026-10-05", "10:40"),
+        timeBooking("c", "2026-10-12", "12:40"),
+      ],
+      baseline,
+      next,
+      "2026-10-01",
+    );
+    const s = summarizeImpact(conflicts);
+    assert.equal(s.total, 3);
+    assert.equal(s.days, 2);
+    assert.deepEqual(s.byCode, { OUTSIDE_HOURS: 2, IN_BREAK: 1 });
+    assert.equal(s.firstDay, "2026-10-05");
+    assert.equal(s.lastDay, "2026-10-12");
   });
 });
 

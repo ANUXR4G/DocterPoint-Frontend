@@ -269,6 +269,11 @@ enum ScheduleMode {
   TOKEN_BASED
 }
 
+enum ScheduleVersionStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+}
+
 enum BookingStatus {
   SCHEDULED
   ACCEPTED
@@ -440,13 +445,17 @@ model ProviderSchedule {
   /// Schedule version: rows sharing an effective_from form one weekly schedule.
   /// A date uses the version with the latest effective_from on or before it (see scheduleVersions.ts).
   effectiveFrom   DateTime     @default(dbgenerated("'2000-01-01'::date")) @map("effective_from") @db.Date
+  /// PENDING_VERIFICATION versions clash with booked visits; ignored by the slot engine until activated.
+  status          ScheduleVersionStatus @default(ACTIVE)
+  submittedById   String?      @map("submitted_by_id") @db.Uuid
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   practice Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   location ClinicLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  @@unique([practiceId, providerId, locationId, dayOfWeek, effectiveFrom], map: "provider_schedules_version_day_key")
+  @@unique([practiceId, providerId, locationId, dayOfWeek, effectiveFrom, status], map: "provider_schedules_version_day_key")
+  @@index([providerId, status])
   @@index([providerId, effectiveFrom])
   @@index([practiceId, providerId, locationId, dayOfWeek, isActive])
   @@index([providerId, dayOfWeek, isActive])
