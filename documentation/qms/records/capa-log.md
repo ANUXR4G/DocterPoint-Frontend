@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260929-01
+- **Date opened:** 2026-09-29
+- **Severity:** 2
+- **Process:** P-BOOK
+- **Description:** A visit existed without a Patient ID (MRN): Appointments showed "Vishnu Sharma — +971-5014526392 — Not set" (emergency walk-in, 28 Sep 13:18). Requirement: every patient and every visit has an MRN.
+- **Evidence:** `practice_bookings.patient_id` null on 1 of 15 bookings; desk list showed MRN "Not set".
+- **Containment:** `scripts/backfill-booking-patients.ts --apply` linked the booking to a new patient record (clinic prefix, MRN `PNCMR00000006`, `createdBy = booking_backfill`; gender / DOB left for the desk). Re-run reports 0 unlinked bookings.
+- **Root cause:** `POST /procto/bookings` accepted name + phone only (public web guests and the portal *Book appointment* modal), and walk-ins created before the desk-patient rule had no patient.
+- **Corrective action:** Server rule in `BookingService.createBooking`: `patientId` must be an existing patient (400 otherwise). `POST /procto/bookings` now needs a session (401 for guests); staff sessions go through `createDeskBooking` (desk-picked patient, phone must match the record, doctor own-list rule); patient sessions are forced to their own id. Portal modal uses the desk patient search / registration; public web booking asks guests to sign in (WhatsApp OTP creates the MRN).
+- **Owner / due:** Engineering / 2026-09-29
+- **Verification:** Refusal-path smoke (guest 401, staff without patient 400, wrong phone 400, walk-in without patient 400); desk search returns Vishnu with `PNCMR00000006`; Appointments row shows the MRN; tsc + 225 procto tests + builds.
+- **Status:** Verified
+- **Docs updated:** flow.md, decisions.md, risk-register.md (R30)
+
 ### CR-20260929-20
 - **Date opened:** 2026-09-29
 - **Severity:** 2
