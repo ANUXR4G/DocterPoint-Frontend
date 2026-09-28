@@ -210,6 +210,13 @@ function beginEdit(s: ScheduleRow) {
       setError(res.message || "Could not save hours");
       return;
     }
+    const saved = res.data as { status?: string; impact?: { total?: number } } | null;
+    if (saved?.status === "PENDING_VERIFICATION") {
+      const n = saved.impact?.total ?? 0;
+      setInfo(
+        `Saved as Pending verification: the new hours clash with ${n} booked appointment${n === 1 ? "" : "s"}. The current hours stay in force until the clinic activates the change in the web portal (Settings → Account).`,
+      );
+    }
     setEditId(null);
     await load();
   }

@@ -174,16 +174,18 @@ router.get(
         req.sessionUser!.id,
       );
       const practiceId = param(req.params.practiceId);
-      const [pendingModeChange, upcomingChanges] = providerId
+      const [pendingModeChange, upcomingChanges, pendingVerification] = providerId
         ? await Promise.all([
             PracticeService.getPendingModeChange(providerId, practiceId),
             PracticeService.getUpcomingSchedules(practiceId, providerId),
+            PracticeService.getPendingVerification(practiceId, providerId),
           ])
-        : [null, []];
+        : [null, [], null];
       return ResponseHandler.fetchSuccessful(res, "schedules fetched.", {
         schedules,
         pendingModeChange,
         upcomingChanges,
+        pendingVerification,
       });
     } catch (error) {
       next(error);
@@ -239,6 +241,41 @@ router.post(
         req.sessionUser!.id,
       );
       return ResponseHandler.fetchSuccessful(res, "schedule change preview.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/:practiceId/schedules/pending/activate",
+  requireAuth("schedule:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await PracticeService.activatePendingSchedule(
+        param(req.params.practiceId),
+        req.body.providerId ?? req.sessionUser!.id,
+        req.sessionUser!.id,
+        req.body.effectiveFrom,
+      );
+      return ResponseHandler.fetchSuccessful(res, "pending schedule activated.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.delete(
+  "/:practiceId/schedules/pending",
+  requireAuth("schedule:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await PracticeService.discardPendingSchedule(
+        param(req.params.practiceId),
+        (req.query.providerId as string | undefined) ?? req.sessionUser!.id,
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "pending schedule discarded.", data);
     } catch (error) {
       next(error);
     }

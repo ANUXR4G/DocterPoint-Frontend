@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-17
+- **Date opened:** 2026-09-28
+- **Severity:** 2
+- **Process:** P-BOOK (slots / schedules)
+- **Description:** User asked for safeguards for pre-existing appointments: an impact assessment against bookings on/after `effective_from` (outside new hours / disabled days, new breaks, awkward slot-interval alignment) and non-destructive saving — a clashing schedule must be held in a *Pending verification* state instead of going live.
+- **Evidence:** After CR-16, *Apply anyway* wrote the clashing version as live immediately; conflicts carried only a free-text reason (no break / off-grid distinction); provider-app per-day saves had no conflict check at all.
+- **Containment:** n/a (proactive; no bookings affected).
+- **Root cause:** Schedule versions had no lifecycle state — every saved version was active.
+- **Corrective action:** `provider_schedules.status` (`ACTIVE` / `PENDING_VERIFICATION`, additive migration, default ACTIVE) + `submitted_by_id`; every slot / booking reader filters `ACTIVE_VERSION`. `assessBooking` classifies `DAY_OFF` / `OUTSIDE_HOURS` / `IN_BREAK` / `OFF_GRID` (nearest grid times) / `MODE_CHANGED` / `OVER_CAPACITY`; `summarizeImpact` counts. Settings save and per-day upsert run the check server-side; conflicts → pending (current schedule stays, nothing cancelled). Activate (safe date / two-step anyway) and discard endpoints; pending panel on Settings and Practice → Hours; provider app shows a pending notice.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** 200/200 procto tests (8 new: each code + summary). Local smoke on demo dr.solo against the 2 real Sep-30 bookings (10:20, 11:00): previews returned OUTSIDE_HOURS (start 11:00), IN_BREAK (break 10:10–10:40), OFF_GRID (15-min, nearest 10:15 / 10:30), DAY_OFF ×2 (Wed off), MODE_CHANGED ×2 (Token), 0 (unchanged). Saving start 11:00 → `PENDING_VERIFICATION`, active rows unchanged, Sep-30 availability still 12 slots with both bookings; panel screenshot showed safe date Thu 1 Oct; *Discard* in browser removed it. Activate path: pending → activate from 2026-12-01 → active upcoming version, 0 conflicts → cancelled; demo back to Mon/Wed/Fri 10:00–14:00. No booking touched.
+
 ### CR-20260928-16
 - **Date opened:** 2026-09-28
 - **Severity:** 2

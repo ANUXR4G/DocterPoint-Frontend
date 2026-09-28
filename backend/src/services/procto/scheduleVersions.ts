@@ -9,6 +9,7 @@
 import {
   BookingStatus,
   ScheduleMode,
+  ScheduleVersionStatus,
   type PracticeBooking,
   type ProviderSchedule,
 } from "@prisma/client";
@@ -16,8 +17,11 @@ import { prisma } from "../../db/prisma.js";
 import {
   formatLocalDate,
   formatPracticeDateTime,
+  formatPracticeTime,
   generateTimeSlots,
+  minutesOf,
   parseLocalDate,
+  PRACTICE_TIMEZONE,
   practiceWeekday,
   resolveProviderBookingMode,
   sameLocalSlot,
@@ -25,6 +29,12 @@ import {
 
 export const BASELINE_EFFECTIVE_FROM = "2000-01-01";
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Rows the slot engine may use (pending-verification versions excluded). */
+export const ACTIVE_VERSION = {
+  isActive: true,
+  status: ScheduleVersionStatus.ACTIVE,
+} as const;
 
 /** `effective_from` is stored as the plain calendar date (UTC midnight). */
 export function dateKey(d: Date): string {
@@ -80,7 +90,7 @@ export async function loadSchedulesOn(
   dayIso: string,
 ): Promise<ProviderSchedule[]> {
   const rows = await prisma.providerSchedule.findMany({
-    where: { ...where, isActive: true, effectiveFrom: { lte: dbDate(dayIso) } },
+    where: { ...where, ...ACTIVE_VERSION, effectiveFrom: { lte: dbDate(dayIso) } },
   });
   return pickEffectiveVersion(rows, dayIso);
 }
@@ -127,7 +137,8 @@ type ScheduleShape = Pick<
   | "maxTokens"
 >;
 
-type BookingShape = Pick<PracticeBooking, "mode" | "slotStart" | "sessionDate">;
+type BookingShape = Pick<PracticeBooking, "mode" | "slotStart" | "sessionDate"> &
+  Partial<Pick<PracticeBooking, "tokenNumber">>;
 
 /** Clinic day of a booking. */
 export function bookingDayIso(b: BookingShape): string | null {
@@ -136,27 +147,117 @@ export function bookingDayIso(b: BookingShape): string | null {
   return null;
 }
 
+export type ConflictCode =
+  | "MODE_CHANGED"
+  | "DAY_OFF"
+  | "OUTSIDE_HOURS"
+  | "IN_BREAK"
+  | "OFF_GRID"
+  | "OVER_CAPACITY";
+
+export type BookingAssessment = { code: ConflictCode; reason: string };
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const clockFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: PRACTICE_TIMEZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** Minutes after clinic-local midnight. */
+export function practiceMinuteOfDay(d: Date): number {
+  const [h, m] = clockFmt.format(d).split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+function hhmm(mins: number): string {
+  return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+}
+
 /**
- * Would this booking be offered by `schedule` (a weekly version)? Time bookings
- * must land on a slot start of the new grid outside the break; token bookings
- * need a token session that day.
+ * Impact of `schedule` (one weekly version) on a booking: null when the
+ * version still offers it, else why not — mode switch, day off, outside the
+ * new hours, inside a new break, off the new slot grid, or token over the new cap.
  */
-export function bookingFitsSchedule(b: BookingShape, schedule: ScheduleShape[]): boolean {
+export function assessBooking(b: BookingShape, schedule: ScheduleShape[]): BookingAssessment | null {
   const dayIso = bookingDayIso(b);
-  if (!dayIso) return false;
+  if (!dayIso) return { code: "DAY_OFF", reason: "Booking has no date" };
   const day = parseLocalDate(dayIso);
   const weekday = practiceWeekday(day);
   const mode = resolveProviderBookingMode(schedule);
-  if (!mode || mode !== b.mode) return false;
-  const rows = schedule.filter((s) => s.dayOfWeek === weekday && s.mode === mode);
-  if (!rows.length) return false;
-  if (mode === ScheduleMode.TOKEN_BASED) return rows.some((r) => r.sessionStart && r.sessionEnd);
-  if (!b.slotStart) return false;
-  return rows.some((r) =>
+  if (mode && mode !== b.mode) {
+    return {
+      code: "MODE_CHANGED",
+      reason:
+        mode === ScheduleMode.TOKEN_BASED
+          ? "Booked as a time slot; the new schedule uses a token queue"
+          : "Booked as a token; the new schedule uses time slots",
+    };
+  }
+  const rows = schedule.filter((s) => s.dayOfWeek === weekday && s.mode === b.mode);
+  const dayOff = {
+    code: "DAY_OFF" as const,
+    reason: `${WEEKDAY_NAMES[weekday]} is no longer a working day`,
+  };
+  if (!rows.length) return dayOff;
+
+  if (b.mode === ScheduleMode.TOKEN_BASED) {
+    const row = rows.find((r) => r.sessionStart && r.sessionEnd);
+    if (!row) return dayOff;
+    if (row.maxTokens != null && b.tokenNumber != null && b.tokenNumber > row.maxTokens) {
+      return {
+        code: "OVER_CAPACITY",
+        reason: `Token #${b.tokenNumber} is above the new daily limit of ${row.maxTokens}`,
+      };
+    }
+    return null;
+  }
+
+  if (!b.slotStart) return dayOff;
+  const fits = rows.some((r) =>
     generateTimeSlots(r as ProviderSchedule, day, [], [], 0).some(
       (slot) => slot.available && sameLocalSlot(slot.start, b.slotStart!),
     ),
   );
+  if (fits) return null;
+
+  const t = practiceMinuteOfDay(b.slotStart);
+  const at = formatPracticeTime(b.slotStart);
+  const r = rows.find((x) => x.startTime && x.endTime) ?? rows[0]!;
+  const interval = r.slotIntervalMin ?? 30;
+  const start = r.startTime ? minutesOf(r.startTime) : 0;
+  const end = r.endTime ? minutesOf(r.endTime) : 0;
+  if (!r.startTime || !r.endTime || t < start || t + interval > end) {
+    return {
+      code: "OUTSIDE_HOURS",
+      reason: `${at} is outside the new hours ${r.startTime ?? "?"}–${r.endTime ?? "?"}`,
+    };
+  }
+  if (r.breakStartTime && r.breakEndTime) {
+    const bs = minutesOf(r.breakStartTime);
+    const be = minutesOf(r.breakEndTime);
+    if (t < be && t + interval > bs) {
+      return {
+        code: "IN_BREAK",
+        reason: `${at} falls in the new break ${r.breakStartTime}–${r.breakEndTime}`,
+      };
+    }
+  }
+  const before = start + Math.floor((t - start) / interval) * interval;
+  return {
+    code: "OFF_GRID",
+    reason: `${at} doesn't line up with the new ${interval}-min slots (nearest ${hhmm(before)} / ${hhmm(before + interval)})`,
+  };
+}
+
+/**
+ * Would this booking be offered by `schedule` (a weekly version)? Time bookings
+ * must land on a slot start of the new grid outside the break; token bookings
+ * need a token session that day within the token cap.
+ */
+export function bookingFitsSchedule(b: BookingShape, schedule: ScheduleShape[]): boolean {
+  return assessBooking(b, schedule) === null;
 }
 
 export type ScheduleConflict = {
@@ -164,24 +265,9 @@ export type ScheduleConflict = {
   patientName: string | null;
   day: string;
   when: string;
+  code: ConflictCode;
   reason: string;
 };
-
-function conflictReason(
-  b: BookingShape,
-  next: ScheduleShape[],
-): string {
-  const nextMode = resolveProviderBookingMode(next);
-  if (nextMode && nextMode !== b.mode) {
-    return nextMode === ScheduleMode.TOKEN_BASED
-      ? "Booked as a time slot; the new schedule uses a token queue"
-      : "Booked as a token; the new schedule uses time slots";
-  }
-  const dayIso = bookingDayIso(b);
-  const weekday = dayIso ? practiceWeekday(parseLocalDate(dayIso)) : -1;
-  if (!next.some((s) => s.dayOfWeek === weekday)) return "Day is no longer a working day";
-  return "Time is outside the new hours, in the break, or off the new slot grid";
-}
 
 export const ACTIVE_BOOKING_STATUSES = [
   BookingStatus.SCHEDULED,
@@ -190,9 +276,9 @@ export const ACTIVE_BOOKING_STATUSES = [
 ];
 
 /**
- * Upcoming bookings that fit the schedule currently in force on their day but
- * would not fit `next`. They stay booked either way — this only tells the
- * clinic who needs a call / reschedule.
+ * Impact assessment: upcoming bookings that fit the schedule currently in force
+ * on their day but would not fit `next`. They stay booked either way — this only
+ * tells the clinic who needs a call / reschedule.
  */
 export function findConflicts(
   bookings: Array<BookingShape & Pick<PracticeBooking, "id" | "patientName" | "locationId">>,
@@ -209,18 +295,41 @@ export function findConflicts(
       day,
     );
     if (!bookingFitsSchedule(b, current)) continue;
-    if (bookingFitsSchedule(b, next)) continue;
+    const impact = assessBooking(b, next);
+    if (!impact) continue;
     out.push({
       bookingId: b.id,
       patientName: b.patientName,
       day,
       when: b.slotStart
         ? formatPracticeDateTime(b.slotStart)
-        : `${day} (token)`,
-      reason: conflictReason(b, next),
+        : `${day} (token${b.tokenNumber != null ? ` #${b.tokenNumber}` : ""})`,
+      code: impact.code,
+      reason: impact.reason,
     });
   }
   return out.sort((a, b) => a.day.localeCompare(b.day) || a.when.localeCompare(b.when));
+}
+
+export type ImpactSummary = {
+  total: number;
+  days: number;
+  firstDay: string | null;
+  lastDay: string | null;
+  byCode: Partial<Record<ConflictCode, number>>;
+};
+
+export function summarizeImpact(conflicts: ScheduleConflict[]): ImpactSummary {
+  const byCode: Partial<Record<ConflictCode, number>> = {};
+  for (const c of conflicts) byCode[c.code] = (byCode[c.code] ?? 0) + 1;
+  const days = [...new Set(conflicts.map((c) => c.day))].sort();
+  return {
+    total: conflicts.length,
+    days: days.length,
+    firstDay: days[0] ?? null,
+    lastDay: days[days.length - 1] ?? null,
+    byCode,
+  };
 }
 
 /** First day on/after `minIso` with no conflicting booking on or after it. */

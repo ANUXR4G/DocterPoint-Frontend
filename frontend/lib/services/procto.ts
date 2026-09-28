@@ -334,6 +334,18 @@ export const proctoService = {
       body: JSON.stringify(body),
     }) as Promise<ProctoResult<SchedulePreview>>,
 
+  activatePendingSchedule: (practiceId: string, providerId: string, effectiveFrom?: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/schedules/pending/activate`, {
+      method: "POST",
+      body: JSON.stringify({ providerId, effectiveFrom }),
+    }),
+
+  discardPendingSchedule: (practiceId: string, providerId: string) =>
+    proctoFetch(
+      `/procto/practices/${practiceId}/schedules/pending?providerId=${encodeURIComponent(providerId)}`,
+      { method: "DELETE" },
+    ),
+
   cancelUpcomingSchedule: (practiceId: string, providerId: string, effectiveFrom: string) =>
     proctoFetch(
       `/procto/practices/${practiceId}/schedules/upcoming?providerId=${encodeURIComponent(providerId)}&effectiveFrom=${encodeURIComponent(effectiveFrom)}`,
@@ -779,12 +791,29 @@ export type RazorpaySettings = {
 
 type ProctoResult<T> = { status: string; message?: string; data?: T };
 
+export type ScheduleConflictCode =
+  | "MODE_CHANGED"
+  | "DAY_OFF"
+  | "OUTSIDE_HOURS"
+  | "IN_BREAK"
+  | "OFF_GRID"
+  | "OVER_CAPACITY";
+
 export type ScheduleConflict = {
   bookingId: string;
   patientName: string | null;
   day: string;
   when: string;
+  code: ScheduleConflictCode;
   reason: string;
+};
+
+export type ScheduleImpact = {
+  total: number;
+  days: number;
+  firstDay: string | null;
+  lastDay: string | null;
+  byCode: Partial<Record<ScheduleConflictCode, number>>;
 };
 
 export type SchedulePreview = {
@@ -792,6 +821,24 @@ export type SchedulePreview = {
   minEffectiveFrom: string;
   modeChanging: boolean;
   conflicts: ScheduleConflict[];
+  impact?: ScheduleImpact;
+  wouldBePending?: boolean;
+  safeEffectiveFrom: string;
+};
+
+/** A saved schedule that clashes with booked visits; not used for booking until activated. */
+export type PendingScheduleVerification = {
+  status: "PENDING_VERIFICATION";
+  effectiveFrom: string;
+  requestedFrom: string;
+  minEffectiveFrom: string;
+  locationId: string;
+  summary: UpcomingScheduleChange;
+  submittedAt: string;
+  submittedBy: string | null;
+  modeChanging: boolean;
+  conflicts: ScheduleConflict[];
+  impact: ScheduleImpact;
   safeEffectiveFrom: string;
 };
 

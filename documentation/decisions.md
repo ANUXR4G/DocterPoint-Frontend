@@ -38,7 +38,7 @@ Architecture and product decisions that the codebase currently follows. Prefer u
 | Decision | Choice | Why |
 |----------|--------|-----|
 | Slot engine | Server-side availability from `ProviderSchedule` + overrides | Single source of truth for open slots/tokens |
-| Schedule edits | **Effective-dated versions** (`provider_schedules.effective_from`); a day uses the latest version starting on/before it; saving never rewrites earlier days; preview lists booked visits the new hours would drop, with a safe start date; bookings are never auto-moved | Changing hours must not corrupt appointments already booked under the old schedule |
+| Schedule edits | **Effective-dated versions** (`provider_schedules.effective_from`); a day uses the latest version starting on/before it; saving never rewrites earlier days; preview lists booked visits the new hours would drop, with a coded reason (day off / outside hours / in break / off-grid / mode / capacity) and a safe start date; a version that clashes with bookings is saved **Pending verification** (ignored by the slot engine) until the clinic activates it from a safe date, activates anyway, or discards it; bookings are never auto-moved or cancelled | Changing hours must not corrupt appointments already booked under the old schedule |
 | Booking identity | `patientPhone` required; optional `patientId` when logged in | Guest book + logged-in book both work |
 | Patient problem at book | Required `disease` text; AI visit brief → `notes` + seeds `doctorRemarks` | Doctor sees problem + AI explanation in Remarks; not a diagnosis |
 | Accept before visit | Bookings are **auto-accepted** (`ACCEPTED`) on create/reschedule — no manual Accept | Front desk starts at Arrived → Started → Finished |
