@@ -210,12 +210,19 @@ function beginEdit(s: ScheduleRow) {
       setError(res.message || "Could not save hours");
       return;
     }
-    const saved = res.data as { status?: string; impact?: { total?: number } } | null;
+    const saved = res.data as {
+      status?: string;
+      impact?: { total?: number };
+      message?: string | null;
+    } | null;
+    const noticeText = saved?.message ? ` ${saved.message}` : "";
     if (saved?.status === "PENDING_VERIFICATION") {
       const n = saved.impact?.total ?? 0;
       setInfo(
-        `Saved as Pending verification: the new hours clash with ${n} booked appointment${n === 1 ? "" : "s"}. The current hours stay in force until the clinic activates the change in the web portal (Settings → Account).`,
+        `Saved as Pending verification: the new hours clash with ${n} booked appointment${n === 1 ? "" : "s"}. The current hours stay in force until the clinic activates the change in the web portal (Settings → Account).${noticeText}`,
       );
+    } else if (noticeText) {
+      setInfo(noticeText.trim());
     }
     setEditId(null);
     await load();

@@ -265,6 +265,8 @@ export type ScheduleConflict = {
   patientName: string | null;
   day: string;
   when: string;
+  /** Slot start; token visits count from the start of their clinic day. */
+  startsAt: string;
   code: ConflictCode;
   reason: string;
 };
@@ -309,6 +311,7 @@ export function findConflicts(
       when: b.slotStart
         ? formatPracticeDateTime(b.slotStart)
         : `${day} (token${b.tokenNumber != null ? ` #${b.tokenNumber}` : ""})`,
+      startsAt: (b.slotStart ?? parseLocalDate(day)).toISOString(),
       code: impact.code,
       reason: impact.reason,
     });
@@ -386,6 +389,42 @@ export function autoMatchSlots<T extends Pick<SlotCandidate, "key" | "capacity">
     out.set(item.bookingId, pick);
   }
   return out;
+}
+
+export const NOTICE_HOURS_OPTIONS = [24, 48, 72, 168] as const;
+export const DEFAULT_NOTICE_HOURS = 48;
+
+export function normalizeNoticeHours(hours: number | null | undefined): number {
+  return (NOTICE_HOURS_OPTIONS as readonly number[]).includes(Number(hours))
+    ? Number(hours)
+    : DEFAULT_NOTICE_HOURS;
+}
+
+/** End of the notice window: visits starting before this can't be affected by a schedule change. */
+export function noticeEndsAt(hours: number, now: Date = new Date()): Date {
+  return new Date(now.getTime() + normalizeNoticeHours(hours) * 60 * 60 * 1000);
+}
+
+export function noticeLabel(hours: number): string {
+  return hours === 168 ? "7 days'" : `${hours} hours'`;
+}
+
+/**
+ * Lead-time rule: a change starting `requestedIso` may not affect any booked
+ * visit inside the notice window, so it starts the day after the last such
+ * visit instead. `conflicts` are the clashes from `requestedIso` on.
+ */
+export function applyNoticePeriod(
+  conflicts: ScheduleConflict[],
+  requestedIso: string,
+  endsAt: Date,
+): { effectiveFrom: string; blockedBy: ScheduleConflict[] } {
+  const blockedBy = conflicts.filter(
+    (c) => c.day >= requestedIso && new Date(c.startsAt).getTime() < endsAt.getTime(),
+  );
+  if (!blockedBy.length) return { effectiveFrom: requestedIso, blockedBy };
+  const lastDay = blockedBy.reduce((max, c) => (c.day > max ? c.day : max), requestedIso);
+  return { effectiveFrom: addDaysIso(lastDay, 1), blockedBy };
 }
 
 /** First day on/after `minIso` with no conflicting booking on or after it. */

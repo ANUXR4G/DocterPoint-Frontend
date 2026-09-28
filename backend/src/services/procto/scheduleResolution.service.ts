@@ -4,15 +4,21 @@
  * For each visit the new schedule no longer offers, the clinic picks one of:
  * reschedule (closest free slot under the schedule that will apply that day),
  * reassign to another doctor free at the same time, cancel with a reason, or
- * keep it as an Override slot. Every write goes through BookingService.
+ * keep it as an Override slot. Every write goes through BookingService. Patient
+ * alerts are held (ScheduleAlertService) until every clash is resolved.
  */
 import { BookingStatus, ScheduleMode, type PracticeBooking, type ProviderSchedule } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../core/response.js";
-import { settings } from "../../config/index.js";
-import { sendEmail } from "../mail.js";
 import { BookingService } from "./booking.service.js";
 import { PracticeService } from "./practice.service.js";
+import {
+  emailConfigured,
+  realPatientEmail,
+  ScheduleAlertService,
+  type AlertChannelStatus,
+  type ScheduleAlertKind,
+} from "./scheduleAlerts.service.js";
 import {
   endOfLocalDay,
   formatPracticeDateTime,
@@ -30,6 +36,7 @@ import {
   autoMatchSlots,
   dbDate,
   loadSchedulesOn,
+  noticeEndsAt,
   practiceMinuteOfDay,
   rankSuggestions,
   todayIso,
@@ -41,7 +48,6 @@ const SEARCH_DAYS = 7;
 const SUGGESTIONS_PER_VISIT = 3;
 const MAX_ACTIONS = 200;
 const MAX_REASSIGN_DOCTORS = 25;
-const PROVISIONAL_EMAIL = "@patients.glucoguide.local";
 
 export type ResolutionActionType = "RESCHEDULE" | "REASSIGN" | "CANCEL" | "KEEP";
 
@@ -57,15 +63,19 @@ export type ResolutionAction = {
   notifyEmail: boolean;
 };
 
-type AlertStatus = "queued" | "off" | "no_email" | "not_configured" | "n/a";
-
 export type ResolutionResult = {
   bookingId: string;
   type: ResolutionActionType;
   ok: boolean;
   message: string;
-  whatsapp: AlertStatus;
-  email: AlertStatus;
+  whatsapp: AlertChannelStatus;
+  email: AlertChannelStatus;
+};
+
+const ALERT_KIND: Record<Exclude<ResolutionActionType, "KEEP">, ScheduleAlertKind> = {
+  RESCHEDULE: "RESCHEDULED",
+  REASSIGN: "REASSIGNED",
+  CANCEL: "CANCELLED",
 };
 
 type Suggestion = Pick<SlotCandidate, "mode" | "day" | "slotStart" | "sessionDate" | "label">;
@@ -83,15 +93,6 @@ function dayLabel(iso: string): string {
 
 function toSuggestion(c: SlotCandidate): Suggestion {
   return { mode: c.mode, day: c.day, slotStart: c.slotStart, sessionDate: c.sessionDate, label: c.label };
-}
-
-function realEmail(email: string | null | undefined): string | null {
-  const e = email?.trim().toLowerCase();
-  return e && e.includes("@") && !e.endsWith(PROVISIONAL_EMAIL) ? e : null;
-}
-
-function emailConfigured(): boolean {
-  return Boolean(settings.smtpPassword);
 }
 
 function whenOf(b: Pick<PracticeBooking, "mode" | "slotStart" | "tokenNumber">, day: string): string {
@@ -141,9 +142,10 @@ async function assertCanResolve(practiceId: string, actorUserId: string, provide
 
 async function loadContext(practiceId: string, providerId: string, actorUserId: string) {
   const member = await assertCanResolve(practiceId, actorUserId, providerId);
-  const [pending, version] = await Promise.all([
+  const [pending, version, noticeHours] = await Promise.all([
     PracticeService.getPendingVerification(practiceId, providerId),
     PracticeService.loadPendingVersion(practiceId, providerId),
+    PracticeService.scheduleNoticeHours(practiceId),
   ]);
   if (!pending || !version) throw new AppError(404, "No schedule is waiting for verification.");
 
@@ -165,11 +167,14 @@ async function loadContext(practiceId: string, providerId: string, actorUserId: 
   const users = patientIds.length
     ? await prisma.user.findMany({ where: { id: { in: patientIds } }, select: { id: true, email: true } })
     : [];
-  const emails = new Map(users.map((u) => [u.id, realEmail(u.email)]));
+  const emails = new Map(users.map((u) => [u.id, realPatientEmail(u.email)]));
 
   return {
     member,
     canReassign: DESK_ROLES.has(member.role),
+    noticeHours,
+    /** New times must give the patient the clinic's notice period too. */
+    noticeEndsAt: noticeEndsAt(noticeHours),
     pending,
     scope,
     rowsOn,
@@ -226,6 +231,7 @@ async function candidatesFor(
   data: Awaited<ReturnType<typeof providerDayData>>,
 ): Promise<SlotCandidate[]> {
   const others = data.bookings.filter((x) => x.id !== b.id);
+  const noticeMs = ctx.noticeEndsAt.getTime();
   const out: SlotCandidate[] = [];
   for (let d = from; d <= to; d = addDaysIso(d, 1)) {
     const rows = await ctx.rowsOn(d);
@@ -234,7 +240,7 @@ async function candidatesFor(
     const date = parseLocalDate(d);
     if (mode === ScheduleMode.TIME_BASED) {
       for (const s of timeSlotsForProviderDay(rows, date, others, data.overrides)) {
-        if (!s.available) continue;
+        if (!s.available || s.start.getTime() < noticeMs) continue;
         const minute = practiceMinuteOfDay(s.start);
         out.push({
           mode,
@@ -247,6 +253,7 @@ async function candidatesFor(
         });
       }
     } else {
+      if (date.getTime() < noticeMs) continue;
       const row = rows.find(
         (r) => r.dayOfWeek === practiceWeekday(date) && r.mode === ScheduleMode.TOKEN_BASED,
       );
@@ -372,7 +379,21 @@ export const ScheduleResolutionService = {
       impact: ctx.pending.impact,
       canReassign: ctx.canReassign,
       emailEnabled: emailConfigured(),
+      noticeHours: ctx.noticeHours,
+      heldAlerts: ctx.pending.heldAlerts,
       items,
+    };
+  },
+
+  /** Staff "Send now": release held patient alerts without waiting for the last clash. */
+  async sendHeldAlerts(practiceId: string, providerId: string, actorUserId: string) {
+    await assertCanResolve(practiceId, actorUserId, providerId);
+    const res = await ScheduleAlertService.dispatch({ practiceId, providerId });
+    console.log(`[schedule-alert] manual send provider=${providerId} by=${actorUserId} sent=${res.sent}`);
+    return {
+      sent: res.sent,
+      skipped: res.skipped,
+      pendingVerification: await PracticeService.getPendingVerification(practiceId, providerId),
     };
   },
 
@@ -393,11 +414,7 @@ export const ScheduleResolutionService = {
     const [ranked, reassign] = needsTargets
       ? await Promise.all([rankedCandidates(ctx), reassignOptions(ctx)])
       : [new Map<string, SlotCandidate[]>(), new Map<string, Array<{ providerId: string; name: string }>>()];
-    const [practice, provider] = await Promise.all([
-      prisma.practice.findUnique({ where: { id: practiceId }, select: { name: true } }),
-      prisma.user.findUnique({ where: { id: providerId }, select: { name: true } }),
-    ]);
-    const practiceName = practice?.name ?? "the clinic";
+    const provider = await prisma.user.findUnique({ where: { id: providerId }, select: { name: true } });
     const conflictById = new Map(ctx.conflicts.map((c) => [c.bookingId, c]));
     const seen = new Set<string>();
     const claimed = new Map<string, number>();
@@ -418,17 +435,30 @@ export const ScheduleResolutionService = {
         fail("No longer clashes with the new schedule (already resolved or changed).");
         continue;
       }
-      const email = a.notifyEmail ? ctx.emailOf(b) : null;
-      const emailStatus: AlertStatus = !a.notifyEmail
+      const emailStatus: AlertChannelStatus = !a.notifyEmail
         ? "off"
         : !emailConfigured()
           ? "not_configured"
-          : email
-            ? "queued"
+          : ctx.emailOf(b)
+            ? "held"
             : "no_email";
-      const waStatus: AlertStatus = a.notifyWhatsApp ? "queued" : "off";
+      const waStatus: AlertChannelStatus = a.notifyWhatsApp ? "held" : "off";
       const oldWhen = whenOf(b, conflict.day);
       const who = b.patientName || "Patient";
+      const holdAlert = async (kind: ScheduleAlertKind, previous: string, reason?: string) => {
+        if (!a.notifyWhatsApp && !a.notifyEmail) return;
+        await ScheduleAlertService.hold({
+          practiceId,
+          providerId,
+          bookingId: b.id,
+          kind,
+          notifyWhatsApp: a.notifyWhatsApp,
+          notifyEmail: a.notifyEmail,
+          oldWhen: previous,
+          reason,
+          createdById: actorUserId,
+        });
+      };
 
       try {
         if (a.type === "RESCHEDULE") {
@@ -453,19 +483,11 @@ export const ScheduleResolutionService = {
               {
                 slotStart: target.slotStart,
                 sessionDate: target.sessionDate,
-                skipPatientNotification: !a.notifyWhatsApp,
+                skipPatientNotification: true,
               },
               { schedulesOn: ctx.rowsOn, mode: target.mode },
             );
-            if (email) {
-              void sendEmail(
-                email,
-                `Appointment rescheduled — ${practiceName}`,
-                `Hello ${who},\n\nYour appointment at ${practiceName} has been moved to ${target.label}` +
-                  `${provider?.name ? ` with ${provider.name}` : ""} (previously ${oldWhen}) because the doctor's schedule changed.\n\n` +
-                  `If this time doesn't suit you, reply to our WhatsApp message or call the clinic.\n\n${practiceName}`,
-              ).catch((err) => console.warn("[schedule-resolve] email failed:", String(err)));
-            }
+            await holdAlert(ALERT_KIND.RESCHEDULE, oldWhen);
           }
           results.push({
             bookingId: b.id,
@@ -493,17 +515,12 @@ export const ScheduleResolutionService = {
           claimed.set(key, 1);
           if (!dryRun) {
             await BookingService.reassignProvider(b.id, doc.providerId, {
-              skipPatientNotification: !a.notifyWhatsApp,
+              skipPatientNotification: true,
             });
-            if (email) {
-              void sendEmail(
-                email,
-                `Your doctor has changed — ${practiceName}`,
-                `Hello ${who},\n\nYour appointment at ${practiceName} on ${oldWhen} will now be with ${doc.name}` +
-                  `${provider?.name ? ` instead of ${provider.name}` : ""}. The time stays the same.\n\n` +
-                  `If you'd prefer another option, reply to our WhatsApp message or call the clinic.\n\n${practiceName}`,
-              ).catch((err) => console.warn("[schedule-resolve] email failed:", String(err)));
-            }
+            await holdAlert(
+              ALERT_KIND.REASSIGN,
+              `${oldWhen}${provider?.name ? ` with ${provider.name}` : ""}`,
+            );
           }
           results.push({
             bookingId: b.id,
@@ -520,17 +537,10 @@ export const ScheduleResolutionService = {
           }
           if (!dryRun) {
             await BookingService.updateStatus(b.id, BookingStatus.CANCELED, undefined, {
-              skipPatientNotification: !a.notifyWhatsApp,
+              skipPatientNotification: true,
               cancelReason: a.reason,
             });
-            if (email) {
-              void sendEmail(
-                email,
-                `Appointment cancelled — ${practiceName}`,
-                `Hello ${who},\n\nYour appointment at ${practiceName} on ${oldWhen} has been cancelled.\n` +
-                  `Reason: ${a.reason}\n\nWe're sorry for the inconvenience. Please book a new time on WhatsApp or call the clinic.\n\n${practiceName}`,
-              ).catch((err) => console.warn("[schedule-resolve] email failed:", String(err)));
-            }
+            await holdAlert(ALERT_KIND.CANCEL, oldWhen, a.reason);
           }
           results.push({
             bookingId: b.id,
@@ -562,18 +572,40 @@ export const ScheduleResolutionService = {
     }
 
     const ok = results.filter((r) => r.ok).length;
-    if (!dryRun) {
-      console.log(
-        `[schedule-resolve] provider=${providerId} by=${actorUserId} ok=${ok} failed=${results.length - ok} ` +
-          results.map((r) => `${r.bookingId}:${r.type}:${r.ok ? "ok" : "fail"}`).join(","),
-      );
+    const markSent = (ids: Set<string>) => {
+      for (const r of results) {
+        if (!r.ok || !ids.has(r.bookingId)) continue;
+        if (r.whatsapp === "held") r.whatsapp = "queued";
+        if (r.email === "held") r.email = "queued";
+      }
+    };
+
+    if (dryRun) {
+      // Alerts go out with this batch only if it settles every clash.
+      if (ctx.conflicts.length - ok <= 0) markSent(new Set(results.map((r) => r.bookingId)));
+      return { dryRun, results, ok, failed: results.length - ok, alertsReleased: 0, pendingVerification: null };
+    }
+
+    console.log(
+      `[schedule-resolve] provider=${providerId} by=${actorUserId} ok=${ok} failed=${results.length - ok} ` +
+        results.map((r) => `${r.bookingId}:${r.type}:${r.ok ? "ok" : "fail"}`).join(","),
+    );
+    let pendingVerification = await PracticeService.getPendingVerification(practiceId, providerId);
+    const settled = !pendingVerification || pendingVerification.conflicts.length === 0;
+    const released = settled
+      ? await ScheduleAlertService.dispatch({ practiceId, providerId })
+      : await ScheduleAlertService.dispatchDue({ practiceId, providerId });
+    markSent(new Set(released.sentBookingIds));
+    if (released.sent && pendingVerification) {
+      pendingVerification = { ...pendingVerification, heldAlerts: await ScheduleAlertService.countHeld(practiceId, providerId) };
     }
     return {
       dryRun,
       results,
       ok,
       failed: results.length - ok,
-      pendingVerification: dryRun ? null : await PracticeService.getPendingVerification(practiceId, providerId),
+      alertsReleased: released.sent,
+      pendingVerification,
     };
   },
 };

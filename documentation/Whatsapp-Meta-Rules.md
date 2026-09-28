@@ -64,7 +64,7 @@ All are **UTILITY**, language `en`, named parameters. Create in WhatsApp Manager
 | `REMINDER` | `docline_appointment_reminder` | ~24h before slot (day-before for tokens) and ~30 min before / morning-of token |
 | `CANCELLATION` | `docline_booking_cancelled` | Cancel |
 | `RESCHEDULE` | `docline_booking_rescheduled` | Time change |
-| `OVERRIDE_IMPACT` | `docline_schedule_change` | Clinic leave / block impact |
+| `OVERRIDE_IMPACT` | `docline_schedule_change` | Clinic leave / block impact; weekly schedule activated with visits still clashing (asks the patient to pick a new time) |
 | `QUEUE_ALERT` | `docline_queue_ready` | You’re up next |
 | `CLINIC_NEW_BOOKING` | `docline_clinic_new_booking` | Staff alert |
 | `CLINIC_CANCEL` | `docline_clinic_booking_cancelled` | Staff alert |

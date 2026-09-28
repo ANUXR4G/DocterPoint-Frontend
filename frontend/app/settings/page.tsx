@@ -10,11 +10,13 @@ import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModa
 import RazorpayAccountPanel from "@/components/ui/procto/RazorpayAccountPanel"
 import {
   EffectiveFromField,
+  NoticePeriodSelect,
   PendingVerificationPanel,
   ScheduleConflictModal,
   UpcomingScheduleChanges,
   addDaysIso,
   clinicTodayIso,
+  discardedMessage,
   formatScheduleDay,
   normalizePendingVerification,
   normalizeUpcomingChanges,
@@ -196,6 +198,7 @@ type Membership = {
     email?: string | null
     consultationFee?: number | null
     advanceBookingAmount?: number | null
+    scheduleNoticeHours?: number | null
     whatsappBusinessNumber?: string | null
     locations: { id: string; name: string; address: string; city: string }[]
     members: Array<{
@@ -330,6 +333,9 @@ function ClinicAccountForm({
       ? String(membership.practice.advanceBookingAmount)
       : "",
   )
+  const [noticeHours, setNoticeHours] = useState(
+    String(membership.practice.scheduleNoticeHours ?? 48),
+  )
   const [waBotPhone, setWaBotPhone] = useState<string | null>(
     membership.practice.whatsappBusinessNumber?.replace(/\D/g, "").slice(-10) ||
       null,
@@ -371,6 +377,7 @@ function ClinicAccountForm({
         ? String(membership.practice.advanceBookingAmount)
         : "",
     )
+    setNoticeHours(String(membership.practice.scheduleNoticeHours ?? 48))
   }, [membership])
 
   useEffect(() => {
@@ -465,6 +472,7 @@ function ClinicAccountForm({
         email: email.trim(),
         consultationFee: feeNum,
         advanceBookingAmount: advanceNum,
+        scheduleNoticeHours: Number(noticeHours),
         location: {
           id: loc?.id,
           address: address.trim(),
@@ -637,6 +645,7 @@ function ClinicAccountForm({
           }
           className="w-full min-w-0"
         />
+        <NoticePeriodSelect value={noticeHours} onChange={setNoticeHours} disabled={saving} />
       </div>
       <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
         Fee is shown when patients text *FAQ* or ask about fees on WhatsApp.
@@ -871,6 +880,9 @@ function DoctorAccountForm({
       ? String(membership.practice.advanceBookingAmount)
       : "",
   )
+  const [noticeHours, setNoticeHours] = useState(
+    String(membership.practice.scheduleNoticeHours ?? 48),
+  )
   const [bookingType, setBookingType] = useState<"TIME" | "TOKEN">("TIME")
   const [workingDays, setWorkingDays] = useState<number[]>([1, 2, 3, 4, 5])
   const [startTime, setStartTime] = useState("09:00")
@@ -946,7 +958,7 @@ function DoctorAccountForm({
       setError(res.message || "Could not discard the pending schedule.")
       return
     }
-    setMessage("Pending schedule discarded. The current schedule is unchanged.")
+    setMessage(discardedMessage(res.data))
     await refreshSchedules()
   }
 
@@ -992,10 +1004,12 @@ function DoctorAccountForm({
         ? String(membership.practice.advanceBookingAmount)
         : "",
     )
+    setNoticeHours(String(membership.practice.scheduleNoticeHours ?? 48))
   }, [
     provider,
     membership.practice.consultationFee,
     membership.practice.advanceBookingAmount,
+    membership.practice.scheduleNoticeHours,
   ])
 
   useEffect(() => {
@@ -1095,7 +1109,10 @@ function DoctorAccountForm({
         membership.practice.id,
         scheduleBody,
       )
-      if (preview.status === "successful" && preview.data?.conflicts.length) {
+      if (
+        preview.status === "successful" &&
+        (preview.data?.conflicts.length || preview.data?.notice?.adjusted)
+      ) {
         setSaving(false)
         setConflictReview({ preview: preview.data, opts })
         return "conflicts"
@@ -1106,7 +1123,11 @@ function DoctorAccountForm({
     if (!opts?.modeOnly && Number.isFinite(feeNum) && feeNum > 0) {
       const profileRes = await proctoService.updatePracticeProfile(
         membership.practice.id,
-        { consultationFee: feeNum, advanceBookingAmount: advanceNum },
+        {
+          consultationFee: feeNum,
+          advanceBookingAmount: advanceNum,
+          scheduleNoticeHours: Number(noticeHours),
+        },
       )
       if (profileRes.status !== "successful") {
         // Solo owners update fee; clinic staff doctors may lack admin — continue schedule save.
@@ -1254,6 +1275,7 @@ function DoctorAccountForm({
             setAdvanceAmount(e.target.value)
           }
         />
+        <NoticePeriodSelect value={noticeHours} onChange={setNoticeHours} disabled={saving} />
       </div>
       <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
         Fee is shown when patients text *FAQ* or ask about fees on WhatsApp.
@@ -1439,6 +1461,7 @@ function DoctorAccountForm({
         value={effectiveFrom}
         onChange={setEffectiveFrom}
         disabled={saving}
+        noticeHours={Number(noticeHours)}
       />
 
       {error || scheduleLoadError ? (

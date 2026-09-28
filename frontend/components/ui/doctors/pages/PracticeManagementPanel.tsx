@@ -32,6 +32,7 @@ import {
   UpcomingScheduleChanges,
   addDaysIso,
   clinicTodayIso,
+  discardedMessage,
   formatScheduleDay,
   normalizePendingVerification,
   normalizeUpcomingChanges,
@@ -1316,7 +1317,7 @@ function SchedulePanel({
       setError(res.message || "Could not discard the pending schedule.");
       return;
     }
-    onSaved({ message: "Pending schedule discarded. The current schedule is unchanged." });
+    onSaved({ message: discardedMessage(res.data) });
   }
 
   useEffect(() => {
@@ -1381,7 +1382,10 @@ function SchedulePanel({
     };
     if (!opts?.skipPreview) {
       const preview = await proctoService.previewProviderSettings(practiceId, scheduleBody);
-      if (preview.status === "successful" && preview.data?.conflicts.length) {
+      if (
+        preview.status === "successful" &&
+        (preview.data?.conflicts.length || preview.data?.notice?.adjusted)
+      ) {
         setSaving(false);
         setConflictReview({ preview: preview.data, opts });
         return "conflicts";

@@ -34,6 +34,7 @@ import {
   type ScheduleConflict,
   summarizeImpact,
   addDaysIso,
+  applyNoticePeriod,
   bookingDayIso,
   bookingFitsSchedule,
   dateKey,
@@ -42,11 +43,33 @@ import {
   findConflicts,
   loadSchedulesOn,
   localDayOfSessionDate,
+  NOTICE_HOURS_OPTIONS,
+  noticeEndsAt,
+  noticeLabel,
+  normalizeNoticeHours,
   pickEffectiveVersion,
   summarizeVersion,
   todayIso,
   upcomingVersionKeys,
 } from "./scheduleVersions.js";
+import { ScheduleAlertService } from "./scheduleAlerts.service.js";
+
+type NoticePlan = {
+  hours: number;
+  requestedFrom: string;
+  adjusted: boolean;
+  blockedBy: ScheduleConflict[];
+};
+
+/** " Starts … instead of …" sentence when the notice period moved the start date. */
+function noticeNote(notice: NoticePlan, effectiveFrom: string): string {
+  if (!notice.adjusted) return "";
+  const k = notice.blockedBy.length;
+  return (
+    ` It starts ${effectiveFrom} instead of ${notice.requestedFrom}: booked patients get ${noticeLabel(notice.hours)} notice,` +
+    ` and ${k} visit${k === 1 ? "" : "s"} before then would have been affected.`
+  );
+}
 import { last10Digits, normalizeGender } from "../../core/gender.js";
 import { ageFromDob } from "../../core/dob.js";
 import {
@@ -1699,7 +1722,6 @@ export const PracticeService = {
     actorUserId: string,
   ) {
     await this.assertCanManageProvider(practiceId, actorUserId, providerId);
-    const effectiveFrom = this.resolveEffectiveFrom(data.effectiveFrom);
 
     const isTime = data.mode === ScheduleMode.TIME_BASED;
 
@@ -1719,27 +1741,47 @@ export const PracticeService = {
       breakStartTime: data.breakStartTime ?? null,
       breakEndTime: data.breakEndTime ?? null,
       isActive: true,
-      effectiveFrom: dbDate(effectiveFrom),
     };
 
     // Copy the version in force on that day, change one weekday, save as a
     // version starting that day. One booking mode per version; later versions untouched.
-    const base = await loadSchedulesOn(
-      { practiceId, providerId, locationId: data.locationId },
-      effectiveFrom,
-    );
-    const carried = base
-      .filter((s) => s.dayOfWeek !== data.dayOfWeek && s.mode === data.mode)
-      .map(toRowInput);
-    const { effectiveFrom: _pe, ...payloadRow } = payload;
-    const rows = [...carried, payloadRow];
-    const conflicts = await this.scheduleConflicts(
+    const rowsFrom = async (dayIso: string) => {
+      const base = await loadSchedulesOn(
+        { practiceId, providerId, locationId: data.locationId },
+        dayIso,
+      );
+      return [
+        ...base
+          .filter((s) => s.dayOfWeek !== data.dayOfWeek && s.mode === data.mode)
+          .map(toRowInput),
+        payload,
+      ];
+    };
+    const requested = this.resolveEffectiveFrom(data.effectiveFrom);
+    let rows = await rowsFrom(requested);
+    let plan = await this.planVersionStart(
       practiceId,
       providerId,
       data.locationId,
       rows,
-      effectiveFrom,
+      data.mode,
+      requested,
     );
+    if (plan.effectiveFrom !== requested) {
+      const notice = plan.notice;
+      rows = await rowsFrom(plan.effectiveFrom);
+      plan = await this.planVersionStart(
+        practiceId,
+        providerId,
+        data.locationId,
+        rows,
+        data.mode,
+        plan.effectiveFrom,
+      );
+      plan.notice = { ...notice, adjusted: plan.effectiveFrom !== notice.requestedFrom };
+    }
+    const effectiveFrom = plan.effectiveFrom;
+    const conflicts = plan.conflicts;
 
     const status = await prisma.$transaction((tx) =>
       this.writeScheduleVersion(tx, {
@@ -1762,7 +1804,13 @@ export const PracticeService = {
         status,
       },
     });
-    return { ...saved, conflicts, impact: summarizeImpact(conflicts) };
+    return {
+      ...saved,
+      conflicts,
+      impact: summarizeImpact(conflicts),
+      notice: plan.notice,
+      message: noticeNote(plan.notice, effectiveFrom).trim() || null,
+    };
   },
 
   /**
@@ -2049,27 +2097,23 @@ export const PracticeService = {
   async getPendingVerification(practiceId: string, providerId: string) {
     const pending = await this.loadPendingVersion(practiceId, providerId);
     if (!pending) return null;
-    const plan = await this.planScheduleEffectiveFrom(
-      practiceId,
-      providerId,
-      pending.locationId,
-      pending.mode,
-      pending.requestedFrom,
-    );
-    const all = await this.scheduleConflicts(
-      practiceId,
-      providerId,
-      pending.locationId,
-      pending.rows,
-      plan.minIso,
-    );
-    const conflicts = all.filter((c) => c.day >= plan.effectiveFrom);
-    const submitter = pending.first.submittedById
-      ? await prisma.user.findUnique({
-          where: { id: pending.first.submittedById },
-          select: { name: true },
-        })
-      : null;
+    const [plan, submitter, heldAlerts] = await Promise.all([
+      this.planVersionStart(
+        practiceId,
+        providerId,
+        pending.locationId,
+        pending.rows,
+        pending.mode,
+        pending.requestedFrom,
+      ),
+      pending.first.submittedById
+        ? prisma.user.findUnique({
+            where: { id: pending.first.submittedById },
+            select: { name: true },
+          })
+        : null,
+      ScheduleAlertService.countHeld(practiceId, providerId),
+    ]);
     return {
       status: ScheduleVersionStatus.PENDING_VERIFICATION,
       effectiveFrom: plan.effectiveFrom,
@@ -2080,9 +2124,12 @@ export const PracticeService = {
       submittedAt: pending.first.createdAt,
       submittedBy: submitter?.name ?? null,
       modeChanging: plan.modeChanging,
-      conflicts,
-      impact: summarizeImpact(conflicts),
-      safeEffectiveFrom: earliestSafeDate(all, plan.effectiveFrom),
+      conflicts: plan.conflicts,
+      impact: summarizeImpact(plan.conflicts),
+      safeEffectiveFrom: plan.safeEffectiveFrom,
+      notice: plan.notice,
+      /** Patient alerts from resolved visits, sent once every clash is resolved. */
+      heldAlerts,
     };
   },
 
@@ -2100,20 +2147,15 @@ export const PracticeService = {
     await this.assertCanManageProvider(practiceId, actorUserId, providerId);
     const pending = await this.loadPendingVersion(practiceId, providerId);
     if (!pending) throw new AppError(404, "No schedule is waiting for verification.");
-    const plan = await this.planScheduleEffectiveFrom(
-      practiceId,
-      providerId,
-      pending.locationId,
-      pending.mode,
-      requestedFrom || pending.requestedFrom,
-    );
-    const conflicts: ScheduleConflict[] = await this.scheduleConflicts(
+    const plan = await this.planVersionStart(
       practiceId,
       providerId,
       pending.locationId,
       pending.rows,
-      plan.effectiveFrom,
+      pending.mode,
+      requestedFrom || pending.requestedFrom,
     );
+    const conflicts: ScheduleConflict[] = plan.conflicts;
     const summary = summarizeVersion(pending.rows, plan.effectiveFrom);
     const startsToday = plan.effectiveFrom <= todayIso();
 
@@ -2140,6 +2182,15 @@ export const PracticeService = {
       `[schedule] pending version activated from ${plan.effectiveFrom} provider=${providerId} by=${actorUserId} conflicts=${conflicts.length}`,
     );
     await this.clearRedundantOverrides(practiceId, providerId, pending.locationId);
+    // Clashes are settled now: visits still outside the schedule get a
+    // "pick a new time" request, and alerts held during resolution go out.
+    await ScheduleAlertService.holdAskToReschedule(
+      practiceId,
+      providerId,
+      conflicts.map((c) => ({ bookingId: c.bookingId, oldWhen: c.when })),
+      actorUserId,
+    );
+    const alerts = await ScheduleAlertService.dispatch({ practiceId, providerId });
 
     if (plan.modeChanging && plan.currentMode) {
       const provider = await prisma.user.findUnique({
@@ -2157,15 +2208,21 @@ export const PracticeService = {
     }
 
     const n = conflicts.length;
+    const informed = alerts.sent - (alerts.byKind.ASK_TO_RESCHEDULE ?? 0);
     return {
       effectiveFrom: plan.effectiveFrom,
       conflicts,
       impact: summarizeImpact(conflicts),
+      alerts,
       message:
         `New schedule is active from ${plan.effectiveFrom}.` +
         (n
-          ? ` ${n} booked appointment${n === 1 ? " is" : "s are"} outside it and stay${n === 1 ? "s" : ""} booked — contact ${n === 1 ? "that patient" : "those patients"} to reschedule if needed.`
-          : ""),
+          ? ` ${n} booked appointment${n === 1 ? " is" : "s are"} outside it and stay${n === 1 ? "s" : ""} booked; ${n === 1 ? "that patient was" : "those patients were"} asked on WhatsApp / email to pick a new time or cancel.`
+          : "") +
+        (informed > 0
+          ? ` ${informed} patient${informed === 1 ? " was" : "s were"} told about their updated appointment.`
+          : "") +
+        noticeNote(plan.notice, plan.effectiveFrom),
     };
   },
 
@@ -2179,7 +2236,9 @@ export const PracticeService = {
     if (!res.count) throw new AppError(404, "No schedule is waiting for verification.");
     console.log(`[schedule] pending version discarded provider=${providerId} by=${actorUserId}`);
     if (pending) await this.clearRedundantOverrides(practiceId, providerId, pending.locationId);
-    return { discarded: true };
+    // Visits already moved / cancelled stay that way — their patients must hear about it.
+    const alerts = await ScheduleAlertService.dispatch({ practiceId, providerId });
+    return { discarded: true, alerts };
   },
 
   /**
@@ -2245,6 +2304,7 @@ export const PracticeService = {
       specialty?: string;
       consultationFee?: number;
       advanceBookingAmount?: number | string | null;
+      scheduleNoticeHours?: number | string;
       whatsappBusinessNumber?: string;
       registrationNo?: string;
       phone?: string;
@@ -2288,6 +2348,15 @@ export const PracticeService = {
         }
         nextAdvance = Math.round(adv * 100) / 100;
       }
+    }
+
+    let nextNotice: number | undefined;
+    if (data.scheduleNoticeHours !== undefined) {
+      const hours = Number(data.scheduleNoticeHours);
+      if (!(NOTICE_HOURS_OPTIONS as readonly number[]).includes(hours)) {
+        throw new AppError(400, "Schedule change notice must be 24, 48 or 72 hours, or 7 days.");
+      }
+      nextNotice = hours;
     }
 
     const liveLine = await prisma.whatsAppNumber.findFirst({
@@ -2356,6 +2425,7 @@ export const PracticeService = {
           ...(nextAdvance !== undefined
             ? { advanceBookingAmount: nextAdvance }
             : {}),
+          ...(nextNotice !== undefined ? { scheduleNoticeHours: nextNotice } : {}),
           ...(data.whatsappBusinessNumber !== undefined
             ? { whatsappBusinessNumber: data.whatsappBusinessNumber }
             : {}),
@@ -2483,6 +2553,7 @@ export const PracticeService = {
             specialty: true,
             consultationFee: true,
             advanceBookingAmount: true,
+            scheduleNoticeHours: true,
             registrationNo: true,
             phone: true,
             email: true,
@@ -2688,6 +2759,51 @@ export const PracticeService = {
     };
   },
 
+  async scheduleNoticeHours(practiceId: string): Promise<number> {
+    const practice = await prisma.practice.findUnique({
+      where: { id: practiceId },
+      select: { scheduleNoticeHours: true },
+    });
+    return normalizeNoticeHours(practice?.scheduleNoticeHours);
+  },
+
+  /**
+   * Start date and impact of a version: the requested date (never before today,
+   * or tomorrow for a mode switch), moved past any booked visit inside the
+   * clinic's notice period that it would affect. Changes that affect nobody
+   * keep the requested date.
+   */
+  async planVersionStart(
+    practiceId: string,
+    providerId: string,
+    locationId: string,
+    rows: Parameters<typeof findConflicts>[2],
+    nextMode: ScheduleMode,
+    requested?: string | null,
+  ) {
+    const [plan, hours] = await Promise.all([
+      this.planScheduleEffectiveFrom(practiceId, providerId, locationId, nextMode, requested),
+      this.scheduleNoticeHours(practiceId),
+    ]);
+    const all = await this.scheduleConflicts(practiceId, providerId, locationId, rows, plan.minIso);
+    const endsAt = noticeEndsAt(hours);
+    const { effectiveFrom, blockedBy } = applyNoticePeriod(all, plan.effectiveFrom, endsAt);
+    return {
+      ...plan,
+      effectiveFrom,
+      all,
+      conflicts: all.filter((c) => c.day >= effectiveFrom),
+      safeEffectiveFrom: earliestSafeDate(all, effectiveFrom),
+      notice: {
+        hours,
+        endsAt: endsAt.toISOString(),
+        requestedFrom: plan.effectiveFrom,
+        adjusted: effectiveFrom !== plan.effectiveFrom,
+        blockedBy,
+      },
+    };
+  },
+
   /** Upcoming active bookings (from `fromIso`) that the proposed version would no longer offer. */
   async scheduleConflicts(
     practiceId: string,
@@ -2740,30 +2856,24 @@ export const PracticeService = {
   ) {
     await this.assertCanManageProvider(practiceId, actorUserId, providerId);
     const built = this.buildProviderScheduleVersion(practiceId, providerId, data);
-    const plan = await this.planScheduleEffectiveFrom(
-      practiceId,
-      providerId,
-      data.locationId,
-      built.mode,
-      data.effectiveFrom,
-    );
-    const all = await this.scheduleConflicts(
+    const plan = await this.planVersionStart(
       practiceId,
       providerId,
       data.locationId,
       built.rows,
-      plan.minIso,
+      built.mode,
+      data.effectiveFrom,
     );
-    const conflicts = all.filter((c) => c.day >= plan.effectiveFrom);
     return {
       effectiveFrom: plan.effectiveFrom,
       minEffectiveFrom: plan.minIso,
       modeChanging: plan.modeChanging,
-      conflicts,
-      impact: summarizeImpact(conflicts),
+      conflicts: plan.conflicts,
+      impact: summarizeImpact(plan.conflicts),
       /** Saving as-is would park the version in PENDING_VERIFICATION. */
-      wouldBePending: conflicts.length > 0,
-      safeEffectiveFrom: earliestSafeDate(all, plan.effectiveFrom),
+      wouldBePending: plan.conflicts.length > 0,
+      safeEffectiveFrom: plan.safeEffectiveFrom,
+      notice: plan.notice,
     };
   },
 
@@ -2787,23 +2897,19 @@ export const PracticeService = {
     await this.applyDuePendingSchedule(providerId);
 
     const built = this.buildProviderScheduleVersion(practiceId, providerId, data);
-    const plan = await this.planScheduleEffectiveFrom(
+    const plan = await this.planVersionStart(
       practiceId,
       providerId,
       data.locationId,
+      built.rows,
       built.mode,
       data.effectiveFrom,
     );
     const effectiveFrom = plan.effectiveFrom;
     const today = todayIso();
-    const conflicts = await this.scheduleConflicts(
-      practiceId,
-      providerId,
-      data.locationId,
-      built.rows,
-      effectiveFrom,
-    );
+    const conflicts = plan.conflicts;
     const pending = conflicts.length > 0;
+    const noticeText = noticeNote(plan.notice, effectiveFrom);
     const startsToday = !pending && effectiveFrom <= today;
 
     const licenseNo = data.licenseNo?.trim();
@@ -2899,7 +3005,8 @@ export const PracticeService = {
         modeChangeEffectiveDate: null,
         pendingMode: null,
         activeMode,
-        message: `Profile saved. The new schedule from ${effectiveFrom} clashes with ${impact.total} booked appointment${impact.total === 1 ? "" : "s"}, so it is saved as Pending verification — the current schedule stays in force and no appointment was changed. Review and activate it when ready.`,
+        notice: plan.notice,
+        message: `Profile saved. The new schedule from ${effectiveFrom} clashes with ${impact.total} booked appointment${impact.total === 1 ? "" : "s"}, so it is saved as Pending verification — the current schedule stays in force and no appointment was changed. Review and activate it when ready.${noticeText}`,
       };
     }
 
@@ -2931,12 +3038,14 @@ export const PracticeService = {
       modeChangeEffectiveDate: plan.modeChanging ? effectiveFrom : null,
       pendingMode: plan.modeChanging ? built.mode : null,
       activeMode,
+      notice: plan.notice,
       message:
         (plan.modeChanging
           ? `Booking type switch to ${modeLabel} is scheduled from ${effectiveFrom}. Appointments before that keep the current mode.`
           : startsToday
             ? "Provider settings saved."
-            : `New schedule saved. It applies from ${effectiveFrom}; days before that keep the current schedule.`),
+            : `New schedule saved. It applies from ${effectiveFrom}; days before that keep the current schedule.`) +
+        noticeText,
     };
   },
 

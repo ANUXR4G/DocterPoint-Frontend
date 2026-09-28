@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-19
+- **Date opened:** 2026-09-28
+- **Severity:** 2
+- **Process:** P-BOOK (slots / schedules) / P-NOTIFY
+- **Description:** User asked for patient & communication rules on schedule changes: a minimum notice period (doctors cannot set an effective date that shifts booked visits without notice, e.g. 48 hours or 7 days), and patient notifications (WhatsApp / SMS / email) sent only after conflicts are resolved, telling patients their updated time or asking them to confirm / reschedule.
+- **Evidence:** After CR-18 a change could start today and move visits happening within hours; each resolver action messaged the patient immediately, so patients could hear partial results while other clashes were still open, and *activate anyway* left the remaining patients uninformed ("clinic contacts the patients").
+- **Containment:** n/a (proactive).
+- **Root cause:** No lead-time rule on effective dates; notifications were coupled to each booking write.
+- **Corrective action:** `practices.schedule_notice_hours` (24/48/72/168, default 48) + `schedule_change_alerts` table (additive migration). `applyNoticePeriod` / `planVersionStart` in preview, save, per-day save, pending view and activate: start moves to the day after the last booked visit inside the window. Resolver writes with `skipPatientNotification` and holds one alert per booking; `ScheduleAlertService.dispatch` (claim → WhatsApp template / email → outcome) on full resolution, activate (plus `ASK_TO_RESCHEDULE` for remaining clashes), discard, *Send now* route, and the worker's 5-minute sweep (`dispatchDue`). UI: notice select on both Settings forms, *Booked patients need N notice* dialog, held-alerts box with *Send now*, resolver copy; provider app shows the notice message.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** 209/209 procto tests (5 new: notice blocking / start date, 7-day window, option normalisation, sweep due rules). Local read-only smoke on demo dr.solo: *Wednesday off* from today → start moved to Thu 1 Oct, both real Sep-30 visits listed in `blockedBy`, 0 conflicts; from Oct 5 / unchanged schedule → not adjusted; notice = 5 → 400; send-held with none pending → 0. Browser: notice select shows 48 hours; Save opened *Booked patients need 48 hours' notice* with both visits and *Apply from Thu, 1 Oct*; closed with *Back*, nothing saved (no pending version). Dispatch covered by unit tests only — no real patient was messaged.
+
 ### CR-20260928-18
 - **Date opened:** 2026-09-28
 - **Severity:** 2
