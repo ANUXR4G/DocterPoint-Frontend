@@ -7,17 +7,20 @@ type Props = {
   open: boolean
   fromLabel: string
   toLabel: string
+  /** e.g. "Thu, 15 Oct 2026"; defaults to tomorrow. */
+  effectiveDateLabel?: string
   confirming?: boolean
   error?: string
   onCancel: () => void
   onConfirm: () => void
 }
 
-/** Confirm Time slots ↔ Token queue switch (takes effect next clinic day). */
+/** Confirm Time slots ↔ Token queue switch (takes effect next clinic day at the earliest). */
 export default function BookingModeChangeModal({
   open,
   fromLabel,
   toLabel,
+  effectiveDateLabel,
   confirming = false,
   error = "",
   onCancel,
@@ -57,8 +60,8 @@ export default function BookingModeChangeModal({
         </p>
         <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
           After you confirm, the new type takes effect from{" "}
-          <strong>tomorrow</strong>. Today&apos;s appointments keep{" "}
-          {fromLabel}.
+          <strong>{effectiveDateLabel ?? "tomorrow"}</strong>. Appointments
+          before that keep {fromLabel}.
         </p>
         {error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-100">

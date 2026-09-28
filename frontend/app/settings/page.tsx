@@ -8,9 +8,22 @@ import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { PracticeManagementPanel } from "@/components/ui/doctors/pages/PracticeManagementPanel"
 import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal"
 import RazorpayAccountPanel from "@/components/ui/procto/RazorpayAccountPanel"
+import {
+  EffectiveFromField,
+  ScheduleConflictModal,
+  UpcomingScheduleChanges,
+  addDaysIso,
+  clinicTodayIso,
+  formatScheduleDay,
+  normalizeUpcomingChanges,
+} from "@/components/ui/procto/ScheduleChangeControls"
 import { PracticeDashboardProvider } from "@/contexts/PracticeDashboardContext"
 import { useRole } from "@/hooks/useRole"
-import { proctoService } from "@/lib/services/procto"
+import {
+  proctoService,
+  type SchedulePreview,
+  type UpcomingScheduleChange,
+} from "@/lib/services/procto"
 
 type Tab = "settings" | "practice" | "theme"
 
@@ -806,6 +819,13 @@ function ClinicAccountForm({
   )
 }
 
+type SaveOpts = {
+  bookingTypeOverride?: "TIME" | "TOKEN"
+  modeOnly?: boolean
+  effectiveFrom?: string
+  skipPreview?: boolean
+}
+
 function DoctorAccountForm({
   membership,
   userId,
@@ -863,49 +883,58 @@ function DoctorAccountForm({
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [modeConfirm, setModeConfirm] = useState<"TIME" | "TOKEN" | null>(null)
-  const [pendingModeChange, setPendingModeChange] = useState<{
-    toMode: string
-    effectiveDate: string
+  const [effectiveFrom, setEffectiveFrom] = useState(clinicTodayIso)
+  const [upcomingChanges, setUpcomingChanges] = useState<UpcomingScheduleChange[]>([])
+  const [cancellingDate, setCancellingDate] = useState<string | null>(null)
+  const [conflictReview, setConflictReview] = useState<{
+    preview: SchedulePreview
+    opts?: SaveOpts
   } | null>(null)
 
   const activeMode: "TIME" | "TOKEN" =
     schedules[0]?.mode === "TOKEN_BASED" ? "TOKEN" : "TIME"
+
+  async function refreshSchedules() {
+    const res = await proctoService.getSchedules(membership.practice.id, userId)
+    if (res.status !== "successful") {
+      setScheduleLoadError(
+        res.message ||
+          "Could not load your working hours. Reload the page before saving.",
+      )
+      return
+    }
+    const data = res.data as unknown[] | { schedules?: typeof schedules } | null
+    if (Array.isArray(data)) setSchedules(data as typeof schedules)
+    else if (data && Array.isArray(data.schedules)) setSchedules(data.schedules)
+    setUpcomingChanges(normalizeUpcomingChanges(res.data))
+    setScheduleLoadError("")
+  }
 
   useEffect(() => {
     if (!locationId) {
       setLoading(false)
       return
     }
-    void proctoService
-      .getSchedules(membership.practice.id, userId)
-      .then((res) => {
-        if (res.status === "successful") {
-          const data = res.data as
-            | unknown[]
-            | {
-                schedules?: typeof schedules
-                pendingModeChange?: {
-                  toMode: string
-                  effectiveDate: string
-                } | null
-              }
-          if (Array.isArray(data)) {
-            setSchedules(data as typeof schedules)
-            setPendingModeChange(null)
-          } else if (data && Array.isArray(data.schedules)) {
-            setSchedules(data.schedules)
-            setPendingModeChange(data.pendingModeChange ?? null)
-          }
-          setScheduleLoadError("")
-        } else {
-          setScheduleLoadError(
-            res.message ||
-              "Could not load your working hours. Reload the page before saving.",
-          )
-        }
-        setLoading(false)
-      })
+    void refreshSchedules().finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [membership.practice.id, userId, locationId])
+
+  async function cancelUpcoming(date: string) {
+    setCancellingDate(date)
+    setError("")
+    const res = await proctoService.cancelUpcomingSchedule(
+      membership.practice.id,
+      userId,
+      date,
+    )
+    setCancellingDate(null)
+    if (res.status !== "successful") {
+      setError(res.message || "Could not cancel the scheduled change.")
+      return
+    }
+    setMessage(`Scheduled change from ${formatScheduleDay(date)} cancelled.`)
+    await refreshSchedules()
+  }
 
   useEffect(() => {
     setName(provider?.name ?? "")
@@ -958,8 +987,8 @@ function DoctorAccountForm({
 
   async function save(
     e?: React.FormEvent,
-    opts?: { bookingTypeOverride?: "TIME" | "TOKEN"; modeOnly?: boolean },
-  ) {
+    opts?: SaveOpts,
+  ): Promise<boolean | "conflicts"> {
     e?.preventDefault()
     setError("")
     setMessage("")
@@ -1007,6 +1036,31 @@ function DoctorAccountForm({
     }
     setSaving(true)
     const nextType = opts?.bookingTypeOverride ?? bookingType
+    const scheduleBody = {
+      providerId: userId,
+      locationId,
+      bookingType: nextType,
+      workingDays,
+      startTime,
+      endTime,
+      breakStartTime: breakStartTime || undefined,
+      breakEndTime: breakEndTime || undefined,
+      slotDurationMins: Number(slotDurationMins) || 15,
+      patientsPerSlot: Number(patientsPerSlot) || 1,
+      effectiveFrom: opts?.effectiveFrom ?? effectiveFrom,
+    }
+
+    if (!opts?.skipPreview) {
+      const preview = await proctoService.previewProviderSettings(
+        membership.practice.id,
+        scheduleBody,
+      )
+      if (preview.status === "successful" && preview.data?.conflicts.length) {
+        setSaving(false)
+        setConflictReview({ preview: preview.data, opts })
+        return "conflicts"
+      }
+    }
 
     // Fee update is clinic-admin only — skip on mode switch so staff doctors can confirm.
     if (!opts?.modeOnly && Number.isFinite(feeNum) && feeNum > 0) {
@@ -1028,19 +1082,10 @@ function DoctorAccountForm({
     const res = await proctoService.saveProviderSettings(
       membership.practice.id,
       {
-        providerId: userId,
-        locationId,
+        ...scheduleBody,
         name: name.trim() || provider?.name || undefined,
         licenseNo:
           licenseNo.trim() || provider?.doctor?.licenseNo || undefined,
-        bookingType: nextType,
-        workingDays,
-        startTime,
-        endTime,
-        breakStartTime: breakStartTime || undefined,
-        breakEndTime: breakEndTime || undefined,
-        slotDurationMins: Number(slotDurationMins) || 15,
-        patientsPerSlot: Number(patientsPerSlot) || 1,
         appointmentValidityDays: (() => {
           const days = Number(appointmentValidityDays)
           return Number.isFinite(days) && days >= 1 && days <= 90 ? days : 7
@@ -1063,29 +1108,8 @@ function DoctorAccountForm({
           ? "Booking type switch confirmed — it takes effect tomorrow."
           : "Doctor details saved."),
     )
-    // Refresh schedules so pending banner appears.
-    const schedRes = await proctoService.getSchedules(
-      membership.practice.id,
-      userId,
-    )
-    if (schedRes.status === "successful") {
-      const data = schedRes.data as
-        | unknown[]
-        | {
-            schedules?: typeof schedules
-            pendingModeChange?: {
-              toMode: string
-              effectiveDate: string
-            } | null
-          }
-      if (Array.isArray(data)) {
-        setSchedules(data as typeof schedules)
-        setPendingModeChange(null)
-      } else if (data && Array.isArray(data.schedules)) {
-        setSchedules(data.schedules)
-        setPendingModeChange(data.pendingModeChange ?? null)
-      }
-    }
+    setEffectiveFrom(clinicTodayIso())
+    await refreshSchedules()
     return true
   }
 
@@ -1097,6 +1121,18 @@ function DoctorAccountForm({
     })
     if (ok) setModeConfirm(null)
   }
+
+  async function resolveConflicts(date?: string) {
+    if (!conflictReview) return
+    const { opts, preview } = conflictReview
+    const chosen = date ?? preview.effectiveFrom
+    if (date) setEffectiveFrom(date)
+    const ok = await save(undefined, { ...opts, effectiveFrom: chosen, skipPreview: true })
+    if (ok) setConflictReview(null)
+  }
+
+  const modeStartIso =
+    effectiveFrom > clinicTodayIso() ? effectiveFrom : addDaysIso(clinicTodayIso(), 1)
 
   if (loading) {
     return <p className="text-base font-medium opacity-80">Loading doctor details…</p>
@@ -1111,6 +1147,7 @@ function DoctorAccountForm({
         open={modeConfirm != null}
         fromLabel={modeLabel(activeMode)}
         toLabel={modeLabel(modeConfirm ?? activeMode)}
+        effectiveDateLabel={formatScheduleDay(modeStartIso)}
         confirming={saving}
         error={modeConfirm ? error : ""}
         onCancel={() => {
@@ -1118,6 +1155,13 @@ function DoctorAccountForm({
           setError("")
         }}
         onConfirm={() => void confirmModeChange()}
+      />
+      <ScheduleConflictModal
+        preview={conflictReview?.preview ?? null}
+        busy={saving}
+        onApplyFrom={(date) => void resolveConflicts(date)}
+        onApplyAnyway={() => void resolveConflicts()}
+        onCancel={() => setConflictReview(null)}
       />
       <p className={sectionLabel}>Doctor profile</p>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -1176,19 +1220,17 @@ function DoctorAccountForm({
 
       <p className={`${sectionLabel} mt-5`}>Booking type</p>
       <p className="mb-2 text-xs opacity-60">
-        Change in Settings here (not registration). Confirm to apply from
-        tomorrow.
+        Change in Settings here (not registration). A switch starts tomorrow at
+        the earliest, or on the &ldquo;Changes apply from&rdquo; date below.
       </p>
-      {pendingModeChange ? (
-        <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-          Switching to{" "}
-          <strong>
-            {pendingModeChange.toMode === "TOKEN_BASED"
-              ? "Token queue"
-              : "Time slots"}
-          </strong>{" "}
-          on <strong>{pendingModeChange.effectiveDate}</strong>.
-        </p>
+      {upcomingChanges.length ? (
+        <div className="mb-2">
+          <UpcomingScheduleChanges
+            changes={upcomingChanges}
+            cancellingDate={cancellingDate}
+            onCancel={(date) => void cancelUpcoming(date)}
+          />
+        </div>
       ) : null}
       <div
         className="grid grid-cols-2 gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-1.5 dark:border-[#333] dark:bg-[#141414]"
@@ -1329,6 +1371,13 @@ function DoctorAccountForm({
           </span>
         </label>
       </div>
+
+      <p className={`${sectionLabel} mt-5`}>Schedule start</p>
+      <EffectiveFromField
+        value={effectiveFrom}
+        onChange={setEffectiveFrom}
+        disabled={saving}
+      />
 
       {error || scheduleLoadError ? (
         <p className="mt-4 text-base font-semibold text-red-600 dark:text-red-300">

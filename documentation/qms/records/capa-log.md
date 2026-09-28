@@ -26,6 +26,18 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### CR-20260928-16
+- **Date opened:** 2026-09-28
+- **Severity:** 2
+- **Process:** P-BOOK (slots / schedules)
+- **Description:** User asked for an Effective Date model so schedule edits don't corrupt existing bookings. Before this, *Save* on provider settings deleted every `provider_schedules` row for the doctor and rewrote them: new hours applied to all future days at once, so visits already booked outside the new hours / days silently dropped out of the slot grid (only a Time ↔ Token switch was deferred, one day, via `Doctor.pendingSchedule`).
+- **Evidence:** `syncProviderSettings` did `deleteMany({ practiceId, providerId, locationId })` + `createMany`; availability / booking / day view read all active rows with no date. DB: 15 schedule rows in 3 groups, 0 pending switches.
+- **Containment:** n/a (no report of lost bookings; change made proactively).
+- **Root cause:** Schedule stored as a single mutable weekly record with no validity period.
+- **Corrective action:** `effective_from` on `provider_schedules` (additive migration, existing rows = baseline 2000-01-01, unique key now includes the date). `scheduleVersions.ts` picks the version per clinic day; all readers switched. Settings save writes a version at *Changes apply from* (≥ today; mode switch ≥ tomorrow) and supersedes later versions only; per-day upsert copies the version in force. Read-only preview endpoint + dialog (affected bookings, *Apply from {safe date}*, *Apply anyway*); upcoming-change banner with cancel (future only). Legacy `pendingSchedule` converted to a version.
+- **Owner / due:** Engineering / 2026-09-28
+- **Verification:** 192/192 procto tests (13 new). Local smoke on demo dr.solo: preview (shorter hours → 0 conflicts; Token switch → 2 real Sep-30 bookings listed, start pushed to Sep 29, safe date Oct 1; >1 year → 400; cancelling a started version → 409). Saved a 10:00–13:00 version from 2027-06-01 (outside the booking window): calendar 2027-05-31 kept 12 slots, 2027-06-07 showed 9; cancelled → 12 again, no upcoming rows. Browser: Settings shows the date field, mode dialog names the start date, conflict dialog lists both visits; *Back* wrote nothing (schedule unchanged). No booking touched.
+
 ### CR-20260928-15
 - **Date opened:** 2026-09-28
 - **Severity:** 2

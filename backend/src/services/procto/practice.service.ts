@@ -22,6 +22,20 @@ import {
   timeSlotsForProviderDay,
   zonedDateTime,
 } from "./slotEngine.js";
+import {
+  ACTIVE_BOOKING_STATUSES,
+  addDaysIso,
+  dateKey,
+  dbDate,
+  earliestSafeDate,
+  findConflicts,
+  loadSchedulesOn,
+  localDayOfSessionDate,
+  pickEffectiveVersion,
+  summarizeVersion,
+  todayIso,
+  upcomingVersionKeys,
+} from "./scheduleVersions.js";
 import { last10Digits, normalizeGender } from "../../core/gender.js";
 import { ageFromDob } from "../../core/dob.js";
 import {
@@ -168,6 +182,20 @@ async function seedDefaultProviderSchedule(opts: {
     })),
   });
 }
+
+type ProviderScheduleForm = {
+  locationId: string;
+  bookingType: "TIME" | "TOKEN" | "TIME_BASED" | "TOKEN_BASED";
+  workingDays: number[];
+  startTime: string;
+  endTime: string;
+  breakStartTime?: string;
+  breakEndTime?: string;
+  slotDurationMins?: number;
+  patientsPerSlot?: number;
+  /** YYYY-MM-DD clinic day the schedule starts; default today. */
+  effectiveFrom?: string;
+};
 
 export const PracticeService = {
   async onboardPractice(data: {
@@ -582,11 +610,13 @@ export const PracticeService = {
           },
         },
         schedules: {
-          where: { isActive: true },
+          where: { isActive: true, effectiveFrom: { lte: dbDate(todayIso()) } },
           select: {
             mode: true,
             dayOfWeek: true,
             providerId: true,
+            locationId: true,
+            effectiveFrom: true,
           },
         },
         reviews: {
@@ -635,8 +665,17 @@ export const PracticeService = {
         : null,
       count: ratings.length,
     };
+    const today = todayIso();
+    const byProvider = new Map<string, NonNullable<typeof practice>["schedules"]>();
+    for (const s of practice!.schedules) {
+      byProvider.set(s.providerId, [...(byProvider.get(s.providerId) ?? []), s]);
+    }
+    const schedules = [...byProvider.values()]
+      .flatMap((rows) => pickEffectiveVersion(rows, today))
+      .map(({ mode, dayOfWeek, providerId }) => ({ mode, dayOfWeek, providerId }));
     return {
       ...practice!,
+      schedules,
       reviews,
       reviewSummary,
       reviewsEnabled,
@@ -1625,24 +1664,12 @@ export const PracticeService = {
       maxTokens?: number;
       breakStartTime?: string | null;
       breakEndTime?: string | null;
+      effectiveFrom?: string;
     },
     actorUserId: string,
   ) {
     await this.assertCanManageProvider(practiceId, actorUserId, providerId);
-
-    // Only one booking mode (time OR token) per provider at a location.
-    await prisma.providerSchedule.deleteMany({
-      where: {
-        practiceId,
-        providerId,
-        locationId: data.locationId,
-        mode: { not: data.mode },
-      },
-    });
-
-    const existing = await prisma.providerSchedule.findFirst({
-      where: { practiceId, providerId, locationId: data.locationId, dayOfWeek: data.dayOfWeek },
-    });
+    const effectiveFrom = this.resolveEffectiveFrom(data.effectiveFrom);
 
     const isTime = data.mode === ScheduleMode.TIME_BASED;
 
@@ -1662,12 +1689,47 @@ export const PracticeService = {
       breakStartTime: data.breakStartTime ?? null,
       breakEndTime: data.breakEndTime ?? null,
       isActive: true,
+      effectiveFrom: dbDate(effectiveFrom),
     };
 
-    if (existing) {
-      return prisma.providerSchedule.update({ where: { id: existing.id }, data: payload });
+    // Copy the version in force on that day, change one weekday, save as a
+    // version starting that day. One booking mode per version; later versions untouched.
+    const base = await loadSchedulesOn(
+      { practiceId, providerId, locationId: data.locationId },
+      effectiveFrom,
+    );
+    const carried = base
+      .filter((s) => s.dayOfWeek !== data.dayOfWeek && s.mode === data.mode)
+      .map(({ id: _id, createdAt: _c, updatedAt: _u, ...row }) => ({
+        ...row,
+        effectiveFrom: dbDate(effectiveFrom),
+      }));
+
+    return prisma.$transaction(async (tx) => {
+      await tx.providerSchedule.deleteMany({
+        where: {
+          practiceId,
+          providerId,
+          locationId: data.locationId,
+          effectiveFrom: dbDate(effectiveFrom),
+        },
+      });
+      if (carried.length) await tx.providerSchedule.createMany({ data: carried });
+      return tx.providerSchedule.create({ data: payload });
+    });
+  },
+
+  /** Requested start date (YYYY-MM-DD), never before today; default today. */
+  resolveEffectiveFrom(requested: string | undefined | null, minIso = todayIso()): string {
+    const raw = requested?.trim();
+    if (!raw) return minIso;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(dbDate(raw).getTime())) {
+      throw new AppError(400, "Effective date must be YYYY-MM-DD.");
     }
-    return prisma.providerSchedule.create({ data: payload });
+    if (raw > addDaysIso(minIso, 366)) {
+      throw new AppError(400, "Effective date can be at most one year ahead.");
+    }
+    return raw < minIso ? minIso : raw;
   },
 
   async createOverride(
@@ -1695,9 +1757,7 @@ export const PracticeService = {
       } catch (e) {
         throw new AppError(400, e instanceof Error ? e.message : "Invalid extra slot window.");
       }
-      const schedules = await prisma.providerSchedule.findMany({
-        where: { practiceId, providerId, isActive: true },
-      });
+      const schedules = await loadSchedulesOn({ practiceId, providerId }, data.date);
       if (resolveProviderBookingMode(schedules) !== ScheduleMode.TIME_BASED) {
         throw new AppError(400, "Extra slots are only available for time-based booking.");
       }
@@ -1786,42 +1846,71 @@ export const PracticeService = {
         providers.map((p) => this.applyDuePendingSchedule(p.providerId)),
       );
     }
-    return prisma.providerSchedule.findMany({
+    const today = todayIso();
+    const rows = await prisma.providerSchedule.findMany({
       where: {
         practiceId,
         ...(scoped ? { providerId: scoped } : {}),
         isActive: true,
+        effectiveFrom: { lte: dbDate(today) },
       },
       include: { location: true },
     });
+    const byProvider = new Map<string, typeof rows>();
+    for (const r of rows) byProvider.set(r.providerId, [...(byProvider.get(r.providerId) ?? []), r]);
+    return [...byProvider.values()].flatMap((list) => pickEffectiveVersion(list, today));
   },
 
-  async getPendingModeChange(providerId: string) {
-    await this.applyDuePendingSchedule(providerId);
-    const doctor = await prisma.doctor.findUnique({
-      where: { id: providerId },
-      select: {
-        pendingSchedule: true,
-        pendingScheduleEffective: true,
-      },
+  /** Saved schedule versions that start after today (oldest first). */
+  async getUpcomingSchedules(practiceId: string, providerId: string) {
+    const today = todayIso();
+    const rows = await prisma.providerSchedule.findMany({
+      where: { practiceId, providerId, isActive: true },
     });
-    if (!doctor?.pendingSchedule || !doctor.pendingScheduleEffective) {
-      return null;
+    return upcomingVersionKeys(rows, today).map((key) => {
+      const versionRows = rows.filter((r) => dateKey(r.effectiveFrom) === key);
+      return { ...summarizeVersion(versionRows, key), locationId: versionRows[0]!.locationId };
+    });
+  },
+
+  /** Next upcoming version that switches Time slots ↔ Token queue. */
+  async getPendingModeChange(providerId: string, practiceId?: string) {
+    await this.applyDuePendingSchedule(providerId);
+    const today = todayIso();
+    const rows = await prisma.providerSchedule.findMany({
+      where: { providerId, isActive: true, ...(practiceId ? { practiceId } : {}) },
+    });
+    let mode = resolveProviderBookingMode(pickEffectiveVersion(rows, today));
+    for (const key of upcomingVersionKeys(rows, today)) {
+      const next = resolveProviderBookingMode(pickEffectiveVersion(rows, key));
+      if (next && mode && next !== mode) {
+        return { toMode: next, fromMode: mode, effectiveDate: key };
+      }
+      mode = next ?? mode;
     }
-    const p = doctor.pendingSchedule as {
-      toMode?: string;
-      fromMode?: string;
-      bookingType?: string;
-    };
-    return {
-      toMode:
-        p.toMode ||
-        (p.bookingType === "TOKEN" || p.bookingType === "TOKEN_BASED"
-          ? "TOKEN_BASED"
-          : "TIME_BASED"),
-      fromMode: p.fromMode ?? null,
-      effectiveDate: formatLocalDate(doctor.pendingScheduleEffective),
-    };
+    return null;
+  },
+
+  /** Drop a saved version that hasn't started yet. */
+  async cancelUpcomingSchedule(
+    practiceId: string,
+    providerId: string,
+    effectiveFrom: string,
+    actorUserId: string,
+  ) {
+    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? "")) {
+      throw new AppError(400, "effectiveFrom must be YYYY-MM-DD.");
+    }
+    if (effectiveFrom <= todayIso()) {
+      throw new AppError(409, "This schedule has already started. Save a new schedule instead.");
+    }
+    const res = await prisma.providerSchedule.deleteMany({
+      where: { practiceId, providerId, effectiveFrom: dbDate(effectiveFrom) },
+    });
+    if (!res.count) throw new AppError(404, "No scheduled change on that date.");
+    console.log(`[schedule] upcoming version ${effectiveFrom} cancelled provider=${providerId} by=${actorUserId}`);
+    return { cancelled: effectiveFrom };
   },
 
   async getOverrides(
@@ -2205,34 +2294,12 @@ export const PracticeService = {
     return { memberships, practiceId, bookings, patients };
   },
 
-  /**
-   * Sync doctor profile + weekly schedule in one transaction (batch write).
-   * Switching Time slots ↔ Token queue is deferred to the next clinic day so
-   * today's already-booked visits keep working. Hours on the current mode
-   * still save immediately.
-   */
-  async syncProviderSettings(
+  /** Validate the provider settings form and build one weekly schedule version (rows without a date). */
+  buildProviderScheduleVersion(
     practiceId: string,
     providerId: string,
-    data: {
-      locationId: string;
-      name?: string;
-      licenseNo?: string;
-      appointmentValidityDays?: number;
-      bookingType: "TIME" | "TOKEN" | "TIME_BASED" | "TOKEN_BASED";
-      workingDays: number[];
-      startTime: string;
-      endTime: string;
-      breakStartTime?: string;
-      breakEndTime?: string;
-      slotDurationMins?: number;
-      patientsPerSlot?: number;
-    },
-    actorUserId: string,
+    data: ProviderScheduleForm,
   ) {
-    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
-    await this.applyDuePendingSchedule(providerId);
-
     const workingDays = Array.from(
       new Set((data.workingDays ?? []).map(Number).filter((d) => d >= 0 && d <= 6)),
     );
@@ -2259,37 +2326,15 @@ export const PracticeService = {
       }
     }
 
-    const requestedMode =
+    const mode =
       data.bookingType === "TOKEN" || data.bookingType === "TOKEN_BASED"
         ? ScheduleMode.TOKEN_BASED
         : ScheduleMode.TIME_BASED;
-
-    const existingSchedules = await prisma.providerSchedule.findMany({
-      where: {
-        practiceId,
-        providerId,
-        locationId: data.locationId,
-        isActive: true,
-      },
-    });
-    const currentMode = resolveProviderBookingMode(existingSchedules);
-    const modeChanging =
-      currentMode != null && currentMode !== requestedMode;
-
-    // Keep serving today's mode; new mode lands tomorrow.
-    const applyMode = modeChanging && currentMode ? currentMode : requestedMode;
-    const isTime = applyMode === ScheduleMode.TIME_BASED;
+    const isTime = mode === ScheduleMode.TIME_BASED;
     const slotMins = Math.min(120, Math.max(5, Number(data.slotDurationMins) || 15));
     const patientsPerSlot = isTime
       ? 1
       : Math.min(50, Math.max(1, Number(data.patientsPerSlot) || 1));
-    const licenseNo = data.licenseNo?.trim();
-    const name = data.name?.trim();
-    const validity =
-      data.appointmentValidityDays != null
-        ? Math.min(90, Math.max(1, Number(data.appointmentValidityDays) || 7))
-        : undefined;
-
     const workSpan = minutesOf(data.endTime) - minutesOf(data.startTime);
     const maxTokens = isTime
       ? null
@@ -2298,12 +2343,12 @@ export const PracticeService = {
           Math.floor((workSpan / slotMins) * patientsPerSlot),
         );
 
-    const scheduleRows = workingDays.map((dayOfWeek) => ({
+    const rows = workingDays.map((dayOfWeek) => ({
       practiceId,
       providerId,
       locationId: data.locationId,
       dayOfWeek,
-      mode: applyMode,
+      mode,
       slotIntervalMin: isTime ? slotMins : null,
       startTime: isTime ? data.startTime : null,
       endTime: isTime ? data.endTime : null,
@@ -2315,31 +2360,153 @@ export const PracticeService = {
       breakEndTime: breakEnd || null,
       isActive: true,
     }));
+    return { mode, rows, workingDays };
+  },
 
-    const tomorrowIso = formatLocalDate(
-      new Date(parseLocalDate(formatLocalDate(new Date())).getTime() + 86400000),
+  /**
+   * Start date for a new version. Switching Time slots ↔ Token queue can't
+   * start today (today's visits were booked under the current mode).
+   */
+  async planScheduleEffectiveFrom(
+    practiceId: string,
+    providerId: string,
+    locationId: string,
+    nextMode: ScheduleMode,
+    requested?: string | null,
+  ) {
+    const today = todayIso();
+    const current = await loadSchedulesOn({ practiceId, providerId, locationId }, today);
+    const currentMode = resolveProviderBookingMode(current);
+    const modeChanging = currentMode != null && currentMode !== nextMode;
+    const minIso = modeChanging ? addDaysIso(today, 1) : today;
+    return {
+      effectiveFrom: this.resolveEffectiveFrom(requested, minIso),
+      minIso,
+      currentMode,
+      modeChanging,
+    };
+  },
+
+  /** Upcoming active bookings (from `fromIso`) that the proposed version would no longer offer. */
+  async scheduleConflicts(
+    practiceId: string,
+    providerId: string,
+    locationId: string,
+    nextRows: Parameters<typeof findConflicts>[2],
+    fromIso: string,
+  ) {
+    const [bookings, currentRows] = await Promise.all([
+      prisma.practiceBooking.findMany({
+        where: {
+          practiceId,
+          providerId,
+          locationId,
+          status: { in: ACTIVE_BOOKING_STATUSES },
+          OR: [
+            { slotStart: { gte: parseLocalDate(fromIso) } },
+            { sessionDate: { gte: parseLocalDate(addDaysIso(fromIso, -1)) } },
+          ],
+        },
+        select: {
+          id: true,
+          patientName: true,
+          locationId: true,
+          mode: true,
+          slotStart: true,
+          sessionDate: true,
+        },
+        take: 2000,
+      }),
+      prisma.providerSchedule.findMany({
+        where: { practiceId, providerId, locationId, isActive: true },
+      }),
+    ]);
+    return findConflicts(bookings, currentRows, nextRows, fromIso);
+  },
+
+  /**
+   * Dry run of a settings save: which upcoming appointments would fall outside
+   * the new schedule, and the first start date that affects none of them.
+   * Nothing is written and no booking is changed.
+   */
+  async previewProviderSettings(
+    practiceId: string,
+    providerId: string,
+    data: ProviderScheduleForm,
+    actorUserId: string,
+  ) {
+    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
+    const built = this.buildProviderScheduleVersion(practiceId, providerId, data);
+    const plan = await this.planScheduleEffectiveFrom(
+      practiceId,
+      providerId,
+      data.locationId,
+      built.mode,
+      data.effectiveFrom,
     );
-    const pendingPayload = modeChanging
-      ? {
-          locationId: data.locationId,
-          bookingType:
-            requestedMode === ScheduleMode.TOKEN_BASED ? "TOKEN" : "TIME",
-          workingDays,
-          startTime: data.startTime,
-          endTime: data.endTime,
-          breakStartTime: breakStart || undefined,
-          breakEndTime: breakEnd || undefined,
-          slotDurationMins: slotMins,
-          patientsPerSlot: Math.min(
-            50,
-            Math.max(1, Number(data.patientsPerSlot) || 1),
-          ),
-          fromMode: currentMode,
-          toMode: requestedMode,
-        }
-      : null;
+    const all = await this.scheduleConflicts(
+      practiceId,
+      providerId,
+      data.locationId,
+      built.rows,
+      plan.minIso,
+    );
+    const conflicts = all.filter((c) => c.day >= plan.effectiveFrom);
+    return {
+      effectiveFrom: plan.effectiveFrom,
+      minEffectiveFrom: plan.minIso,
+      modeChanging: plan.modeChanging,
+      conflicts,
+      safeEffectiveFrom: earliestSafeDate(all, plan.effectiveFrom),
+    };
+  },
 
-    const [schedules, provider] = await prisma.$transaction(async (tx) => {
+  /**
+   * Save the settings form as a new schedule version starting `effectiveFrom`
+   * (default: today, or tomorrow for a Time ↔ Token switch). Days before it keep
+   * the version they were booked under; versions starting on/after it are replaced.
+   * Existing bookings are never modified.
+   */
+  async syncProviderSettings(
+    practiceId: string,
+    providerId: string,
+    data: ProviderScheduleForm & {
+      name?: string;
+      licenseNo?: string;
+      appointmentValidityDays?: number;
+    },
+    actorUserId: string,
+  ) {
+    await this.assertCanManageProvider(practiceId, actorUserId, providerId);
+    await this.applyDuePendingSchedule(providerId);
+
+    const built = this.buildProviderScheduleVersion(practiceId, providerId, data);
+    const plan = await this.planScheduleEffectiveFrom(
+      practiceId,
+      providerId,
+      data.locationId,
+      built.mode,
+      data.effectiveFrom,
+    );
+    const effectiveFrom = plan.effectiveFrom;
+    const today = todayIso();
+    const startsToday = effectiveFrom <= today;
+    const conflicts = await this.scheduleConflicts(
+      practiceId,
+      providerId,
+      data.locationId,
+      built.rows,
+      effectiveFrom,
+    );
+
+    const licenseNo = data.licenseNo?.trim();
+    const name = data.name?.trim();
+    const validity =
+      data.appointmentValidityDays != null
+        ? Math.min(90, Math.max(1, Number(data.appointmentValidityDays) || 7))
+        : undefined;
+
+    const provider = await prisma.$transaction(async (tx) => {
       await Promise.all([
         name
           ? tx.user.update({ where: { id: providerId }, data: { name } })
@@ -2349,16 +2516,11 @@ export const PracticeService = {
           data: {
             ...(licenseNo ? { licenseNo } : {}),
             ...(validity != null ? { appointmentValidityDays: validity } : {}),
-            availableTimes: `${workingDays.join(",")}|${data.startTime}-${data.endTime}`,
-            ...(modeChanging && pendingPayload
-              ? {
-                  pendingSchedule: pendingPayload,
-                  pendingScheduleEffective: parseLocalDate(tomorrowIso),
-                }
-              : {
-                  pendingSchedule: Prisma.JsonNull,
-                  pendingScheduleEffective: null,
-                }),
+            ...(startsToday
+              ? { availableTimes: `${built.workingDays.join(",")}|${data.startTime}-${data.endTime}` }
+              : {}),
+            pendingSchedule: Prisma.JsonNull,
+            pendingScheduleEffective: null,
           },
         }),
       ]);
@@ -2382,72 +2544,81 @@ export const PracticeService = {
           practiceId,
           providerId,
           locationId: data.locationId,
+          effectiveFrom: { gte: dbDate(effectiveFrom) },
         },
       });
-      await tx.providerSchedule.createMany({ data: scheduleRows });
+      await tx.providerSchedule.createMany({
+        data: built.rows.map((r) => ({ ...r, effectiveFrom: dbDate(effectiveFrom) })),
+      });
 
-      const [created, user] = await Promise.all([
-        tx.providerSchedule.findMany({
-          where: {
-            practiceId,
-            providerId,
-            locationId: data.locationId,
-            isActive: true,
-          },
-          orderBy: { dayOfWeek: "asc" },
-        }),
-        tx.user.findUnique({
-          where: { id: providerId },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            doctor: {
-              select: {
-                licenseNo: true,
-                appointmentValidityDays: true,
-                pendingSchedule: true,
-                pendingScheduleEffective: true,
-              },
+      return tx.user.findUnique({
+        where: { id: providerId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          doctor: {
+            select: {
+              licenseNo: true,
+              appointmentValidityDays: true,
+              pendingSchedule: true,
+              pendingScheduleEffective: true,
             },
           },
-        }),
-      ]);
-
-      return [created, user] as const;
+        },
+      });
     });
 
-    if (modeChanging && pendingPayload) {
+    const [schedules, upcomingChanges] = await Promise.all([
+      loadSchedulesOn({ practiceId, providerId, locationId: data.locationId }, today).then(
+        (rows) => rows.sort((a, b) => a.dayOfWeek - b.dayOfWeek),
+      ),
+      this.getUpcomingSchedules(practiceId, providerId),
+    ]);
+    const activeMode = resolveProviderBookingMode(schedules) ?? built.mode;
+
+    if (plan.modeChanging) {
       void this.notifyBookingModeChange({
         practiceId,
         providerId,
         providerName: provider?.name ?? null,
-        fromMode: currentMode!,
-        toMode: requestedMode,
-        effectiveDate: tomorrowIso,
+        fromMode: plan.currentMode!,
+        toMode: built.mode,
+        effectiveDate: effectiveFrom,
       }).catch((err) =>
         console.warn("mode-change notification skipped:", err),
       );
     }
 
+    const modeLabel = built.mode === ScheduleMode.TOKEN_BASED ? "Token queue" : "Time slots";
+    const affected = conflicts.length
+      ? ` ${conflicts.length} booked appointment${conflicts.length === 1 ? " falls" : "s fall"} outside the new schedule and stay booked — contact ${conflicts.length === 1 ? "that patient" : "those patients"} if needed.`
+      : "";
     return {
       schedules,
       provider,
-      modeChangeDeferred: modeChanging,
-      modeChangeEffectiveDate: modeChanging ? tomorrowIso : null,
-      pendingMode: modeChanging ? requestedMode : null,
-      activeMode: applyMode,
-      message: modeChanging
-        ? `Booking type switch to ${
-            requestedMode === ScheduleMode.TOKEN_BASED
-              ? "Token queue"
-              : "Time slots"
-          } is scheduled. It will appear for patients from ${tomorrowIso} (tomorrow). Today's appointments keep the current mode.`
-        : "Provider settings saved.",
+      effectiveFrom,
+      scheduledChange: !startsToday,
+      upcomingChanges,
+      conflicts,
+      modeChangeDeferred: plan.modeChanging,
+      modeChangeEffectiveDate: plan.modeChanging ? effectiveFrom : null,
+      pendingMode: plan.modeChanging ? built.mode : null,
+      activeMode,
+      message:
+        (plan.modeChanging
+          ? `Booking type switch to ${modeLabel} is scheduled from ${effectiveFrom}. Appointments before that keep the current mode.`
+          : startsToday
+            ? "Provider settings saved."
+            : `New schedule saved. It applies from ${effectiveFrom}; days before that keep the current schedule.`) +
+        affected,
     };
   },
 
-  /** Apply deferred Time↔Token switches whose effective date is today or earlier. */
+  /**
+   * Legacy: turn a pre-versioning deferred switch (`Doctor.pendingSchedule`)
+   * into a schedule version at its effective date.
+   */
   async applyDuePendingSchedule(providerId: string) {
     const doctor = await prisma.doctor.findUnique({
       where: { id: providerId },
@@ -2458,97 +2629,49 @@ export const PracticeService = {
     });
     if (!doctor?.pendingSchedule || !doctor.pendingScheduleEffective) return false;
 
-    const effectiveIso = formatLocalDate(doctor.pendingScheduleEffective);
-    const todayIso = formatLocalDate(new Date());
-    if (effectiveIso > todayIso) return false;
-
-    const pending = doctor.pendingSchedule as {
-      locationId?: string;
-      bookingType?: string;
-      workingDays?: number[];
-      startTime?: string;
-      endTime?: string;
-      breakStartTime?: string;
-      breakEndTime?: string;
-      slotDurationMins?: number;
-      patientsPerSlot?: number;
-    };
-    const locationId = pending.locationId?.trim();
-    if (!locationId || !pending.startTime || !pending.endTime) {
-      await prisma.doctor.update({
+    const clear = () =>
+      prisma.doctor.update({
         where: { id: providerId },
-        data: {
-          pendingSchedule: Prisma.JsonNull,
-          pendingScheduleEffective: null,
-        },
+        data: { pendingSchedule: Prisma.JsonNull, pendingScheduleEffective: null },
       });
-      return false;
-    }
 
+    const pending = doctor.pendingSchedule as Partial<ProviderScheduleForm>;
+    const locationId = pending.locationId?.trim();
     const membership = await prisma.practiceMember.findFirst({
       where: { userId: providerId, isActive: true },
       select: { practiceId: true },
     });
     if (!membership) return false;
-
-    const mode =
-      pending.bookingType === "TOKEN" || pending.bookingType === "TOKEN_BASED"
-        ? ScheduleMode.TOKEN_BASED
-        : ScheduleMode.TIME_BASED;
-    const isTime = mode === ScheduleMode.TIME_BASED;
-    const workingDays = Array.from(
-      new Set(
-        (pending.workingDays ?? [])
-          .map(Number)
-          .filter((d) => d >= 0 && d <= 6),
-      ),
-    );
-    if (!workingDays.length) {
-      await prisma.doctor.update({
-        where: { id: providerId },
-        data: {
-          pendingSchedule: Prisma.JsonNull,
-          pendingScheduleEffective: null,
-        },
-      });
+    if (!locationId || !pending.startTime || !pending.endTime) {
+      await clear();
       return false;
     }
 
-    const slotMins = Math.min(
-      120,
-      Math.max(5, Number(pending.slotDurationMins) || 15),
-    );
-    const patientsPerSlot = isTime
-      ? 1
-      : Math.min(50, Math.max(1, Number(pending.patientsPerSlot) || 1));
-    const workSpan =
-      minutesOf(pending.endTime) - minutesOf(pending.startTime);
-    const maxTokens = isTime
-      ? null
-      : Math.max(
-          patientsPerSlot,
-          Math.floor((workSpan / slotMins) * patientsPerSlot),
-        );
-    const breakStart = pending.breakStartTime?.trim() || null;
-    const breakEnd = pending.breakEndTime?.trim() || null;
+    const built = (() => {
+      try {
+        return this.buildProviderScheduleVersion(membership.practiceId, providerId, {
+        locationId,
+        bookingType: pending.bookingType ?? "TIME",
+        workingDays: pending.workingDays ?? [],
+        startTime: pending.startTime,
+        endTime: pending.endTime,
+        breakStartTime: pending.breakStartTime,
+        breakEndTime: pending.breakEndTime,
+        slotDurationMins: pending.slotDurationMins,
+        patientsPerSlot: pending.patientsPerSlot,
+        });
+      } catch {
+        return null;
+      }
+    })();
+    if (!built) {
+      await clear();
+      return false;
+    }
 
-    const scheduleRows = workingDays.map((dayOfWeek) => ({
-      practiceId: membership.practiceId,
-      providerId,
-      locationId,
-      dayOfWeek,
-      mode,
-      slotIntervalMin: isTime ? slotMins : null,
-      startTime: isTime ? pending.startTime! : null,
-      endTime: isTime ? pending.endTime! : null,
-      maxPerSlot: patientsPerSlot,
-      sessionStart: !isTime ? pending.startTime! : null,
-      sessionEnd: !isTime ? pending.endTime! : null,
-      maxTokens,
-      breakStartTime: breakStart,
-      breakEndTime: breakEnd,
-      isActive: true,
-    }));
+    const legacyDay = localDayOfSessionDate(doctor.pendingScheduleEffective);
+    const today = todayIso();
+    const effectiveFrom = legacyDay > today ? legacyDay : today;
 
     await prisma.$transaction(async (tx) => {
       await tx.providerSchedule.deleteMany({
@@ -2556,15 +2679,15 @@ export const PracticeService = {
           practiceId: membership.practiceId,
           providerId,
           locationId,
+          effectiveFrom: { gte: dbDate(effectiveFrom) },
         },
       });
-      await tx.providerSchedule.createMany({ data: scheduleRows });
+      await tx.providerSchedule.createMany({
+        data: built.rows.map((r) => ({ ...r, effectiveFrom: dbDate(effectiveFrom) })),
+      });
       await tx.doctor.update({
         where: { id: providerId },
-        data: {
-          pendingSchedule: Prisma.JsonNull,
-          pendingScheduleEffective: null,
-        },
+        data: { pendingSchedule: Prisma.JsonNull, pendingScheduleEffective: null },
       });
     });
     return true;
@@ -2613,9 +2736,9 @@ export const PracticeService = {
     const dayEnd = endOfLocalDay(date);
 
     const [schedules, bookings, overrides] = await Promise.all([
-      prisma.providerSchedule.findMany({
-        where: { practiceId, providerId, dayOfWeek, isActive: true },
-      }),
+      loadSchedulesOn({ practiceId, providerId }, formatLocalDate(date)).then((rows) =>
+        rows.filter((s) => s.dayOfWeek === dayOfWeek),
+      ),
       prisma.practiceBooking.findMany({
         where: {
           practiceId,

@@ -173,12 +173,17 @@ router.get(
         providerId,
         req.sessionUser!.id,
       );
-      const pendingModeChange = providerId
-        ? await PracticeService.getPendingModeChange(providerId)
-        : null;
+      const practiceId = param(req.params.practiceId);
+      const [pendingModeChange, upcomingChanges] = providerId
+        ? await Promise.all([
+            PracticeService.getPendingModeChange(providerId, practiceId),
+            PracticeService.getUpcomingSchedules(practiceId, providerId),
+          ])
+        : [null, []];
       return ResponseHandler.fetchSuccessful(res, "schedules fetched.", {
         schedules,
         pendingModeChange,
+        upcomingChanges,
       });
     } catch (error) {
       next(error);
@@ -216,6 +221,42 @@ router.put(
         req.sessionUser!.id,
       );
       return ResponseHandler.fetchSuccessful(res, "provider settings saved.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/:practiceId/provider-settings/preview",
+  requireAuth("schedule:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await PracticeService.previewProviderSettings(
+        param(req.params.practiceId),
+        req.body.providerId ?? req.sessionUser!.id,
+        req.body,
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "schedule change preview.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.delete(
+  "/:practiceId/schedules/upcoming",
+  requireAuth("schedule:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await PracticeService.cancelUpcomingSchedule(
+        param(req.params.practiceId),
+        (req.query.providerId as string | undefined) ?? req.sessionUser!.id,
+        String(req.query.effectiveFrom ?? ""),
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "scheduled change cancelled.", data);
     } catch (error) {
       next(error);
     }

@@ -173,6 +173,16 @@ BookingService.createBooking({ slotStart | sessionDate, mode, patientPhone, … 
         └─ async: notify queue + Socket broadcast
 ```
 
+**Schedule versions (effective dates).** `provider_schedules` rows sharing an `effective_from` form one weekly schedule. Every reader (availability, create / reschedule booking, day view, extra-slot check, public profile) uses the version with the latest `effective_from` ≤ the appointment's clinic day (`scheduleVersions.ts#loadSchedulesOn`), per location. Rows that existed before versioning are the baseline (`2000-01-01`).
+
+Editing hours (Settings → Account, or Practice → Hours): the form has **Changes apply from** (default today; max one year ahead; a Time slots ↔ Token queue switch starts tomorrow at the earliest).
+1. Save first calls `POST …/provider-settings/preview` (read-only): upcoming *Scheduled / Requested / Accepted* bookings that fit the version in force on their day but not the new one.
+2. If any, a dialog lists them with **Apply from {day after the last one} instead**, **Apply anyway**, or **Back**. Bookings are never moved or cancelled — they stay booked; the clinic contacts the patient if needed.
+3. `PUT …/provider-settings` writes the new version at that date and replaces versions starting on/after it; days before keep their version. A per-day `PUT …/schedules` copies the version in force on its date and changes one weekday.
+4. Future versions show as *Scheduled change from …* with **Cancel scheduled change** (`DELETE …/schedules/upcoming?providerId&effectiveFrom`, future dates only). `GET …/schedules` returns today's rows plus `upcomingChanges`; `pendingModeChange` is derived from the first upcoming version that switches mode.
+
+Old provider-app builds send no date, so their saves start today (or tomorrow for a mode switch), matching the previous behaviour. `Doctor.pendingSchedule` is no longer written; any legacy value is turned into a version.
+
 Status lifecycle (doctor queue):  
 `ACCEPTED` → `WAITING` → `IN_PROGRESS` → `COMPLETED` · or `CANCELED` / `NO_SHOW`.  
 `COMPLETED` is set only from the visit page (**Finish appointment** on web, **Save & finish** in the provider app), which saves remarks + medicines in the same call. Queue / Appointments list controls stop at *Appointment started* (+ No-show / Cancel). Server enforces it: `PATCH /procto/bookings/:id/status` rejects `COMPLETED` (400); finishing goes through `PATCH /procto/bookings/:id/visit` only.
