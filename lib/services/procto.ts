@@ -327,6 +327,19 @@ export const proctoService = {
       body: JSON.stringify(body),
     }),
 
+  /** Dry run: upcoming appointments the new schedule would no longer offer. */
+  previewProviderSettings: (practiceId: string, body: Record<string, unknown>) =>
+    proctoFetch(`/procto/practices/${practiceId}/provider-settings/preview`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }) as Promise<ProctoResult<SchedulePreview>>,
+
+  cancelUpcomingSchedule: (practiceId: string, providerId: string, effectiveFrom: string) =>
+    proctoFetch(
+      `/procto/practices/${practiceId}/schedules/upcoming?providerId=${encodeURIComponent(providerId)}&effectiveFrom=${encodeURIComponent(effectiveFrom)}`,
+      { method: "DELETE" },
+    ),
+
   getOverrides: (practiceId: string, providerId?: string) =>
     proctoFetch(
       `/procto/practices/${practiceId}/overrides${providerId ? `?providerId=${providerId}` : ""}`,
@@ -765,6 +778,36 @@ export type RazorpaySettings = {
 };
 
 type ProctoResult<T> = { status: string; message?: string; data?: T };
+
+export type ScheduleConflict = {
+  bookingId: string;
+  patientName: string | null;
+  day: string;
+  when: string;
+  reason: string;
+};
+
+export type SchedulePreview = {
+  effectiveFrom: string;
+  minEffectiveFrom: string;
+  modeChanging: boolean;
+  conflicts: ScheduleConflict[];
+  safeEffectiveFrom: string;
+};
+
+/** A saved schedule version that starts after today. */
+export type UpcomingScheduleChange = {
+  effectiveFrom: string;
+  mode: "TIME_BASED" | "TOKEN_BASED" | null;
+  workingDays: number[];
+  startTime: string | null;
+  endTime: string | null;
+  breakStartTime: string | null;
+  breakEndTime: string | null;
+  slotIntervalMin: number | null;
+  maxPerSlot: number | null;
+  locationId?: string;
+};
 
 export type PaymentsListResponse = {
   items: PaymentRequestRow[];

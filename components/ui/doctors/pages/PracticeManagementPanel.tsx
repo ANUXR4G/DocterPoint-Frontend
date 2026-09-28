@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { proctoService, type ProctoBooking } from "@/lib/services/procto";
+import {
+  proctoService,
+  type ProctoBooking,
+  type SchedulePreview,
+  type UpcomingScheduleChange,
+} from "@/lib/services/procto";
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader";
 import {
   filterBookingsByDate,
@@ -19,6 +24,15 @@ import {
 } from "@/lib/doctorPracticeTabs";
 import { formatPracticeTime } from "@/lib/practiceTime";
 import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal";
+import {
+  EffectiveFromField,
+  ScheduleConflictModal,
+  UpcomingScheduleChanges,
+  addDaysIso,
+  clinicTodayIso,
+  formatScheduleDay,
+  normalizeUpcomingChanges,
+} from "@/components/ui/procto/ScheduleChangeControls";
 
 type Tab = PracticeTab;
 
@@ -109,32 +123,21 @@ type ScheduleRow = {
 
 function normalizeSchedulesResponse(data: unknown): {
   schedules: ScheduleRow[]
-  pendingModeChange: {
-    toMode: string
-    fromMode?: string | null
-    effectiveDate: string
-  } | null
+  upcomingChanges: UpcomingScheduleChange[]
 } {
   if (Array.isArray(data)) {
-    return { schedules: data as ScheduleRow[], pendingModeChange: null }
+    return { schedules: data as ScheduleRow[], upcomingChanges: [] }
   }
   if (data && typeof data === "object") {
-    const obj = data as {
-      schedules?: ScheduleRow[]
-      pendingModeChange?: {
-        toMode: string
-        fromMode?: string | null
-        effectiveDate: string
-      } | null
-    }
+    const obj = data as { schedules?: ScheduleRow[] }
     if (Array.isArray(obj.schedules)) {
       return {
         schedules: obj.schedules,
-        pendingModeChange: obj.pendingModeChange ?? null,
+        upcomingChanges: normalizeUpcomingChanges(data),
       }
     }
   }
-  return { schedules: [], pendingModeChange: null }
+  return { schedules: [], upcomingChanges: [] }
 }
 
 
@@ -219,11 +222,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [calendar, setCalendar] = useState<CalendarData | null>(null);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
-  const [pendingModeChange, setPendingModeChange] = useState<{
-    toMode: string
-    fromMode?: string | null
-    effectiveDate: string
-  } | null>(null);
+  const [upcomingChanges, setUpcomingChanges] = useState<UpcomingScheduleChange[]>([]);
   const [overrides, setOverrides] = useState<unknown[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -278,7 +277,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
     if (res.status === "successful") {
       const normalized = normalizeSchedulesResponse(res.data);
       setSchedules(normalized.schedules);
-      setPendingModeChange(normalized.pendingModeChange);
+      setUpcomingChanges(normalized.upcomingChanges);
     }
   }, [practice, providerId]);
 
@@ -599,7 +598,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
               providerId={providerId}
               locationId={locationId}
               schedules={schedules}
-              pendingModeChange={pendingModeChange}
+              upcomingChanges={upcomingChanges}
               providerUser={
                 practice.members.find((m) => m.userId === providerId)?.user ?? {
                   id: providerId,
@@ -1207,12 +1206,18 @@ function DoctorSchedulePanel({
   );
 }
 
+type PanelSaveOpts = {
+  bookingTypeOverride?: "TIME" | "TOKEN";
+  effectiveFrom?: string;
+  skipPreview?: boolean;
+};
+
 function SchedulePanel({
   practiceId,
   providerId,
   locationId,
   schedules,
-  pendingModeChange,
+  upcomingChanges = [],
   providerUser,
   onSaved,
 }: {
@@ -1220,11 +1225,7 @@ function SchedulePanel({
   providerId: string;
   locationId: string;
   schedules: ScheduleRow[];
-  pendingModeChange?: {
-    toMode: string
-    fromMode?: string | null
-    effectiveDate: string
-  } | null;
+  upcomingChanges?: UpcomingScheduleChange[];
   providerUser: {
     id: string;
     name: string | null;
@@ -1272,6 +1273,12 @@ function SchedulePanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [modeConfirm, setModeConfirm] = useState<"TIME" | "TOKEN" | null>(null);
+  const [effectiveFrom, setEffectiveFrom] = useState(clinicTodayIso);
+  const [cancellingDate, setCancellingDate] = useState<string | null>(null);
+  const [conflictReview, setConflictReview] = useState<{
+    preview: SchedulePreview;
+    opts?: PanelSaveOpts;
+  } | null>(null);
 
   useEffect(() => {
     setName(providerUser.name ?? "");
@@ -1306,7 +1313,7 @@ function SchedulePanel({
     setModeConfirm(next);
   }
 
-  async function save(opts?: { bookingTypeOverride?: "TIME" | "TOKEN" }) {
+  async function save(opts?: PanelSaveOpts): Promise<boolean | "conflicts"> {
     setError("");
     const modeOnly = Boolean(opts?.bookingTypeOverride);
     if (!modeOnly && (!name.trim() || !licenseNo.trim())) {
@@ -1320,11 +1327,9 @@ function SchedulePanel({
 
     const nextType = opts?.bookingTypeOverride ?? bookingType;
     setSaving(true);
-    const res = await proctoService.saveProviderSettings(practiceId, {
+    const scheduleBody = {
       providerId,
       locationId,
-      name: name.trim() || providerUser.name || undefined,
-      licenseNo: licenseNo.trim() || providerUser.doctor?.licenseNo || undefined,
       bookingType: nextType,
       workingDays,
       startTime,
@@ -1333,6 +1338,20 @@ function SchedulePanel({
       breakEndTime: breakEndTime || undefined,
       slotDurationMins: Number(slotDurationMins) || 15,
       patientsPerSlot: Number(patientsPerSlot) || 1,
+      effectiveFrom: opts?.effectiveFrom ?? effectiveFrom,
+    };
+    if (!opts?.skipPreview) {
+      const preview = await proctoService.previewProviderSettings(practiceId, scheduleBody);
+      if (preview.status === "successful" && preview.data?.conflicts.length) {
+        setSaving(false);
+        setConflictReview({ preview: preview.data, opts });
+        return "conflicts";
+      }
+    }
+    const res = await proctoService.saveProviderSettings(practiceId, {
+      ...scheduleBody,
+      name: name.trim() || providerUser.name || undefined,
+      licenseNo: licenseNo.trim() || providerUser.doctor?.licenseNo || undefined,
       appointmentValidityDays: (() => {
         const days = Number(appointmentValidityDays);
         return Number.isFinite(days) && days >= 1 && days <= 90 ? days : 7;
@@ -1358,6 +1377,7 @@ function SchedulePanel({
           ? "Booking type switch confirmed — it takes effect tomorrow."
           : "Doctor settings saved."),
     });
+    setEffectiveFrom(clinicTodayIso());
     return true;
   }
 
@@ -1368,6 +1388,33 @@ function SchedulePanel({
     if (ok) setModeConfirm(null);
   }
 
+  async function resolveConflicts(date?: string) {
+    if (!conflictReview) return;
+    const { opts, preview } = conflictReview;
+    if (date) setEffectiveFrom(date);
+    const ok = await save({
+      ...opts,
+      effectiveFrom: date ?? preview.effectiveFrom,
+      skipPreview: true,
+    });
+    if (ok) setConflictReview(null);
+  }
+
+  async function cancelUpcoming(date: string) {
+    setCancellingDate(date);
+    setError("");
+    const res = await proctoService.cancelUpcomingSchedule(practiceId, providerId, date);
+    setCancellingDate(null);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not cancel the scheduled change.");
+      return;
+    }
+    onSaved({ message: `Scheduled change from ${formatScheduleDay(date)} cancelled.` });
+  }
+
+  const modeStartIso =
+    effectiveFrom > clinicTodayIso() ? effectiveFrom : addDaysIso(clinicTodayIso(), 1);
+
   const modeLabel = (id: "TIME" | "TOKEN") =>
     id === "TOKEN" ? "Token queue" : "Time slots";
 
@@ -1377,6 +1424,7 @@ function SchedulePanel({
         open={modeConfirm != null}
         fromLabel={modeLabel(activeMode)}
         toLabel={modeLabel(modeConfirm ?? activeMode)}
+        effectiveDateLabel={formatScheduleDay(modeStartIso)}
         confirming={saving}
         error={modeConfirm ? error : ""}
         onCancel={() => {
@@ -1385,25 +1433,25 @@ function SchedulePanel({
         }}
         onConfirm={() => void confirmModeChange()}
       />
+      <ScheduleConflictModal
+        preview={conflictReview?.preview ?? null}
+        busy={saving}
+        onApplyFrom={(date) => void resolveConflicts(date)}
+        onApplyAnyway={() => void resolveConflicts()}
+        onCancel={() => setConflictReview(null)}
+      />
       <div className="rounded-xl border dark:border-neutral-700 p-4 space-y-5">
         <h2 className="font-semibold">Doctor & schedule settings</h2>
         <p className="text-xs opacity-60 -mt-3">
-          Per doctor — pick Time slots or Token queue (confirm to apply from
-          tomorrow).
+          Per doctor — changes start on the &ldquo;Changes apply from&rdquo;
+          date; days before it keep the current schedule.
         </p>
 
-        {pendingModeChange ? (
-          <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
-            Switching to{" "}
-            <strong>
-              {pendingModeChange.toMode === "TOKEN_BASED"
-                ? "Token queue"
-                : "Time slots"}
-            </strong>{" "}
-            on <strong>{pendingModeChange.effectiveDate}</strong>. Until then,
-            patients still book with the current mode.
-          </p>
-        ) : null}
+        <UpcomingScheduleChanges
+          changes={upcomingChanges}
+          cancellingDate={cancellingDate}
+          onCancel={(date) => void cancelUpcoming(date)}
+        />
 
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#0099ff]">
@@ -1461,8 +1509,8 @@ function SchedulePanel({
             ))}
           </div>
           <p className="mt-2 text-xs opacity-60">
-            Switching opens a confirmation. After confirm, the new type takes
-            effect tomorrow.
+            Switching opens a confirmation. The new type starts tomorrow at the
+            earliest.
           </p>
         </div>
 
@@ -1592,6 +1640,13 @@ function SchedulePanel({
             </label>
           </div>
         </div>
+
+        <EffectiveFromField
+          compact
+          value={effectiveFrom}
+          onChange={setEffectiveFrom}
+          disabled={saving}
+        />
 
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
