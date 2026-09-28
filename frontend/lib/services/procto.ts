@@ -135,7 +135,8 @@ export const proctoService = {
     practiceId: string;
     providerId: string;
     locationId?: string;
-    patientName: string;
+    /** Registered patient (MRN) picked from the desk search. */
+    patientId: string;
     patientPhone: string;
     disease?: string;
   }) =>
@@ -394,6 +395,31 @@ export const proctoService = {
       method: "POST",
       body: JSON.stringify({ ...body, type: "EXTRA_SLOT" }),
     }) as Promise<ProctoResult<ExtraSlotsResult | ExtraSlotsNeedsConfirmation>>,
+
+  searchDeskPatients: (practiceId: string, q: string) =>
+    proctoFetch(
+      `/procto/practices/${practiceId}/desk-patients?q=${encodeURIComponent(q)}`,
+    ) as Promise<ProctoResult<{ patients: DeskPatient[] }>>,
+
+  registerDeskPatient: (practiceId: string, body: DeskPatientRegistration) =>
+    proctoFetch(`/procto/practices/${practiceId}/desk-patients`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }) as Promise<ProctoResult<DeskPatient>>,
+
+  getAuditLog: (
+    practiceId: string,
+    q: { action?: string; providerId?: string; from?: string; to?: string; before?: string; limit?: number } = {},
+  ) => {
+    const qs = new URLSearchParams(
+      Object.entries(q)
+        .filter(([, v]) => v !== undefined && v !== "")
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    return proctoFetch(`/procto/practices/${practiceId}/audit${qs ? `?${qs}` : ""}`) as Promise<
+      ProctoResult<AuditLogPage>
+    >;
+  },
 
   getMyPracticePermissions: (practiceId: string) =>
     proctoFetch(`/procto/practices/${practiceId}/permissions`) as Promise<
@@ -806,7 +832,8 @@ export type ProctoWsEvent =
       event: "notification_created";
       notification: Record<string, unknown>;
     }
-  | { event: "payment_updated"; payment: PaymentRequestRow };
+  | { event: "payment_updated"; payment: PaymentRequestRow }
+  | { event: "calendar_updated"; providerId: string; dates: string[] };
 
 export type PaymentRequestStatus = "PENDING" | "PAID" | "EXPIRED" | "CANCELLED";
 
@@ -880,6 +907,10 @@ export type ExtraWindow = TimeWindow & {
   /** Patients per slot (1 = normal, more = shared queue slot). */
   capacity: number;
   seriesId: string | null;
+  createdBy: string | null;
+  createdAt: string | null;
+  /** Staff member who added it (name + clinic role); null for older rows. */
+  addedBy?: { name: string; role: string | null } | null;
 };
 
 export type DayWindows = {
@@ -944,10 +975,65 @@ export type ExtraSlotsNeedsConfirmation = ExtraSlotsPlan & {
 
 export type PracticePermissionScope = "ANY" | "OWN" | null;
 
+/** Patient found or registered at the front desk. */
+export type DeskPatient = {
+  patientId: string;
+  name: string;
+  mrn: string | null;
+  phone: string;
+  gender: string | null;
+  dateOfBirth: string | null;
+  age: number | null;
+  relationship: string | null;
+  /** Visited / registered at this clinic before. */
+  knownHere: boolean;
+  lastVisitAt: string | null;
+};
+
+export type DeskPatientRegistration = {
+  name: string;
+  phone: string;
+  gender: "male" | "female" | "others";
+  /** YYYY-MM-DD */
+  dateOfBirth: string;
+  email?: string;
+  relationship?: string;
+};
+
+export type AuditAction =
+  | "SLOT_CREATED"
+  | "SLOT_REMOVED"
+  | "OVERRIDE_CREATED"
+  | "WALK_IN_ADDED"
+  | "PATIENT_REGISTERED";
+
+export type AuditEvent = {
+  id: string;
+  action: AuditAction;
+  actorUserId: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  providerId: string | null;
+  summary: string;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type AuditLogPage = {
+  scope: "ANY" | "OWN";
+  events: AuditEvent[];
+  nextBefore: string | null;
+};
+
 export type MyPracticePermissions = {
   userId: string;
   role: string;
-  permissions: { MANAGE_SLOTS_INLINE: PracticePermissionScope };
+  permissions: {
+    MANAGE_SLOTS_INLINE: PracticePermissionScope;
+    VIEW_AUDIT_LOG: PracticePermissionScope;
+  };
 };
 
 export type ExtraSlotsResult = ExtraSlotsPlan & {

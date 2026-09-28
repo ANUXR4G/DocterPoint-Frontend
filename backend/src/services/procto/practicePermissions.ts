@@ -4,17 +4,17 @@ import type { PracticeMemberRole } from "@prisma/client";
  * Practice-level permissions. Every clinic login carries the same global token scopes,
  * so what a member may do inside a clinic comes from their membership role here.
  */
-export const PRACTICE_PERMISSIONS = ["MANAGE_SLOTS_INLINE"] as const;
+export const PRACTICE_PERMISSIONS = ["MANAGE_SLOTS_INLINE", "VIEW_AUDIT_LOG"] as const;
 export type PracticePermission = (typeof PRACTICE_PERMISSIONS)[number];
 
-/** Whose calendar a permission covers: every doctor's, or only the member's own. */
+/** Whose calendar / records a permission covers: every doctor's, or only the member's own. */
 export type PermissionScope = "ANY" | "OWN";
 
 const ROLE_PERMISSIONS: Record<PracticeMemberRole, Partial<Record<PracticePermission, PermissionScope>>> = {
-  PRACTICE_OWNER: { MANAGE_SLOTS_INLINE: "ANY" },
-  PRACTICE_ADMIN: { MANAGE_SLOTS_INLINE: "ANY" },
+  PRACTICE_OWNER: { MANAGE_SLOTS_INLINE: "ANY", VIEW_AUDIT_LOG: "ANY" },
+  PRACTICE_ADMIN: { MANAGE_SLOTS_INLINE: "ANY", VIEW_AUDIT_LOG: "ANY" },
   RECEPTIONIST: { MANAGE_SLOTS_INLINE: "ANY" },
-  DOCTOR: { MANAGE_SLOTS_INLINE: "OWN" },
+  DOCTOR: { MANAGE_SLOTS_INLINE: "OWN", VIEW_AUDIT_LOG: "OWN" },
 };
 
 export function permissionScope(

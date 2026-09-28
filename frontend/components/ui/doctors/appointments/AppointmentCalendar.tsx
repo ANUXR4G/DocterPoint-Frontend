@@ -323,6 +323,7 @@ export default function AppointmentCalendar() {
     isClinicAdmin,
     membershipRole,
     actorUserId,
+    lastCalendarEvent,
   } = usePracticeDashboard()
   const isFrontDesk = isClinicAdmin || membershipRole === "RECEPTIONIST"
   const [error, setError] = useState("")
@@ -502,6 +503,24 @@ export default function AppointmentCalendar() {
     setDayWindows({})
     void loadDayWindows()
   }, [loadDayWindows])
+
+  useEffect(() => {
+    if (!lastCalendarEvent || view !== "day") return
+    if (
+      lastCalendarEvent.dates.includes(ymd(anchor)) &&
+      columnKey.split(",").includes(lastCalendarEvent.providerId)
+    )
+      void loadDayWindows()
+    // Only react to new events, not to navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastCalendarEvent])
+
+  const [freshIds, setFreshIds] = useState<string[]>([])
+  useEffect(() => {
+    if (!freshIds.length) return
+    const t = window.setTimeout(() => setFreshIds([]), 6000)
+    return () => window.clearTimeout(t)
+  }, [freshIds])
 
   const windowSeed = useMemo(() => {
     const date = ymd(anchor)
@@ -791,6 +810,7 @@ export default function AppointmentCalendar() {
             onRemoveExtra={(id, extra, scope) =>
               void removeExtra(id, extra, scope)
             }
+            freshIds={freshIds}
           />
         ) : null}
 
@@ -848,8 +868,19 @@ export default function AppointmentCalendar() {
                 scope: result.seriesId ? "series" : "one",
               },
             })
-            if (view === "day" && target.date === ymd(anchor))
+            setFreshIds(result.ids?.length ? result.ids : [result.id])
+            const onScreen =
+              view === "day" &&
+              target.date === ymd(anchor) &&
+              columns.some((c) => c.id === target.providerId)
+            if (onScreen) {
               void loadDayWindows()
+            } else {
+              if (providerId !== "all" && providerId !== target.providerId)
+                setProviderId(target.providerId)
+              setAnchor(new Date(`${target.date}T00:00:00`))
+              setView("day")
+            }
           }}
         />
       ) : null}
@@ -866,6 +897,7 @@ function DayView({
   selection,
   onQuickCreate,
   onRemoveExtra,
+  freshIds,
 }: {
   day: Date
   bookings: CalBooking[]
@@ -879,6 +911,7 @@ function DayView({
     extra: TimeWindow & { id: string },
     scope: "one" | "series",
   ) => void
+  freshIds: string[]
 }) {
   const dateIso = ymd(day)
   const today = practiceTodayIso()
@@ -916,6 +949,7 @@ function DayView({
       selection={selection}
       onQuickCreate={onQuickCreate}
       onRemoveExtra={onRemoveExtra}
+      freshIds={freshIds}
       renderBooking={(id) => {
         const b = byId.get(id)
         return b ? <BookingCard booking={b} compact /> : null

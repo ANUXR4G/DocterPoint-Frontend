@@ -16,6 +16,8 @@ export function useClinicAdmin() {
   const [loading, setLoading] = useState(true)
   const [isClinicAdmin, setIsClinicAdmin] = useState(false)
   const [hasPractice, setHasPractice] = useState(false)
+  /** Reception only (no owner / admin / doctor membership) — no audit log. */
+  const [isReceptionOnly, setIsReceptionOnly] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -25,13 +27,16 @@ export function useClinicAdmin() {
       setHasPractice(list.length > 0)
       setIsClinicAdmin(
         list.some(
-          (m) =>
-            m.role === "PRACTICE_OWNER" || m.role === "PRACTICE_ADMIN",
+          (m) => m.role === "PRACTICE_OWNER" || m.role === "PRACTICE_ADMIN",
         ),
+      )
+      setIsReceptionOnly(
+        list.length > 0 && list.every((m) => m.role === "RECEPTIONIST"),
       )
     } else {
       setHasPractice(false)
       setIsClinicAdmin(false)
+      setIsReceptionOnly(false)
     }
     setLoading(false)
   }, [])
@@ -40,5 +45,5 @@ export function useClinicAdmin() {
     void refresh()
   }, [refresh])
 
-  return { loading, isClinicAdmin, hasPractice, refresh }
+  return { loading, isClinicAdmin, hasPractice, isReceptionOnly, refresh }
 }

@@ -86,6 +86,8 @@ export type PracticePatientRow = {
   }>
 }
 
+export type CalendarChange = { providerId: string; dates: string[]; at: number }
+
 type PracticeDashboardValue = {
   /** True only while membership is unresolved on first paint. */
   loading: boolean
@@ -126,6 +128,8 @@ type PracticeDashboardValue = {
   notificationTick: number
   /** Latest `payment_updated` row from the shared WS (Payments tab upserts it). */
   lastPaymentEvent: PaymentRequestRow | null
+  /** Latest `calendar_updated` (extra slots / blocks changed) — calendars refresh that doctor's day. */
+  lastCalendarEvent: CalendarChange | null
   refresh: (opts?: { silent?: boolean }) => Promise<void>
   patchBooking: (id: string, patch: Partial<ProctoBooking>) => void
   setBookings: React.Dispatch<React.SetStateAction<ProctoBooking[]>>
@@ -190,6 +194,8 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
   const [notificationTick, setNotificationTick] = useState(0)
   const [lastPaymentEvent, setLastPaymentEvent] =
     useState<PaymentRequestRow | null>(null)
+  const [lastCalendarEvent, setLastCalendarEvent] =
+    useState<CalendarChange | null>(null)
   const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bootInFlight = useRef(false)
   const lastBootAt = useRef(0)
@@ -352,6 +358,14 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
         setLastPaymentEvent(event.payment)
         return
       }
+      if (event.event === "calendar_updated") {
+        setLastCalendarEvent({
+          providerId: event.providerId,
+          dates: event.dates,
+          at: Date.now(),
+        })
+        return
+      }
       setBookingTick((n) => n + 1)
       const incoming = event.booking as Record<string, unknown> | undefined
       setBookings((prev) => {
@@ -404,6 +418,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       bookingTick,
       notificationTick,
       lastPaymentEvent,
+      lastCalendarEvent,
       refresh: load,
       patchBooking,
       setBookings,
@@ -429,6 +444,7 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
       bookingTick,
       notificationTick,
       lastPaymentEvent,
+      lastCalendarEvent,
       load,
       patchBooking,
     ],

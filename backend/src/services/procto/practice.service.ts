@@ -63,12 +63,15 @@ import {
   MAX_REPEAT_SPAN_DAYS,
   parseSlotOptions,
   planExtraSlots,
+  type DayWindows,
   type ExtraSlotPlan,
   type RepeatRule,
   WARNING_LABEL,
   weekdayOfIso,
 } from "./calendarSlots.js";
 import { deniedFor, permissionsFor } from "./practicePermissions.js";
+import { recordAudit } from "./practiceAudit.js";
+import { broadcastProctoEvent } from "./proctoSocket.js";
 import { randomUUID } from "node:crypto";
 
 /** "2026-11-05" → "Thu 5 Nov". */
@@ -1944,8 +1947,11 @@ export const PracticeService = {
         endTime: data.endTime,
         maxTokens: data.maxTokens,
         reason: data.reason,
+        createdBy: actorUserId,
       },
     });
+    void this.auditOverride(practiceId, providerId, override, actorUserId);
+    this.announceCalendar(practiceId, providerId, [data.date]);
 
     const affected = await prisma.practiceBooking.findMany({
       where: {
@@ -2134,6 +2140,7 @@ export const PracticeService = {
           slotIntervalMin: opts.slotIntervalMin,
           capacity: opts.capacity,
           seriesId,
+          createdBy: actorUserId,
         })),
       });
       return { p, ids };
@@ -2156,6 +2163,34 @@ export const PracticeService = {
     const message = repeat
       ? `Added ${hm12(startTime)}–${hm12(endTime)} for ${who} on ${this.extraPlanSummary(p, startTime, endTime, perSlot, true)}`
       : `Added ${first.slots} bookable ${first.slotIntervalMin}-min slot${first.slots === 1 ? "" : "s"} for ${who}, ${hm12(startTime)}–${hm12(endTime)}${perSlot}.`;
+    const last = p.dates[p.dates.length - 1];
+    const totalSlots = p.dates.reduce((n, d) => n + d.slots, 0);
+    void recordAudit({
+      practiceId,
+      actorUserId,
+      action: "SLOT_CREATED",
+      headline: repeat ? `Repeating slots created manually (${p.dates.length} days)` : "Slot created manually",
+      detail:
+        `${who}, ${shortDay(first.date)}${repeat ? ` – ${shortDay(last.date)}` : ""}, ${hm12(startTime)}–${hm12(endTime)}, ` +
+        `${totalSlots} slot${totalSlots === 1 ? "" : "s"} of ${first.slotIntervalMin} min${perSlot}` +
+        `${reason ? ` · ${reason}` : ""}${acknowledged.length ? ` · confirmed ${acknowledged.map((c) => WARNING_LABEL[c]).join(", ")}` : ""}`,
+      entityType: "schedule_override",
+      entityId: seriesId ?? ids[0],
+      providerId,
+      meta: {
+        ids,
+        seriesId,
+        dates: p.dates.map((d) => d.date),
+        startTime,
+        endTime,
+        slotIntervalMin: first.slotIntervalMin,
+        capacity: opts.capacity ?? 1,
+        reason,
+        confirmedWarnings: acknowledged,
+        skipped: p.skipped.map((s) => ({ date: s.date, code: s.code })),
+      },
+    });
+    this.announceCalendar(practiceId, providerId, p.dates.map((d) => d.date));
     return {
       id: ids[0],
       ids,
@@ -2254,9 +2289,9 @@ export const PracticeService = {
     if (!override || override.type !== OverrideType.EXTRA_SLOT || !override.startTime || !override.endTime) {
       throw new AppError(404, "Those extra slots no longer exist.");
     }
-    await this.assertCanManageSlots(practiceId, actorUserId, override.providerId);
+    const { providerName } = await this.assertCanManageSlots(practiceId, actorUserId, override.providerId);
     if (scope === "series" && override.seriesId) {
-      return this.deleteExtraSeries(practiceId, override.providerId, override.seriesId, actorUserId);
+      return this.deleteExtraSeries(practiceId, override.providerId, override.seriesId, actorUserId, providerName);
     }
     const dateIso = localDayOfSessionDate(override.date);
     const booked = await prisma.practiceBooking.count({
@@ -2281,10 +2316,28 @@ export const PracticeService = {
     console.log(
       `[calendar] extra slots removed ${dateIso} ${override.startTime}-${override.endTime} provider=${override.providerId} by=${actorUserId}`,
     );
+    void recordAudit({
+      practiceId,
+      actorUserId,
+      action: "SLOT_REMOVED",
+      headline: "Extra slot removed",
+      detail: `${drName(providerName)}, ${shortDay(dateIso)}, ${hm12(override.startTime)}–${hm12(override.endTime)}${override.reason ? ` · ${override.reason}` : ""}`,
+      entityType: "schedule_override",
+      entityId: override.id,
+      providerId: override.providerId,
+      meta: { ids: [override.id], seriesId: override.seriesId, dates: [dateIso], startTime: override.startTime, endTime: override.endTime },
+    });
+    this.announceCalendar(practiceId, override.providerId, [dateIso]);
     return { removed: true, message: `Removed extra slots ${hm12(override.startTime)}–${hm12(override.endTime)}.` };
   },
 
-  async deleteExtraSeries(practiceId: string, providerId: string, seriesId: string, actorUserId: string) {
+  async deleteExtraSeries(
+    practiceId: string,
+    providerId: string,
+    seriesId: string,
+    actorUserId: string,
+    providerName = "the doctor",
+  ) {
     const today = todayIso();
     const rows = await prisma.scheduleOverride.findMany({
       where: {
@@ -2324,6 +2377,21 @@ export const PracticeService = {
       `[calendar] extra series removed series=${seriesId} days=${removable.map((w) => w.day).join(",")} kept=${kept.length} provider=${providerId} by=${actorUserId}`,
     );
     const range = `${hm12(first.startTime!)}–${hm12(first.endTime!)}`;
+    const days = removable.map((w) => w.day);
+    void recordAudit({
+      practiceId,
+      actorUserId,
+      action: "SLOT_REMOVED",
+      headline: `Repeating slots removed (${days.length} day${days.length === 1 ? "" : "s"})`,
+      detail:
+        `${drName(providerName)}, ${shortDay(days[0])}${days.length > 1 ? ` – ${shortDay(days[days.length - 1])}` : ""}, ${range}` +
+        (kept.length ? ` · kept ${kept.map((w) => shortDay(w.day)).join(", ")} (booked visits)` : ""),
+      entityType: "schedule_override",
+      entityId: seriesId,
+      providerId,
+      meta: { ids: removable.map((w) => w.id), seriesId, dates: days, kept: kept.map((w) => w.day), startTime: first.startTime, endTime: first.endTime },
+    });
+    this.announceCalendar(practiceId, providerId, days);
     return {
       removed: true,
       count: removable.length,
@@ -3311,7 +3379,9 @@ export const PracticeService = {
           where: { id: practiceId },
           data: {
             ...(licenseNo ? { registrationNo: licenseNo } : {}),
-            ...(name && practice?.type === "SOLO" ? { name: `Dr. ${name}` } : {}),
+            ...(name && practice?.type === "SOLO"
+              ? { name: /^dr\b/i.test(name.trim()) ? name.trim() : `Dr. ${name}` }
+              : {}),
           },
         });
       }
@@ -3576,8 +3646,63 @@ export const PracticeService = {
       tokenSessions,
       overrides,
       configuredMode,
-      windows: dayWindows(allRows, overrides, date),
+      windows: await this.withAddedBy(practiceId, dayWindows(allRows, overrides, date)),
     };
+  },
+
+  /** Name and clinic role of whoever added each extra window (for the calendar's "Manual" badge). */
+  async withAddedBy(practiceId: string, windows: DayWindows): Promise<DayWindows> {
+    const ids = [...new Set(windows.extra.map((x) => x.createdBy).filter((id): id is string => !!id))];
+    if (!ids.length) return windows;
+    const members = await prisma.practiceMember.findMany({
+      where: { practiceId, userId: { in: ids } },
+      select: { userId: true, role: true, user: { select: { name: true, email: true } } },
+    });
+    const byId = new Map(members.map((m) => [m.userId, m]));
+    return {
+      ...windows,
+      extra: windows.extra.map((x) => {
+        const m = x.createdBy ? byId.get(x.createdBy) : undefined;
+        return { ...x, addedBy: m ? { name: m.user?.name?.trim() || m.user?.email || "Staff", role: m.role } : null };
+      }),
+    };
+  },
+
+  /** Other open calendars refresh the doctor's day(s) without a reload. */
+  announceCalendar(practiceId: string, providerId: string, dates: string[]) {
+    if (!dates.length) return;
+    void broadcastProctoEvent(practiceId, { event: "calendar_updated", providerId, dates }).catch(() => undefined);
+  },
+
+  async auditOverride(
+    practiceId: string,
+    providerId: string,
+    o: { id: string; type: OverrideType; date: Date; startTime: string | null; endTime: string | null; reason: string | null },
+    actorUserId: string,
+  ) {
+    const provider = await prisma.user.findUnique({ where: { id: providerId }, select: { name: true } });
+    const day = localDayOfSessionDate(o.date);
+    const headline =
+      o.type === OverrideType.EMERGENCY_LEAVE
+        ? "Emergency leave added"
+        : o.type === OverrideType.BLOCK_DAY
+          ? "Day blocked"
+          : o.type === OverrideType.BLOCK_SLOT
+            ? "Time blocked"
+            : "Schedule change added";
+    await recordAudit({
+      practiceId,
+      actorUserId,
+      action: "OVERRIDE_CREATED",
+      headline,
+      detail:
+        `${drName(provider?.name?.trim() || "the doctor")}, ${shortDay(day)}` +
+        `${o.startTime && o.endTime ? `, ${hm12(o.startTime)}–${hm12(o.endTime)}` : ""}${o.reason?.trim() ? ` · ${o.reason.trim()}` : ""}`,
+      entityType: "schedule_override",
+      entityId: o.id,
+      providerId,
+      meta: { type: o.type, date: day, startTime: o.startTime, endTime: o.endTime, reason: o.reason },
+    });
   },
 
   /**

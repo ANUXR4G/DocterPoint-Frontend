@@ -91,6 +91,8 @@ describe("calendar quick slots", () => {
         slotIntervalMin: 20,
         capacity: 1,
         seriesId: null,
+        createdBy: null,
+        createdAt: "1970-01-01T00:00:00.000Z",
       },
     ]);
     assert.equal(d.blocked.length, 1);
@@ -327,7 +329,7 @@ describe("calendar quick slots", () => {
     assert.equal(deniedFor("DOCTOR", "MANAGE_SLOTS_INLINE", "dr-a", "dr-a"), null);
     assert.match(deniedFor("DOCTOR", "MANAGE_SLOTS_INLINE", "dr-a", "dr-b") ?? "", /only change your own calendar/);
     assert.match(deniedFor("PATIENT", "MANAGE_SLOTS_INLINE", "x", "dr-a") ?? "", /needs MANAGE_SLOTS_INLINE/);
-    assert.deepEqual(permissionsFor("DOCTOR"), { MANAGE_SLOTS_INLINE: "OWN" });
+    assert.deepEqual(permissionsFor("DOCTOR"), { MANAGE_SLOTS_INLINE: "OWN", VIEW_AUDIT_LOG: "OWN" });
   });
 
   test("hm12 formats clinic times", () => {

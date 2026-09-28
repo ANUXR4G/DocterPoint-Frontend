@@ -528,7 +528,7 @@ export class AuthService {
       slug = `dr-${baseSlug}-${suffix++}`;
     }
 
-    const practiceName = `Dr. ${name}`;
+    const practiceName = /^dr\b/i.test(name.trim()) ? name.trim() : `Dr. ${name}`;
     const mrnPrefix = await allocateUniquePracticeMrnPrefix(practiceName);
 
     const practice = await prisma.practice.create({

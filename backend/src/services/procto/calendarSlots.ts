@@ -35,6 +35,10 @@ export type ExtraWindow = TimeWindow & {
   /** Patients per slot (1 = normal slot, more = shared queue slot). */
   capacity: number;
   seriesId: string | null;
+  /** Manually added: who added it (filled in by the calendar endpoint) and when. */
+  createdBy: string | null;
+  createdAt: string | null;
+  addedBy?: { name: string; role: string | null } | null;
 };
 
 export type DayWindows = {
@@ -121,6 +125,8 @@ export function dayWindows(
         slotIntervalMin: o.slotIntervalMin ?? slotIntervalMin,
         capacity: Math.max(1, o.capacity ?? 1),
         seriesId: o.seriesId ?? null,
+        createdBy: o.createdBy ?? null,
+        createdAt: o.createdAt ? o.createdAt.toISOString() : null,
       });
     } else if (o.type === OverrideType.BLOCK_SLOT && o.startTime && o.endTime) {
       blocked.push({ start: o.startTime, end: o.endTime, type: o.type, reason: o.reason });
