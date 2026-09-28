@@ -6,6 +6,8 @@ import { enqueueNotificationEvent } from "../../workers/notificationQueue.js";
 export type NotifyOpts = {
   /** Bot already sent a short in-session ack — skip duplicate patient UTILITY template. */
   skipPatientTemplate?: boolean;
+  /** Clinic inbox row already written (patient alert sent later). */
+  skipClinicInbox?: boolean;
 };
 
 /** Human-facing place line for WhatsApp / confirmations (prefer street address over branch label). */
@@ -342,13 +344,15 @@ export const NotificationService = {
       });
     }
 
-    await enqueueClinicInbox({
-      practiceId: booking.practiceId,
-      bookingId: booking.id,
-      type: NotificationType.CANCELLATION,
-      templateKey: "CLINIC_CANCEL",
-      payload: { ...base },
-    });
+    if (!opts?.skipClinicInbox) {
+      await enqueueClinicInbox({
+        practiceId: booking.practiceId,
+        bookingId: booking.id,
+        type: NotificationType.CANCELLATION,
+        templateKey: "CLINIC_CANCEL",
+        payload: { ...base },
+      });
+    }
 
     return true;
   },
@@ -426,13 +430,15 @@ export const NotificationService = {
       });
     }
 
-    await enqueueClinicInbox({
-      practiceId: booking.practiceId,
-      bookingId: booking.id,
-      type: NotificationType.RESCHEDULE,
-      templateKey: "CLINIC_RESCHEDULE",
-      payload: { ...base },
-    });
+    if (!opts?.skipClinicInbox) {
+      await enqueueClinicInbox({
+        practiceId: booking.practiceId,
+        bookingId: booking.id,
+        type: NotificationType.RESCHEDULE,
+        templateKey: "CLINIC_RESCHEDULE",
+        payload: { ...base },
+      });
+    }
 
     return true;
   },
@@ -440,6 +446,7 @@ export const NotificationService = {
   async enqueueOverrideImpact(
     bookingId: string,
     reason?: string,
+    opts?: NotifyOpts,
   ) {
     const booking = await loadBooking(bookingId);
     if (!booking) return null;
@@ -453,18 +460,21 @@ export const NotificationService = {
       ...whenFields(booking),
     };
 
-    await createAndEnqueue({
-      practiceId: booking.practiceId,
-      bookingId: booking.id,
-      type: NotificationType.RESCHEDULE,
-      payload: {
-        to: booking.patientPhone,
-        templateKey: "OVERRIDE_IMPACT",
-        recipientRole: "patient",
-        ...base,
-      },
-    });
+    if (!opts?.skipPatientTemplate) {
+      await createAndEnqueue({
+        practiceId: booking.practiceId,
+        bookingId: booking.id,
+        type: NotificationType.RESCHEDULE,
+        payload: {
+          to: booking.patientPhone,
+          templateKey: "OVERRIDE_IMPACT",
+          recipientRole: "patient",
+          ...base,
+        },
+      });
+    }
 
+    if (opts?.skipClinicInbox) return true;
     await enqueueClinicInbox({
       practiceId: booking.practiceId,
       bookingId: booking.id,

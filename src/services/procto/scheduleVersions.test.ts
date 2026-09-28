@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { BookingStatus, ScheduleMode, type ProviderSchedule } from "@prisma/client";
 import {
+  applyNoticePeriod,
   assessBooking,
   autoMatchSlots,
   bookingFitsSchedule,
@@ -9,6 +10,8 @@ import {
   earliestSafeDate,
   findConflicts,
   localDayOfSessionDate,
+  noticeEndsAt,
+  normalizeNoticeHours,
   pickEffectiveVersion,
   rankSuggestions,
   summarizeImpact,
@@ -21,6 +24,7 @@ import {
   zonedDateTime,
 } from "./slotEngine.js";
 import { PracticeService } from "./practice.service.js";
+import { alertIsDue } from "./scheduleAlerts.service.js";
 
 const LOC = "loc-1";
 
@@ -308,6 +312,40 @@ describe("conflict resolution", () => {
       countBookingsOccupying([kept], zonedDateTime(day, "10:40"), zonedDateTime(day, "11:00")),
       0,
     );
+  });
+});
+
+describe("notice period", () => {
+  const next = [row(1, "2026-10-01", { startTime: "11:00" })];
+  const visits = [timeBooking("a", "2026-10-05", "10:20"), timeBooking("b", "2026-10-12", "10:20")];
+  const conflicts = findConflicts(visits, baseline, next, "2026-10-01");
+  const now = zonedDateTime("2026-10-03", "10:00");
+
+  test("a change can't touch a booked visit inside the notice window — it starts the day after", () => {
+    const r = applyNoticePeriod(conflicts, "2026-10-01", noticeEndsAt(72, now));
+    assert.equal(r.effectiveFrom, "2026-10-06");
+    assert.deepEqual(r.blockedBy.map((c) => c.bookingId), ["a"]);
+  });
+  test("visits outside the window, or no affected visits, keep the requested date", () => {
+    assert.equal(applyNoticePeriod(conflicts, "2026-10-01", noticeEndsAt(24, now)).effectiveFrom, "2026-10-01");
+    assert.equal(applyNoticePeriod([], "2026-10-01", noticeEndsAt(168, now)).effectiveFrom, "2026-10-01");
+    assert.equal(applyNoticePeriod(conflicts, "2026-10-06", noticeEndsAt(72, now)).effectiveFrom, "2026-10-06");
+  });
+  test("7-day notice pushes past every visit in the week", () => {
+    const r = applyNoticePeriod(conflicts, "2026-10-01", noticeEndsAt(168, zonedDateTime("2026-10-05", "11:00")));
+    assert.equal(r.effectiveFrom, "2026-10-13");
+  });
+  test("only the allowed notice periods are accepted", () => {
+    assert.equal(normalizeNoticeHours(168), 168);
+    assert.equal(normalizeNoticeHours(5), 48);
+    assert.equal(normalizeNoticeHours(undefined), 48);
+  });
+  test("held alerts are released when the visit gets close or after a day", () => {
+    const createdAt = now;
+    const inDays = (d: number) => new Date(now.getTime() + d * 24 * 3600 * 1000);
+    assert.equal(alertIsDue({ createdAt }, inDays(10), 48, now), false);
+    assert.equal(alertIsDue({ createdAt }, inDays(2.5), 48, now), true);
+    assert.equal(alertIsDue({ createdAt }, inDays(10), 48, inDays(1.05)), true);
   });
 });
 

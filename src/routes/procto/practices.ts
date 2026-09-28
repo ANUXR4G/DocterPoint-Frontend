@@ -289,6 +289,23 @@ router.post(
 );
 
 router.post(
+  "/:practiceId/schedules/pending/alerts/send",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await ScheduleResolutionService.sendHeldAlerts(
+        param(req.params.practiceId),
+        req.body.providerId ?? req.sessionUser!.id,
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "patient alerts sent.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
   "/:practiceId/schedules/pending/activate",
   requireAuth("schedule:write"),
   async (req: Request, res: Response, next: NextFunction) => {

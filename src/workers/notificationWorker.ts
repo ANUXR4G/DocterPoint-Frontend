@@ -165,8 +165,18 @@ async function scheduleReminders() {
   }
 }
 
+async function releaseDueScheduleAlerts() {
+  try {
+    const { ScheduleAlertService } = await import("../services/procto/scheduleAlerts.service.js");
+    await ScheduleAlertService.dispatchDue();
+  } catch (err) {
+    console.warn("[schedule-alert] sweep failed:", err);
+  }
+}
+
 setInterval(() => {
   void scheduleReminders();
+  void releaseDueScheduleAlerts();
 }, 5 * 60_000);
 
 void scheduleReminders();
