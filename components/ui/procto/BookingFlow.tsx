@@ -26,6 +26,7 @@ import {
   uploadBookingDocument,
   type BookingDocument,
 } from "@/lib/uploadBookingDocument"
+import { withDrTitle } from "@/lib/doctorName"
 
 type Practice = {
   id: string
@@ -421,14 +422,14 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
                         : "border-neutral-300 text-neutral-800 dark:border-white/20 dark:text-neutral-200"
                     }`}
                   >
-                    Dr. {d.name ?? "Provider"}
+                    {withDrTitle(d.name) || "Provider"}
                   </button>
                 ))}
               </div>
             </div>
           ) : provider ? (
             <p className="text-slate-900 dark:text-white font-semibold text-sm font-semibold">
-              Dr. {provider.name ?? "Provider"}
+              {withDrTitle(provider.name) || "Provider"}
             </p>
           ) : null}
 

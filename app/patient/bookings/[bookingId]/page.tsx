@@ -31,6 +31,7 @@ import {
   formatPracticeDate,
   formatPracticeDateTime,
 } from "@/lib/practiceTime"
+import { withDrTitle } from "@/lib/doctorName"
 
 type Medicine = { name: string; amount?: string; times?: string[] }
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
@@ -358,7 +359,7 @@ export default function PatientVisitPage() {
                   <>
                     <span className="text-slate-300 dark:text-slate-600">·</span>
                     <IconStethoscope className="size-4 shrink-0 text-blue-500" />
-                    <span>Dr. {doctor.name}</span>
+                    <span>{withDrTitle(doctor.name)}</span>
                   </>
                 ) : null}
               </p>
@@ -603,7 +604,7 @@ export default function PatientVisitPage() {
             <CareChatPanel
               selfUserId={selfId}
               peerUserId={peerId}
-              peerName={doctor?.name ? `Dr. ${doctor.name}` : "Doctor"}
+              peerName={withDrTitle(doctor?.name) || "Doctor"}
               subtitle="Message your doctor about this visit. Clinic replies also go to WhatsApp. Do not share emergencies here — call the clinic."
             />
           </div>

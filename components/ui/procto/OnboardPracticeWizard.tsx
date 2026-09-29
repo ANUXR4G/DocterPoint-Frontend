@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { legacyPracticeTabHref } from "@/lib/doctorPracticeTabs"
 import { ThinkingLoader } from "@/components"
 import { proctoService } from "@/lib/services/procto"
+import { withDrTitle } from "@/lib/doctorName"
 
 const PRACTICE_TYPES = [
   {
@@ -454,7 +455,7 @@ export default function OnboardPracticeWizard() {
                     Care
                   </p>
                   {doctorName ? (
-                    <p className="mt-1 font-medium">Dr. {doctorName}</p>
+                    <p className="mt-1 font-medium">{withDrTitle(doctorName)}</p>
                   ) : null}
                   <p className="opacity-80">
                     {specialty}

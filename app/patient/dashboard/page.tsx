@@ -12,6 +12,7 @@ import {
   sortBookingsByWhen,
 } from "@/lib/bookingDisplay"
 import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
+import { withDrTitle } from "@/lib/doctorName"
 
 function statusTone(status: string) {
   switch ((status || "").toUpperCase()) {
@@ -260,9 +261,7 @@ export default function Dashboard() {
                         {b.practice?.name || "Clinic"}
                       </p>
                       <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                        {b.provider?.name
-                          ? `Dr ${b.provider.name}`
-                          : "Doctor TBA"}{" "}
+                        {withDrTitle(b.provider?.name) || "Doctor TBA"}{" "}
                         · {formatWhen(b)}
                       </p>
                     </div>
