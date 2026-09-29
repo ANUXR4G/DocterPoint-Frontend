@@ -1630,8 +1630,9 @@ export const PracticeService = {
   },
 
   /**
-   * Profiles registered via this practice (practice MRN prefix) or on its
-   * WhatsApp line (self + family sharing the number) that have no booking yet.
+   * Profiles on this clinic's patient list (`practice_patients`), registered via
+   * this practice (MRN prefix) or on its WhatsApp line (self + family sharing
+   * the number) that have no booking yet.
    */
   async listRegisteredWithoutBookings(
     practiceId: string,
@@ -1644,7 +1645,7 @@ export const PracticeService = {
     const last10 = (raw: string | null | undefined) =>
       String(raw || "").replace(/\D/g, "").slice(-10);
 
-    const [practice, conversations] = await Promise.all([
+    const [practice, conversations, linked] = await Promise.all([
       prisma.practice.findUnique({
         where: { id: practiceId },
         select: { mrnPrefix: true },
@@ -1655,7 +1656,14 @@ export const PracticeService = {
         take: 500,
         select: { patientPhone: true },
       }),
+      prisma.practicePatient.findMany({
+        where: { practiceId },
+        orderBy: { createdAt: "desc" },
+        take: 1000,
+        select: { patientUserId: true, createdAt: true },
+      }),
     ]);
+    const addedAt = new Map(linked.map((l) => [l.patientUserId, l.createdAt]));
 
     const convPhones = [
       ...new Set(
@@ -1666,6 +1674,7 @@ export const PracticeService = {
     ];
     const prefix = practice?.mrnPrefix?.trim();
     const or: Prisma.UserWhereInput[] = [
+      ...(linked.length ? [{ id: { in: [...addedAt.keys()] } }] : []),
       ...(prefix ? [{ patient: { mrn: { startsWith: `${prefix}MR` } } }] : []),
       ...convPhones.flatMap((d) => [
         { phone: { endsWith: d } },
@@ -1733,7 +1742,7 @@ export const PracticeService = {
           lastStatus: null as string | null,
           providerNames: [] as string[],
           recentBookings: [] as never[],
-          registeredAt: u.createdAt as Date | null,
+          registeredAt: (addedAt.get(u.id) ?? u.createdAt) as Date | null,
         };
       });
   },

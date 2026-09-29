@@ -36,6 +36,8 @@ export type DeskPatient = {
   /** Visited / registered here before (otherwise found by exact mobile or MRN only). */
   knownHere: boolean;
   lastVisitAt: string | null;
+  /** Register call matched a patient already on GlucoGuide and added them to this clinic (no new MRN). */
+  existingPatient?: boolean;
 };
 
 const last10 = (raw: string | null | undefined) => String(raw || "").replace(/\D/g, "").slice(-10);
@@ -59,14 +61,36 @@ async function assertDeskMember(practiceId: string, actorUserId: string) {
   return member;
 }
 
-/** Patients this clinic already knows: booked here, registered with its MRN prefix, or on its WhatsApp line. */
+/** Add a patient to this clinic's list (idempotent). */
+export async function linkPatientToPractice(
+  practiceId: string,
+  patientUserId: string,
+  source: "desk_register" | "desk_link",
+  addedBy: string | null,
+) {
+  await prisma.practicePatient.upsert({
+    where: { practiceId_patientUserId: { practiceId, patientUserId } },
+    create: { practiceId, patientUserId, source, addedBy },
+    update: {},
+  });
+}
+
+/**
+ * Patients this clinic already knows: added to its list, booked here, registered with its MRN
+ * prefix, or on its WhatsApp line.
+ */
 async function knownScope(practiceId: string) {
-  const [practice, booked, chats] = await Promise.all([
+  const [practice, booked, linked, chats] = await Promise.all([
     prisma.practice.findUnique({ where: { id: practiceId }, select: { mrnPrefix: true } }),
     prisma.practiceBooking.findMany({
       where: { practiceId, patientId: { not: null } },
       distinct: ["patientId"],
       select: { patientId: true },
+      take: 5000,
+    }),
+    prisma.practicePatient.findMany({
+      where: { practiceId },
+      select: { patientUserId: true },
       take: 5000,
     }),
     prisma.whatsAppConversation.findMany({
@@ -76,7 +100,7 @@ async function knownScope(practiceId: string) {
       take: 500,
     }),
   ]);
-  const ids = booked.map((b) => b.patientId!).filter(Boolean);
+  const ids = [...new Set([...booked.map((b) => b.patientId!), ...linked.map((l) => l.patientUserId)].filter(Boolean))];
   const prefix = practice?.mrnPrefix?.trim() || null;
   const phones = [...new Set(chats.map((c) => last10(c.patientPhone)).filter((d) => d.length === 10))];
   const where: Prisma.UserWhereInput[] = [
@@ -220,12 +244,7 @@ export async function registerDeskPatient(
   if (emailTaken) throw new AppError(409, "That email is already registered. Search for the patient instead.");
   const key = (n: string | null | undefined) => (n ?? "").toLowerCase().replace(/\s*·.*$/, "").replace(/\s+/g, " ").trim();
   const same = onNumber.find((u) => key(u.name) === key(name));
-  if (same) {
-    throw new AppError(
-      409,
-      `${same.name?.trim() || name} is already registered on this number${same.patient?.mrn ? ` (MRN ${same.patient.mrn})` : ""}. Pick them from the search results.`,
-    );
-  }
+  if (same) return addExistingPatient(practiceId, actorUserId, same, dateOfBirth);
   const owner = pickPrimaryPatientUser(onNumber.filter((u) => last10(u.phone) === d10));
   if (owner && !relationship) {
     throw new AppError(
@@ -258,6 +277,7 @@ export async function registerDeskPatient(
     })
     .catch(() => undefined);
 
+  await linkPatientToPractice(practiceId, created.id, "desk_register", actorUserId);
   const row = await prisma.user.findUniqueOrThrow({ where: { id: created.id }, select: PATIENT_SELECT });
   const scope = await knownScope(practiceId);
   const patient = toDeskPatient(row, scope, new Map());
@@ -274,4 +294,42 @@ export async function registerDeskPatient(
   });
   console.log(`[desk] patient registered id=${patient.patientId} mrn=${patient.mrn} practice=${practiceId} by=${actorUserId}`);
   return { ...patient, knownHere: true };
+}
+
+/**
+ * Same person (name + mobile) is already on GlucoGuide — registered at another clinic, on WhatsApp
+ * or the app. Keep their MRN and add them to this clinic's patient list instead of refusing.
+ */
+async function addExistingPatient(
+  practiceId: string,
+  actorUserId: string,
+  existing: PatientRow,
+  dateOfBirth: string,
+): Promise<DeskPatient> {
+  const onFile = normalizeDateOfBirth(existing.patient?.dateOfBirth ?? "");
+  if (onFile && onFile !== dateOfBirth) {
+    throw new AppError(
+      409,
+      `${existing.name?.trim() || "This patient"} is already registered on this number with a different date of birth. Check the details with the patient, or pick them from the search results.`,
+    );
+  }
+  const scope = await knownScope(practiceId);
+  const wasKnown = scope.ids.has(existing.id);
+  await linkPatientToPractice(practiceId, existing.id, "desk_link", actorUserId);
+  scope.ids.add(existing.id);
+  const patient = toDeskPatient(existing, scope, await lastVisits(practiceId, [existing.id]));
+  if (!wasKnown) {
+    void recordAudit({
+      practiceId,
+      actorUserId,
+      action: "PATIENT_REGISTERED",
+      headline: "Existing patient added to the clinic",
+      detail: `${patient.name} (MRN ${patient.mrn ?? "—"}) — already registered on GlucoGuide`,
+      entityType: "patient",
+      entityId: patient.patientId,
+      meta: { mrn: patient.mrn, existing: true },
+    });
+    console.log(`[desk] existing patient linked id=${patient.patientId} mrn=${patient.mrn} practice=${practiceId} by=${actorUserId}`);
+  }
+  return { ...patient, knownHere: true, existingPatient: true };
 }

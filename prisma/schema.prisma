@@ -31,6 +31,7 @@ model User {
   receivedMessages       Message[]               @relation("ReceiverMessages")
   practiceMembers        PracticeMember[]
   assistantConversations AssistantConversation[]
+  clinicPatientLinks     PracticePatient[]
 
   @@map("users")
 }
@@ -389,8 +390,28 @@ model Practice {
   reviews          PracticeReview[]
   paymentRequests  PaymentRequest[]
   auditEvents      PracticeAuditEvent[]
+  patients         PracticePatient[]
 
   @@map("practices")
+}
+
+/// A clinic's own patient list. Patients keep one GlucoGuide identity + MRN; this row adds them to a clinic
+/// (desk registration, or registering someone already on GlucoGuide) before they have a booking there.
+model PracticePatient {
+  id            String   @id @default(uuid()) @db.Uuid
+  practiceId    String   @map("practice_id") @db.Uuid
+  patientUserId String   @map("patient_user_id") @db.Uuid
+  /// desk_register | desk_link
+  source        String   @db.VarChar(24)
+  addedBy       String?  @map("added_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient  User     @relation(fields: [patientUserId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceId, patientUserId])
+  @@index([patientUserId])
+  @@map("practice_patients")
 }
 
 model ClinicLocation {
