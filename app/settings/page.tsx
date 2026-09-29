@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/procto/ScheduleChangeControls"
 import { PracticeDashboardProvider } from "@/contexts/PracticeDashboardContext"
 import { useRole } from "@/hooks/useRole"
+import { CLINIC_SUBSCRIPTION_HREF, practiceTabHref } from "@/lib/doctorPracticeTabs"
 import {
   proctoService,
   type PendingScheduleVerification,
@@ -41,6 +42,15 @@ const WEEKDAYS = [
   { value: 6, label: "Sat" },
   { value: 0, label: "Sun" },
 ] as const
+
+/** WhatsApp line states in which the backend locks the clinic Tel to the line number. */
+const LOCKED_LINE_STATUSES = new Set([
+  "LIVE",
+  "TEMPLATES_PENDING",
+  "DISPLAY_NAME_PENDING",
+  "VERIFYING",
+  "ASSIGNED",
+])
 
 const sectionLabel =
   "mb-3 text-sm font-bold uppercase tracking-[0.12em] text-blue-600 dark:text-sky-400"
@@ -74,7 +84,7 @@ function SettingsPageInner() {
   const subtitle = hydrated
     ? role === "user"
       ? "Customize appearance and theme for your account."
-      : "Update your registration details or customize appearance."
+      : "Practice profile, fees, hours and appearance."
     : "Customize your account and appearance."
 
   const isPatient = hydrated && (role === "user" || role === "admin")
@@ -193,6 +203,7 @@ type Membership = {
     id: string
     name: string
     type?: string
+    specialty?: string | null
     registrationNo?: string | null
     phone?: string | null
     email?: string | null
@@ -336,36 +347,27 @@ function ClinicAccountForm({
   const [noticeHours, setNoticeHours] = useState(
     String(membership.practice.scheduleNoticeHours ?? 48),
   )
-  const [waBotPhone, setWaBotPhone] = useState<string | null>(
-    membership.practice.whatsappBusinessNumber?.replace(/\D/g, "").slice(-10) ||
-      null,
-  )
+  const [city, setCity] = useState(loc?.city ?? "")
+  const [specialty, setSpecialty] = useState(membership.practice.specialty ?? "")
+  const [waBotPhone, setWaBotPhone] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
-  const [newName, setNewName] = useState("")
-  const [newEmail, setNewEmail] = useState("")
-  const [newPassword, setNewPassword] = useState("")
-  const [newSpecialty, setNewSpecialty] = useState("")
-  const [adding, setAdding] = useState(false)
-  const [canAddDoctor, setCanAddDoctor] = useState(true)
-  const [planHint, setPlanHint] = useState("")
-
-  const doctors = membership.practice.members.filter((m) => m.role === "DOCTOR")
-  const doctorSlots = membership.practice.members.filter(
-    (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
+  const roster = membership.practice.members.filter(
+    (m) =>
+      m.role === "DOCTOR" ||
+      ((m.role === "PRACTICE_OWNER" || m.role === "PRACTICE_ADMIN") &&
+        m.user.doctor),
   )
 
   useEffect(() => {
     setClinicName(membership.practice.name)
     setAddress(membership.practice.locations[0]?.address ?? "")
+    setCity(membership.practice.locations[0]?.city ?? "")
+    setSpecialty(membership.practice.specialty ?? "")
     setRegistrationNo(membership.practice.registrationNo ?? "")
-    const bot =
-      membership.practice.whatsappBusinessNumber?.replace(/\D/g, "").slice(-10) ||
-      null
-    setWaBotPhone(bot)
-    setTelNo(bot || membership.practice.phone || "")
+    setTelNo(membership.practice.phone || "")
     setEmail(membership.practice.email ?? "")
     setConsultationFee(
       membership.practice.consultationFee != null
@@ -384,57 +386,24 @@ function ClinicAccountForm({
     let cancelled = false
     void proctoService.getPracticeBilling(membership.practice.id).then((res) => {
       if (cancelled || res?.status !== "successful" || !res.data) return
-      const practice = (
+      const line = (
         res.data as {
           practice?: {
-            phone?: string | null
-            whatsappBusinessNumber?: string | null
             whatsappNumber?: { phoneNumber?: string; status?: string } | null
           }
-          entitlement?: {
-            usable?: boolean
-            features?: Record<string, unknown>
-          }
         }
-      ).practice
+      ).practice?.whatsappNumber
       const bot =
-        practice?.whatsappNumber?.phoneNumber?.replace(/\D/g, "").slice(-10) ||
-        practice?.whatsappBusinessNumber?.replace(/\D/g, "").slice(-10) ||
-        null
-      if (bot) {
-        setWaBotPhone(bot)
-        setTelNo(bot)
-      }
-      const ent = (
-        res.data as {
-          entitlement?: {
-            usable?: boolean
-            features?: Record<string, unknown>
-          }
-        }
-      ).entitlement
-      const multi =
-        ent?.features?.multiDoctor === true ||
-        ent?.features?.multiDoctor === 1
-      if (!ent?.usable) {
-        setCanAddDoctor(false)
-        setPlanHint(
-          "Active subscription required to add doctors. Open Subscription.",
-        )
-      } else if (doctorSlots.length >= 1 && !multi) {
-        setCanAddDoctor(false)
-        setPlanHint(
-          "Multi-doctor clinics require Growth or Clinic. Upgrade under Subscription.",
-        )
-      } else {
-        setCanAddDoctor(true)
-        setPlanHint("")
-      }
+        line?.status && LOCKED_LINE_STATUSES.has(line.status)
+          ? line.phoneNumber?.replace(/\D/g, "").slice(-10) || null
+          : null
+      setWaBotPhone(bot)
+      if (bot) setTelNo(bot)
     })
     return () => {
       cancelled = true
     }
-  }, [membership.practice.id, doctorSlots.length])
+  }, [membership.practice.id])
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
@@ -443,11 +412,20 @@ function ClinicAccountForm({
     if (
       !clinicName.trim() ||
       !address.trim() ||
+      !city.trim() ||
       !registrationNo.trim() ||
       !(waBotPhone || telNo).trim() ||
       !email.trim()
     ) {
-      setError("Fill Clinic Name, Address, Reg No, Tel, and Email.")
+      setError("Fill Clinic name, Reg no, Address, City, Tel and Email.")
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Enter a valid clinic email.")
+      return
+    }
+    if (!waBotPhone && telNo.replace(/\D/g, "").length < 10) {
+      setError("Enter a 10-digit clinic phone number.")
       return
     }
     const feeNum = Number(consultationFee)
@@ -467,6 +445,7 @@ function ClinicAccountForm({
       membership.practice.id,
       {
         name: clinicName.trim(),
+        specialty: specialty.trim(),
         registrationNo: registrationNo.trim(),
         phone: phoneToSave,
         email: email.trim(),
@@ -476,12 +455,7 @@ function ClinicAccountForm({
         location: {
           id: loc?.id,
           address: address.trim(),
-          city:
-            address
-              .split(",")
-              .map((p) => p.trim())
-              .filter(Boolean)
-              .at(-1) || loc?.city,
+          city: city.trim(),
         },
       },
     )
@@ -494,66 +468,14 @@ function ClinicAccountForm({
     await onReload()
   }
 
-  async function addDoctor() {
-    setError("")
-    setMessage("")
-    if (!canAddDoctor) {
-      setError(planHint || "Upgrade your plan to add more doctors.")
-      return
-    }
-    if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) {
-      setError("Doctor name, email, and password are required for login.")
-      return
-    }
-    if (newPassword.trim().length < 6) {
-      setError("Password must be at least 6 characters.")
-      return
-    }
-    setAdding(true)
-    const res = await proctoService.addPracticeDoctor(membership.practice.id, {
-      name: newName.trim(),
-      email: newEmail.trim(),
-      password: newPassword.trim(),
-      specialty: newSpecialty.trim() || undefined,
-    })
-    setAdding(false)
-    if (res.status !== "successful") {
-      setError(res.message || "Could not add doctor.")
-      return
-    }
-    setNewName("")
-    setNewEmail("")
-    setNewPassword("")
-    setNewSpecialty("")
-    setMessage(
-      "Doctor added. They can sign in with the email and password you set.",
-    )
-    await onReload()
-  }
-
-  async function removeDoctor(userId: string) {
-    setError("")
-    const res = await proctoService.setPracticeMemberActive(
-      membership.practice.id,
-      userId,
-      false,
-    )
-    if (res.status !== "successful") {
-      setError(res.message || "Could not deactivate doctor.")
-      return
-    }
-    setMessage("Doctor deactivated.")
-    await onReload()
-  }
-
   return (
-    <form className="w-full text-left" onSubmit={(e) => void save(e)}>
+    <form noValidate className="w-full text-left" onSubmit={(e) => void save(e)}>
       <p className={sectionLabel}>Clinic details</p>
-      <div className="grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-2">
+      <div className="grid w-full gap-3 sm:grid-cols-2">
         <IconInput
           icon="home"
           name="clinicName"
-          label="Clinic Name *"
+          label="Clinic name *"
           value={clinicName}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setClinicName(e.target.value)
@@ -563,7 +485,7 @@ function ClinicAccountForm({
         <IconInput
           icon="written-page"
           name="registrationNo"
-          label="Reg No *"
+          label="Registration no *"
           value={registrationNo}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setRegistrationNo(e.target.value)
@@ -572,25 +494,46 @@ function ClinicAccountForm({
         />
         <div className="sm:col-span-2">
           <IconInput
-            icon="pin"
-            name="address"
-            label="Address *"
-            value={address}
+            icon="doctor"
+            name="specialty"
+            label="Specialty (shown in Find clinics)"
+            value={specialty}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setAddress(e.target.value)
+              setSpecialty(e.target.value)
             }
             className="w-full min-w-0"
           />
         </div>
+      </div>
+
+      <p className={`${sectionLabel} mt-6`}>Location & contact</p>
+      <div className="grid w-full gap-3 sm:grid-cols-2">
+        <IconInput
+          icon="pin"
+          name="address"
+          label="Street address *"
+          value={address}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setAddress(e.target.value)
+          }
+          className="w-full min-w-0"
+        />
+        <IconInput
+          icon="pin"
+          name="city"
+          label="City / area *"
+          value={city}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setCity(e.target.value)
+          }
+          className="w-full min-w-0"
+        />
         <div className="min-w-0">
           <IconInput
             icon="phone"
             name="telNo"
-            label={
-              waBotPhone
-                ? "Tel * (WhatsApp booking number)"
-                : "Tel *"
-            }
+            type="tel"
+            label={waBotPhone ? "Tel * (WhatsApp booking number)" : "Tel *"}
             value={waBotPhone || telNo}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               if (waBotPhone) return
@@ -600,22 +543,22 @@ function ClinicAccountForm({
             disabled={Boolean(waBotPhone)}
             readOnly={Boolean(waBotPhone)}
           />
-          {waBotPhone ? (
-            <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-              Locked to your clinic WhatsApp bot line. Patients message this
-              number. Change it under Billing → WhatsApp, or ask admin to
-              reassign the pool number.
-            </p>
-          ) : (
-            <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-              After you connect WhatsApp under Billing, this Tel becomes your
-              public WhatsApp booking number automatically.
-            </p>
-          )}
+          <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+            {waBotPhone
+              ? "Locked to your live WhatsApp booking line — patients message this number. "
+              : "Once your WhatsApp booking line is live, Tel switches to that number. "}
+            <Link
+              href={CLINIC_SUBSCRIPTION_HREF}
+              className="font-semibold underline"
+            >
+              Subscription → WhatsApp line
+            </Link>
+          </p>
         </div>
         <IconInput
           icon="envelope"
           name="email"
+          type="email"
           label="Email *"
           value={email}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -623,6 +566,10 @@ function ClinicAccountForm({
           }
           className="w-full min-w-0"
         />
+      </div>
+
+      <p className={`${sectionLabel} mt-6`}>Fees & booking rules</p>
+      <div className="grid w-full gap-3 sm:grid-cols-2">
         <IconInput
           icon="written-page"
           name="consultationFee"
@@ -645,7 +592,9 @@ function ClinicAccountForm({
           }
           className="w-full min-w-0"
         />
-        <NoticePeriodSelect value={noticeHours} onChange={setNoticeHours} disabled={saving} />
+        <div className="sm:col-span-2">
+          <NoticePeriodSelect value={noticeHours} onChange={setNoticeHours} disabled={saving} />
+        </div>
       </div>
       <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
         Fee is shown when patients text *FAQ* or ask about fees on WhatsApp.
@@ -653,151 +602,44 @@ function ClinicAccountForm({
         amount online (Razorpay) — or the full fee when the advance is empty.
       </p>
 
-      <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className={`${sectionLabel} !mb-0`}>Doctors in this clinic</p>
-          <p className="mt-1 text-base font-semibold text-neutral-900 dark:text-white">
-            Manage doctors linked to this clinic — same fields as registration.
-          </p>
+      <div className="mt-6 rounded-xl border border-neutral-200 p-4 dark:border-[#262626]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className={`${sectionLabel} !mb-0`}>Doctors</p>
+            <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+              {roster.length
+                ? `${roster.length} doctor${roster.length === 1 ? "" : "s"} on this clinic.`
+                : "No doctors on this clinic yet."}{" "}
+              Add, deactivate or change a doctor&apos;s hours from Practice.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={practiceTabHref("doctors")}
+              className="inline-flex h-10 items-center rounded-full bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              Manage doctors
+            </Link>
+            <Link
+              href={practiceTabHref("setup")}
+              className="inline-flex h-10 items-center rounded-full border border-neutral-300 px-4 text-sm font-semibold dark:border-[#333]"
+            >
+              Hours & blocks
+            </Link>
+          </div>
         </div>
-      </div>
-
-      {doctors.length === 0 ? (
-        <p className="gg-faint mt-3 rounded-xl border border-dashed border-neutral-300 px-4 py-6 text-center text-base font-semibold dark:border-[#333]">
-          No doctors added yet.
-        </p>
-      ) : (
-        <ul className="mt-4 w-full space-y-3">
-          {doctors.map((doc, index) => (
-            <li
-              key={doc.userId}
-              className="w-full rounded-xl border border-neutral-200 p-4 dark:border-[#262626]"
-            >
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <span className="text-sm font-bold uppercase tracking-wide text-neutral-500">
-                  Doctor {index + 1}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void removeDoctor(doc.userId)}
-                  className="shrink-0 text-sm font-bold text-red-600 hover:underline dark:text-red-400"
-                >
-                  Deactivate
-                </button>
-              </div>
-              <div className="grid w-full gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <IconInput
-                  icon="doctor"
-                  name={`doctor-name-${doc.userId}`}
-                  label="Doctor name *"
-                  value={doc.user.name ?? ""}
-                  onChange={() => {}}
-                  disabled
-                  className="w-full min-w-0"
-                />
-                <IconInput
-                  icon="envelope"
-                  name={`doctor-email-${doc.userId}`}
-                  label="Doctor email *"
-                  value={doc.user.email ?? ""}
-                  onChange={() => {}}
-                  disabled
-                  className="w-full min-w-0"
-                />
-                <IconInput
-                  icon="written-page"
-                  name={`doctor-specialty-${doc.userId}`}
-                  label="Specialty"
-                  value={
-                    doc.user.doctor?.description?.split("—")[0]?.trim() ?? ""
-                  }
-                  onChange={() => {}}
-                  disabled
-                  className="w-full min-w-0 md:col-span-2 xl:col-span-1"
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-4 w-full rounded-xl border border-neutral-200 p-4 dark:border-[#262626]">
-        <p className="mb-3 text-sm font-bold uppercase tracking-wide text-neutral-500">
-          Add doctor
-        </p>
-        <p className="mb-3 text-sm font-semibold text-neutral-900 dark:text-white">
-          Set email and password for the doctor&apos;s portal login.
-        </p>
-        {planHint ? (
-          <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-            {planHint}{" "}
-            <a
-              href="/doctor/subscription"
-              className="font-semibold underline"
-            >
-              Open Subscription
-            </a>
-          </p>
+        {roster.length ? (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {roster.map((m) => (
+              <li
+                key={m.userId}
+                className="rounded-full bg-neutral-100 px-3 py-1 text-sm font-medium dark:bg-[#1c1c1c]"
+              >
+                {m.user.name || m.user.email || "Doctor"}
+              </li>
+            ))}
+          </ul>
         ) : null}
-        {!canAddDoctor ? (
-          <p className="text-sm font-semibold text-neutral-600 dark:text-neutral-300">
-            Upgrade your plan to add more doctors.
-          </p>
-        ) : (
-          <>
-            <div className="grid w-full gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <IconInput
-                icon="doctor"
-                name="new-doctor-name"
-                label="Doctor name *"
-                value={newName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setNewName(e.target.value)
-                }
-                className="w-full min-w-0"
-              />
-              <IconInput
-                icon="envelope"
-                name="new-doctor-email"
-                label="Login email *"
-                value={newEmail}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setNewEmail(e.target.value)
-                }
-                className="w-full min-w-0"
-              />
-              <IconInput
-                icon="key"
-                name="new-doctor-password"
-                type="password"
-                label="Login password *"
-                value={newPassword}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setNewPassword(e.target.value)
-                }
-                className="w-full min-w-0"
-              />
-              <IconInput
-                icon="written-page"
-                name="new-doctor-specialty"
-                label="Specialty"
-                value={newSpecialty}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setNewSpecialty(e.target.value)
-                }
-                className="w-full min-w-0 md:col-span-2 xl:col-span-1"
-              />
-            </div>
-            <button
-              type="button"
-              disabled={adding || !canAddDoctor}
-              onClick={() => void addDoctor()}
-              className="mt-4 rounded-full border border-neutral-300 px-4 py-2 text-base font-bold text-neutral-800 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-[#333] dark:text-white dark:hover:bg-[#1c1c1c]"
-            >
-              {adding ? "Adding…" : "+ Add doctor"}
-            </button>
-          </>
-        )}
       </div>
 
       {error ? (

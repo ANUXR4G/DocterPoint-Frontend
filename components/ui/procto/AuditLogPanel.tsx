@@ -15,6 +15,7 @@ const ACTIONS: Array<[AuditAction | "", string]> = [
   ["SLOT_CREATED", "Slots created"],
   ["SLOT_REMOVED", "Slots removed"],
   ["OVERRIDE_CREATED", "Leave & blocks"],
+  ["OVERRIDE_REMOVED", "Blocks lifted"],
   ["WALK_IN_ADDED", "Emergency walk-ins"],
   ["PATIENT_REGISTERED", "Patient registrations"],
 ]
@@ -26,6 +27,8 @@ const ACTION_STYLE: Record<AuditAction, string> = {
     "bg-neutral-200 text-neutral-800 dark:bg-neutral-700 dark:text-neutral-100",
   OVERRIDE_CREATED:
     "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100",
+  OVERRIDE_REMOVED:
+    "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100",
   WALK_IN_ADDED: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
   PATIENT_REGISTERED:
     "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",

@@ -42,6 +42,13 @@ export function isClinicNavActive(
     return true
   }
 
+  if (destPath === "/settings" && !destTab) {
+    return (
+      pathname === "/settings" &&
+      !(currentTab === "practice" && currentSubtab === "setup")
+    )
+  }
+
   if (destPath === "/clinic/dashboard") {
     return pathname === "/clinic/dashboard"
   }

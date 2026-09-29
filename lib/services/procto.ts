@@ -444,6 +444,12 @@ export const proctoService = {
       { method: "DELETE" },
     ) as Promise<ProctoResult<{ removed: boolean; message: string }>>,
 
+  /** Lifts a block / leave / token limit, or removes one day of extra slots. */
+  removeOverride: (practiceId: string, overrideId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/overrides/${overrideId}`, {
+      method: "DELETE",
+    }) as Promise<ProctoResult<{ removed: boolean; message: string }>>,
+
   getCalendarDay: (practiceId: string, providerId: string, date: string) =>
     proctoFetch(
       `/procto/practices/${practiceId}/calendar?providerId=${providerId}&date=${date}`,
@@ -1014,6 +1020,7 @@ export type AuditAction =
   | "SLOT_CREATED"
   | "SLOT_REMOVED"
   | "OVERRIDE_CREATED"
+  | "OVERRIDE_REMOVED"
   | "WALK_IN_ADDED"
   | "PATIENT_REGISTERED";
 
