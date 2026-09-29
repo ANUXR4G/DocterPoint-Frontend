@@ -504,7 +504,13 @@ router.post(
         req.sessionUser!.id,
         req.body ?? {},
       );
-      return ResponseHandler.createSuccessful(res, `Registered ${data.name} — MRN ${data.mrn}.`, data);
+      return ResponseHandler.createSuccessful(
+        res,
+        data.existingPatient
+          ? `${data.name} is already registered on GlucoGuide (MRN ${data.mrn ?? "—"}) — added to your clinic's patients.`
+          : `Registered ${data.name} — MRN ${data.mrn}.`,
+        data,
+      );
     } catch (error) {
       next(error);
     }

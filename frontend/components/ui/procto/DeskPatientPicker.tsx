@@ -171,7 +171,12 @@ export default function DeskPatientPicker({
             </span>
             {patientMeta(value)}
           </p>
-          {!value.knownHere ? (
+          {value.existingPatient ? (
+            <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              Already registered on GlucoGuide — added to your clinic&apos;s
+              patients with their existing MRN
+            </p>
+          ) : !value.knownHere ? (
             <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
               First visit at this clinic
             </p>
@@ -329,7 +334,8 @@ export default function DeskPatientPicker({
         ) : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Creates a Patient ID (MRN) with your clinic prefix.
+            New patients get an MRN with your clinic prefix; patients already
+            on GlucoGuide keep theirs and are added to your clinic.
           </p>
           <button
             type="button"

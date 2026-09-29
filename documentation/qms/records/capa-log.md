@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260930-02
+- **Date opened:** 2026-09-30
+- **Severity:** 3
+- **Process:** P-BOOK
+- **Description:** A patient registered at Dr. Priya Nair's clinic could not be registered at Dr. Ananya Sharma Clinic ("already registered on this number") and did not appear in that clinic's Patients tab.
+- **Evidence:** User report; DB: `PNCMR…` patients (e.g. PNCMR00000008) with no booking or WhatsApp chat at Dr. Ananya Sharma Clinic; full-mobile desk search there showed them as "new to this clinic".
+- **Containment:** Desk could still pick the patient via full-mobile search and book them.
+- **Root cause:** Patients are one global identity, but a clinic only "knew" a patient through its own bookings, MRN prefix or WhatsApp chats — there was no per-clinic patient list, so desk registration of an existing patient could only refuse.
+- **Corrective action:** New `practice_patients` table (backfilled from desk registration audit events); desk registration of an existing patient (same name + number, matching date of birth) adds them to the clinic with their MRN; new registrations also get a list row; Patients tab, desk search and custom payment requests include listed patients; picker explains "Already registered on GlucoGuide — added to your clinic's patients".
+- **Owner / due:** Engineering / 2026-09-30
+- **Verification:** API refusal paths (different DOB 409, missing gender 400, no rows written); success path exercised with the link / audit writes stubbed — patient absent from the Patients tab before, present after, name search `knownHere=true`; picker UI with intercepted register; 229 backend tests; tsc; production builds.
+- **Status:** Verified
+- **Docs updated:** capa-log.md, flow.md, decisions.md, risk-register.md (R33)
+
 ### NC-20260930-01
 - **Date opened:** 2026-09-30
 - **Severity:** 3

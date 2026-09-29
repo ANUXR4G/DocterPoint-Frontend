@@ -423,11 +423,12 @@ export const PaymentRequestService = {
         providerId = provider.userId;
       }
       if (input.patientId) {
-        const known = await prisma.practiceBooking.findFirst({
-          where: { practiceId, patientId: String(input.patientId) },
-          select: { patientId: true },
-        });
-        patientId = known?.patientId ?? null;
+        const id = String(input.patientId);
+        const [booked, listed] = await Promise.all([
+          prisma.practiceBooking.findFirst({ where: { practiceId, patientId: id }, select: { patientId: true } }),
+          prisma.practicePatient.findFirst({ where: { practiceId, patientUserId: id }, select: { patientUserId: true } }),
+        ]);
+        patientId = booked?.patientId ?? listed?.patientUserId ?? null;
       }
     }
     if (!patientPhone) {
