@@ -1004,6 +1004,8 @@ export type DeskPatient = {
   /** Visited / registered at this clinic before. */
   knownHere: boolean;
   lastVisitAt: string | null;
+  /** Register matched a patient already on GlucoGuide; added to this clinic with their existing MRN. */
+  existingPatient?: boolean;
 };
 
 export type DeskPatientRegistration = {
