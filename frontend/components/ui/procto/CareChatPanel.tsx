@@ -112,7 +112,8 @@ export default function CareChatPanel({
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [syncError, setSyncError] = useState("")
-  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const lastScrollKey = useRef("")
   const loadSeq = useRef(0)
   const polling = useRef(false)
 
@@ -164,6 +165,7 @@ export default function CareChatPanel({
     setMessages([])
     setPending([])
     setSyncError("")
+    lastScrollKey.current = ""
     void load()
   }, [load])
 
@@ -198,8 +200,22 @@ export default function CareChatPanel({
   )
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
-  }, [visible.length, pending.length])
+    // Key on the newest row, not the count — the thread is capped at 50, so a
+    // new message can arrive without the length changing.
+    const last = pending.length
+      ? `p:${pending[pending.length - 1].tempId}:${pending[pending.length - 1].status}`
+      : visible.length
+        ? `m:${visible[visible.length - 1].id}`
+        : ""
+    if (!last || last === lastScrollKey.current) return
+    const first = lastScrollKey.current === ""
+    lastScrollKey.current = last
+    const el = listRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: first ? "auto" : "smooth" })
+    })
+  }, [visible, pending])
 
   async function deliver(item: PendingMessage) {
     setPending((prev) =>
@@ -285,7 +301,11 @@ export default function CareChatPanel({
         </p>
       ) : null}
 
-      <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
+      <div
+        ref={listRef}
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-3"
+        aria-live="polite"
+      >
         {loading && visible.length === 0 ? (
           <p className="text-sm text-slate-500">Loading messages…</p>
         ) : loadError && visible.length === 0 ? (
@@ -371,7 +391,6 @@ export default function CareChatPanel({
             ) : null}
           </div>
         ))}
-        <div ref={bottomRef} />
       </div>
 
       {loadError && visible.length > 0 ? (
