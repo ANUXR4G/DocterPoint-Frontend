@@ -107,6 +107,13 @@ import {
   publicPatientEmail,
 } from "../../core/patientDisplay.js";
 
+const BLOCK_OVERRIDE_TYPES: readonly OverrideType[] = [
+  OverrideType.BLOCK_DAY,
+  OverrideType.BLOCK_SLOT,
+  OverrideType.EMERGENCY_LEAVE,
+  OverrideType.TOKEN_LIMIT_ADJUST,
+];
+
 const MEMBER_CACHE_TTL_MS = 60_000;
 const memberCache = new Map<
   string,
@@ -1934,6 +1941,47 @@ export const PracticeService = {
     }
     await this.assertCanManageProvider(practiceId, actorUserId, providerId);
 
+    if (!BLOCK_OVERRIDE_TYPES.includes(overrideType)) {
+      throw new AppError(400, "Pick a valid block type.");
+    }
+    const dateIso = data.date?.trim() ?? "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+      throw new AppError(400, "Date must be YYYY-MM-DD.");
+    }
+    if (dateIso < todayIso()) throw new AppError(400, "That day has already passed.");
+    if (dateIso > addDaysIso(todayIso(), 366)) {
+      throw new AppError(400, "Blocks can be added at most one year ahead.");
+    }
+    if (overrideType === OverrideType.BLOCK_SLOT) {
+      const hm = (raw?: string) => {
+        const m = /^(\d{1,2}):([0-5]\d)$/.exec(raw?.trim() ?? "");
+        return m && Number(m[1]) < 24 ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
+      };
+      const start = hm(data.startTime);
+      const end = hm(data.endTime);
+      if (!start || !end) {
+        throw new AppError(400, "Enter the start and end time to block.");
+      }
+      data.startTime = start;
+      data.endTime = end;
+      if (start >= end) {
+        throw new AppError(400, "Block end time must be after the start time.");
+      }
+    } else {
+      data.startTime = undefined;
+      data.endTime = undefined;
+    }
+    if (overrideType === OverrideType.TOKEN_LIMIT_ADJUST) {
+      const max = Number(data.maxTokens);
+      if (!Number.isInteger(max) || max < 0 || max > 500) {
+        throw new AppError(400, "Max tokens must be a whole number from 0 to 500.");
+      }
+      data.maxTokens = max;
+    } else {
+      data.maxTokens = undefined;
+    }
+    data.reason = data.reason?.trim().slice(0, 200) || undefined;
+
     const dayStart = startOfLocalDay(parseLocalDate(data.date));
     const dayEnd = endOfLocalDay(dayStart);
 
@@ -2286,6 +2334,10 @@ export const PracticeService = {
           : { id: overrideId, practiceId },
       orderBy: { date: "desc" },
     });
+    if (!override) throw new AppError(404, "That block or slot no longer exists.");
+    if (scope === "one" && BLOCK_OVERRIDE_TYPES.includes(override.type)) {
+      return this.liftBlockOverride(practiceId, override, actorUserId);
+    }
     if (!override || override.type !== OverrideType.EXTRA_SLOT || !override.startTime || !override.endTime) {
       throw new AppError(404, "Those extra slots no longer exist.");
     }
@@ -2329,6 +2381,53 @@ export const PracticeService = {
     });
     this.announceCalendar(practiceId, override.providerId, [dateIso]);
     return { removed: true, message: `Removed extra slots ${hm12(override.startTime)}–${hm12(override.endTime)}.` };
+  },
+
+  /** Lift a block / leave / token limit for today or a later day. Patients are not messaged. */
+  async liftBlockOverride(
+    practiceId: string,
+    override: {
+      id: string;
+      providerId: string;
+      type: OverrideType;
+      date: Date;
+      startTime: string | null;
+      endTime: string | null;
+      reason: string | null;
+    },
+    actorUserId: string,
+  ) {
+    await this.assertCanManageProvider(practiceId, actorUserId, override.providerId);
+    const dateIso = localDayOfSessionDate(override.date);
+    if (dateIso < todayIso()) throw new AppError(400, "That day has already passed.");
+    await prisma.scheduleOverride.delete({ where: { id: override.id } });
+    const provider = await prisma.user.findUnique({
+      where: { id: override.providerId },
+      select: { name: true },
+    });
+    const label =
+      override.type === OverrideType.EMERGENCY_LEAVE
+        ? "Leave"
+        : override.type === OverrideType.TOKEN_LIMIT_ADJUST
+          ? "Token limit"
+          : "Block";
+    const window =
+      override.startTime && override.endTime
+        ? `, ${hm12(override.startTime)}–${hm12(override.endTime)}`
+        : "";
+    void recordAudit({
+      practiceId,
+      actorUserId,
+      action: "OVERRIDE_REMOVED",
+      headline: `${label} removed`,
+      detail: `${drName(provider?.name?.trim() || "the doctor")}, ${shortDay(dateIso)}${window}${override.reason ? ` · ${override.reason}` : ""}`,
+      entityType: "schedule_override",
+      entityId: override.id,
+      providerId: override.providerId,
+      meta: { type: override.type, date: dateIso, startTime: override.startTime, endTime: override.endTime },
+    });
+    this.announceCalendar(practiceId, override.providerId, [dateIso]);
+    return { removed: true, message: `${label} on ${shortDay(dateIso)}${window} removed.` };
   },
 
   async deleteExtraSeries(
