@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 import { MessageCircle, X } from "lucide-react"
 import CareChatPanel from "@/components/ui/procto/CareChatPanel"
@@ -24,6 +24,7 @@ export default function AppointmentChatModal({
   const selfId = getSessionUserId()
   const peerId = peerUserId?.trim() || ""
   const displayName = patientName?.trim() || "Patient"
+  const pressedBackdrop = useRef(false)
 
   useEffect(() => {
     if (!open) return
@@ -47,8 +48,12 @@ export default function AppointmentChatModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="appointment-chat-title"
+      onMouseDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (pressedBackdrop.current && e.target === e.currentTarget) onClose()
+        pressedBackdrop.current = false
       }}
     >
       <div className="flex max-h-[min(90vh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">

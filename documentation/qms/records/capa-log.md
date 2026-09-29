@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260929-02
+- **Date opened:** 2026-09-29
+- **Severity:** 3
+- **Process:** P-NOTIFY
+- **Description:** Appointment chat modal: sent messages disappeared a few seconds later, and failures showed nothing (or the whole thread went blank).
+- **Evidence:** Reported from Appointments → chat icon; reproduced in `CareChatPanel`.
+- **Containment:** N/A (display only; messages were stored server-side).
+- **Root cause:** (1) the WhatsApp bot-noise filter (`shouldHideFromCareChat`) ran on the clinic's own messages, so "Hello…", "Hi Vishnu…", "Thanks", "Test" vanished on the next 4-second poll; (2) socket messages involving the signed-in user from any other patient were appended to the open thread, then removed by the poll; (3) a poll that started before a send finished overwrote the list; (4) `chatService` used a token read once at render with no refresh / retry, so expired sessions failed silently on polls; (5) a text selection released on the backdrop closed the modal.
+- **Corrective action:** Filter only the other side's messages; socket messages must be between this doctor and this patient; polls merge with local rows, never overlap and skip hidden tabs; `chatFetch` (fresh token, one refresh + retry on 401, 12 s timeout, server message on error); pending bubbles with *Sending…* / *Not sent* + Retry / Discard; amber "Retrying…" notice for poll failures, *Try again* on load failure; backdrop closes only when press and release are both on it.
+- **Owner / due:** Engineering / 2026-09-29
+- **Verification:** Browser: modal stable across polls; drag from textarea to backdrop keeps it open; simulated offline shows the retry notice and clears on recovery; simulated send failure shows Retry / Discard (no message reached the server); tsc + production build.
+- **Status:** Verified
+- **Docs updated:** capa-log.md
+
 ### NC-20260929-01
 - **Date opened:** 2026-09-29
 - **Severity:** 2
