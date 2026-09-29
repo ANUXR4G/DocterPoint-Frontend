@@ -10,6 +10,7 @@ import {
   getPracticeProviders,
   proctoService,
 } from "@/lib/services/procto"
+import { withDrTitle } from "@/lib/doctorName"
 
 const BookingFlow = dynamic(
   () => import("@/components/ui/procto/BookingFlow"),
@@ -116,7 +117,7 @@ export default function PracticeDetailPage() {
       practice.whatsappBusinessNumber || practice.phone || undefined
     const doctors = clinicDoctors.map((d) => ({
       "@type": "Physician",
-      name: d.name ? `Dr. ${d.name}` : "Physician",
+      name: withDrTitle(d.name) || "Physician",
       ...(telephone ? { telephone } : {}),
       ...(location
         ? {
@@ -227,7 +228,7 @@ export default function PracticeDetailPage() {
                   <ul className="mt-2 space-y-1">
                     {clinicDoctors.map((d) => (
                       <li key={d.id} className="text-sm font-semibold text-slate-900 dark:text-white">
-                        Dr. {d.name ?? "Provider"}
+                        {withDrTitle(d.name) || "Provider"}
                       </li>
                     ))}
                   </ul>

@@ -231,7 +231,7 @@ export default function BookingDetailScreen() {
             peerUserId={display.provider.id}
             peerName={
               display.provider.name
-                ? `Dr. ${display.provider.name}`
+                ? `Dr. ${display.provider.name.trim().replace(/^(?:dr\.\s*|dr\s+)+/i, "")}`
                 : "Doctor"
             }
             subtitle="Doctor messages also arrive on WhatsApp. Do not use this for emergencies."

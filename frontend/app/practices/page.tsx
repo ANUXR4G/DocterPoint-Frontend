@@ -14,6 +14,7 @@ import {
   practicesFieldClearAction,
   type PracticesRecoveryAction,
 } from "@/lib/practicesEmptyState"
+import { withDrTitle } from "@/lib/doctorName"
 
 type Practice = {
   id: string
@@ -83,7 +84,7 @@ function displayDoctorName(practice: Practice) {
   const doctors = getPracticeProviders(practice.members ?? [])
   const primary = doctors[0]?.name
   if (practice.type === "SOLO" && primary) {
-    return primary.startsWith("Dr") ? primary : `Dr. ${primary}`
+    return withDrTitle(primary)
   }
   return practice.name
 }
@@ -94,8 +95,7 @@ function displaySubtitle(practice: Practice) {
     return doctors
       .slice(0, 3)
       .map((d) => {
-        const n = d.name ?? "Provider"
-        return n.startsWith("Dr") ? n : `Dr. ${n}`
+        return withDrTitle(d.name) || "Provider"
       })
       .join(" · ")
   }

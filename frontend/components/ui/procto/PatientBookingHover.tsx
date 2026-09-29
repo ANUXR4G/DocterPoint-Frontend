@@ -6,6 +6,7 @@ import Link from "next/link"
 import type { ProctoBooking } from "@/lib/services/procto"
 import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import { withDrTitle } from "@/lib/doctorName"
 
 function dash(v: string | null | undefined) {
   return v?.trim() ? v : "—"
@@ -126,7 +127,7 @@ export function BookingHoverDetailsPanel({
         <div className="flex justify-between gap-3">
           <dt className="opacity-60">Doctor</dt>
           <dd className="text-right font-semibold">
-            {booking.provider?.name ? `Dr ${booking.provider.name}` : "—"}
+            {withDrTitle(booking.provider?.name) || "—"}
           </dd>
         </div>
         {booking.location ? (
