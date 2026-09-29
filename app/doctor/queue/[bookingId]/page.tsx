@@ -900,7 +900,9 @@ export default function VisitPage() {
           selfUserId={selfId}
           peerUserId={peerId}
           peerName={patientName}
-          subtitle="Patient WhatsApp replies also appear here."
+          subtitle="Patient WhatsApp replies also appear here. Attached documents are sent on WhatsApp and saved to this visit."
+          bookingId={bookingId}
+          onDocumentShared={() => void load({ silent: true })}
         />
       ) : (
         <section className="dashboard-panel !p-5">

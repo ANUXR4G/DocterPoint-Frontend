@@ -1,12 +1,19 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { FileText, Paperclip } from "lucide-react"
 import { chatService } from "@/lib/services/chat"
+import { proctoService } from "@/lib/services/procto"
 import { useSocket } from "@/hooks/useSocket"
 import { buildWsUrl } from "@/lib/wsOrigin"
 import { firey } from "@/utils"
 import type { TSocketMessage } from "@/types"
 import { shouldHideFromCareChat } from "@/lib/careChatFilter"
+import {
+  BOOKING_DOCUMENT_ACCEPT,
+  uploadBookingDocument,
+  type BookingDocument,
+} from "@/lib/uploadBookingDocument"
 
 type CareMessage = {
   id: string
@@ -28,6 +35,91 @@ type Props = {
   /** Hide title row when the parent already provides one (e.g. modal). */
   showHeader?: boolean
   className?: string
+  /** Clinic side: enables "attach" — file is saved on this appointment and sent on WhatsApp. */
+  bookingId?: string
+  onDocumentShared?: () => void
+}
+
+type WhatsAppDocStatus =
+  | "sent"
+  | "template"
+  | "simulated"
+  | "opted_out"
+  | "no_phone"
+  | "no_line"
+  | "failed"
+
+function whatsappNotice(
+  status: WhatsAppDocStatus | undefined,
+  error?: string,
+): { text: string; tone: "ok" | "warn" } {
+  const saved = "Saved to the appointment"
+  switch (status) {
+    case "sent":
+      return { text: `Sent on WhatsApp and ${saved.toLowerCase()}.`, tone: "ok" }
+    case "simulated":
+      return { text: `${saved}. WhatsApp is simulated on this server.`, tone: "ok" }
+    case "template":
+      return {
+        text: `${saved}. The patient hasn't messaged in 24 h, so WhatsApp sent a notice to open the app instead of the file.`,
+        tone: "ok",
+      }
+    case "opted_out":
+      return { text: `${saved}. Not sent on WhatsApp — the patient replied STOP.`, tone: "warn" }
+    case "no_phone":
+      return { text: `${saved}. Not sent on WhatsApp — no WhatsApp number on file.`, tone: "warn" }
+    case "no_line":
+      return { text: `${saved}. Not sent on WhatsApp — the clinic's WhatsApp line isn't set up.`, tone: "warn" }
+    default:
+      return {
+        text: `${saved}, but WhatsApp delivery failed${error ? ` (${error})` : ""}.`,
+        tone: "warn",
+      }
+  }
+}
+
+const DOC_MESSAGE = /^📎 (.+)\n(https:\/\/\S+)(?:\n([\s\S]*))?$/
+const URL_PART = /(https?:\/\/[^\s]+)/g
+
+function MessageBody({ content, mine }: { content: string; mine: boolean }) {
+  const doc = content.match(DOC_MESSAGE)
+  const linkClass = mine
+    ? "underline decoration-blue-200 underline-offset-2"
+    : "text-blue-600 underline underline-offset-2 dark:text-blue-400"
+  if (doc) {
+    return (
+      <div>
+        <a
+          href={doc[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`flex items-center gap-2 rounded-xl px-2.5 py-2 ${
+            mine ? "bg-white/15 hover:bg-white/25" : "bg-white hover:bg-slate-50 dark:bg-neutral-700 dark:hover:bg-neutral-600"
+          }`}
+        >
+          <FileText className="size-5 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate font-semibold">{doc[1]}</span>
+        </a>
+        {doc[3]?.trim() ? (
+          <p className="mt-1.5 whitespace-pre-wrap break-words">{doc[3].trim()}</p>
+        ) : null}
+      </div>
+    )
+  }
+  const parts = content.split(URL_PART)
+  return (
+    <p className="whitespace-pre-wrap break-words">
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className={linkClass}>
+            {part}
+          </a>
+        ) : (
+          part
+        ),
+      )}
+    </p>
+  )
 }
 
 function pickUuid(...candidates: unknown[]): string {
@@ -92,8 +184,9 @@ type PendingMessage = {
   tempId: string
   content: string
   createdAt: string
-  status: "sending" | "failed"
+  status: "uploading" | "sending" | "failed"
   error?: string
+  doc?: { file: File; uploaded?: BookingDocument; caption?: string }
 }
 
 const POLL_MS = 4000
@@ -105,10 +198,16 @@ export default function CareChatPanel({
   subtitle,
   showHeader = true,
   className = "",
+  bookingId,
+  onDocumentShared,
 }: Props) {
   const [messages, setMessages] = useState<CareMessage[]>([])
   const [pending, setPending] = useState<PendingMessage[]>([])
   const [draft, setDraft] = useState("")
+  const [notice, setNotice] = useState<{ text: string; tone: "ok" | "warn" } | null>(
+    null,
+  )
+  const fileInput = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [syncError, setSyncError] = useState("")
@@ -162,8 +261,15 @@ export default function CareChatPanel({
   )
 
   useEffect(() => {
+    if (!notice) return
+    const id = window.setTimeout(() => setNotice(null), notice.tone === "ok" ? 6000 : 12000)
+    return () => window.clearTimeout(id)
+  }, [notice])
+
+  useEffect(() => {
     setMessages([])
     setPending([])
+    setNotice(null)
     setSyncError("")
     lastScrollKey.current = ""
     void load()
@@ -217,7 +323,68 @@ export default function CareChatPanel({
     })
   }, [visible, pending])
 
+  function patchPending(tempId: string, patch: Partial<PendingMessage>) {
+    setPending((prev) => prev.map((p) => (p.tempId === tempId ? { ...p, ...patch } : p)))
+  }
+
+  async function deliverDoc(item: PendingMessage) {
+    const doc = item.doc
+    if (!doc || !bookingId) return
+    try {
+      let uploaded = doc.uploaded
+      if (!uploaded) {
+        patchPending(item.tempId, { status: "uploading", error: undefined })
+        uploaded = await uploadBookingDocument(doc.file)
+        patchPending(item.tempId, { doc: { ...doc, uploaded } })
+      }
+      patchPending(item.tempId, { status: "sending", error: undefined })
+      const res = await proctoService.shareBookingDocument(bookingId, {
+        name: uploaded.name,
+        url: uploaded.url,
+        caption: doc.caption,
+      })
+      if (res.status !== "successful" || !res.data) {
+        throw new Error(res.message || "Could not share the document.")
+      }
+      const data = res.data as {
+        message?: Record<string, unknown>
+        whatsapp?: { status?: WhatsAppDocStatus; error?: string }
+      }
+      if (data.message) {
+        const msg = normalizeMsg(data.message)
+        setMessages((prev) => addOnce(prev, msg))
+      }
+      setPending((prev) => prev.filter((p) => p.tempId !== item.tempId))
+      setNotice(whatsappNotice(data.whatsapp?.status, data.whatsapp?.error))
+      onDocumentShared?.()
+    } catch (e) {
+      patchPending(item.tempId, {
+        status: "failed",
+        error: e instanceof Error ? e.message : "Could not share the document.",
+      })
+    }
+  }
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file || !bookingId) return
+    const caption = draft.trim()
+    const item: PendingMessage = {
+      tempId: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      content: `📎 ${file.name}${caption ? `\n${caption}` : ""}`,
+      createdAt: new Date().toISOString(),
+      status: "uploading",
+      doc: { file, caption: caption || undefined },
+    }
+    setPending((prev) => [...prev, item])
+    setDraft("")
+    setNotice(null)
+    void deliverDoc(item)
+  }
+
   async function deliver(item: PendingMessage) {
+    if (item.doc) return deliverDoc(item)
     setPending((prev) =>
       prev.map((p) =>
         p.tempId === item.tempId ? { ...p, status: "sending", error: undefined } : p,
@@ -261,7 +428,7 @@ export default function CareChatPanel({
     setPending((prev) => prev.filter((p) => p.tempId !== tempId))
   }
 
-  const anySending = pending.some((p) => p.status === "sending")
+  const anySending = pending.some((p) => !p.doc && p.status === "sending")
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -338,7 +505,7 @@ export default function CareChatPanel({
                       : "rounded-bl-md bg-slate-100 text-slate-800 dark:bg-neutral-800 dark:text-slate-100"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  <MessageBody content={m.content} mine={mine} />
                   <p
                     className={`mt-1 text-[10px] ${
                       mine ? "text-blue-100" : "text-slate-400"
@@ -367,7 +534,13 @@ export default function CareChatPanel({
             >
               <p className="whitespace-pre-wrap break-words">{p.content}</p>
               <p className="mt-1 text-[10px] text-blue-100">
-                {p.status === "sending" ? "Sending…" : "Not sent"}
+                {p.status === "uploading"
+                  ? "Uploading…"
+                  : p.status === "sending"
+                    ? p.doc
+                      ? "Sending to WhatsApp…"
+                      : "Sending…"
+                    : "Not sent"}
               </p>
             </div>
             {p.status === "failed" ? (
@@ -397,8 +570,41 @@ export default function CareChatPanel({
         <p className="px-4 text-xs text-red-600 dark:text-red-400">{loadError}</p>
       ) : null}
 
+      {notice ? (
+        <p
+          role="status"
+          className={`border-t px-4 py-1.5 text-xs ${
+            notice.tone === "ok"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200"
+              : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+          }`}
+        >
+          {notice.text}
+        </p>
+      ) : null}
+
       <div className="border-t border-slate-200 p-3 dark:border-neutral-700">
         <div className="flex gap-2">
+          {bookingId ? (
+            <>
+              <input
+                ref={fileInput}
+                type="file"
+                accept={BOOKING_DOCUMENT_ACCEPT}
+                className="hidden"
+                onChange={onPickFile}
+              />
+              <button
+                type="button"
+                onClick={() => fileInput.current?.click()}
+                title="Send a document — saved to this appointment and sent on the patient's WhatsApp. Any typed text goes with it as a caption."
+                aria-label="Attach document"
+                className="flex size-11 shrink-0 items-center justify-center self-end rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
+              >
+                <Paperclip className="size-5" aria-hidden />
+              </button>
+            </>
+          ) : null}
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}

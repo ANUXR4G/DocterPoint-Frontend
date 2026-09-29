@@ -481,6 +481,16 @@ export const proctoService = {
       body: JSON.stringify(doc),
     }),
 
+  /** Save on the appointment, post in care chat, and send on patient WhatsApp. */
+  shareBookingDocument: (
+    bookingId: string,
+    doc: { name: string; url: string; caption?: string },
+  ) =>
+    proctoFetch(`/procto/bookings/${bookingId}/share-document`, {
+      method: "POST",
+      body: JSON.stringify(doc),
+    }),
+
   listPracticeBookings: (
     practiceId: string,
     opts?:

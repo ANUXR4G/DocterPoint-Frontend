@@ -11,6 +11,8 @@ type Props = {
   patientName?: string | null
   /** Registered patient account UUID — required for care chat. */
   peerUserId?: string | null
+  /** Enables sending documents: saved on this appointment + patient WhatsApp. */
+  bookingId?: string | null
   onClose: () => void
 }
 
@@ -19,6 +21,7 @@ export default function AppointmentChatModal({
   open,
   patientName,
   peerUserId,
+  bookingId,
   onClose,
 }: Props) {
   const selfId = getSessionUserId()
@@ -71,6 +74,9 @@ export default function AppointmentChatModal({
             </h2>
             <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
               Patient WhatsApp replies also appear here.
+              {bookingId
+                ? " Documents you attach are sent on WhatsApp and saved to this appointment."
+                : ""}
             </p>
           </div>
           <button
@@ -92,6 +98,7 @@ export default function AppointmentChatModal({
               peerUserId={peerId}
               peerName={displayName}
               subtitle="Patient WhatsApp replies also appear here."
+              bookingId={bookingId || undefined}
             />
           ) : (
             <div className="px-5 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
