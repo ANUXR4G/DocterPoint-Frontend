@@ -160,12 +160,28 @@ function dateLabel(b: CalBooking) {
   return formatPracticeDateTime(start)
 }
 
-function BookingHoverDetails({ booking }: { booking: CalBooking }) {
+function BookingDetails({
+  booking,
+  onClose,
+}: {
+  booking: CalBooking
+  onClose: () => void
+}) {
   return (
     <div className="w-80 rounded-2xl border border-neutral-200 bg-white p-4 text-left shadow-2xl dark:border-neutral-600 dark:bg-neutral-900 sm:w-96">
-      <p className="text-base font-bold text-neutral-900 dark:text-white">
-        {patientLabel(booking)}
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-base font-bold text-neutral-900 dark:text-white">
+          {patientLabel(booking)}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close details"
+          className="-mr-1 -mt-1 rounded-lg px-2 py-0.5 text-lg leading-none text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-white"
+        >
+          ×
+        </button>
+      </div>
       <dl className="mt-3 space-y-2 text-sm text-neutral-600 dark:text-neutral-300">
         {booking.patient?.mrn?.trim() ? (
           <div className="flex justify-between gap-3">
@@ -220,9 +236,12 @@ function BookingHoverDetails({ booking }: { booking: CalBooking }) {
           </dd>
         </div>
       </dl>
-      <p className="mt-3 border-t border-neutral-100 pt-3 text-xs font-bold text-[var(--theme-primary)] dark:border-neutral-700">
-        Click to open visit
-      </p>
+      <Link
+        href={`/doctor/queue/${booking.id}`}
+        className="mt-3 block border-t border-neutral-100 pt-3 text-xs font-bold text-[var(--theme-primary)] hover:underline dark:border-neutral-700"
+      >
+        Open visit →
+      </Link>
     </div>
   )
 }
@@ -237,13 +256,14 @@ function BookingCard({
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const ref = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   function show() {
     const el = ref.current
     if (!el) return
     const r = el.getBoundingClientRect()
     const panelW = 384
-    const panelH = 280
+    const panelH = 300
     let left = r.left
     let top = r.bottom + 8
     if (left + panelW > window.innerWidth - 12) {
@@ -256,21 +276,50 @@ function BookingCard({
     setOpen(true)
   }
 
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (ref.current?.contains(t) || panelRef.current?.contains(t)) return
+      close()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close()
+    }
+    const onScroll = (e: Event) => {
+      if (panelRef.current?.contains(e.target as Node)) return
+      close()
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKey)
+    window.addEventListener("scroll", onScroll, true)
+    window.addEventListener("resize", close)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKey)
+      window.removeEventListener("scroll", onScroll, true)
+      window.removeEventListener("resize", close)
+    }
+  }, [open])
+
   return (
-    <div
-      ref={ref}
-      className="relative"
-      onMouseEnter={show}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={show}
-      onBlur={() => setOpen(false)}
-    >
-      <Link
-        href={`/doctor/queue/${booking.id}`}
-        onClick={(e) => e.stopPropagation()}
-        className={`block rounded-lg border text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${statusClass(booking.status)} ${
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (open) setOpen(false)
+          else show()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") e.stopPropagation()
+        }}
+        className={`block w-full rounded-lg border text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${statusClass(booking.status)} ${
           compact ? "px-1.5 py-1" : "px-2.5 py-2"
-        }`}
+        } ${open ? "ring-2 ring-[var(--theme-primary)] ring-offset-1 dark:ring-offset-neutral-900" : ""}`}
       >
         {compact ? (
           <p className="truncate text-[11px] font-semibold leading-tight">
@@ -296,14 +345,26 @@ function BookingCard({
             </p>
           </>
         )}
-      </Link>
+      </button>
       {open
         ? createPortal(
             <div
-              className="pointer-events-none fixed z-[9999]"
+              ref={panelRef}
+              role="dialog"
+              aria-label={`Booking details for ${patientLabel(booking)}`}
+              className="fixed z-[9999]"
               style={{ top: pos.top, left: pos.left }}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation()
+                if (e.key === "Escape") setOpen(false)
+              }}
             >
-              <BookingHoverDetails booking={booking} />
+              <BookingDetails
+                booking={booking}
+                onClose={() => setOpen(false)}
+              />
             </div>,
             document.body,
           )
