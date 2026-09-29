@@ -186,6 +186,7 @@ export class ChatService {
     senderIdRaw: string,
     receiverIdRaw: string,
     content: string,
+    opts?: { whatsappFanOut?: boolean },
   ) {
     const trimmed = content.trim();
     if (!trimmed) {
@@ -216,16 +217,18 @@ export class ChatService {
     await socketManager.sendPrivateMsg(senderRoom, newDirectMsg);
 
     // Clinic → patient: also mirror to WhatsApp (best-effort; never blocks chat).
-    void import("./chat.whatsappFanout.js")
-      .then(({ fanOutCareMessageToWhatsApp }) =>
-        fanOutCareMessageToWhatsApp(senderId, receiverId, trimmed),
-      )
-      .catch((err) =>
-        console.warn(
-          "[care-chat-wa] fan-out import/send error:",
-          err instanceof Error ? err.message : err,
-        ),
-      );
+    if (opts?.whatsappFanOut !== false) {
+      void import("./chat.whatsappFanout.js")
+        .then(({ fanOutCareMessageToWhatsApp }) =>
+          fanOutCareMessageToWhatsApp(senderId, receiverId, trimmed),
+        )
+        .catch((err) =>
+          console.warn(
+            "[care-chat-wa] fan-out import/send error:",
+            err instanceof Error ? err.message : err,
+          ),
+        );
+    }
 
     // Staff → patient: surface on practice Notifications tab (message to patient).
     void (async () => {

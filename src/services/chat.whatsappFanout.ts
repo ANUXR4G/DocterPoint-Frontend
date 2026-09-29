@@ -6,6 +6,7 @@
 import { prisma } from "../db/prisma.js";
 import { settings } from "../config/index.js";
 import {
+  sendWhatsAppDocument,
   sendWhatsAppTemplate,
   sendWhatsAppText,
   type WhatsAppSendResult,
@@ -528,5 +529,185 @@ export async function fanOutCareMessageToWhatsApp(
       "[care-chat-wa] fan-out failed:",
       err instanceof Error ? err.message : err,
     );
+  }
+}
+
+export type CareDocumentWhatsAppStatus =
+  | "sent"
+  | "template"
+  | "simulated"
+  | "opted_out"
+  | "no_phone"
+  | "no_line"
+  | "failed";
+
+const DOC_MAX_BYTES = 10 * 1024 * 1024;
+const DOC_FETCH_TIMEOUT_MS = 20_000;
+
+/** Only files from the clinic's own Cloudinary account are fetched server-side. */
+export function isClinicDocumentUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      u.protocol === "https:" &&
+      u.hostname === "res.cloudinary.com" &&
+      u.pathname.startsWith("/dwhlynqj3/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function documentMimeFor(filename: string, headerMime?: string | null): string {
+  const h = String(headerMime || "").split(";")[0]!.trim().toLowerCase();
+  if (h && h !== "application/octet-stream") return h;
+  const ext = filename.toLowerCase().match(/\.([a-z0-9]{2,5})$/)?.[1];
+  switch (ext) {
+    case "pdf":
+      return "application/pdf";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "heic":
+      return "image/heic";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    default:
+      return "application/pdf";
+  }
+}
+
+async function downloadClinicDocument(
+  url: string,
+  filename: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), DOC_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`document download failed (${res.status})`);
+    const declared = Number(res.headers.get("content-length") || 0);
+    if (declared > DOC_MAX_BYTES) throw new Error("document is larger than 10 MB");
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length > DOC_MAX_BYTES) throw new Error("document is larger than 10 MB");
+    return { buffer, mimeType: documentMimeFor(filename, res.headers.get("content-type")) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Clinic → patient: deliver a shared visit document on WhatsApp.
+ * Inside the 24h window the file itself is sent; outside it (or when the file
+ * cannot be sent) the approved CLINIC_CARE_MESSAGE UTILITY template tells the
+ * patient a document is waiting in the app. Honours STOP.
+ */
+export async function sendCareDocumentToWhatsApp(opts: {
+  practiceId: string;
+  practiceName: string;
+  providerName: string;
+  patientUserId: string;
+  staffUserId: string;
+  phones: Array<string | null | undefined>;
+  doc: { name: string; url: string };
+  caption?: string;
+}): Promise<{ status: CareDocumentWhatsAppStatus; error?: string }> {
+  try {
+    const to = await resolveWhatsAppMsisdn(opts.practiceId, ...opts.phones);
+    if (to.length < 10) return { status: "no_phone" };
+    if (await isOptedOut(opts.practiceId, to)) return { status: "opted_out" };
+
+    const line = await practicePhoneNumberId(opts.practiceId);
+    if (line.source === "none") return { status: "no_line" };
+    const envFallback = settings.whatsappPhoneNumberId?.trim() || undefined;
+    const candidates = [
+      line.phoneNumberId,
+      ...(envFallback && envFallback !== line.phoneNumberId ? [envFallback] : []),
+    ].filter(Boolean) as string[];
+    const extra = {
+      practiceId: opts.practiceId,
+      to: `…${to.slice(-4)}`,
+      lineSource: line.source,
+    };
+
+    const heading = `*${opts.providerName}* (${opts.practiceName})`;
+    const caption = opts.caption?.trim()
+      ? `${heading}:\n${opts.caption.trim()}`
+      : `${heading} shared a document with you.`;
+
+    let lastError: string | undefined;
+    let sent: WhatsAppSendResult | null = null;
+    try {
+      const file = await downloadClinicDocument(opts.doc.url, opts.doc.name);
+      for (const phoneNumberId of candidates) {
+        const res = await sendWhatsAppDocument(
+          to,
+          {
+            filename: opts.doc.name,
+            mimeType: file.mimeType,
+            buffer: file.buffer,
+            caption,
+          },
+          phoneNumberId,
+        );
+        logResult("document", res, { ...extra, phoneNumberId });
+        if (res.ok || res.simulated) {
+          sent = res;
+          break;
+        }
+        lastError = res.error;
+        if (!isDisplayNameBlocked(res.error) && !isOutsideWindowError(res.error)) break;
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      console.warn(`[care-chat-wa] document prepare failed: ${lastError}`, extra);
+    }
+
+    let status: CareDocumentWhatsAppStatus | null = sent
+      ? sent.simulated
+        ? "simulated"
+        : "sent"
+      : null;
+
+    if (!status) {
+      const templated = await sendWhatsAppTemplate(
+        to,
+        "CLINIC_CARE_MESSAGE",
+        {
+          practiceName: opts.practiceName,
+          providerName: opts.providerName,
+          messagePreview: truncate(`Shared a document: ${opts.doc.name}`),
+        },
+        line.phoneNumberId,
+      );
+      logResult("document CLINIC_CARE_MESSAGE template", templated, extra);
+      if (templated.ok || templated.simulated) status = "template";
+      else lastError = templated.error || lastError;
+    }
+
+    if (!status) return { status: "failed", error: lastError };
+
+    void import("./chat.whatsappInbound.js")
+      .then(({ markWhatsAppConversationHandedOff }) =>
+        markWhatsAppConversationHandedOff({
+          practiceId: opts.practiceId,
+          patientPhone: to,
+          carePatientId: opts.patientUserId,
+          careProviderId: opts.staffUserId,
+        }),
+      )
+      .catch((err) =>
+        console.warn(
+          "[care-chat-wa] handoff mark failed:",
+          err instanceof Error ? err.message : err,
+        ),
+      );
+    return { status };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.warn(`[care-chat-wa] document send failed: ${error}`);
+    return { status: "failed", error };
   }
 }
