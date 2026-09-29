@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { uuidToBase64 } from "../core/security.js";
 import { socketManager } from "../core/socket.js";
+import { isOptIn, isOptOut } from "./procto/whatsapp.policy.js";
 
 const PROVISIONAL_EMAIL_SUFFIX = "@patients.glucoguide.local";
 
@@ -213,6 +214,35 @@ export function looksLikeBotCommand(text: string): boolean {
 }
 
 /**
+ * While the clinic owns the thread (Message doctor / support handoff), only
+ * explicit commands go back to the bot — BOT / MENU / booking commands, STOP /
+ * START, list taps and button ids. Greetings, "ok", "yes", numbers and any
+ * sentence are messages for the doctor.
+ */
+export function isCareModeBotCommand(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  if (isOptOut(t) || isOptIn(t)) return true;
+  if (
+    /^(?:menu|post|booking|slot|date|mode|patient|provider|lang|rel|doc|whom|cancel|confirm|idle|continue|nlu|specialty|manage|reg_email)[:_]\S*$/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/^[1-9]\u{FE0F}?\u{20E3}$/u.test(t)) return true;
+  if (/^[1-9]\s*[·•]\s*\S+/u.test(t)) return true;
+  return /^(bot|resume(\s*bot)?|menu|main(\s*menu)?|book(ing|\s*appt)?|book\s*new\s*appointment|new\s*booking|my\s*bookings|view\s*\/?\s*manage\s*bookings|cancel|reschedule|status|language|faq|support|talk\s*to\s*(support|agent)|exit|quit)$/i.test(
+    t,
+  );
+}
+
+/** Bot command check for the thread's current owner (bot vs clinic). */
+export function isBotCommandFor(text: string, clinicOwnsThread: boolean): boolean {
+  return clinicOwnsThread ? isCareModeBotCommand(text) : looksLikeBotCommand(text);
+}
+
+/**
  * True for system care-chat notices doctors should always see
  * (cancel alerts, visit-doc attachments).
  */
@@ -284,7 +314,10 @@ export async function ingestWhatsAppPatientReply(opts: {
   }
 
   // Menu / list taps and booking commands belong to the bot — never mirror them.
-  if (looksLikeBotCommand(text)) {
+  const clinicOwnsThread =
+    opts.conversationAlreadyHandedOff === true || opts.postBookingCare === true;
+  const botCommand = isBotCommandFor(text, clinicOwnsThread);
+  if (botCommand) {
     return { ingested: false, shouldDeferToHuman: false };
   }
 
@@ -473,7 +506,7 @@ export async function ingestWhatsAppPatientReply(opts: {
 
   const deferFor = async (): Promise<boolean> => {
     // Booking commands / BOT resume / post-booking menu always go to orchestrator.
-    if (looksLikeBotCommand(text)) return false;
+    if (botCommand) return false;
     // Clinic already took over (Talk to Support / Message doctor).
     if (opts.conversationAlreadyHandedOff === true) return true;
     // Only park the bot after explicit "Message doctor".
