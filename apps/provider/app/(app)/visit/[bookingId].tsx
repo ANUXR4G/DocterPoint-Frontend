@@ -44,6 +44,16 @@ import { contentBottomPad } from "@/lib/dockLayout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const TIMES = ["morning", "afternoon", "evening", "night"] as const;
+const INTERVAL_HOURS = [2, 4, 6, 8, 12] as const;
+const MAX_INTERVAL_HOURS = 48;
+
+function everyHoursLabel(hours: number) {
+  return hours === 1 ? "Every 1 hour" : `Every ${hours} hours`;
+}
+
+function isDayPart(t: string) {
+  return (TIMES as readonly string[]).includes(t);
+}
 
 type Med = { name: string; amount?: string; times?: string[] };
 
@@ -102,6 +112,7 @@ export default function VisitScreen() {
   const [medName, setMedName] = useState("");
   const [medAmount, setMedAmount] = useState("");
   const [medTimes, setMedTimes] = useState<string[]>([]);
+  const [customHours, setCustomHours] = useState("");
   const [selfId, setSelfId] = useState<string | null>(null);
   const [sideTab, setSideTab] = useState<"chat" | "documents">("chat");
 
@@ -194,6 +205,11 @@ export default function VisitScreen() {
   function addMedicine() {
     const name = medName.trim();
     if (!name) return;
+    const hours = Number(customHours);
+    if (customHours && !(hours >= 1 && hours <= MAX_INTERVAL_HOURS)) {
+      setError(`Custom timing must be every 1 to ${MAX_INTERVAL_HOURS} hours.`);
+      return;
+    }
     const next = [
       ...medicines,
       {
@@ -206,6 +222,7 @@ export default function VisitScreen() {
     setMedName("");
     setMedAmount("");
     setMedTimes([]);
+    setCustomHours("");
     void persistMedicines(next);
   }
 
@@ -216,9 +233,26 @@ export default function VisitScreen() {
   }
 
   function toggleTime(t: string) {
+    setCustomHours("");
+    setMedTimes((prev) => {
+      const parts = prev.filter(isDayPart);
+      return parts.includes(t) ? parts.filter((x) => x !== t) : [...parts, t];
+    });
+  }
+
+  function pickInterval(hours: number) {
+    setCustomHours("");
     setMedTimes((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+      prev[0] === everyHoursLabel(hours) ? [] : [everyHoursLabel(hours)],
     );
+  }
+
+  function onCustomHours(value: string) {
+    const digits = value.replace(/\D/g, "").slice(0, 2);
+    setCustomHours(digits);
+    const n = Number(digits);
+    if (n >= 1 && n <= MAX_INTERVAL_HOURS) setMedTimes([everyHoursLabel(n)]);
+    else setMedTimes((prev) => prev.filter(isDayPart));
   }
 
   async function saveVisit(alsoStatus?: string) {
@@ -492,6 +526,30 @@ export default function VisitScreen() {
                 />
               ))}
             </View>
+            <Text style={[styles.meta, { marginTop: space.sm }]}>Or every</Text>
+            <View style={styles.actions}>
+              {INTERVAL_HOURS.map((h) => (
+                <Chip
+                  key={h}
+                  label={`${h} h`}
+                  active={!customHours && medTimes[0] === everyHoursLabel(h)}
+                  onPress={() => pickInterval(h)}
+                />
+              ))}
+              <TextInput
+                value={customHours}
+                onChangeText={onCustomHours}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="Custom h"
+                placeholderTextColor={colors.inkFaint}
+                accessibilityLabel={`Custom interval in hours (1–${MAX_INTERVAL_HOURS})`}
+                style={[styles.input, { width: 96, paddingVertical: 6, textAlign: "center" }]}
+              />
+            </View>
+            {medTimes.length ? (
+              <Text style={styles.meta}>Timing: {medTimes.join(", ")}</Text>
+            ) : null}
             <PrimaryButton label="Add medicine" onPress={addMedicine} />
           </View>
         ) : null}

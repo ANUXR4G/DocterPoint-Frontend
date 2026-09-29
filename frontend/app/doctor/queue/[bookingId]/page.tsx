@@ -102,6 +102,16 @@ function doctorRemarksForEdit(text?: string | null): string {
 }
 
 const TIMES = ["morning", "afternoon", "evening", "night"] as const
+const INTERVAL_HOURS = [2, 4, 6, 8, 12] as const
+const MAX_INTERVAL_HOURS = 48
+
+function everyHoursLabel(hours: number) {
+  return hours === 1 ? "Every 1 hour" : `Every ${hours} hours`
+}
+
+function isDayPart(t: string) {
+  return (TIMES as readonly string[]).includes(t)
+}
 
 function dash(v: string | null | undefined) {
   return v?.trim() ? v : "—"
@@ -231,6 +241,7 @@ export default function VisitPage() {
   const [medName, setMedName] = useState("")
   const [medAmount, setMedAmount] = useState("1")
   const [medTimes, setMedTimes] = useState<string[]>(["morning"])
+  const [customHours, setCustomHours] = useState("")
 
   const applyVisitData = useCallback((data: VisitBooking, opts?: { silent?: boolean }) => {
     setBooking(data)
@@ -321,13 +332,28 @@ export default function VisitPage() {
   }, [ready, loadGeneralDocs])
 
   function toggleTime(time: string) {
-    setMedTimes((prev) =>
-      prev.includes(time)
-        ? prev.length > 1
-          ? prev.filter((t) => t !== time)
-          : prev
-        : [...prev, time],
-    )
+    setCustomHours("")
+    setMedTimes((prev) => {
+      const parts = prev.filter(isDayPart)
+      return parts.includes(time)
+        ? parts.length > 1
+          ? parts.filter((t) => t !== time)
+          : parts
+        : [...parts, time]
+    })
+  }
+
+  function pickInterval(hours: number) {
+    setCustomHours("")
+    setMedTimes([everyHoursLabel(hours)])
+  }
+
+  function onCustomHours(value: string) {
+    const digits = value.replace(/\D/g, "").slice(0, 2)
+    setCustomHours(digits)
+    const n = Number(digits)
+    if (n >= 1 && n <= MAX_INTERVAL_HOURS) setMedTimes([everyHoursLabel(n)])
+    else if (!medTimes.some(isDayPart)) setMedTimes(["morning"])
   }
 
   async function persistVisit(
@@ -370,6 +396,11 @@ export default function VisitPage() {
   async function addMedicine() {
     if (!medName.trim() || !bookingId) return
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
+    const hours = Number(customHours)
+    if (customHours && !(hours >= 1 && hours <= MAX_INTERVAL_HOURS)) {
+      setError(`Custom timing must be every 1 to ${MAX_INTERVAL_HOURS} hours.`)
+      return
+    }
     const next = [
       ...medicines,
       {
@@ -382,6 +413,7 @@ export default function VisitPage() {
     setMedName("")
     setMedAmount("1")
     setMedTimes(["morning"])
+    setCustomHours("")
     setMessage("")
     await persistVisit(next, documents, { successMessage: "Medicine saved." })
   }
@@ -736,6 +768,51 @@ export default function VisitPage() {
                   </button>
                 ))}
               </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs opacity-60">Or every</span>
+                {INTERVAL_HOURS.map((h) => {
+                  const active = !customHours && medTimes[0] === everyHoursLabel(h)
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => pickInterval(h)}
+                      aria-pressed={active}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                        active
+                          ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
+                          : "border border-neutral-300 dark:border-neutral-600"
+                      }`}
+                    >
+                      {h} h
+                    </button>
+                  )
+                })}
+                <label
+                  className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-semibold ${
+                    customHours && medTimes[0] === everyHoursLabel(Number(customHours))
+                      ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
+                      : "border border-neutral-300 dark:border-neutral-600"
+                  }`}
+                >
+                  <input
+                    value={customHours}
+                    onChange={(e) => onCustomHours(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Custom"
+                    aria-label={`Custom interval in hours (1–${MAX_INTERVAL_HOURS})`}
+                    className="w-14 bg-transparent py-0.5 text-center outline-none placeholder:font-normal placeholder:opacity-60"
+                  />
+                  h
+                </label>
+              </div>
+              {customHours && !(Number(customHours) >= 1 && Number(customHours) <= MAX_INTERVAL_HOURS) ? (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  Enter 1 to {MAX_INTERVAL_HOURS} hours.
+                </p>
+              ) : (
+                <p className="text-xs opacity-60">Timing: {medTimes.join(", ")}</p>
+              )}
             </div>
           ) : null}
 
