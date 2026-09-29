@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260930-01
+- **Date opened:** 2026-09-30
+- **Severity:** 3
+- **Process:** P-BOOK
+- **Description:** Clinic portal Settings: sections, actions and fields misbehaved. Saving the clinic account overwrote the city with a fragment of the street address; extra slots added from Leave & blocks ignored the chosen patients-per-slot; an extra-slot save that needed confirmation (break / leave clash) was reported as created although nothing was written; leave and blocks could not be removed once added; the clinic hours form demanded a licence number the server treats as optional; invalid login email on *Add doctor* did nothing; the WhatsApp number showed as the bot line before any line was assigned; switching doctors could briefly show the previous doctor's hours.
+- **Evidence:** Browser walk-through of `/settings` (Account, Practice → Schedule / Hours & blocks / Doctors / WhatsApp) as dr.demo; intercepted request payloads.
+- **Containment:** N/A (no bookings affected).
+- **Root cause:** The account form derived `location.city` from the address string; `OverridesPanel` sent capacity as `maxTokens` (ignored for `EXTRA_SLOT`) and treated every 200 as success; no delete path for block-type overrides; client validation copied from an older schema; native `type=email` validation silently blocked submit; loaders had no stale-response guard.
+- **Corrective action:** Explicit *City / area* field sent as `location.city` (plus *Specialty*); roster moved to Practice → Doctors with a summary card on Account; extra slots send `capacity` and handle `needsConfirmation` with *Save anyway* (`confirm: true`); new *Upcoming leave & blocks* list with two-step *Remove* → `DELETE …/overrides/:id` (server validates type, date, window, token count; lifts only today or later; audit `OVERRIDE_REMOVED`; no patient messages); licence optional; forms `noValidate` with inline errors; WhatsApp line shown only for LIVE / pending statuses; per-doctor reset + stale-response guard; readable role / status labels; deep link `?pane=blocks`.
+- **Owner / due:** Engineering / 2026-09-30
+- **Verification:** API refusals (past date, bad type, bad date, slot order, missing times, negative tokens → 400; missing → 404; other clinic → 403; own block lifted → 200); browser checks with intercepted saves; backend 229 tests, tsc, production builds.
+- **Status:** Verified
+- **Docs updated:** capa-log.md, flow.md, decisions.md, risk-register.md (R32)
+
 ### NC-20260929-02
 - **Date opened:** 2026-09-29
 - **Severity:** 3

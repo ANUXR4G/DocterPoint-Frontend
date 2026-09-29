@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -23,7 +23,8 @@ import {
   practiceTabHref,
   type PracticeTab,
 } from "@/lib/doctorPracticeTabs";
-import { formatPracticeTime } from "@/lib/practiceTime";
+import { formatPracticeTime, PRACTICE_TIMEZONE } from "@/lib/practiceTime";
+import { hm12 } from "@/lib/quickSlots";
 import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal";
 import {
   EffectiveFromField,
@@ -45,6 +46,7 @@ type PracticeMember = {
     id: string;
     name: string;
     slug: string;
+    scheduleNoticeHours?: number | null;
     locations: { id: string; name: string; city: string }[];
     members: {
       userId: string;
@@ -110,6 +112,17 @@ const WEEKDAYS = [
 ] as const;
 const OVERRIDE_TYPES = ["BLOCK_DAY", "BLOCK_SLOT", "EMERGENCY_LEAVE", "TOKEN_LIMIT_ADJUST"];
 const EXTRA_SLOT_TYPE = "EXTRA_SLOT";
+const MEMBER_ROLE_LABEL: Record<string, string> = {
+  PRACTICE_OWNER: "Clinic owner",
+  PRACTICE_ADMIN: "Clinic admin",
+  DOCTOR: "Doctor",
+  RECEPTIONIST: "Receptionist",
+};
+const CONVERSATION_STATUS_LABEL: Record<string, string> = {
+  bot_active: "Bot replying",
+  handed_off: "Staff handling",
+  closed: "Closed",
+};
 
 type ScheduleRow = {
   dayOfWeek: number
@@ -169,6 +182,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
     ? searchParams.get("subtab")
     : searchParams.get("tab");
   const doctorParam = searchParams.get("doctor");
+  const paneParam = searchParams.get("pane");
   const subscribePlan = searchParams.get("subscribePlan");
 
   useEffect(() => {
@@ -200,7 +214,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
 
   const [tab, setTab] = useState<Tab>(initialTab);
   const [setupPane, setSetupPane] = useState<"hours" | "blocks">(
-    tabParam === "overrides" ? "blocks" : "hours",
+    tabParam === "overrides" || paneParam === "blocks" ? "blocks" : "hours",
   );
 
   useEffect(() => {
@@ -211,6 +225,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
       tabParam === "inbox"
     ) {
       setTab(tabParam);
+      if (tabParam === "setup") setSetupPane(paneParam === "blocks" ? "blocks" : "hours");
     } else if (tabParam === "schedule") {
       setTab("setup");
       setSetupPane("hours");
@@ -218,14 +233,14 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
       setTab("setup");
       setSetupPane("blocks");
     }
-  }, [tabParam]);
+  }, [tabParam, paneParam]);
 
   const [memberships, setMemberships] = useState<PracticeMember[]>([]);
   const [practiceIdx, setPracticeIdx] = useState(0);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
     null,
   );
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(clinicTodayIso);
   const [calendar, setCalendar] = useState<CalendarData | null>(null);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [upcomingChanges, setUpcomingChanges] = useState<UpcomingScheduleChange[]>([]);
@@ -269,19 +284,30 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
     [embedded, providerId],
   );
 
+  const setupAwareUrl = useCallback(
+    (t: Tab, doctorId?: string | null, pane = setupPane) =>
+      `${practiceTabUrl(t, doctorId)}${t === "setup" && pane === "blocks" ? "&pane=blocks" : ""}`,
+    [practiceTabUrl, setupPane],
+  );
+
   const reloadMemberships = useCallback(async () => {
     await refreshDashboard({ silent: true });
   }, [refreshDashboard]);
 
+  const providerRef = useRef(providerId);
+  providerRef.current = providerId;
+
   const loadCalendar = useCallback(async () => {
     if (!practice || !providerId) return;
     const res = await proctoService.getCalendar(practice.id, providerId, date);
+    if (providerRef.current !== providerId) return;
     if (res.status === "successful") setCalendar(res.data);
   }, [practice, providerId, date]);
 
   const loadSchedules = useCallback(async () => {
     if (!practice || !providerId) return;
     const res = await proctoService.getSchedules(practice.id, providerId);
+    if (providerRef.current !== providerId) return;
     if (res.status === "successful") {
       const normalized = normalizeSchedulesResponse(res.data);
       setSchedules(normalized.schedules);
@@ -293,6 +319,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
   const loadOverrides = useCallback(async () => {
     if (!practice || !providerId) return;
     const res = await proctoService.getOverrides(practice.id, providerId);
+    if (providerRef.current !== providerId) return;
     if (res.status === "successful") setOverrides(res.data);
   }, [practice, providerId]);
 
@@ -326,6 +353,20 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
       return preferred;
     });
   }, [practice, membership?.userId, isClinicAdmin, doctorParam]);
+
+  useEffect(() => {
+    setSchedules([]);
+    setUpcomingChanges([]);
+    setPendingVerification(null);
+    setOverrides([]);
+    setCalendar(null);
+  }, [providerId]);
+
+  useEffect(() => {
+    if (!message) return;
+    const t = window.setTimeout(() => setMessage(""), 6000);
+    return () => window.clearTimeout(t);
+  }, [message]);
 
   useEffect(() => {
     if (!practice || !providerId) return;
@@ -419,12 +460,12 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
                     onChange={(e) => {
                       const next = e.target.value;
                       setSelectedProviderId(next);
-                      router.replace(practiceTabUrl(tab, next), {
+                      router.replace(setupAwareUrl(tab, next), {
                         scroll: false,
                       });
                     }}
                     className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-slate-800"
-                    aria-label="Select doctor to override"
+                    aria-label="Doctor"
                   >
                     {rosterDoctors.map((m) => (
                       <option key={m.userId} value={m.userId}>
@@ -458,24 +499,26 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
             {isClinicAdmin &&
               rosterDoctors.length >= 1 &&
               (tab === "calendar" || tab === "setup") && (
-                <select
-                  value={providerId ?? ""}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setSelectedProviderId(next);
-                    router.replace(practiceTabUrl(tab, next), {
-                      scroll: false,
-                    });
-                  }}
-                  className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-slate-800"
-                  aria-label="Select doctor to override"
-                >
-                  {rosterDoctors.map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.user.name || m.user.email || "Doctor"}
-                    </option>
-                  ))}
-                </select>
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <span className="opacity-70">Doctor</span>
+                  <select
+                    value={providerId ?? ""}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setSelectedProviderId(next);
+                      router.replace(setupAwareUrl(tab, next), {
+                        scroll: false,
+                      });
+                    }}
+                    className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-slate-800"
+                  >
+                    {rosterDoctors.map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {m.user.name || m.user.email || "Doctor"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               )}
             {memberships.length > 1 && (
               <select
@@ -539,7 +582,11 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
         <>
           <div className="mb-4 flex flex-wrap gap-2">
             <Link
-              href="/doctor/dashboard"
+              href={
+                isClinicAdmin && providerId
+                  ? `/clinic/queue?doctor=${encodeURIComponent(providerId)}`
+                  : "/doctor/queue"
+              }
               className="inline-flex min-h-11 items-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white"
             >
               Open live queue
@@ -550,10 +597,12 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
               onClick={() => {
                 setTab("setup");
                 setSetupPane("blocks");
-                router.replace(practiceTabUrl("setup"), { scroll: false });
+                router.replace(setupAwareUrl("setup", undefined, "blocks"), {
+                  scroll: false,
+                });
               }}
             >
-              Block / leave today
+              Add leave or block
             </button>
           </div>
           <DoctorSchedulePanel
@@ -573,16 +622,20 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
         <div className="space-y-4">
           {isClinicAdmin ? (
             <p className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs text-sky-950 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100">
-              Clinic override: you can change this doctor&apos;s weekly hours,
-              booking mode, validity, and leave blocks. Doctors can also edit
-              their own settings from Doctor Login.
+              You are editing{" "}
+              <strong>
+                {rosterDoctors.find((m) => m.userId === providerId)?.user.name ||
+                  "this doctor"}
+              </strong>
+              &apos;s weekly hours, booking type and leave. Pick another doctor
+              above. Doctors can also edit their own hours from Doctor Login.
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Setup">
             {(
               [
                 { id: "hours" as const, label: "Weekly hours" },
-                { id: "blocks" as const, label: "Overrides" },
+                { id: "blocks" as const, label: "Leave & blocks" },
               ] as const
             ).map((p) => (
               <button
@@ -590,7 +643,12 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
                 type="button"
                 role="tab"
                 aria-selected={setupPane === p.id}
-                onClick={() => setSetupPane(p.id)}
+                onClick={() => {
+                  setSetupPane(p.id);
+                  router.replace(setupAwareUrl("setup", undefined, p.id), {
+                    scroll: false,
+                  });
+                }}
                 className={`min-h-11 rounded-lg px-4 py-2 text-sm font-semibold ${
                   setupPane === p.id
                     ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
@@ -601,8 +659,16 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
               </button>
             ))}
           </div>
+          {setupPane === "hours" && !locationId ? (
+            <p className="text-sm text-red-600 dark:text-red-400">
+              This practice has no location yet. Add the clinic address under
+              Settings → Account first.
+            </p>
+          ) : null}
           {setupPane === "hours" && locationId && (
             <SchedulePanel
+              key={providerId}
+              noticeHours={practice.scheduleNoticeHours ?? 48}
               practiceId={practice.id}
               providerId={providerId}
               locationId={locationId}
@@ -632,8 +698,9 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
               providerId={providerId}
               overrides={overrides}
               canManageExtraSlots={isClinicAdmin}
-              onSaved={() => {
-                setMessage("Override created.");
+              tokenMode={schedules.some((s) => s.mode === "TOKEN_BASED")}
+              onSaved={(msg) => {
+                setMessage(msg);
                 void loadOverrides();
                 void loadCalendar();
               }}
@@ -681,6 +748,7 @@ function InboxPanel({
     }>
   >([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
   const [whatsappOk, setWhatsappOk] = useState(true);
   const [waHint, setWaHint] = useState("");
 
@@ -737,16 +805,19 @@ function InboxPanel({
     status: "bot_active" | "handed_off" | "closed",
   ) {
     setBusyId(id);
+    setError("");
     const res = await proctoService.setConversationStatus(
       practiceId,
       id,
       status,
     );
     setBusyId(null);
-    if (res.status === "successful") {
-      onChanged();
-      await load();
+    if (res.status !== "successful") {
+      setError(res.message || "Could not update the conversation.");
+      return;
     }
+    onChanged();
+    await load();
   }
 
   return (
@@ -763,10 +834,15 @@ function InboxPanel({
         </p>
       ) : null}
       <p className="text-sm opacity-70">
-        Take over a WhatsApp thread to silence the bot, or return it to{" "}
-        <span className="font-medium">bot_active</span>. Private visit notes stay
-        on the booking and are never sent over WhatsApp.
+        Take over a WhatsApp thread to pause the bot and reply yourself, then
+        hand it back to the bot when you are done. Private visit notes stay on
+        the booking and are never sent over WhatsApp.
       </p>
+      {error ? (
+        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+          {error}
+        </p>
+      ) : null}
       <ul className="divide-y divide-neutral-200 dark:divide-neutral-700">
         {rows.length === 0 && (
           <li className="py-3 text-sm opacity-60">No conversations yet.</li>
@@ -779,34 +855,45 @@ function InboxPanel({
             <div>
               <p className="font-semibold tabular-nums">{r.patientPhone}</p>
               <p className="text-xs opacity-60">
-                {r.status} · {new Date(r.updatedAt).toLocaleString()}
+                {CONVERSATION_STATUS_LABEL[r.status] ?? r.status} ·{" "}
+                {new Date(r.updatedAt).toLocaleString("en-IN", {
+                  timeZone: PRACTICE_TIMEZONE,
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={busyId === r.id || !whatsappOk}
-                className="min-h-11 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold dark:border-neutral-600 disabled:opacity-50"
-                onClick={() => void setStatus(r.id, "handed_off")}
-              >
-                Take over
-              </button>
-              <button
-                type="button"
-                disabled={busyId === r.id || !whatsappOk}
-                className="min-h-11 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold dark:border-neutral-600 disabled:opacity-50"
-                onClick={() => void setStatus(r.id, "bot_active")}
-              >
-                Return to bot
-              </button>
-              <button
-                type="button"
-                disabled={busyId === r.id || !whatsappOk}
-                className="min-h-11 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold opacity-80 dark:border-neutral-600 disabled:opacity-50"
-                onClick={() => void setStatus(r.id, "closed")}
-              >
-                Close
-              </button>
+              {r.status !== "handed_off" ? (
+                <button
+                  type="button"
+                  disabled={busyId === r.id || !whatsappOk}
+                  className="min-h-11 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold dark:border-neutral-600 disabled:opacity-50"
+                  onClick={() => void setStatus(r.id, "handed_off")}
+                >
+                  Take over
+                </button>
+              ) : null}
+              {r.status !== "bot_active" ? (
+                <button
+                  type="button"
+                  disabled={busyId === r.id || !whatsappOk}
+                  className="min-h-11 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold dark:border-neutral-600 disabled:opacity-50"
+                  onClick={() => void setStatus(r.id, "bot_active")}
+                >
+                  Return to bot
+                </button>
+              ) : null}
+              {r.status !== "closed" ? (
+                <button
+                  type="button"
+                  disabled={busyId === r.id || !whatsappOk}
+                  className="min-h-11 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold opacity-80 dark:border-neutral-600 disabled:opacity-50"
+                  onClick={() => void setStatus(r.id, "closed")}
+                >
+                  Close
+                </button>
+              ) : null}
             </div>
           </li>
         ))}
@@ -837,6 +924,7 @@ function DoctorsPanel({
   const [message, setMessage] = useState("");
   const [canAddDoctor, setCanAddDoctor] = useState(true);
   const [planHint, setPlanHint] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const doctors = members.filter(
     (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
@@ -888,6 +976,10 @@ function DoctorsPanel({
       setError("Name, email, and password are required for doctor login.");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Enter a valid login email.");
+      return;
+    }
     if (password.trim().length < 6) {
       setError("Password must be at least 6 characters.");
       return;
@@ -906,7 +998,7 @@ function DoctorsPanel({
       setError(res.message || "Could not add doctor.");
       return;
     }
-    setMessage("Doctor added. They can sign in with this email and password.");
+    setMessage(`${name.trim()} added. They can sign in with this email and password.`);
     setName("");
     setEmail("");
     setPassword("");
@@ -917,6 +1009,8 @@ function DoctorsPanel({
   }
 
   async function deactivate(userId: string) {
+    setError("");
+    setMessage("");
     setBusy(true);
     const res = await proctoService.setPracticeMemberActive(
       practiceId,
@@ -924,10 +1018,12 @@ function DoctorsPanel({
       false,
     );
     setBusy(false);
+    setConfirmId(null);
     if (res.status !== "successful") {
       setError(res.message || "Could not deactivate doctor.");
       return;
     }
+    setMessage("Doctor deactivated. They can no longer sign in to this clinic.");
     await onChanged();
   }
 
@@ -935,6 +1031,16 @@ function DoctorsPanel({
     <div className="grid gap-6 lg:grid-cols-2">
       <section className="rounded-xl border dark:border-neutral-700 p-4">
         <h2 className="font-semibold mb-3">Clinic doctors</h2>
+        {error ? (
+          <p className="mb-3 text-sm text-red-600 dark:text-red-400" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {message ? (
+          <p className="mb-3 text-sm text-green-700 dark:text-green-400" role="status">
+            {message}
+          </p>
+        ) : null}
         <ul className="space-y-3">
           {doctors.map((m) => (
             <li
@@ -945,7 +1051,7 @@ function DoctorsPanel({
                 <p className="font-medium truncate">
                   {m.user.name || "Unnamed"}
                   <span className="ml-2 text-xs font-normal opacity-60">
-                    {m.role.replace(/_/g, " ")}
+                    {MEMBER_ROLE_LABEL[m.role] ?? m.role.replace(/_/g, " ").toLowerCase()}
                   </span>
                 </p>
                 <p className="text-xs opacity-70 truncate">{m.user.email}</p>
@@ -964,14 +1070,37 @@ function DoctorsPanel({
                 ) : null}
               </div>
               {canManage && m.role === "DOCTOR" ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void deactivate(m.userId)}
-                  className="shrink-0 text-xs text-red-600 hover:underline disabled:opacity-50"
-                >
-                  Deactivate
-                </button>
+                confirmId === m.userId ? (
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void deactivate(m.userId)}
+                      className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Deactivating…" : "Confirm deactivate"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(null)}
+                      className="text-xs font-semibold opacity-70 hover:underline"
+                    >
+                      Keep
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setError("");
+                      setConfirmId(m.userId);
+                    }}
+                    className="shrink-0 text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
+                  >
+                    Deactivate…
+                  </button>
+                )
               ) : null}
             </li>
           ))}
@@ -1007,61 +1136,43 @@ function DoctorsPanel({
             Upgrade your plan to add more doctors to this clinic.
           </p>
         ) : (
-          <div className="space-y-3">
-            <input
-              placeholder="Doctor name *"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
-            />
-            <input
-              placeholder="Login email *"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
-            />
-            <input
-              placeholder="Login password *"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              className="w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
-            />
-            <input
-              placeholder="Phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
-            />
-            <input
-              placeholder="Specialty"
-              value={specialty}
-              onChange={(e) => setSpecialty(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
-            />
-            <input
-              placeholder="License no"
-              value={licenseNo}
-              onChange={(e) => setLicenseNo(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
-            />
-            {error ? <p className="text-xs text-red-600">{error}</p> : null}
-            {message ? (
-              <p className="text-xs text-green-700 dark:text-green-400">
-                {message}
-              </p>
-            ) : null}
+          <form
+            noValidate
+            className="grid gap-3 sm:grid-cols-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void addDoctor();
+            }}
+          >
+            {(
+              [
+                { label: "Doctor name *", value: name, set: setName, autoComplete: "off" },
+                { label: "Login email *", value: email, set: setEmail, type: "email", autoComplete: "off" },
+                { label: "Login password * (min 6)", value: password, set: setPassword, type: "password", autoComplete: "new-password" },
+                { label: "Phone", value: phone, set: setPhone, type: "tel", autoComplete: "off" },
+                { label: "Specialty", value: specialty, set: setSpecialty, autoComplete: "off" },
+                { label: "License no", value: licenseNo, set: setLicenseNo, autoComplete: "off" },
+              ] as const
+            ).map((f) => (
+              <label key={f.label} className="block text-sm">
+                <span className="text-xs opacity-70">{f.label}</span>
+                <input
+                  type={"type" in f ? f.type : "text"}
+                  value={f.value}
+                  autoComplete={f.autoComplete}
+                  onChange={(e) => f.set(e.target.value)}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
+                />
+              </label>
+            ))}
             <button
-              type="button"
+              type="submit"
               disabled={busy || !canAddDoctor}
-              onClick={() => void addDoctor()}
-              className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-50 sm:col-span-2"
             >
               {busy ? "Saving…" : "Add to clinic"}
             </button>
-          </div>
+          </form>
         )}
       </section>
     </div>
@@ -1230,11 +1341,13 @@ function SchedulePanel({
   upcomingChanges = [],
   pendingVerification = null,
   providerUser,
+  noticeHours,
   onSaved,
 }: {
   practiceId: string;
   providerId: string;
   locationId: string;
+  noticeHours: number;
   schedules: ScheduleRow[];
   upcomingChanges?: UpcomingScheduleChange[];
   pendingVerification?: PendingScheduleVerification | null;
@@ -1329,7 +1442,17 @@ function SchedulePanel({
   }, [providerUser]);
 
   useEffect(() => {
-    if (!schedules.length) return;
+    if (!schedules.length) {
+      setBookingType("TIME");
+      setWorkingDays([1, 2, 3, 4, 5]);
+      setStartTime("09:00");
+      setEndTime("17:00");
+      setBreakStartTime("13:00");
+      setBreakEndTime("14:00");
+      setSlotDurationMins("15");
+      setPatientsPerSlot("1");
+      return;
+    }
     const first = schedules[0];
     setBookingType(first.mode === "TOKEN_BASED" ? "TOKEN" : "TIME");
     setWorkingDays([...new Set(schedules.map((s) => s.dayOfWeek))].sort());
@@ -1356,12 +1479,45 @@ function SchedulePanel({
   async function save(opts?: PanelSaveOpts): Promise<boolean | "conflicts"> {
     setError("");
     const modeOnly = Boolean(opts?.bookingTypeOverride);
-    if (!modeOnly && (!name.trim() || !licenseNo.trim())) {
-      setError("Dr Name and license number are required.");
+    if (!modeOnly && !name.trim()) {
+      setError("Dr Name is required.");
       return false;
     }
     if (workingDays.length === 0) {
       setError("Select at least one working day.");
+      return false;
+    }
+    if (!startTime || !endTime || startTime >= endTime) {
+      setError("Working end time must be after start time.");
+      return false;
+    }
+    if (Boolean(breakStartTime) !== Boolean(breakEndTime)) {
+      setError("Enter both break start and break end, or clear both.");
+      return false;
+    }
+    if (
+      breakStartTime &&
+      breakEndTime &&
+      (breakStartTime >= breakEndTime ||
+        breakStartTime < startTime ||
+        breakEndTime > endTime)
+    ) {
+      setError("Break must end after it starts and sit inside working hours.");
+      return false;
+    }
+    const slotMins = Number(slotDurationMins);
+    if (bookingType === "TIME" && (!Number.isInteger(slotMins) || slotMins < 5 || slotMins > 120)) {
+      setError("Slot duration must be 5 to 120 minutes.");
+      return false;
+    }
+    const perSlot = Number(patientsPerSlot);
+    if (!Number.isInteger(perSlot) || perSlot < 1 || perSlot > 50) {
+      setError("Patients per slot must be 1 to 50.");
+      return false;
+    }
+    const validity = Number(appointmentValidityDays);
+    if (!Number.isInteger(validity) || validity < 1 || validity > 90) {
+      setError("Appointment validity must be 1 to 90 days.");
       return false;
     }
 
@@ -1522,7 +1678,7 @@ function SchedulePanel({
               />
             </label>
             <label className="block text-sm">
-              <span className="opacity-70 text-xs">Dr license number *</span>
+              <span className="opacity-70 text-xs">Dr license number</span>
               <input
                 value={licenseNo}
                 onChange={(e) => setLicenseNo(e.target.value)}
@@ -1679,7 +1835,7 @@ function SchedulePanel({
                 className="mt-1 w-full rounded-lg border px-3 py-2.5 text-sm dark:bg-neutral-900 dark:border-neutral-700"
               />
             </label>
-            <label className="text-sm col-span-2">
+            <label className="text-sm sm:col-span-2">
               <span className="opacity-70 text-xs">Appointment validity (days) *</span>
               <input
                 type="number"
@@ -1701,6 +1857,7 @@ function SchedulePanel({
           value={effectiveFrom}
           onChange={setEffectiveFrom}
           disabled={saving}
+          noticeHours={noticeHours}
         />
 
         {error && (
@@ -1752,65 +1909,166 @@ function SchedulePanel({
   );
 }
 
+type OverrideRow = {
+  id: string;
+  type: string;
+  date: string;
+  day?: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  maxTokens?: number | null;
+  capacity?: number | null;
+  reason: string | null;
+};
+
 function OverridesPanel({
   practiceId,
   providerId,
   overrides,
   canManageExtraSlots,
+  tokenMode,
   onSaved,
 }: {
   practiceId: string;
   providerId: string;
   overrides: unknown[];
   canManageExtraSlots: boolean;
-  onSaved: () => void;
+  tokenMode: boolean;
+  onSaved: (message: string) => void;
 }) {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const today = clinicTodayIso();
+  const [date, setDate] = useState(today);
   const [type, setType] = useState("BLOCK_DAY");
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("11:00");
-  const [maxTokens, setMaxTokens] = useState(20);
-  const [extraCapacity, setExtraCapacity] = useState(1);
+  const [maxTokens, setMaxTokens] = useState("20");
+  const [extraCapacity, setExtraCapacity] = useState("1");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirmPrompt, setConfirmPrompt] = useState("");
+  const [removeId, setRemoveId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [listError, setListError] = useState("");
 
-  const overrideOptions = canManageExtraSlots
-    ? [...OVERRIDE_TYPES, EXTRA_SLOT_TYPE]
-    : OVERRIDE_TYPES;
+  const overrideOptions = [
+    ...OVERRIDE_TYPES.filter((t) => t !== "TOKEN_LIMIT_ADJUST" || tokenMode),
+    ...(canManageExtraSlots ? [EXTRA_SLOT_TYPE] : []),
+  ];
+  const needsWindow = type === "BLOCK_SLOT" || type === EXTRA_SLOT_TYPE;
 
-  async function submit() {
+  const rows = overrides as OverrideRow[];
+  const dayOf = (o: OverrideRow) => o.day ?? o.date.slice(0, 10);
+  const upcoming = rows
+    .filter((o) => dayOf(o) >= today)
+    .sort((a, b) => dayOf(a).localeCompare(dayOf(b)));
+  const past = rows.filter((o) => dayOf(o) < today).slice(0, 5);
+
+  useEffect(() => {
+    if (!overrideOptions.includes(type)) setType("BLOCK_DAY");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenMode, canManageExtraSlots]);
+
+  useEffect(() => {
+    setConfirmPrompt("");
     setError("");
-    const body: Record<string, unknown> = { providerId, date, type, reason };
-    if (type === "BLOCK_SLOT" || type === EXTRA_SLOT_TYPE) {
-      Object.assign(body, { startTime, endTime });
-    }
-    if (type === "TOKEN_LIMIT_ADJUST") Object.assign(body, { maxTokens });
-    if (type === EXTRA_SLOT_TYPE && extraCapacity > 0) {
-      Object.assign(body, { maxTokens: extraCapacity });
-    }
-    const res = await proctoService.createOverride(practiceId, body);
-    if (res.status !== "successful") {
-      setError(res.message || "Could not create override.");
+  }, [type, date, startTime, endTime]);
+
+  async function submit(confirm = false) {
+    setError("");
+    if (!date || date < today) {
+      setError("Pick today or a later date.");
       return;
     }
-    onSaved();
+    if (needsWindow && (!startTime || !endTime || startTime >= endTime)) {
+      setError("End time must be after the start time.");
+      return;
+    }
+    const body: Record<string, unknown> = {
+      providerId,
+      date,
+      type,
+      reason: reason.trim() || undefined,
+    };
+    if (needsWindow) Object.assign(body, { startTime, endTime });
+    if (type === "TOKEN_LIMIT_ADJUST") {
+      const max = Number(maxTokens);
+      if (!Number.isInteger(max) || max < 0 || max > 500) {
+        setError("Max tokens must be a whole number from 0 to 500.");
+        return;
+      }
+      body.maxTokens = max;
+    }
+    if (type === EXTRA_SLOT_TYPE) {
+      const cap = Number(extraCapacity);
+      if (!Number.isInteger(cap) || cap < 1 || cap > 50) {
+        setError("Patients per slot must be from 1 to 50.");
+        return;
+      }
+      body.capacity = cap;
+      if (confirm) body.confirm = true;
+    }
+    setBusy(true);
+    const res = await proctoService.createOverride(practiceId, body);
+    setBusy(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not save.");
+      return;
+    }
+    const data = res.data as { needsConfirmation?: boolean; message?: string } | null;
+    if (data?.needsConfirmation) {
+      setConfirmPrompt(data.message || "This clashes with the doctor's calendar. Save anyway?");
+      return;
+    }
+    setConfirmPrompt("");
+    setReason("");
+    onSaved(
+      data?.message ||
+        `${overrideLabel(type)} saved for ${formatScheduleDay(date)}.`,
+    );
+  }
+
+  async function remove(id: string) {
+    setListError("");
+    setRemovingId(id);
+    const res = await proctoService.removeOverride(practiceId, id);
+    setRemovingId(null);
+    setRemoveId(null);
+    if (res.status !== "successful") {
+      setListError(res.message || "Could not remove it.");
+      return;
+    }
+    onSaved(res.data?.message || "Removed.");
+  }
+
+  function describe(o: OverrideRow) {
+    const window =
+      o.startTime && o.endTime
+        ? ` · ${hm12(o.startTime)}–${hm12(o.endTime)}`
+        : "";
+    const limit =
+      o.type === "TOKEN_LIMIT_ADJUST" && o.maxTokens != null
+        ? ` · max ${o.maxTokens} tokens`
+        : "";
+    return `${formatScheduleDay(dayOf(o))}${window}${limit}`;
   }
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">
       <div className="rounded-xl border dark:border-neutral-700 p-4 space-y-4">
-        <h2 className="font-semibold">Create override</h2>
-        {canManageExtraSlots && (
-          <p className="text-xs opacity-60 -mt-2">
-            Clinic admins can add extra bookable slots on a date using{" "}
-            <span className="font-medium">Extra slot</span>.
-          </p>
-        )}
+        <h2 className="font-semibold">Add leave or block</h2>
+        <p className="text-xs opacity-60 -mt-2">
+          Blocking time stops new bookings. Patients already booked in that
+          window get a reschedule notice.
+          {canManageExtraSlots ? " Use Extra slots to open more bookable time on a date." : ""}
+        </p>
 
         <label className="block text-sm">
           Date
           <input
             type="date"
+            min={today}
+            max={addDaysIso(today, 366)}
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="mt-1 w-full rounded-lg border px-3 py-2 dark:bg-neutral-900 dark:border-neutral-700"
@@ -1826,13 +2084,14 @@ function OverridesPanel({
           >
             {overrideOptions.map((t) => (
               <option key={t} value={t}>
-                {t === EXTRA_SLOT_TYPE ? "Extra slot" : t.replace(/_/g, " ")}
+                {overrideLabel(t)}
               </option>
             ))}
           </select>
+          <span className="mt-1 block text-xs opacity-60">{overrideHint(type)}</span>
         </label>
 
-        {(type === "BLOCK_SLOT" || type === EXTRA_SLOT_TYPE) && (
+        {needsWindow && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-sm">
               From
@@ -1853,7 +2112,7 @@ function OverridesPanel({
               min={1}
               max={50}
               value={extraCapacity}
-              onChange={(e) => setExtraCapacity(Number(e.target.value) || 1)}
+              onChange={(e) => setExtraCapacity(e.target.value)}
               className="mt-1 w-full rounded-lg border px-3 py-2 dark:bg-neutral-900 dark:border-neutral-700"
             />
             <span className="mt-1 block text-xs opacity-50">
@@ -1864,19 +2123,22 @@ function OverridesPanel({
 
         {type === "TOKEN_LIMIT_ADJUST" && (
           <label className="block text-sm">
-            Max tokens
+            Max tokens that day
             <input
               type="number"
+              min={0}
+              max={500}
               value={maxTokens}
-              onChange={(e) => setMaxTokens(Number(e.target.value))}
+              onChange={(e) => setMaxTokens(e.target.value)}
               className="mt-1 w-full rounded-lg border px-3 py-2 dark:bg-neutral-900 dark:border-neutral-700"
             />
           </label>
         )}
 
         <label className="block text-sm">
-          Reason
+          Reason (optional)
           <input
+            maxLength={200}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={
@@ -1889,37 +2151,150 @@ function OverridesPanel({
         </label>
 
         {error && (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>
         )}
 
-        <button
-          type="button"
-          onClick={() => void submit()}
-          className="w-full py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium"
-        >
-          {type === EXTRA_SLOT_TYPE ? "Add extra slots" : "Apply override"}
-        </button>
+        {confirmPrompt ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+            <p>{confirmPrompt}</p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void submit(true)}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                Save anyway
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmPrompt("")}
+                className="rounded-lg border border-amber-400 px-3 py-1.5 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void submit()}
+            className="w-full py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-60"
+          >
+            {busy
+              ? "Saving…"
+              : type === EXTRA_SLOT_TYPE
+                ? "Add extra slots"
+                : `Save ${overrideLabel(type).toLowerCase()}`}
+          </button>
+        )}
       </div>
 
       <div className="rounded-xl border dark:border-neutral-700 p-4">
-        <h2 className="font-semibold mb-3">Recent overrides</h2>
+        <h2 className="font-semibold mb-3">Upcoming leave & blocks</h2>
+        {listError ? (
+          <p className="mb-2 text-sm text-red-600 dark:text-red-400" role="alert">
+            {listError}
+          </p>
+        ) : null}
         <ul className="text-sm space-y-2">
-          {(overrides as Array<{ id: string; type: string; date: string; day?: string; reason: string | null }>).map(
-            (o) => (
-              <li key={o.id} className="rounded-lg border dark:border-neutral-700 px-3 py-2">
-                <span className="font-medium">
-                  {o.type === EXTRA_SLOT_TYPE
-                    ? "Extra slot"
-                    : o.type.replace(/_/g, " ")}
-                </span>
-                <span className="opacity-70 ml-2">{o.day ?? o.date.slice(0, 10)}</span>
+          {upcoming.map((o) => (
+            <li
+              key={o.id}
+              className="flex items-start justify-between gap-3 rounded-lg border dark:border-neutral-700 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="font-medium">{overrideLabel(o.type)}</p>
+                <p className="text-xs opacity-70">{describe(o)}</p>
                 {o.reason && <p className="text-xs opacity-60 mt-1">{o.reason}</p>}
-              </li>
-            ),
+              </div>
+              {removeId === o.id ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={removingId === o.id}
+                    onClick={() => void remove(o.id)}
+                    className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {removingId === o.id ? "Removing…" : "Remove"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRemoveId(null)}
+                    className="text-xs font-semibold opacity-70 hover:underline"
+                  >
+                    Keep
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setListError("");
+                    setRemoveId(o.id);
+                  }}
+                  className="shrink-0 text-xs font-semibold text-red-600 hover:underline dark:text-red-400"
+                >
+                  Remove…
+                </button>
+              )}
+            </li>
+          ))}
+          {!upcoming.length && (
+            <p className="text-xs opacity-60">No upcoming leave or blocks.</p>
           )}
-          {!overrides.length && <p className="text-xs opacity-60">No overrides yet.</p>}
         </ul>
+        {past.length ? (
+          <>
+            <h3 className="mt-5 mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
+              Past
+            </h3>
+            <ul className="space-y-1 text-xs opacity-70">
+              {past.map((o) => (
+                <li key={o.id}>
+                  {overrideLabel(o.type)} · {describe(o)}
+                  {o.reason ? ` · ${o.reason}` : ""}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
       </div>
     </div>
   );
+}
+
+function overrideLabel(type: string): string {
+  switch (type) {
+    case "BLOCK_DAY":
+      return "Block whole day";
+    case "BLOCK_SLOT":
+      return "Block time range";
+    case "EMERGENCY_LEAVE":
+      return "Emergency leave";
+    case "TOKEN_LIMIT_ADJUST":
+      return "Token limit";
+    case EXTRA_SLOT_TYPE:
+      return "Extra slots";
+    default:
+      return type.replace(/_/g, " ").toLowerCase();
+  }
+}
+
+function overrideHint(type: string): string {
+  switch (type) {
+    case "BLOCK_DAY":
+      return "No bookings for this doctor on the whole day.";
+    case "BLOCK_SLOT":
+      return "No bookings between the start and end time.";
+    case "EMERGENCY_LEAVE":
+      return "Doctor unavailable all day at short notice.";
+    case "TOKEN_LIMIT_ADJUST":
+      return "Caps how many tokens can be issued that day.";
+    case EXTRA_SLOT_TYPE:
+      return "Opens extra bookable slots in this window, using the doctor's slot length.";
+    default:
+      return "";
+  }
 }

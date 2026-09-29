@@ -500,7 +500,7 @@ model PracticeAuditEvent {
   /// Name and clinic role at the time of the action (kept if the member later leaves).
   actorName   String?  @map("actor_name") @db.VarChar(160)
   actorRole   String?  @map("actor_role") @db.VarChar(32)
-  /// SLOT_CREATED | SLOT_REMOVED | OVERRIDE_CREATED | WALK_IN_ADDED | PATIENT_REGISTERED
+  /// SLOT_CREATED | SLOT_REMOVED | OVERRIDE_CREATED | OVERRIDE_REMOVED | WALK_IN_ADDED | PATIENT_REGISTERED
   action      String   @db.VarChar(48)
   entityType  String?  @map("entity_type") @db.VarChar(32)
   entityId    String?  @map("entity_id") @db.Uuid
