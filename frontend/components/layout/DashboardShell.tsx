@@ -12,6 +12,7 @@ import Header from "@/components/ui/Header"
 import ThemeBackground from "@/components/bg/ThemeBackground"
 import { useDashboardBg } from "@/hooks/useDashboardBg"
 import { isCustomImageBg } from "@/lib/themeBg"
+import NewVersionWatcher from "@/components/layout/NewVersionWatcher"
 
 const Sidebar = dynamic(() => import("../ui/Sidebar"), { ssr: false })
 const Menu = dynamic(() => import("../ui/Menu"), { ssr: false })
@@ -69,6 +70,7 @@ export default function DashboardShell({
       {showHelp && (
         <ChatModal isOpen={showHelp} toggleChat={toggleHelp} role={role} />
       )}
+      <NewVersionWatcher />
     </div>
   )
 }
