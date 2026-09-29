@@ -656,6 +656,7 @@ export default function DoctorAppointmentsList({
           chatBooking?.patientName || chatBooking?.patient?.name || null
         }
         peerUserId={chatBooking ? bookingPeerUserId(chatBooking) : null}
+        bookingId={chatBooking?.id ?? null}
         onClose={() => setChatBooking(null)}
       />
     </>

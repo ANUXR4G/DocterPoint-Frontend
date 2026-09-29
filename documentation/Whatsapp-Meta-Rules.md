@@ -50,7 +50,7 @@ Code sources of truth:
 
 **GlucoGuide platform OTP line:** `+91 99900 52082` / Meta id `1378039178715653` (`GLUCOGUIDE_OTP_PHONE` / `GLUCOGUIDE_OTP_PHONE_NUMBER_ID`). Patient login OTPs are sent **only** from this number (`glucoguide_login_otp` AUTHENTICATION template, text fallback). Never send login OTPs from clinic pool lines.
 
-GlucoGuide notification worker prefers Meta templates via `sendNotificationWhatsApp`. Session bot replies stay free-form (user-initiated). Doctor → patient care-chat (`ChatService.sendDirectMessage`) mirrors to WhatsApp: session text inside the 24h window, otherwise `CLINIC_CARE_MESSAGE` UTILITY template.
+GlucoGuide notification worker prefers Meta templates via `sendNotificationWhatsApp`. Session bot replies stay free-form (user-initiated). Doctor → patient care-chat (`ChatService.sendDirectMessage`) mirrors to WhatsApp: session text inside the 24h window, otherwise `CLINIC_CARE_MESSAGE` UTILITY template. Documents shared from care chat (`sendCareDocumentToWhatsApp`) follow the same rule: the file is sent as a session `document` message inside the window; outside it the template names the document and points to the app (no link in template variables).
 
 ---
 

@@ -135,6 +135,7 @@ function normalizeBookingDocuments(
 }
 
 const MAX_GENERAL_DOCUMENTS = 30;
+const MAX_SHARED_VISIT_DOCUMENTS = 20;
 export const EMERGENCY_WALK_IN = "EMERGENCY_WALK_IN";
 
 export type CreateBookingInput = {
@@ -1379,6 +1380,120 @@ export const BookingService = {
       .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
       .catch(() => undefined);
     return { patientLinked: true, documents: next };
+  },
+
+  /**
+   * Care chat "attach": save the file on the appointment, post it in the
+   * clinic ↔ patient chat, and deliver it on the patient's WhatsApp.
+   */
+  async shareDocumentWithPatient(
+    bookingId: string,
+    input: { name?: string; url?: string; caption?: string },
+    actorUserId: string,
+  ) {
+    const booking = await prisma.practiceBooking.findUnique({
+      where: { id: bookingId },
+      include: { practice: { select: { name: true } } },
+    });
+    if (!booking) ResponseHandler.notFoundError("booking not found.");
+    const existing = booking!;
+
+    const member = await prisma.practiceMember.findUnique({
+      where: {
+        practiceId_userId: { practiceId: existing.practiceId, userId: actorUserId },
+      },
+    });
+    if (!member?.isActive) ResponseHandler.noPermission("not authorized.");
+    const role = member!.role;
+    const frontDesk =
+      role === "PRACTICE_OWNER" || role === "PRACTICE_ADMIN" || role === "RECEPTIONIST";
+    if (!frontDesk && existing.providerId !== actorUserId) {
+      throw new AppError(
+        403,
+        "You can only share documents on visits assigned to you.",
+      );
+    }
+    if (!existing.patientId) {
+      throw new AppError(
+        400,
+        "This visit is not linked to a registered patient, so there is no chat to send to.",
+      );
+    }
+
+    const { isClinicDocumentUrl, sendCareDocumentToWhatsApp } = await import(
+      "../chat.whatsappFanout.js"
+    );
+    const url = String(input.url || "").trim();
+    if (!isClinicDocumentUrl(url)) {
+      throw new AppError(400, "Upload the file first, then share it.");
+    }
+    const name = String(input.name || "").trim().slice(0, 120) || "Document";
+    const caption = String(input.caption || "").trim().slice(0, 900);
+
+    const docs = normalizeBookingDocuments(
+      Array.isArray(existing.documents)
+        ? (existing.documents as Array<{ name?: string; url?: string; uploadedAt?: string }>)
+        : [],
+    );
+    if (docs.length >= MAX_SHARED_VISIT_DOCUMENTS) {
+      throw new AppError(
+        400,
+        `This visit already has ${MAX_SHARED_VISIT_DOCUMENTS} documents.`,
+      );
+    }
+    const doc = { name, url, uploadedAt: new Date().toISOString() };
+    const updated = await prisma.practiceBooking.update({
+      where: { id: bookingId },
+      data: { documents: [...docs, doc] as unknown as Prisma.InputJsonValue },
+      include: {
+        practice: {
+          select: { name: true, slug: true, specialty: true, consultationFee: true },
+        },
+        location: { select: { name: true, address: true, city: true } },
+      },
+    });
+
+    void broadcastProctoEvent(
+      existing.practiceId,
+      { event: "booking_updated", booking: serializeBooking(updated) },
+      updated.patientId,
+    ).catch(() => undefined);
+    void import("../opsSocket.js")
+      .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
+      .catch(() => undefined);
+
+    const { ChatService } = await import("../chat.js");
+    const message = await ChatService.sendDirectMessage(
+      actorUserId,
+      existing.patientId,
+      `📎 ${name}\n${url}${caption ? `\n${caption}` : ""}`,
+      { whatsappFanOut: false },
+    );
+
+    const [sender, patient] = await Promise.all([
+      prisma.user.findUnique({ where: { id: actorUserId }, select: { name: true } }),
+      prisma.user.findUnique({
+        where: { id: existing.patientId },
+        select: { phone: true, patient: { select: { contactNumber: true } } },
+      }),
+    ]);
+    const whatsapp = await sendCareDocumentToWhatsApp({
+      practiceId: existing.practiceId,
+      practiceName: existing.practice?.name || "your clinic",
+      providerName: sender?.name || "Your clinic",
+      patientUserId: existing.patientId,
+      staffUserId: actorUserId,
+      phones: [existing.patientPhone, patient?.patient?.contactNumber, patient?.phone],
+      doc: { name, url },
+      caption,
+    });
+
+    return {
+      booking: await this.enrichBooking(updated),
+      document: doc,
+      message,
+      whatsapp,
+    };
   },
 
   async getById(bookingId: string) {

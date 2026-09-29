@@ -417,6 +417,27 @@ router.post(
   },
 );
 
+router.post(
+  "/:id/share-document",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await BookingService.shareDocumentWithPatient(
+        param(req.params.id),
+        {
+          name: req.body?.name,
+          url: req.body?.url,
+          caption: req.body?.caption,
+        },
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "document shared.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get(
   "/:id",
   attachSessionIfPresent(),
