@@ -1,54 +1,32 @@
 /**
- * Care-chat display filter — hide WhatsApp bot menu noise already stored in
- * Message rows. Keep cancel / attachment system notices visible.
- * Mirror of backend `shouldHideFromCareChat` in chat.whatsappInbound.ts.
+ * Care-chat display filter — hide only WhatsApp bot menu payloads that older
+ * rows stored as messages (button ids, numbered list titles, exact menu labels).
+ * Greetings, yes / no, numbers and any real sentence always show: new WhatsApp
+ * bot commands are already kept out at ingest (`looksLikeBotCommand` in
+ * backend chat.whatsappInbound.ts), so anything else in a thread was typed by a person.
  */
 export function shouldHideFromCareChat(text: string): boolean {
   const raw = String(text || "").trim()
   if (!raw) return true
 
-  if (
-    raw.startsWith("❌") ||
-    raw.startsWith("📎") ||
-    /^cancelled via whatsapp/i.test(raw) ||
-    /^attached a visit document/i.test(raw)
-  ) {
-    return false
-  }
-
   const t = raw.toLowerCase()
 
+  // Interactive ids: "menu:register", "lang:en", "slot_2026-10-01T…", "reg_email_skip"
   if (
-    /^(?:menu|post|booking|slot|date|mode|patient|provider|lang|reg_email_)/i.test(
-      t,
-    )
-  ) {
-    return true
-  }
-  if (/^(?:yes|no)$/i.test(t)) return true
-  if (/^[1-9]$/.test(t)) return true
-  if (/^[1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣]$/u.test(t)) return true
-  if (/^[1-9]\s*[·.•\-–—)]\s*\S+/u.test(t)) return true
-
-  // Bare "main" = Main Menu truncation; Male/Female/Others = gender buttons.
-  if (
-    /^(main(\s*menu)?|booking|book(\s*appt)?|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|my\s*family(\s*members?)?|add\s*family|family(\s*member)?|register(\s*family)?|support|talk\s*to\s*(support|agent)|msg\s*doctor|message(\s*to)?\s*doctor|attach(\s*(report|doc|document))?|cancel|reschedule|status|doctors?|faq|help|language|new\s*booking|resume(\s*bot)?|bot|exit|quit|callback|call\s*back|select(\s+appointment)?|general(\s+document)?|male|female|others?|self|spouse|parent|child|sibling|friend)$/i.test(
+    /^(?:menu|post|booking|slot|date|mode|patient|provider|lang|rel|doc|whom|confirm|idle|continue|nlu|specialty|manage|reg_email)[:_]\S*$/i.test(
       t,
     )
   ) {
     return true
   }
 
-  if (
-    /^(ok|okay|k|kk|ya|yep|yup|nah|nope|thanks|thank\s*you|thx|hi+|hello|hey|hola|yo|boat|you|test|hmm+|hii+|he+y+)$/i.test(
-      t,
-    )
-  ) {
-    return true
-  }
+  // Emoji keycap taps and numbered list titles: "3️⃣", "3 · New booking"
+  if (/^[1-9]\u{FE0F}?\u{20E3}$/u.test(t)) return true
+  if (/^[1-9]\s*[·•]\s*\S+/u.test(t)) return true
 
+  // Exact bot menu / button labels
   if (
-    /^(book|cancel|reschedule|status|help|menu|bot|resume|hi|hello|hey|start|register|stop|report|reports|my\s*docs?|document|documents|doctors?|faq|info|message|msg|new\s+book)\b/.test(
+    /^(main\s*menu|book\s*appt|book\s*new\s*appointment|my\s*bookings|view\s*\/?\s*manage\s*bookings|my\s*family(\s*members?)?|add\s*family(\s*member)?|register\s*family|talk\s*to\s*(support|agent)|msg\s*doctor|message\s*(to\s*)?doctor|attach\s*(report|doc|document)|new\s*booking|resume\s*bot|call\s*back|select\s+appointment|general\s+document|exit|quit)$/i.test(
       t,
     )
   ) {
