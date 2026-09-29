@@ -26,7 +26,7 @@ import {
 } from "./planEntitlements.js";
 import {
   ingestWhatsAppPatientReply,
-  looksLikeBotCommand,
+  isBotCommandFor,
 } from "../chat.whatsappInbound.js";
 
 const MAIN_MENU_ROW = {
@@ -1425,7 +1425,7 @@ export const WhatsAppService = {
         !branchECollecting;
       if (
         !payload.fromInteractive &&
-        !looksLikeBotCommand(text) &&
+        !isBotCommandFor(text, humanOwnsThread) &&
         !branchECollecting &&
         !inBotWizard
       ) {

@@ -134,3 +134,21 @@ describe("Branch F button titles are bot commands (not care-chat)", () => {
     assert.equal(looksLikeBotCommand("Others"), true);
   });
 });
+
+describe("Care mode (clinic owns the thread): short replies reach the doctor", () => {
+  it("greetings, acks, yes / no, numbers and sentences are care chat", async () => {
+    const { isBotCommandFor } = await import("../chat.whatsappInbound.js");
+    for (const t of ["hi", "Hello", "hey", "ok", "thanks", "yes", "No", "2", "test", "hi doctor", "Hello sir, sugar is 180", "cancel my appointment please"]) {
+      assert.equal(isBotCommandFor(t, true), false, t);
+    }
+    // Bot-owned thread keeps the broad rule (a "hi" starts the menu).
+    assert.equal(isBotCommandFor("hi", false), true);
+  });
+
+  it("explicit commands, STOP / START and list taps still go to the bot", async () => {
+    const { isBotCommandFor } = await import("../chat.whatsappInbound.js");
+    for (const t of ["BOT", "menu", "Main Menu", "book", "Cancel", "reschedule", "status", "STOP", "start", "exit", "3 · New booking", "menu:register", "lang:en", "3️⃣"]) {
+      assert.equal(isBotCommandFor(t, true), true, t);
+    }
+  });
+});

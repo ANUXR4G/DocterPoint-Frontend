@@ -38,7 +38,8 @@ Append new entries at the top. Do not delete closed records.
 - **Owner / due:** Engineering / 2026-09-29
 - **Verification:** Browser: modal stable across polls; drag from textarea to backdrop keeps it open; simulated offline shows the retry notice and clears on recovery; simulated send failure shows Retry / Discard (no message reached the server); tsc + production build.
 - **Status:** Verified
-- **Docs updated:** capa-log.md
+- **Follow-up (same day):** patient WhatsApp replies "hi", "ok", "thanks", "yes", numbers never reached the modal while the clinic owned the thread — `looksLikeBotCommand` treated them as bot commands, so they went to the bot menu instead of care chat. Care mode now uses `isCareModeBotCommand` (explicit commands, STOP / START, list taps only); unit tests added; flow.md updated.
+- **Docs updated:** capa-log.md, flow.md
 
 ### NC-20260929-01
 - **Date opened:** 2026-09-29
