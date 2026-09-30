@@ -103,6 +103,7 @@ Notes:
 - Logged-in patients auto-fill name/phone/email from profile.
 - Seeded schedules are typically Mon–Sat; Sunday defaults to next weekday in the UI.
 - **Patient Expo Home = patient dashboard** (mirrors web `/patient/dashboard`, same `GET /procto/bookings/mine` + live socket): tiles *Upcoming* / *Completed* / *Clinics* / *Next visit* (Today · Tomorrow · In N days, clinic calendar days), *Next up* and *Later* visit rows (doctor, time, status) that open the visit, and *Your medicines* from the most recent visit with a prescription; clinic search and discovery below. A visit counts as upcoming only with an active status **and** a date of today or later (Asia/Kolkata) — accepted visits from past days the clinic never closed move to *Past* on the Visits tab.
+- **Provider Expo Home = doctor dashboard** (mirrors web `/doctor/dashboard`, shared practice live socket): tiles *Patients* / *Today* / *On queue* / *Finished*, then **Today's queue** — in consultation → waiting → booked (by slot / token), up to 5 rows with the same *Arrived* / *Start* / *No-show* / *Cancel* chips as the Today tab (No-show and Cancel ask to confirm; finished visits can't change) plus *Open visit* and *Full-screen queue*. Clinic staff doctors see only their own visits and the header "Queue at {clinic}"; links show *Hours & blocks* + *Plans & billing* to owners / admins / the solo doctor, *My hours* to staff doctors, and *Patient messages* (WhatsApp inbox) to everyone.
 
 ---
 

@@ -23,8 +23,9 @@ import {
   isClinicAdminRole,
   usePractice,
 } from "@/lib/practiceContext";
-import { updateBookingStatus } from "@/lib/procto";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
+import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
+import { withDrTitle } from "@/lib/doctorName";
 import {
   nextActions,
   whenLabel,
@@ -60,8 +61,7 @@ export default function QueueScreen() {
   }, []);
   const rows = bookingsInRange(today, rangeTo);
   const error = liveError || "";
-  const [localError, setLocalError] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const { busyId, error: localError, setStatus } = useBookingStatusActions();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<QueueStatusFilter>("all");
   const [providerFilter, setProviderFilter] = useState<string>("all");
@@ -79,27 +79,6 @@ export default function QueueScreen() {
       setProviderFilter(membership.userId);
     }
   }, [isClinicAdmin, membership?.userId]);
-
-  async function setStatus(id: string, status: string) {
-    const current = rows.find((b) => b.id === id)?.status;
-    if (
-      ["COMPLETED", "CANCELED", "CANCELLED", "NO_SHOW"].includes(
-        String(current || "").toUpperCase(),
-      )
-    ) {
-      setLocalError("Completed appointments cannot change status.");
-      return;
-    }
-    setBusyId(id);
-    const res = await updateBookingStatus(id, status);
-    setBusyId(null);
-    if (res.status !== "successful") {
-      setLocalError(res.message || "Update failed");
-      return;
-    }
-    setLocalError("");
-    await refresh({ soft: true, force: true });
-  }
 
   const scoped = useMemo(() => {
     if (providerFilter === "all") return rows;
@@ -260,7 +239,7 @@ export default function QueueScreen() {
               <Text style={styles.meta}>
                 {whenLabel(b)} · {b.mode === "TOKEN_BASED" ? "Token" : "Time"}
                 {b.disease ? ` · ${b.disease}` : ""}
-                {b.provider?.name ? ` · ${b.provider.name}` : ""}
+                {b.provider?.name ? ` · ${withDrTitle(b.provider.name)}` : ""}
               </Text>
               {b.notes ? <Text style={styles.notes}>{b.notes}</Text> : null}
               <View style={styles.actions}>
@@ -271,8 +250,9 @@ export default function QueueScreen() {
                     onPress={
                       busyId === b.id
                         ? undefined
-                        : () => void setStatus(b.id, s.status)
+                        : () => setStatus(b.id, s.status)
                     }
+                    disabled={busyId === b.id}
                   />
                 ))}
                 <Chip

@@ -248,7 +248,7 @@ export const BillingService = {
     actorUserId: string,
     mode: "trial" | "activate" | "change" = "activate",
   ) {
-    await PracticeService.assertAdmin(practiceId, actorUserId);
+    await PracticeService.assertProfileEditor(practiceId, actorUserId);
     const plan = await prisma.docLinePlan.findUnique({ where: { id: planId } });
     if (!plan || !plan.isActive) throw new AppError(404, "Plan not found");
 
@@ -437,7 +437,7 @@ export const BillingService = {
       razorpaySignature?: string;
     },
   ) {
-    await PracticeService.assertAdmin(practiceId, actorUserId);
+    await PracticeService.assertProfileEditor(practiceId, actorUserId);
 
     if (razorpay.isConfigured()) {
       if (!payment?.razorpayPaymentId) {
@@ -499,7 +499,7 @@ export const BillingService = {
    * Razorpay ids so webhooks / retry confirm can still activate features.
    */
   async cancelPendingCheckout(practiceId: string, actorUserId: string) {
-    await PracticeService.assertAdmin(practiceId, actorUserId);
+    await PracticeService.assertProfileEditor(practiceId, actorUserId);
     const sub = await prisma.practiceSubscription.findUnique({
       where: { practiceId },
       include: { plan: true, pendingPlan: true },
@@ -601,7 +601,7 @@ export const BillingService = {
 
   /** Cancel a downgrade / lateral change scheduled for period end. */
   async cancelScheduledPlanChange(practiceId: string, actorUserId: string) {
-    await PracticeService.assertAdmin(practiceId, actorUserId);
+    await PracticeService.assertProfileEditor(practiceId, actorUserId);
     const sub = await prisma.practiceSubscription.findUnique({
       where: { practiceId },
       include: { plan: true, pendingPlan: true },

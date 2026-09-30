@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20260930-03
+- **Date opened:** 2026-09-30
+- **Severity:** 2
+- **Process:** P-BILL
+- **Description:** The doctor of a solo practice (membership role `DOCTOR`, the only member) could not start a trial, activate, change or cancel a plan — web and Expo Plans screens were read-only and the API returned 403 — although the same doctor may already edit the practice profile and payout keys.
+- **Evidence:** Found while building the Expo doctor dashboard: `/procto/practices/mine` for dr.solo returns role `DOCTOR` on the only SOLO practice (DB: 1 SOLO practice, members `DOCTOR` ×1); `BillingService.selectPlan` / confirm / cancel used `assertAdmin` (owner / admin only); web and Expo `canManage` checked the same two roles.
+- **Containment:** None needed for data — refusal only; the practice could not self-serve its subscription.
+- **Root cause:** Solo practices are created with a `DOCTOR` membership; `assertProfileEditor` was introduced for that case but billing kept the older owner/admin check.
+- **Corrective action:** Billing writes use `assertProfileEditor` (owner / admin, or the only active doctor of a SOLO practice); web `usePracticeMembership` and Expo `canManagePractice` apply the same rule; staff doctors in a clinic remain refused.
+- **Owner / due:** Engineering / 2026-09-30
+- **Verification:** In-process permission check — solo doctor allowed, clinic owner allowed, clinic staff doctor 403; `POST …/billing/subscribe` with an unknown plan id → solo doctor 404 *Plan not found* (past the permission check, nothing written), staff doctor 403; web Plans page shows enabled *Upgrade* buttons for dr.solo; 229 backend tests; tsc (backend, frontend, provider).
+- **Status:** Verified
+- **Docs updated:** capa-log.md, risk-register.md (R34), decisions.md, flow.md
+
 ### NC-20260930-02
 - **Date opened:** 2026-09-30
 - **Severity:** 3

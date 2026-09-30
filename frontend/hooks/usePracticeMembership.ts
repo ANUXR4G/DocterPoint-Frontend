@@ -8,7 +8,24 @@ type Membership = {
   role: string
   practiceId?: string
   id?: string
-  practice?: { id: string; name: string; slug?: string }
+  practice?: {
+    id: string
+    name: string
+    slug?: string
+    type?: string
+    members?: Array<{ role: string }>
+  }
+}
+
+/** Mirrors backend assertProfileEditor: owner/admin, or the only doctor of a SOLO practice. */
+function canManagePractice(m: Membership | undefined): boolean {
+  if (!m) return false
+  if (m.role === "PRACTICE_OWNER" || m.role === "PRACTICE_ADMIN") return true
+  return (
+    m.role === "DOCTOR" &&
+    m.practice?.type === "SOLO" &&
+    (m.practice.members?.length ?? 0) === 1
+  )
 }
 
 /**
@@ -59,7 +76,7 @@ export function usePracticeMembership() {
       memberships: dash.memberships as Membership[],
       practiceId: dash.practiceId,
       practiceName: dash.practiceName,
-      canManage: dash.isClinicAdmin,
+      canManage: canManagePractice(dash.memberships[0] as Membership | undefined),
       refresh: async () => {
         await dash.refresh({ silent: true })
       },
@@ -67,8 +84,7 @@ export function usePracticeMembership() {
   }
 
   const primary = memberships[0]
-  const canManage =
-    primary?.role === "PRACTICE_OWNER" || primary?.role === "PRACTICE_ADMIN"
+  const canManage = canManagePractice(primary)
 
   return {
     loading: dash ? dash.loading || loading : loading,

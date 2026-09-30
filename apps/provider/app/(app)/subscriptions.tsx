@@ -19,7 +19,7 @@ import {
   PageTitle,
   PrimaryButton,
 } from "@/components/ui";
-import { usePractice } from "@/lib/practiceContext";
+import { canManagePractice, usePractice } from "@/lib/practiceContext";
 import {
   cancelPendingCheckout,
   confirmPracticeBilling,
@@ -65,9 +65,7 @@ function formatDate(value?: string | null) {
 export default function SubscriptionsScreen() {
   const insets = useSafeAreaInsets();
   const { practiceId, membership } = usePractice();
-  const canManage =
-    membership?.role === "PRACTICE_OWNER" ||
-    membership?.role === "PRACTICE_ADMIN";
+  const canManage = canManagePractice(membership);
 
   const [data, setData] = useState<PracticeBilling | null>(null);
   const [error, setError] = useState("");

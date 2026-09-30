@@ -75,6 +75,45 @@ export function countQueueStatusFilters(
   return c;
 }
 
+export function isFinishedStatus(status: string | null | undefined): boolean {
+  return matchesQueueStatusFilter(String(status || ""), "done");
+}
+
+type QueueOrderRow = {
+  status: string;
+  tokenNumber?: number | null;
+  slotStart?: string | null;
+};
+
+function queueRank(status: string): number {
+  if (matchesQueueStatusFilter(status, "in_appointment")) return 0;
+  if (matchesQueueStatusFilter(status, "waiting")) return 1;
+  return 2;
+}
+
+function queuePosition(b: QueueOrderRow): number {
+  if (b.slotStart) {
+    const t = Date.parse(b.slotStart);
+    if (!Number.isNaN(t)) return t;
+  }
+  return b.tokenNumber ?? Number.MAX_SAFE_INTEGER;
+}
+
+/** Day queue: in consultation → waiting → booked (by slot/token); finished split out. */
+export function splitDayQueue<T extends QueueOrderRow>(
+  rows: T[],
+): { active: T[]; finished: T[] } {
+  const active = rows
+    .filter((b) => !isFinishedStatus(b.status))
+    .sort(
+      (a, b) =>
+        queueRank(a.status) - queueRank(b.status) ||
+        queuePosition(a) - queuePosition(b),
+    );
+  const finished = rows.filter((b) => isFinishedStatus(b.status));
+  return { active, finished };
+}
+
 export const QUEUE_FILTER_KEYS: QueueStatusFilter[] = [
   "all",
   "accepted",
