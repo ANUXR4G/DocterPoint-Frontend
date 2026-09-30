@@ -122,7 +122,7 @@ function settingsView(
 
 export const PaymentAccountService = {
   async getSettings(practiceId: string, actorUserId: string) {
-    await PracticeService.assertProfileEditor(practiceId, actorUserId);
+    await PracticeService.assertProfileEditor(practiceId, actorUserId, "payment settings");
     return settingsView(practiceId, await loadSettings(practiceId));
   },
 
@@ -136,7 +136,7 @@ export const PaymentAccountService = {
     actorUserId: string,
     input: { keyId?: unknown; keySecret?: unknown; webhookSecret?: unknown },
   ) {
-    await PracticeService.assertProfileEditor(practiceId, actorUserId);
+    await PracticeService.assertProfileEditor(practiceId, actorUserId, "payment settings");
     const current = await loadSettings(practiceId);
 
     const keyId = String(input.keyId ?? "").trim();
@@ -209,7 +209,7 @@ export const PaymentAccountService = {
   },
 
   async removeSettings(practiceId: string, actorUserId: string) {
-    await PracticeService.assertProfileEditor(practiceId, actorUserId);
+    await PracticeService.assertProfileEditor(practiceId, actorUserId, "payment settings");
     const updated = await prisma.practice.update({
       where: { id: practiceId },
       data: {

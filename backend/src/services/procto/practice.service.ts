@@ -995,7 +995,7 @@ export const PracticeService = {
   },
 
   /** Owner/admin, or the only active doctor of a SOLO practice (created with DOCTOR role). */
-  async assertProfileEditor(practiceId: string, userId: string) {
+  async assertProfileEditor(practiceId: string, userId: string, what = "the practice settings") {
     const member = await this.assertMember(practiceId, userId);
     if (member.role === "PRACTICE_OWNER" || member.role === "PRACTICE_ADMIN") {
       return member;
@@ -1010,7 +1010,7 @@ export const PracticeService = {
       ]);
       if (practice?.type === "SOLO" && activeMembers === 1) return member;
     }
-    ResponseHandler.noPermission("only clinic owners can manage doctors and patients.");
+    ResponseHandler.noPermission(`Only the clinic owner or admin can change ${what}.`);
     return member;
   },
 
