@@ -132,7 +132,7 @@ export default function EmergencyWalkInModal({
         if (e.target === e.currentTarget && !submitting) onClose()
       }}
     >
-      <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white text-slate-900 shadow-2xl sm:rounded-3xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+      <div className="flex max-h-[96dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white text-slate-900 shadow-2xl sm:rounded-3xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
         <div className="flex items-start gap-3 border-b border-slate-100 px-5 pb-4 pt-5 dark:border-slate-800">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 ring-1 ring-red-100 dark:bg-red-950/50 dark:text-red-400 dark:ring-red-900">
             <svg

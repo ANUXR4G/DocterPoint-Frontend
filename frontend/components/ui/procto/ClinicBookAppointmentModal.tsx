@@ -228,7 +228,7 @@ export default function ClinicBookAppointmentModal({
       handler={onClose}
       title="Book appointment"
       direction="center"
-      className="max-h-[90vh] w-full max-w-lg overflow-y-auto"
+      className="!h-auto max-h-[96dvh] w-full max-w-xl overflow-hidden"
       secondaryBtn={
         <button
           type="button"
@@ -250,7 +250,7 @@ export default function ClinicBookAppointmentModal({
         </button>
       }
     >
-      <div className="space-y-3 px-4 pb-2 text-sm">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-2 text-sm">
         <p className="text-neutral-600 dark:text-neutral-400">
           Manual booking for{" "}
           <span className="font-semibold text-neutral-900 dark:text-white">
@@ -270,49 +270,53 @@ export default function ClinicBookAppointmentModal({
           </p>
         ) : null}
 
-        <label className="block">
-          <span className="font-semibold">Doctor</span>
-          <select
-            className={fieldClass}
-            value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
-          >
-            {doctors.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {locations.length > 1 ? (
+        <div
+          className={`grid gap-3 ${locations.length > 1 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+        >
           <label className="block">
-            <span className="font-semibold">Location</span>
+            <span className="font-semibold">Doctor</span>
             <select
               className={fieldClass}
-              value={locationId}
-              onChange={(e) => setLocationId(e.target.value)}
+              value={providerId}
+              onChange={(e) => setProviderId(e.target.value)}
             >
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                  {l.city ? ` · ${l.city}` : ""}
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
             </select>
           </label>
-        ) : null}
 
-        <label className="block">
-          <span className="font-semibold">Date</span>
-          <input
-            type="date"
-            className={fieldClass}
-            value={date}
-            min={practiceTodayIso()}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </label>
+          {locations.length > 1 ? (
+            <label className="block">
+              <span className="font-semibold">Location</span>
+              <select
+                className={fieldClass}
+                value={locationId}
+                onChange={(e) => setLocationId(e.target.value)}
+              >
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                    {l.city ? ` · ${l.city}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          <label className="block">
+            <span className="font-semibold">Date</span>
+            <input
+              type="date"
+              className={fieldClass}
+              value={date}
+              min={practiceTodayIso()}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </label>
+        </div>
 
         {availability?.configuredModes &&
         availability.configuredModes.length > 1 ? (

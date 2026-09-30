@@ -229,31 +229,33 @@ export default function DeskPatientPicker({
             ← Back to search
           </button>
         </div>
-        <label className="block">
-          <span className={labelClass}>Full name *</span>
-          <input
-            className={fieldClass}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="As on ID"
-            autoComplete="off"
-            autoFocus
-          />
-        </label>
-        <label className="block">
-          <span className={labelClass}>Mobile *</span>
-          <input
-            className={fieldClass}
-            value={phone}
-            onChange={(e) => {
-              setPhone(e.target.value)
-              setNeedsRelationship(false)
-            }}
-            placeholder="10-digit mobile"
-            inputMode="tel"
-            autoComplete="off"
-          />
-        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className={labelClass}>Full name *</span>
+            <input
+              className={fieldClass}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="As on ID"
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Mobile *</span>
+            <input
+              className={fieldClass}
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value)
+                setNeedsRelationship(false)
+              }}
+              placeholder="10-digit mobile"
+              inputMode="tel"
+              autoComplete="off"
+            />
+          </label>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <span className={labelClass}>Gender *</span>
@@ -291,39 +293,41 @@ export default function DeskPatientPicker({
             />
           </label>
         </div>
-        <label className="block">
-          <span className={labelClass}>
-            Relationship{" "}
-            <span className="font-normal text-slate-400">
-              — only if this mobile belongs to a family member
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className={labelClass}>
+              Relationship{" "}
+              <span className="font-normal text-slate-400">
+                — if a family member&apos;s mobile
+              </span>
             </span>
-          </span>
-          <select
-            ref={relationRef}
-            className={`${fieldClass} ${needsRelationship ? "!border-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.2)]" : ""}`}
-            value={relationship}
-            onChange={(e) => setRelationship(e.target.value)}
-          >
-            <option value="">Patient&apos;s own number</option>
-            {RELATIONSHIPS.map((r) => (
-              <option key={r} value={r}>
-                {r} of the number&apos;s owner
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className={labelClass}>
-            Email <span className="font-normal text-slate-400">— optional</span>
-          </span>
-          <input
-            type="email"
-            className={fieldClass}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="off"
-          />
-        </label>
+            <select
+              ref={relationRef}
+              className={`${fieldClass} ${needsRelationship ? "!border-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.2)]" : ""}`}
+              value={relationship}
+              onChange={(e) => setRelationship(e.target.value)}
+            >
+              <option value="">Patient&apos;s own number</option>
+              {RELATIONSHIPS.map((r) => (
+                <option key={r} value={r}>
+                  {r} of the number&apos;s owner
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelClass}>
+              Email <span className="font-normal text-slate-400">— optional</span>
+            </span>
+            <input
+              type="email"
+              className={fieldClass}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+        </div>
         {registerError ? (
           <p
             className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
