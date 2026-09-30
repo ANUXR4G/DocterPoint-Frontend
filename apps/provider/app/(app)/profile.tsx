@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { type ComponentProps, useCallback, useState } from "react";
 import {
+  ActivityIndicator,
+  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -13,14 +15,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Chip, PageTitle } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { clearSession } from "@/lib/api";
+import { pickAndUploadPhoto } from "@/lib/cloudinary";
 import { contentBottomPad } from "@/lib/dockLayout";
+import { resolveMediaUrl } from "@/lib/media";
 import {
   canManagePractice,
   isClinicAdminRole,
   usePractice,
   usePracticeLabel,
 } from "@/lib/practiceContext";
-import { fetchPracticeNotifications } from "@/lib/procto";
+import {
+  fetchPracticeNotifications,
+  updateMyPhoto,
+  updatePracticeLogo,
+} from "@/lib/procto";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import { doctorWebPath } from "@/lib/webPortal";
 
@@ -44,14 +52,62 @@ type MenuItem = {
 export default function MoreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { memberships, membership, practiceId, practiceIndex, setPracticeIndex } =
-    usePractice();
+  const {
+    memberships,
+    membership,
+    practiceId,
+    practiceIndex,
+    setPracticeIndex,
+    refresh,
+  } = usePractice();
   const label = usePracticeLabel(membership);
   const [openAlerts, setOpenAlerts] = useState(0);
 
   const isClinicAdmin = isClinicAdminRole(membership?.role);
   const canManage = canManagePractice(membership);
   const isReception = membership?.role === "RECEPTIONIST";
+  const me = membership?.practice.members.find((m) => m.userId === membership.userId)?.user;
+  const [photoBusy, setPhotoBusy] = useState<"me" | "logo" | null>(null);
+  const [photoError, setPhotoError] = useState("");
+
+  async function changePhoto(target: "me" | "logo", remove = false) {
+    if (!membership) return;
+    setPhotoError("");
+    let url: string | null = null;
+    if (!remove) {
+      let picked: string | "denied" | null;
+      try {
+        setPhotoBusy(target);
+        picked = await pickAndUploadPhoto();
+      } catch {
+        setPhotoBusy(null);
+        setPhotoError("Upload failed. Check your connection and try again.");
+        return;
+      }
+      if (picked === "denied") {
+        setPhotoBusy(null);
+        setPhotoError("Photo access was blocked. Allow photos in Settings.");
+        return;
+      }
+      if (!picked) {
+        setPhotoBusy(null);
+        return;
+      }
+      url = picked;
+    }
+    setPhotoBusy(target);
+    const res =
+      target === "me"
+        ? await updateMyPhoto(url)
+        : await updatePracticeLogo(membership.practice.id, url);
+    if (res.status !== "successful") {
+      setPhotoBusy(null);
+      setPhotoError(res.message || "Could not save the photo.");
+      return;
+    }
+    await refresh();
+    setPhotoBusy(null);
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -193,6 +249,36 @@ export default function MoreScreen() {
           </View>
         ) : null}
 
+        {membership ? (
+          <>
+            <Text style={styles.section}>Photos</Text>
+            <View style={[styles.group, styles.photoGroup]}>
+              <PhotoTile
+                label="Your photo"
+                name={me?.name || "You"}
+                uri={resolveMediaUrl(me?.imgSrc)}
+                round
+                busy={photoBusy === "me"}
+                disabled={photoBusy != null}
+                onChange={() => void changePhoto("me")}
+                onRemove={() => void changePhoto("me", true)}
+              />
+              {canManage ? (
+                <PhotoTile
+                  label="Clinic logo"
+                  name={membership.practice.name}
+                  uri={resolveMediaUrl(membership.practice.bgSrc)}
+                  busy={photoBusy === "logo"}
+                  disabled={photoBusy != null}
+                  onChange={() => void changePhoto("logo")}
+                  onRemove={() => void changePhoto("logo", true)}
+                />
+              ) : null}
+            </View>
+            {photoError ? <Text style={styles.photoError}>{photoError}</Text> : null}
+          </>
+        ) : null}
+
         <Text style={styles.section}>Practice</Text>
         <MenuGroup items={practiceItems} onOpen={open} />
 
@@ -210,6 +296,62 @@ export default function MoreScreen() {
           <Text style={[styles.label, { color: colors.danger }]}>Sign out</Text>
         </Pressable>
       </ScrollView>
+    </View>
+  );
+}
+
+function PhotoTile({
+  label,
+  name,
+  uri,
+  round,
+  busy,
+  disabled,
+  onChange,
+  onRemove,
+}: {
+  label: string;
+  name: string;
+  uri: string | null;
+  round?: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onChange: () => void;
+  onRemove: () => void;
+}) {
+  const radius = round ? 36 : 18;
+  const initial = name.replace(/^Dr\.?\s*/i, "").trim().charAt(0).toUpperCase() || "?";
+  return (
+    <View style={styles.photoTile}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={uri ? `Change ${label.toLowerCase()}` : `Add ${label.toLowerCase()}`}
+        onPress={onChange}
+        disabled={disabled}
+      >
+        {uri ? (
+          <Image source={{ uri }} style={[styles.photo, { borderRadius: radius }]} />
+        ) : (
+          <View style={[styles.photo, styles.photoEmpty, { borderRadius: radius }]}>
+            <Text style={styles.photoInitial}>{initial}</Text>
+          </View>
+        )}
+        <View style={styles.photoBadge}>
+          {busy ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="camera" size={13} color="#fff" />
+          )}
+        </View>
+      </Pressable>
+      <Text style={styles.photoLabel}>{label}</Text>
+      {uri ? (
+        <Pressable accessibilityRole="button" onPress={onRemove} disabled={disabled} hitSlop={8}>
+          <Text style={styles.photoRemove}>Remove</Text>
+        </Pressable>
+      ) : (
+        <Text style={styles.hint}>Tap to add</Text>
+      )}
     </View>
   );
 }
@@ -316,4 +458,34 @@ const styles = StyleSheet.create({
     backgroundColor: colors.danger,
   },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  photoGroup: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingVertical: space.lg,
+  },
+  photoTile: { alignItems: "center", gap: 4, minWidth: 110 },
+  photo: { width: 72, height: 72, backgroundColor: colors.paper },
+  photoEmpty: { alignItems: "center", justifyContent: "center" },
+  photoInitial: { fontSize: 26, fontWeight: "700", color: colors.brand },
+  photoBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brand,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  photoLabel: { marginTop: 6, fontSize: 14, fontWeight: "600", color: colors.ink },
+  photoRemove: { fontSize: 12, fontWeight: "600", color: colors.danger },
+  photoError: {
+    marginTop: -space.sm,
+    marginBottom: space.md,
+    fontSize: 13,
+    color: colors.danger,
+  },
 });

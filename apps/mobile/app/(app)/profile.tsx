@@ -1,7 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import {
   PremiumAtmosphere,
   PremiumCard,
@@ -17,6 +25,9 @@ import {
   Screen,
 } from "@/components/ui";
 import { api, clearSession } from "@/lib/api";
+import { pickProfilePhoto, uploadPhoto } from "@/lib/cloudinary";
+import { setCachedPatientName, setCachedPatientPhoto } from "@/lib/dataCache";
+import { resolveMediaUrl } from "@/lib/media";
 import { colors, space } from "@/lib/theme";
 import type { PatientProfile } from "@/lib/types";
 
@@ -54,6 +65,48 @@ export default function ProfileScreen() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+
+  async function savePhoto(url: string | null) {
+    const res = await api<PatientProfile>("/patient/profile", {
+      method: "PUT",
+      body: JSON.stringify({ img_src: url ?? "" }),
+    });
+    if (res.status !== "successful") {
+      setPhotoError(res.message || "Could not save the photo.");
+      return;
+    }
+    const uri = resolveMediaUrl(url);
+    setPhoto(uri);
+    setCachedPatientPhoto(uri);
+  }
+
+  async function changePhoto() {
+    setPhotoError("");
+    const picked = await pickProfilePhoto();
+    if (picked === "denied") {
+      setPhotoError("Photo access was blocked. Allow photos in Settings.");
+      return;
+    }
+    if (!picked) return;
+    setPhotoBusy(true);
+    try {
+      await savePhoto(await uploadPhoto(picked));
+    } catch {
+      setPhotoError("Upload failed. Check your connection and try again.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function removePhoto() {
+    setPhotoError("");
+    setPhotoBusy(true);
+    await savePhoto(null);
+    setPhotoBusy(false);
+  }
 
   useEffect(() => {
     api<PatientProfile>("/patient/profile").then((res) => {
@@ -73,6 +126,7 @@ export default function ProfileScreen() {
         ),
         address: p.address ?? "",
       });
+      setPhoto(resolveMediaUrl(p.img_src ?? p.imgSrc));
     });
   }, []);
 
@@ -100,6 +154,7 @@ export default function ProfileScreen() {
       setError(res.message || "Update failed");
       return;
     }
+    if (form.name.trim()) setCachedPatientName(form.name.trim());
     setMessage("Profile saved.");
   }
 
@@ -126,6 +181,54 @@ export default function ProfileScreen() {
         />
 
         <PremiumCard style={styles.formCard}>
+          <View style={styles.photoRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={photo ? "Change profile photo" : "Add profile photo"}
+              onPress={() => void changePhoto()}
+              disabled={photoBusy}
+            >
+              <ClinicAvatar
+                name={form.name || "You"}
+                uri={photo}
+                size={76}
+                radius={38}
+                backgroundColor={colors.brandLight}
+              />
+              <View style={styles.photoBadge}>
+                {photoBusy ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Ionicons name="camera" size={14} color={colors.white} />
+                )}
+              </View>
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.photoTitle}>Profile photo</Text>
+              <Text style={styles.menuHint}>Helps your clinic recognise you at the desk.</Text>
+              <View style={styles.photoActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => void changePhoto()}
+                  disabled={photoBusy}
+                  hitSlop={8}
+                >
+                  <Text style={styles.photoLink}>{photo ? "Change" : "Add photo"}</Text>
+                </Pressable>
+                {photo ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void removePhoto()}
+                    disabled={photoBusy}
+                    hitSlop={8}
+                  >
+                    <Text style={[styles.photoLink, { color: colors.danger }]}>Remove</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          </View>
+          <ErrorText text={photoError} />
           <Field
             label="Full name"
             value={form.name}
@@ -242,6 +345,28 @@ const styles = StyleSheet.create({
   formCard: {
     paddingTop: space.lg,
   },
+  photoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.lg,
+    marginBottom: space.md,
+  },
+  photoBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brand,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  photoTitle: { fontSize: 15, fontWeight: "700", color: colors.ink },
+  photoActions: { flexDirection: "row", gap: space.lg, marginTop: 8 },
+  photoLink: { fontSize: 14, fontWeight: "700", color: colors.brand },
   genderLabel: {
     marginBottom: 8,
     fontSize: 14,

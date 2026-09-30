@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { api, setRefreshToken, setToken } from "@/lib/api";
 import type {
   BookingRow,
   OverrideRow,
@@ -100,6 +100,32 @@ export async function fetchSchedules(practiceId: string, providerId?: string) {
     };
   }
   return { ...res, pendingModeChange: null as null };
+}
+
+/** Signed-in user's own photo; `null` removes it. */
+export async function updateMyPhoto(imgSrc: string | null) {
+  const res = await api<{
+    imgSrc: string | null;
+    access_token?: string;
+    refresh_token?: string;
+  }>("/auth/me/photo", {
+    method: "PUT",
+    body: JSON.stringify({ imgSrc }),
+  });
+  // The access JWT carries imgSrc; keep the stored session in sync.
+  if (res.status === "successful" && res.data?.access_token) {
+    await setToken(res.data.access_token);
+    if (res.data.refresh_token) await setRefreshToken(res.data.refresh_token);
+  }
+  return res;
+}
+
+/** Clinic logo (owner / admin, or a solo doctor); `null` removes it. */
+export async function updatePracticeLogo(practiceId: string, bgSrc: string | null) {
+  return api(`/procto/practices/${practiceId}/profile`, {
+    method: "PATCH",
+    body: JSON.stringify({ bgSrc }),
+  });
 }
 
 export async function saveProviderSettings(

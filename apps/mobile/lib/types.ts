@@ -91,6 +91,8 @@ export type PatientProfile = {
   dateOfBirth?: string | null;
   profession?: string | null;
   phone?: string | null;
+  img_src?: string | null;
+  imgSrc?: string | null;
 };
 
 export function consultationTypeLabel(value: string | null | undefined): string {

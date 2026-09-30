@@ -19,7 +19,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow GlucoGuide Doctor to attach visit documents from your photos."
+          "photosPermission": "Allow GlucoGuide Doctor to attach visit documents and set your profile photo or clinic logo."
         }
       ],
       "expo-document-picker",

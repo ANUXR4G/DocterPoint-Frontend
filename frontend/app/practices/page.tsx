@@ -15,6 +15,7 @@ import {
   type PracticesRecoveryAction,
 } from "@/lib/practicesEmptyState"
 import { withDrTitle } from "@/lib/doctorName"
+import { practicePhotoUrl } from "@/lib/practicePhoto"
 
 type Practice = {
   id: string
@@ -27,10 +28,11 @@ type Practice = {
   planName?: string | null
   nextAvailableHint?: string | null
   reviewSummary?: { average: number | null; count: number }
+  bgSrc?: string | null
   locations: { id: string; name: string; city: string; address: string }[]
   members?: {
     role: string
-    user: { id: string; name: string | null }
+    user: { id: string; name: string | null; imgSrc?: string | null }
   }[]
 }
 
@@ -522,6 +524,7 @@ function PracticesPageContent() {
               const subtitle = displaySubtitle(p)
               const loc = p.locations[0]
               const isClinic = p.type === "CLINIC" || p.type === "CENTER"
+              const photo = practicePhotoUrl(p)
 
               return (
                 <li
@@ -530,12 +533,22 @@ function PracticesPageContent() {
                 >
                   <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-stretch sm:gap-5 sm:p-5">
                     {/* Avatar */}
-                    <div
-                      className={`mx-auto flex size-16 shrink-0 items-center justify-center rounded-full text-lg font-bold sm:mx-0 sm:size-[72px] sm:text-xl ${avatarTone(title)}`}
-                      aria-hidden
-                    >
-                      {initials(title)}
-                    </div>
+                    {photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={photo}
+                        alt=""
+                        aria-hidden
+                        className={`mx-auto size-16 shrink-0 bg-neutral-100 object-cover sm:mx-0 sm:size-[72px] dark:bg-white/10 ${isClinic ? "rounded-2xl" : "rounded-full"}`}
+                      />
+                    ) : (
+                      <div
+                        className={`mx-auto flex size-16 shrink-0 items-center justify-center rounded-full text-lg font-bold sm:mx-0 sm:size-[72px] sm:text-xl ${avatarTone(title)}`}
+                        aria-hidden
+                      >
+                        {initials(title)}
+                      </div>
+                    )}
 
                     {/* Main info */}
                     <div className="min-w-0 flex-1 text-center sm:text-left">

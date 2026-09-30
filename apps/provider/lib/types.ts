@@ -9,11 +9,12 @@ export type PracticeMembership = {
     slug: string;
     specialty?: string | null;
     type?: string;
+    bgSrc?: string | null;
     locations: Array<{ id: string; name: string; city: string }>;
     members: Array<{
       role: string;
       userId: string;
-      user: { id: string; name: string | null };
+      user: { id: string; name: string | null; imgSrc?: string | null };
     }>;
   };
 };

@@ -8,6 +8,7 @@ type Entry<T> = { at: number; data: T };
 let bookingsCache: Entry<ProctoBooking[]> | null = null;
 let practicesCache: Entry<PracticeListItem[]> | null = null;
 let patientName: string | null = null;
+let patientPhoto: string | null = null;
 
 function fresh<T>(entry: Entry<T> | null, ttl: number): T | null {
   if (!entry) return null;
@@ -42,7 +43,7 @@ export function setCachedPractices(data: PracticeListItem[]) {
   practicesCache = { at: Date.now(), data };
 }
 
-/** Signed-in patient's display name (Home greeting); cleared with the session. */
+/** Signed-in patient's display name + photo (Home header); cleared with the session. */
 export function getCachedPatientName(): string | null {
   return patientName;
 }
@@ -51,8 +52,17 @@ export function setCachedPatientName(name: string | null) {
   patientName = name;
 }
 
+export function getCachedPatientPhoto(): string | null {
+  return patientPhoto;
+}
+
+export function setCachedPatientPhoto(uri: string | null) {
+  patientPhoto = uri;
+}
+
 export function clearDataCache() {
   bookingsCache = null;
   practicesCache = null;
   patientName = null;
+  patientPhoto = null;
 }

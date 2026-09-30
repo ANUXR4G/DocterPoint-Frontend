@@ -11,10 +11,13 @@ import { AnimatedView, PressableScale } from "@/lib/motion";
 import { api, getApiUrl } from "@/lib/api";
 import {
   getCachedPatientName,
+  getCachedPatientPhoto,
   getCachedPractices,
   setCachedPatientName,
+  setCachedPatientPhoto,
   setCachedPractices,
 } from "@/lib/dataCache";
+import { resolveMediaUrl } from "@/lib/media";
 import { dockClearance } from "@/lib/dockLayout";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { PRACTICE_TIMEZONE } from "@/lib/practiceTime";
@@ -46,6 +49,7 @@ export default function HomeScreen() {
     refresh: refreshBookings,
   } = usePatientLive();
   const [name, setName] = useState<string | null>(getCachedPatientName);
+  const [photo, setPhoto] = useState<string | null>(getCachedPatientPhoto);
   const [practices, setPractices] = useState<PracticeListItem[]>(
     () => getCachedPractices() ?? [],
   );
@@ -81,21 +85,27 @@ export default function HomeScreen() {
     if (!soft) setLoading(false);
   }
 
-  async function loadName() {
+  async function loadProfile() {
     const res = await api<PatientProfile>("/patient/profile");
+    if (res.status !== "successful") return;
     const profile = (res.data || res) as PatientProfile;
     const full = profile?.name?.trim();
     if (full) {
       setCachedPatientName(full);
       setName(full);
     }
+    const uri = resolveMediaUrl(profile?.img_src ?? profile?.imgSrc);
+    setCachedPatientPhoto(uri);
+    setPhoto(uri);
   }
 
   useFocusEffect(
     useCallback(() => {
       void loadPractices({ soft: true });
       void refreshBookings({ soft: true });
-      if (!getCachedPatientName()) void loadName();
+      setPhoto(getCachedPatientPhoto());
+      if (getCachedPatientName()) setName(getCachedPatientName());
+      else void loadProfile();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refreshBookings]),
   );
@@ -118,7 +128,7 @@ export default function HomeScreen() {
               void Promise.all([
                 loadPractices({ soft: true, force: true }),
                 refreshBookings({ soft: true, force: true }),
-                loadName(),
+                loadProfile(),
               ]).finally(() => setRefreshing(false));
             }}
             tintColor={colors.brand}
@@ -139,6 +149,7 @@ export default function HomeScreen() {
           >
             <ClinicAvatar
               name={name || "You"}
+              uri={photo}
               size={48}
               radius={24}
               backgroundColor={colors.brandLight}

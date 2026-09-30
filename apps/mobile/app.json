@@ -24,7 +24,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow GlucoGuide to access ID photos for registration autofill."
+          "photosPermission": "Allow GlucoGuide to use your photos for your profile picture and ID registration autofill."
         }
       ],
       [

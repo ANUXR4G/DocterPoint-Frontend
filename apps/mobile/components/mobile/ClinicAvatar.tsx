@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Image,
   StyleSheet,
@@ -43,6 +43,7 @@ export function ClinicAvatar({
   textColor = colors.brand,
 }: Props) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [uri]);
   const showImage = Boolean(uri) && !failed;
   const borderRadius = radius ?? Math.round(size * 0.28);
 

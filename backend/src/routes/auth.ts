@@ -93,6 +93,49 @@ router.get(
   },
 );
 
+/** Set / clear the signed-in user's own profile photo (Cloudinary URL). */
+router.put(
+  "/me/photo",
+  requireAuth(),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { prisma } = await import("../db/prisma.js");
+      const { normalizeProfileImageUrl } = await import("../core/profileImage.js");
+      const { ResponseHandler } = await import("../core/response.js");
+      const session = req.sessionUser!;
+      const current = await prisma.user.findUnique({
+        where: { id: session.id },
+        select: { imgSrc: true },
+      });
+      if (!current) ResponseHandler.invalidToken("invalid token or expired token.");
+      const imgSrc = normalizeProfileImageUrl(
+        req.body?.imgSrc ?? req.body?.img_src ?? null,
+        current!.imgSrc,
+      );
+      await prisma.user.update({
+        where: { id: session.id },
+        data: { imgSrc, updatedAt: new Date() },
+      });
+      const { clearProfilePhotoCaches } = await import(
+        "../services/procto/practice.service.js"
+      );
+      clearProfilePhotoCaches(session.id);
+      const { deleteCachedKeys } = await import("../db/redis.js");
+      const b64 = uuidToBase64(session.id);
+      await deleteCachedKeys([`users:doctor:${b64}:info`, `patients:info:${b64}`]);
+      const tokenResult = getUserToken({ ...session, imgSrc });
+      setTokenCookies(res, tokenResult.cookies);
+      return ResponseHandler.fetchSuccessful(res, "Photo updated", {
+        img_src: imgSrc,
+        imgSrc,
+        ...tokenResult.responseBody,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get(
   "/token/refresh",
   requireAuth(),

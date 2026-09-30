@@ -1,4 +1,5 @@
 /** Upload visit documents to Cloudinary (same preset as doctor web portal). */
+import * as ImagePicker from "expo-image-picker";
 
 const CLOUD_NAME = "dwhlynqj3";
 const UPLOAD_PRESET = "gluco-guide-users";
@@ -42,4 +43,24 @@ export async function uploadVisitFile(opts: {
     throw new Error("Upload failed");
   }
   return (await res.json()) as CloudinaryUpload;
+}
+
+/** Pick a square-cropped photo and upload it; null if cancelled, "denied" if blocked. */
+export async function pickAndUploadPhoto(): Promise<string | "denied" | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) return "denied";
+  const picked = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.7,
+  });
+  const asset = picked.canceled ? null : picked.assets[0];
+  if (!asset) return null;
+  const upload = await uploadVisitFile({
+    uri: asset.uri,
+    name: asset.fileName || "photo.jpg",
+    mimeType: asset.mimeType || "image/jpeg",
+  });
+  return upload.secure_url;
 }

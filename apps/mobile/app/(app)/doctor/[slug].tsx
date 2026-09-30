@@ -27,6 +27,7 @@ type PracticeDetail = {
   id: string;
   name: string;
   slug: string;
+  type?: string;
   specialty: string | null;
   consultationFee: number | null;
   bgSrc?: string | null;

@@ -75,6 +75,8 @@ On `/login/patient?mode=register`, patients **upload a government ID first**; OC
 
 On `/login/doctor?mode=register` and `/login/clinic?mode=register`, providers can **upload a visiting card, letterhead, medical licence, or clinic registration** to autofill name / clinic / licence / reg no / phone / email / address. Guest OCR: `POST /auth/doc-scan`.
 
+**Photos & logo:** the image uploads from the browser / app to Cloudinary, then the URL is saved — doctor or staff photo `PUT /auth/me/photo { imgSrc }` (own account; response carries a fresh access token), clinic logo `PATCH /procto/practices/:id/profile { bgSrc }` (owner / admin or solo doctor), patient photo `PUT /patient/profile { img_src }`. Empty / `null` removes. Web: *Settings → Photos* and patient *Profile*; Provider app: *More → Photos*; Patient app: *Profile*.
+
 ---
 
 ## 3. Patient — discover & book (Procto)

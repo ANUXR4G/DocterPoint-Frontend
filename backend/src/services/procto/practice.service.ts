@@ -2,6 +2,7 @@ import { prisma } from "../../db/prisma.js";
 import { AppError, ResponseHandler } from "../../core/response.js";
 import { generateHash } from "../../core/security.js";
 import { isUuid } from "../../core/params.js";
+import { normalizeProfileImageUrl } from "../../core/profileImage.js";
 import type { PracticeType, PracticeMemberRole } from "@prisma/client";
 import { allocateUniquePracticeMrnPrefix } from "../../core/patientMrn.js";
 import {
@@ -179,6 +180,12 @@ export function clearListPublicCache() {
 
 function clearMineCacheFor(userId: string) {
   mineCache.delete(userId);
+}
+
+/** A member's photo shows in their own practices list and on clinic cards. */
+export function clearProfilePhotoCaches(userId: string) {
+  clearMineCacheFor(userId);
+  clearListPublicCache();
 }
 
 /** Default Mon–Fri clinic hours so booking works immediately after add/register. */
@@ -2899,6 +2906,15 @@ export const PracticeService = {
       nextNotice = hours;
     }
 
+    let nextBgSrc: string | null | undefined;
+    if (data.bgSrc !== undefined) {
+      const current = await prisma.practice.findUnique({
+        where: { id: practiceId },
+        select: { bgSrc: true },
+      });
+      nextBgSrc = normalizeProfileImageUrl(data.bgSrc, current?.bgSrc);
+    }
+
     const liveLine = await prisma.whatsAppNumber.findFirst({
       where: {
         practiceId,
@@ -2980,14 +2996,7 @@ export const PracticeService = {
           ...(data.email !== undefined
             ? { email: data.email.trim().toLowerCase() || null }
             : {}),
-          ...(data.bgSrc !== undefined
-            ? {
-                bgSrc:
-                  data.bgSrc == null || !String(data.bgSrc).trim()
-                    ? null
-                    : String(data.bgSrc).trim(),
-              }
-            : {}),
+          ...(nextBgSrc !== undefined ? { bgSrc: nextBgSrc } : {}),
           ...(faqDirty ? { faqKb } : {}),
         },
       });
@@ -3060,6 +3069,7 @@ export const PracticeService = {
     }).then((updated) => {
       clearMineCacheFor(actorUserId);
       for (const m of updated.members) clearMineCacheFor(m.userId);
+      if (nextBgSrc !== undefined) clearListPublicCache();
       return updated;
     });
   },
@@ -3127,6 +3137,7 @@ export const PracticeService = {
                     name: true,
                     email: true,
                     phone: true,
+                    imgSrc: true,
                     doctor: {
                       select: {
                         licenseNo: true,

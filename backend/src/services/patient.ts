@@ -10,6 +10,7 @@ import {
 } from "../core/security.js";
 import { AppError } from "../core/response.js";
 import { noneExcluded } from "../core/utils.js";
+import { normalizeProfileImageUrl } from "../core/profileImage.js";
 import { normalizeGender, requireGender } from "../core/gender.js";
 import { ageFromDob, normalizeDateOfBirth } from "../core/dob.js";
 import { allocatePatientMrn, ensurePracticeMrnPrefix } from "../core/patientMrn.js";
@@ -145,10 +146,15 @@ export class PatientService {
     const userUpdate: Record<string, unknown> = { updatedAt: new Date() };
     const patientUpdate: Record<string, unknown> = {};
     let genderTouched = false;
+    const existing = await prisma.user.findUnique({
+      where: { id: sessionUser.id },
+      select: { gender: true, imgSrc: true },
+    });
 
     for (const [key, value] of Object.entries(payload)) {
-      if (key === "img_src") userUpdate.imgSrc = value;
-      else if (key === "date_of_birth" || key === "dateOfBirth") {
+      if (key === "img_src" || key === "imgSrc") {
+        userUpdate.imgSrc = normalizeProfileImageUrl(value, existing?.imgSrc);
+      } else if (key === "date_of_birth" || key === "dateOfBirth") {
         const normalized = normalizeDateOfBirth(
           typeof value === "string" ? value : null,
         );
@@ -173,10 +179,6 @@ export class PatientService {
     }
 
     if (!genderTouched) {
-      const existing = await prisma.user.findUnique({
-        where: { id: sessionUser.id },
-        select: { gender: true },
-      });
       if (!normalizeGender(existing?.gender)) {
         throw new AppError(
           400,
