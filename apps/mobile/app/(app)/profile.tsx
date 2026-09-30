@@ -1,6 +1,7 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   PremiumAtmosphere,
   PremiumCard,
@@ -167,10 +168,38 @@ export default function ProfileScreen() {
           <PrimaryButton label="Save changes" onPress={save} busy={saving} />
         </PremiumCard>
 
-        <View style={{ height: space.md }} />
-        <PrimaryButton label="Sign out" onPress={logout} tone="ghost" />
+        <View style={styles.menu}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/(app)/queries")}
+            style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+          >
+            <View style={styles.menuIcon}>
+              <Ionicons name="help-buoy-outline" size={20} color={colors.brand} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuLabel}>Help & Support</Text>
+              <Text style={styles.menuHint}>Messages from your clinic and Mira</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.inkSoft} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void logout()}
+            style={({ pressed }) => [
+              styles.menuRow,
+              styles.menuDivider,
+              pressed && styles.menuRowPressed,
+            ]}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: "#fdecec" }]}>
+              <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+            </View>
+            <Text style={[styles.menuLabel, { flex: 1, color: colors.danger }]}>Sign out</Text>
+          </Pressable>
+        </View>
         <Text style={styles.note}>
-          Doctors and clinics use the GlucoGuide website — not this app.
+          Doctors and clinics use the GlucoGuide Provider app or website.
         </Text>
       </ScrollView>
     </Screen>
@@ -178,7 +207,38 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.xl, paddingBottom: 48 },
+  content: { padding: space.xl, paddingBottom: 130 },
+  menu: {
+    marginTop: space.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  menuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    minHeight: 56,
+  },
+  menuDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.lineStrong,
+  },
+  menuRowPressed: { backgroundColor: colors.paper },
+  menuIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.paper,
+  },
+  menuLabel: { fontSize: 15, fontWeight: "600", color: colors.ink },
+  menuHint: { marginTop: 2, fontSize: 12, color: colors.inkSoft },
   formCard: {
     paddingTop: space.lg,
   },

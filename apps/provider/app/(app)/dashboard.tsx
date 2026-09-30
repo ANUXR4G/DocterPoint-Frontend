@@ -122,7 +122,7 @@ export default function DashboardScreen() {
         tone: "blue",
       },
       {
-        title: "Appointments list",
+        title: "Appointments",
         body: "Search and filter all visits",
         href: "/(app)/appointments",
         tone: "emerald",
@@ -134,8 +134,8 @@ export default function DashboardScreen() {
         tone: "teal",
       },
       {
-        title: "Patient messages",
-        body: "WhatsApp conversations with patients",
+        title: "Patient Support",
+        body: "WhatsApp support chats with patients",
         href: "/(app)/inbox",
         tone: "amber",
       },
@@ -149,7 +149,7 @@ export default function DashboardScreen() {
           tone: dashOrder[1]!,
         },
         {
-          title: "Plans & billing",
+          title: "Subscription",
           body: "Trial, subscription, WhatsApp line",
           href: "/(app)/subscriptions",
           tone: "coral",

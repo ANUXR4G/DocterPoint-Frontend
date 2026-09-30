@@ -51,9 +51,10 @@ const TAB_ICONS: Record<
   string,
   { label: string; active: IconName; idle: IconName }
 > = {
-  home: { label: "Home", active: "home", idle: "home-outline" },
-  doctors: { label: "Clinics", active: "business", idle: "business-outline" },
-  appointments: { label: "Visits", active: "calendar", idle: "calendar-outline" },
+  home: { label: "Dashboard", active: "home", idle: "home-outline" },
+  doctors: { label: "Find clinics", active: "business", idle: "business-outline" },
+  appointments: { label: "My Bookings", active: "calendar", idle: "calendar-outline" },
+  profile: { label: "Profile", active: "person", idle: "person-outline" },
 };
 
 /** Even px sizes stay sharp on @2x/@3x — never scale icon glyphs. */

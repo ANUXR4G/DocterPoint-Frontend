@@ -77,8 +77,8 @@ async function setStatus(
     >
       <PageTitle
         eyebrow={membership?.practice.name}
-        title="WhatsApp inbox"
-        subtitle="Take over to silence the AI bot, or return the thread to bot_active."
+        title="Patient Support"
+        subtitle="WhatsApp support chats — take over to silence the AI bot, or hand the thread back to it."
       />
       <ErrorText text={error} />
       {rows.length === 0 ? (

@@ -47,13 +47,13 @@ export type FloatingDockProps = {
   };
 };
 
-/** Only these routes get a dock icon, in this order. */
+/** Only these routes get a dock icon, in the web portal sidebar's order. */
 const DOCK_ORDER = [
   "dashboard",
   "queue",
   "appointments",
-  "calendar",
   "patients",
+  "calendar",
   "profile",
 ] as const;
 
@@ -61,10 +61,10 @@ const TAB_ICONS: Record<
   string,
   { label: string; active: IconName; idle: IconName }
 > = {
-  dashboard: { label: "Home", active: "home", idle: "home-outline" },
-  queue: { label: "Today", active: "list", idle: "list-outline" },
+  dashboard: { label: "Dashboard", active: "home", idle: "home-outline" },
+  queue: { label: "Queue", active: "list", idle: "list-outline" },
   appointments: {
-    label: "Appts",
+    label: "Appointments",
     active: "calendar-number",
     idle: "calendar-number-outline",
   },

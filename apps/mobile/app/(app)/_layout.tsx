@@ -70,7 +70,7 @@ export default function AppLayout() {
         <Tabs.Screen
           name="home"
           options={{
-            title: "Home",
+            title: "Dashboard",
             headerShown: false,
           }}
         />
@@ -85,14 +85,14 @@ export default function AppLayout() {
         <Tabs.Screen
           name="doctors"
           options={{
-            title: "Clinics",
+            title: "Find clinics",
             headerShown: false,
           }}
         />
         <Tabs.Screen
           name="appointments"
           options={{
-            title: "Visits",
+            title: "My Bookings",
             headerShown: false,
           }}
         />
@@ -100,14 +100,14 @@ export default function AppLayout() {
           name="queries"
           options={{
             href: null,
-            title: "Messages",
+            title: "Help & Support",
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
-            href: null,
             title: "Profile",
+            headerShown: false,
           }}
         />
         <Tabs.Screen

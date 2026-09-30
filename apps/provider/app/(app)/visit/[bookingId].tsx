@@ -598,8 +598,8 @@ export default function VisitScreen() {
             />
           ) : (
             <Text style={styles.hint}>
-              Care chat needs a linked patient account. WhatsApp inbox is under
-              More.
+              Care chat needs a linked patient account. WhatsApp chats are in
+              More → Patient Support.
             </Text>
           )
         ) : (

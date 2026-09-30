@@ -108,8 +108,8 @@ export default function AppointmentsScreen() {
         }
       >
         <PageTitle
-          eyebrow="Schedule"
-          title="My visits"
+          eyebrow="Patient"
+          title="My bookings"
           subtitle={
             liveConnected
               ? "Live updates on · list and calendar stay in sync with the clinic."

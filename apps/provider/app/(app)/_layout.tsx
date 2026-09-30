@@ -159,11 +159,11 @@ export default function AppLayout() {
             },
           }}
         >
-          <Tabs.Screen name="dashboard" options={{ title: "Home" }} />
-          <Tabs.Screen name="queue" options={{ title: "Today" }} />
-          <Tabs.Screen name="appointments" options={{ title: "Appts" }} />
-          <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
+          <Tabs.Screen name="dashboard" options={{ title: "Dashboard" }} />
+          <Tabs.Screen name="queue" options={{ title: "Queue" }} />
+          <Tabs.Screen name="appointments" options={{ title: "Appointments" }} />
           <Tabs.Screen name="patients" options={{ title: "Patients" }} />
+          <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
           <Tabs.Screen
             name="analytics"
             options={{ href: null, title: "Analytics", headerShown: true }}
@@ -175,7 +175,7 @@ export default function AppLayout() {
           <Tabs.Screen name="profile" options={{ title: "More" }} />
           <Tabs.Screen
             name="subscriptions"
-            options={{ href: null, title: "Plans", headerShown: true }}
+            options={{ href: null, title: "Subscription", headerShown: true }}
           />
           <Tabs.Screen
             name="visit/[bookingId]"
@@ -183,7 +183,7 @@ export default function AppLayout() {
           />
           <Tabs.Screen
             name="schedule"
-            options={{ href: null, title: "Hours", headerShown: true }}
+            options={{ href: null, title: "Hours & blocks", headerShown: true }}
           />
           <Tabs.Screen
             name="overrides"
@@ -191,7 +191,7 @@ export default function AppLayout() {
           />
           <Tabs.Screen
             name="inbox"
-            options={{ href: null, title: "Inbox", headerShown: true }}
+            options={{ href: null, title: "Patient Support", headerShown: true }}
           />
           <Tabs.Screen
             name="notifications"
@@ -199,7 +199,7 @@ export default function AppLayout() {
           />
           <Tabs.Screen
             name="queries"
-            options={{ href: null, title: "Help", headerShown: true }}
+            options={{ href: null, title: "Help & Support", headerShown: true }}
           />
         </Tabs>
         <GlucoBotFab />
