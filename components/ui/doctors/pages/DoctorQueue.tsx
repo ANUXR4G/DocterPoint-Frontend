@@ -19,6 +19,7 @@ import {
 } from "@/lib/bookingStatus"
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
+import ClinicBookAppointmentModal from "@/components/ui/procto/ClinicBookAppointmentModal"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
@@ -137,6 +138,7 @@ export default function DoctorQueue({
     return ""
   })
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
+  const [bookOpen, setBookOpen] = useState(false)
 
   // Clinic-staff doctors default to (and stay on) their own queue.
   // Clinic admins honor ?doctor= deep links, then can switch to all.
@@ -283,14 +285,26 @@ export default function DoctorQueue({
       <div className={emptyShell}>
         <CoolKid className="mb-4 h-28 w-28 opacity-80" />
         <p className="text-sm font-medium opacity-80">
-          No visits scheduled for {formatPracticeDate(date)}.
+          No appointments for today ({formatPracticeDate(date)}).{" "}
+          <button
+            type="button"
+            className="font-semibold text-[var(--theme-primary)] hover:underline"
+            onClick={() => setBookOpen(true)}
+          >
+            Book one now
+          </button>
         </p>
         <Link
           href={practiceTabHref("calendar")}
-          className="mt-4 inline-block text-sm font-semibold text-blue-600 underline dark:text-sky-400"
+          className="mt-3 inline-block text-xs font-semibold text-slate-500 hover:underline dark:text-slate-400"
         >
           Open practice calendar
         </Link>
+        <ClinicBookAppointmentModal
+          open={bookOpen}
+          onClose={() => setBookOpen(false)}
+          onBooked={() => void refresh({ silent: true })}
+        />
       </div>
     )
   }
