@@ -300,6 +300,22 @@ export const proctoService = {
       method: "DELETE",
     }) as Promise<ProctoResult<RazorpaySettings>>,
 
+  /** Signed-in user's own photo (doctor / clinic staff). `null` removes it. */
+  updateMyPhoto: async (imgSrc: string | null) => {
+    const res = (await proctoFetch("/auth/me/photo", {
+      method: "PUT",
+      body: JSON.stringify({ imgSrc }),
+    })) as ProctoResult<{ imgSrc: string | null; access_token?: string }>;
+    if (res.status === "successful") {
+      // The access JWT carries imgSrc; keep the browser copy in sync.
+      if (res.data?.access_token) {
+        cookies.setCookie("access_token", res.data.access_token, 60 * 60 * 2);
+      }
+      invalidateMyPracticesCacheImpl?.();
+    }
+    return res;
+  },
+
   updatePracticeProfile: (practiceId: string, body: Record<string, unknown>) =>
     proctoFetch(`/procto/practices/${practiceId}/profile`, {
       method: "PATCH",

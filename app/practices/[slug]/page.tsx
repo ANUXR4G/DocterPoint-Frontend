@@ -11,6 +11,7 @@ import {
   proctoService,
 } from "@/lib/services/procto"
 import { withDrTitle } from "@/lib/doctorName"
+import { practicePhotoUrl } from "@/lib/practicePhoto"
 
 const BookingFlow = dynamic(
   () => import("@/components/ui/procto/BookingFlow"),
@@ -28,6 +29,8 @@ type Practice = {
   id: string
   name: string
   slug: string
+  type?: string
+  bgSrc?: string | null
   specialty: string | null
   consultationFee: number | null
   whatsappBusinessNumber?: string | null
@@ -41,6 +44,7 @@ type Practice = {
     user: {
       id: string
       name: string | null
+      imgSrc?: string | null
       doctor?: { appointmentValidityDays?: number; licenseNo?: string | null } | null
     }
   }[]
@@ -107,6 +111,7 @@ export default function PracticeDetailPage() {
 
   const clinicDoctors = practice ? getPracticeProviders(practice.members) : []
   const location = practice?.locations[0]
+  const photoUrl = practice ? practicePhotoUrl(practice) : ""
   const waHref = practice?.whatsappBusinessNumber
     ? whatsappMeHref(practice.whatsappBusinessNumber)
     : null
@@ -197,6 +202,15 @@ export default function PracticeDetailPage() {
               <div aria-hidden className="dashboard-hero-glow" />
               <div className="relative">
               <div className="flex flex-wrap items-center gap-2">
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoUrl}
+                    alt=""
+                    aria-hidden
+                    className={`mr-2 size-14 shrink-0 bg-white object-cover shadow-sm sm:size-16 ${practice.type === "SOLO" ? "rounded-full" : "rounded-2xl"}`}
+                  />
+                ) : null}
                 <h1 className="break-words text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
                   {practice.name}
                 </h1>

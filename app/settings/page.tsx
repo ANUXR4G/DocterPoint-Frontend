@@ -7,6 +7,7 @@ import { Button, Icon, IconInput, ThemeUI } from "@/components"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import { PracticeManagementPanel } from "@/components/ui/doctors/pages/PracticeManagementPanel"
 import BookingModeChangeModal from "@/components/ui/procto/BookingModeChangeModal"
+import ProfilePhotoField from "@/components/ui/procto/ProfilePhotoField"
 import RazorpayAccountPanel from "@/components/ui/procto/RazorpayAccountPanel"
 import {
   EffectiveFromField,
@@ -22,6 +23,7 @@ import {
   normalizeUpcomingChanges,
 } from "@/components/ui/procto/ScheduleChangeControls"
 import { PracticeDashboardProvider } from "@/contexts/PracticeDashboardContext"
+import { queryClient } from "@/app/providers"
 import { useRole } from "@/hooks/useRole"
 import { CLINIC_SUBSCRIPTION_HREF, practiceTabHref } from "@/lib/doctorPracticeTabs"
 import {
@@ -207,6 +209,7 @@ type Membership = {
     advanceBookingAmount?: number | null
     scheduleNoticeHours?: number | null
     whatsappBusinessNumber?: string | null
+    bgSrc?: string | null
     locations: { id: string; name: string; address: string; city: string }[]
     members: Array<{
       userId: string
@@ -215,6 +218,7 @@ type Membership = {
         id: string
         name: string | null
         email?: string | null
+        imgSrc?: string | null
         doctor?: {
           licenseNo: string | null
           appointmentValidityDays: number
@@ -306,12 +310,83 @@ function DoctorOrClinicAccountSettings() {
       {showClinicForm ? (
         <ClinicAccountForm membership={membership} onReload={reload} />
       ) : (
-        <DoctorAccountForm membership={membership} userId={membership.userId} />
+        <DoctorAccountForm
+          membership={membership}
+          userId={membership.userId}
+          onReload={reload}
+        />
       )}
       {canManagePayments ? (
         <RazorpayAccountPanel practiceId={membership.practice.id} />
       ) : null}
     </>
+  )
+}
+
+function PhotoSettings({
+  membership,
+  userId,
+  showLogo,
+  onReload,
+}: {
+  membership: Membership
+  userId: string
+  showLogo: boolean
+  onReload: () => Promise<void>
+}) {
+  const me = membership.practice.members.find((m) => m.userId === userId)?.user
+  const isSolo = membership.practice.type === "SOLO"
+
+  async function refresh() {
+    proctoService.invalidateMyPracticesCache()
+    await onReload()
+  }
+
+  return (
+    <div className="mb-6 w-full">
+      <p className={sectionLabel}>Photos</p>
+      <div className="grid w-full gap-5 sm:grid-cols-2">
+        <ProfilePhotoField
+          label="Your photo"
+          hint="Shown to patients on your profile and booking pages."
+          src={me?.imgSrc}
+          name={me?.name}
+          onSave={async (url) => {
+            const res = await proctoService.updateMyPhoto(url)
+            if (res.status !== "successful") {
+              return { ok: false, message: res.message }
+            }
+            void queryClient.invalidateQueries("user:info")
+            await refresh()
+            return { ok: true }
+          }}
+        />
+        {showLogo ? (
+          <ProfilePhotoField
+            label="Clinic logo"
+            hint={
+              isSolo
+                ? "Shown on your clinic card when you have no photo."
+                : "Shown on your clinic card and profile page."
+            }
+            src={membership.practice.bgSrc}
+            name={membership.practice.name}
+            shape="square"
+            onSave={async (url) => {
+              const res = await proctoService.updatePracticeProfile(
+                membership.practice.id,
+                { bgSrc: url },
+              )
+              if (res.status !== "successful") {
+                return { ok: false, message: res.message }
+              }
+              await refresh()
+              return { ok: true }
+            }}
+          />
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -466,6 +541,12 @@ function ClinicAccountForm({
 
   return (
     <form noValidate className="w-full text-left" onSubmit={(e) => void save(e)}>
+      <PhotoSettings
+        membership={membership}
+        userId={membership.userId}
+        showLogo
+        onReload={onReload}
+      />
       <p className={sectionLabel}>Clinic details</p>
       <div className="grid w-full gap-3 sm:grid-cols-2">
         <IconInput
@@ -679,9 +760,11 @@ type SaveOpts = {
 function DoctorAccountForm({
   membership,
   userId,
+  onReload,
 }: {
   membership: Membership
   userId: string
+  onReload: () => Promise<void>
 }) {
   const locationId = membership.practice.locations[0]?.id
   const provider =
@@ -1064,6 +1147,17 @@ function DoctorAccountForm({
         onApplyFrom={(date) => void resolveConflicts(date)}
         onSavePending={() => void resolveConflicts()}
         onCancel={() => setConflictReview(null)}
+      />
+      <PhotoSettings
+        membership={membership}
+        userId={userId}
+        showLogo={
+          membership.role === "PRACTICE_OWNER" ||
+          membership.role === "PRACTICE_ADMIN" ||
+          (membership.practice.type === "SOLO" &&
+            membership.practice.members.length <= 1)
+        }
+        onReload={onReload}
       />
       <p className={sectionLabel}>Doctor profile</p>
       <div className="grid gap-3 sm:grid-cols-2">
