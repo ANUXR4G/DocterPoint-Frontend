@@ -128,7 +128,7 @@ function SettingsPageInner() {
         ] as const)
 
   return (
-    <div className="dashboard-page-wide">
+    <div className="w-full space-y-6 pb-8 sm:space-y-7">
       <DashboardPageHeader
         eyebrow="Account"
         title="Settings"
@@ -153,7 +153,7 @@ function SettingsPageInner() {
       </div>
 
       {tab === "theme" || isPatient ? (
-        <div className="dashboard-panel mt-5 w-full max-w-4xl">
+        <div className="dashboard-panel mt-5 w-full">
           <div className="mb-4">
             <h2 className="dashboard-section-title text-lg">Appearance</h2>
             <p className="dashboard-section-sub">
@@ -164,7 +164,7 @@ function SettingsPageInner() {
           <ThemeUI />
         </div>
       ) : tab === "practice" && isProvider ? (
-        <div className="dashboard-panel mt-5 w-full max-w-6xl">
+        <div className="dashboard-panel mt-5 w-full">
           <div className="mb-4">
             <h2 className="dashboard-section-title text-lg">Practice</h2>
             <p className="dashboard-section-sub">
@@ -176,11 +176,7 @@ function SettingsPageInner() {
           </PracticeDashboardProvider>
         </div>
       ) : (
-        <div
-          className={`dashboard-panel mt-5 w-full ${
-            hydrated && role === "doctor" ? "max-w-5xl" : "max-w-3xl"
-          }`}
-        >
+        <div className="dashboard-panel mt-5 w-full">
           {!hydrated ? (
             <p className="text-base font-medium opacity-80">Loading settings…</p>
           ) : role === "doctor" ? (
