@@ -9,6 +9,7 @@ import { fadingAnimation } from "@/lib/animations"
 import Icon from "../icons"
 import Button from "../buttons/Button"
 import { useKeyPress } from "@/hooks/useKeyPress"
+import { dashboardPortalRoot } from "@/lib/portalRoot"
 
 type Props = {
   open: boolean
@@ -56,6 +57,9 @@ export default function PopupModal({
             {/* modal inner */}
             <motion.div
               ref={modalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={title || undefined}
               initial={{
                 opacity: 0,
                 scale: "var(--scale-from)",
@@ -130,6 +134,6 @@ export default function PopupModal({
         </React.Fragment>
       )}
     </AnimatePresence>,
-    document.querySelector(".dashboard-app") ?? document.body,
+    dashboardPortalRoot(),
   )
 }
