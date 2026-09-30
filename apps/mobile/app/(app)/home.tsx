@@ -9,14 +9,17 @@ import { SpecialtyChips } from "@/components/mobile/SpecialtyRow";
 import { ErrorText, Loading, PrimaryButton, Screen } from "@/components/ui";
 import { AnimatedView, PressableScale } from "@/lib/motion";
 import { api, getApiUrl } from "@/lib/api";
-import { getCachedPractices, setCachedPractices } from "@/lib/dataCache";
+import {
+  getCachedPatientName,
+  getCachedPractices,
+  setCachedPatientName,
+  setCachedPractices,
+} from "@/lib/dataCache";
 import { dockClearance } from "@/lib/dockLayout";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { PRACTICE_TIMEZONE } from "@/lib/practiceTime";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import type { PatientProfile, PracticeListItem } from "@/lib/types";
-
-let cachedName: string | null = null;
 
 function greeting(now = new Date()) {
   const hour = Number(
@@ -42,7 +45,7 @@ export default function HomeScreen() {
     error: bookingsError,
     refresh: refreshBookings,
   } = usePatientLive();
-  const [name, setName] = useState<string | null>(cachedName);
+  const [name, setName] = useState<string | null>(getCachedPatientName);
   const [practices, setPractices] = useState<PracticeListItem[]>(
     () => getCachedPractices() ?? [],
   );
@@ -83,7 +86,7 @@ export default function HomeScreen() {
     const profile = (res.data || res) as PatientProfile;
     const full = profile?.name?.trim();
     if (full) {
-      cachedName = full;
+      setCachedPatientName(full);
       setName(full);
     }
   }
@@ -92,7 +95,7 @@ export default function HomeScreen() {
     useCallback(() => {
       void loadPractices({ soft: true });
       void refreshBookings({ soft: true });
-      if (!cachedName) void loadName();
+      if (!getCachedPatientName()) void loadName();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refreshBookings]),
   );

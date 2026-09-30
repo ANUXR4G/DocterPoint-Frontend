@@ -74,7 +74,11 @@ export default function PracticeBookScreen() {
   const slotWidth = Math.floor((windowWidth - space.xl * 2 - 20) / 3);
   const [practice, setPractice] = useState<PracticeDetail | null>(null);
   const [providerId, setProviderId] = useState<string | null>(null);
-  const [date, setDate] = useState(() => ymd(new Date()));
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+    return ymd(d);
+  });
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [tokens, setTokens] = useState<TokenSession[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -108,13 +112,20 @@ export default function PracticeBookScreen() {
         dow: d.toLocaleDateString("en-IN", { weekday: "short" }).slice(0, 2).toUpperCase(),
         day: d.getDate(),
         month: d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
-        closed: d.getDay() === 0,
       };
     });
   }, []);
   const visibleDays = days.slice(weekPage * 7, weekPage * 7 + 7);
   const monthLabel =
     (visibleDays.find((d) => d.value === date) ?? visibleDays[0])?.month ?? "";
+
+  function showWeek(page: number) {
+    setWeekPage(page);
+    const first = days[page * 7];
+    if (first && !days.slice(page * 7, page * 7 + 7).some((d) => d.value === date)) {
+      setDate(first.value);
+    }
+  }
 
   useEffect(() => {
     if (!slug) return;
@@ -308,7 +319,7 @@ export default function PracticeBookScreen() {
               <PressableScale
                 style={[styles.arrow, weekPage === 0 && styles.arrowOff]}
                 disabled={weekPage === 0}
-                onPress={() => setWeekPage(0)}
+                onPress={() => showWeek(0)}
                 accessibilityRole="button"
                 accessibilityLabel="Previous week"
               >
@@ -317,7 +328,7 @@ export default function PracticeBookScreen() {
               <PressableScale
                 style={[styles.arrow, weekPage === 1 && styles.arrowOff]}
                 disabled={weekPage === 1}
-                onPress={() => setWeekPage(1)}
+                onPress={() => showWeek(1)}
                 accessibilityRole="button"
                 accessibilityLabel="Next week"
               >
@@ -333,11 +344,10 @@ export default function PracticeBookScreen() {
                   key={d.value}
                   wrapStyle={styles.grow}
                   style={[styles.day, active && styles.dayActive]}
-                  disabled={d.closed}
                   onPress={() => setDate(d.value)}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: active, disabled: d.closed }}
-                  accessibilityLabel={`${d.dow} ${d.day}${d.closed ? ", closed" : ""}`}
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`${d.dow} ${d.day}`}
                 >
                   <Text style={[styles.dayDow, active && styles.dayTextActive]}>{d.dow}</Text>
                   <Text style={[styles.dayNum, active && styles.dayTextActive]}>{d.day}</Text>
@@ -448,7 +458,7 @@ export default function PracticeBookScreen() {
         <ErrorText text={error} />
         {message ? <HintText text={message} /> : null}
         <PressableScale
-          style={[styles.bookCta, cannotBook && styles.bookCtaDisabled]}
+          style={styles.bookCta}
           onPress={book}
           disabled={cannotBook}
           accessibilityRole="button"
@@ -586,5 +596,4 @@ const styles = StyleSheet.create({
     ...shadows.brand,
   },
   bookCtaText: { color: colors.white, fontSize: 16, fontWeight: "700" },
-  bookCtaDisabled: { opacity: 0.45 },
 });
