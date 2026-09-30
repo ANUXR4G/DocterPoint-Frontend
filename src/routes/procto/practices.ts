@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { listAudit } from "../../services/procto/practiceAudit.js";
-import { registerDeskPatient, searchDeskPatients } from "../../services/procto/deskPatients.service.js";
+import { linkDeskPatient, registerDeskPatient, searchDeskPatients } from "../../services/procto/deskPatients.service.js";
 import type { Request, Response, NextFunction } from "express";
 import { ResponseHandler } from "../../core/response.js";
 import { requireAuth } from "../../middleware/auth.js";
@@ -509,6 +509,27 @@ router.post(
         data.existingPatient
           ? `${data.name} is already registered on GlucoGuide (MRN ${data.mrn ?? "—"}) — added to your clinic's patients.`
           : `Registered ${data.name} — MRN ${data.mrn}.`,
+        data,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/:practiceId/desk-patients/:patientId/link",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await linkDeskPatient(
+        requireUuid(param(req.params.practiceId), "practiceId"),
+        req.sessionUser!.id,
+        requireUuid(param(req.params.patientId), "patientId"),
+      );
+      return ResponseHandler.createSuccessful(
+        res,
+        `${data.name} (MRN ${data.mrn ?? "—"}) added to your clinic's patients.`,
         data,
       );
     } catch (error) {
