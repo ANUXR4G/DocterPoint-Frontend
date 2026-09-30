@@ -58,9 +58,14 @@ export function AnimatedView({
 /** Soft press scale for cards and CTAs. */
 export const PressableScale = forwardRef<
   React.ElementRef<typeof Pressable>,
-  PressableProps & { children: ReactNode; style?: StyleProp<ViewStyle> }
+  PressableProps & {
+    children: ReactNode;
+    style?: StyleProp<ViewStyle>;
+    /** Layout for the outer press target (flex / width in rows); `style` is the animated face. */
+    wrapStyle?: StyleProp<ViewStyle>;
+  }
 >(function PressableScale(
-  { children, style, onPress, disabled, onPressIn, onPressOut, ...rest },
+  { children, style, wrapStyle, onPress, disabled, onPressIn, onPressOut, ...rest },
   ref,
 ) {
   const scale = useSharedValue(1);
@@ -81,6 +86,7 @@ export const PressableScale = forwardRef<
         onPressOut?.(e);
       }}
       onPress={onPress}
+      style={wrapStyle}
       {...rest}
     >
       <Animated.View style={[style, animatedStyle, disabled ? { opacity: 0.45 } : null]}>

@@ -1,107 +1,77 @@
-import { Ionicons } from "@expo/vector-icons";
-import type { ComponentProps } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, shadows } from "@/lib/theme";
-
-type IconName = ComponentProps<typeof Ionicons>["name"];
+import { ScrollView, StyleSheet, Text } from "react-native";
+import { PressableScale } from "@/lib/motion";
+import { colors, radii, shadows, space } from "@/lib/theme";
 
 export const SPECIALTIES = [
-  {
-    id: "endocrinology",
-    label: "Diabetes",
-    icon: "water-outline" as IconName,
-    query: "endocrinology",
-  },
-  {
-    id: "general",
-    label: "General",
-    icon: "medkit-outline" as IconName,
-    query: "general",
-  },
-  {
-    id: "cardiology",
-    label: "Heart",
-    icon: "heart-outline" as IconName,
-    query: "cardiology",
-  },
-  {
-    id: "paediatrics",
-    label: "Child",
-    icon: "happy-outline" as IconName,
-    query: "paediatric",
-  },
+  { id: "endocrinology", label: "Diabetes", query: "endocrinology" },
+  { id: "general", label: "General", query: "general" },
+  { id: "cardiology", label: "Cardiology", query: "cardiology" },
+  { id: "paediatrics", label: "Paediatrics", query: "paediatric" },
 ] as const;
 
 type Props = {
-  onSelect: (query: string) => void;
-  activeId?: string;
+  /** Selected specialty query; undefined means "All specialties". */
+  active?: string;
+  onSelect: (query: string | undefined) => void;
+  /** Horizontal padding so the first pill lines up with page content. */
+  inset?: number;
 };
 
-export function SpecialtyRow({ onSelect, activeId }: Props) {
+/** Horizontal specialty filter pills. */
+export function SpecialtyChips({ active, onSelect, inset = space.xl }: Props) {
+  const items: { key: string; label: string; query?: string }[] = [
+    { key: "all", label: "All specialties" },
+    ...SPECIALTIES.map((s) => ({ key: s.id, label: s.label, query: s.query })),
+  ];
+
   return (
-    <View style={styles.row}>
-      {SPECIALTIES.map((s) => {
-        const active = activeId === s.query || activeId === s.id;
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[styles.row, { paddingHorizontal: inset }]}
+      style={{ marginHorizontal: -inset }}
+    >
+      {items.map((s) => {
+        const selected = (s.query ?? undefined) === (active || undefined);
         return (
-          <Pressable
-            key={s.id}
-            style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+          <PressableScale
+            key={s.key}
+            style={[styles.pill, selected && styles.pillActive]}
             onPress={() => onSelect(s.query)}
             accessibilityRole="button"
-            accessibilityState={{ selected: active }}
+            accessibilityState={{ selected }}
             accessibilityLabel={s.label}
           >
-            <View style={[styles.circle, active && styles.circleActive]}>
-              <Ionicons
-                name={s.icon}
-                size={22}
-                color={active ? colors.white : colors.ink}
-              />
-            </View>
-            <Text style={[styles.label, active && styles.labelActive]}>
-              {s.label}
-            </Text>
-          </Pressable>
+            <Text style={[styles.label, selected && styles.labelActive]}>{s.label}</Text>
+          </PressableScale>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     gap: 10,
+    paddingVertical: 6,
   },
-  item: {
-    alignItems: "center",
-    flex: 1,
-  },
-  itemPressed: {
-    opacity: 0.72,
-  },
-  circle: {
-    width: 58,
-    height: 58,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
+  pill: {
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: radii.pill,
     backgroundColor: colors.white,
     ...shadows.soft,
   },
-  circleActive: {
-    backgroundColor: colors.navy,
+  pillActive: {
+    backgroundColor: colors.brand,
+    ...shadows.brand,
   },
   label: {
-    marginTop: 10,
-    fontSize: 11,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "600",
     color: colors.inkSoft,
-    letterSpacing: -0.1,
   },
   labelActive: {
-    color: colors.ink,
-    fontWeight: "600",
+    color: colors.white,
   },
 });

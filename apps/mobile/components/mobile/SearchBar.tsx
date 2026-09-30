@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, TextInput, View } from "react-native";
-import { colors, radii, space } from "@/lib/theme";
+import { colors, radii, shadows, space } from "@/lib/theme";
 
 type Props = {
   value: string;
@@ -14,7 +14,7 @@ type Props = {
 export function SearchBar({
   value,
   onChangeText,
-  placeholder = "Search doctor or clinic",
+  placeholder = "Search doctor, specialty…",
   onSubmit,
   dark = false,
 }: Props) {
@@ -34,6 +34,8 @@ export function SearchBar({
         style={[styles.input, dark && styles.inputDark]}
         returnKeyType="search"
         onSubmitEditing={onSubmit}
+        autoCorrect={false}
+        clearButtonMode="while-editing"
       />
     </View>
   );
@@ -44,11 +46,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    paddingHorizontal: space.lg,
-    paddingVertical: 15,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
+    borderRadius: radii.pill,
+    paddingHorizontal: space.xl,
+    paddingVertical: 16,
+    ...shadows.soft,
   },
   wrapDark: {
     backgroundColor: "rgba(255,255,255,0.1)",

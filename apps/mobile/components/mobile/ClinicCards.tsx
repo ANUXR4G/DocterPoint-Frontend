@@ -1,10 +1,11 @@
-import { Link, type Href } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter, type Href } from "expo-router";
+import { StyleSheet, Text, View } from "react-native";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
-import { StarRating } from "@/components/StarRating";
+import { withDrTitle } from "@/lib/doctorName";
 import { practicePhotoUrl } from "@/lib/media";
-import { colors, shadows, radii, space } from "@/lib/theme";
+import { PressableScale } from "@/lib/motion";
+import { colors, radii, shadows, space } from "@/lib/theme";
 import type { PracticeListItem } from "@/lib/types";
 
 function doctorName(item: PracticeListItem) {
@@ -12,196 +13,140 @@ function doctorName(item: PracticeListItem) {
   return doc?.user?.name?.trim() || item.name;
 }
 
-/** Large featured card — home screen. */
-export function FeaturedClinicCard({ item }: { item: PracticeListItem }) {
+/** Doctor / clinic card — photo, rating, specialty, city and a Book visit action. */
+export function ClinicCard({ item }: { item: PracticeListItem }) {
+  const router = useRouter();
   const doc = doctorName(item);
-  const specialty = item.specialty ?? "General physician";
+  const title = withDrTitle(doc) || item.name;
+  const specialty = item.specialty?.trim() || "General physician";
   const city = item.locations?.[0]?.city;
-  const photo = practicePhotoUrl(item);
+  const rating = item.reviewSummary?.count ? item.reviewSummary.average : null;
+  const open = () => router.push(`/(app)/doctor/${item.slug}` as Href);
 
   return (
-    <Link href={`/(app)/doctor/${item.slug}` as Href} asChild>
-      <Pressable style={styles.featured}>
-        <ClinicAvatar name={doc} uri={photo} size={76} radius={radii.lg} />
-        <View style={styles.featuredBody}>
-          <Text style={styles.featuredKicker}>Recommended</Text>
-          <Text style={styles.featuredName} numberOfLines={1}>
-            {doc.startsWith("Dr") ? doc : `Dr. ${doc}`}
-          </Text>
-          <Text style={styles.featuredMeta} numberOfLines={1}>
-            {specialty}
-            {city ? ` · ${city}` : ""}
-          </Text>
-          <View style={styles.featuredFooter}>
-            <View style={styles.availablePill}>
-              <View style={styles.availableDot} />
-              <Text style={styles.available}>Open now</Text>
-            </View>
-            <View style={styles.appointmentBtn}>
-              <Text style={styles.appointmentBtnText}>Book</Text>
-              <Ionicons name="arrow-forward" size={14} color={colors.white} />
-            </View>
+    <PressableScale
+      style={styles.card}
+      onPress={open}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${specialty}${city ? `, ${city}` : ""}. Book visit`}
+    >
+      <View style={styles.row}>
+        <ClinicAvatar name={doc} uri={practicePhotoUrl(item)} size={84} radius={20} />
+        <View style={styles.body}>
+          <View style={styles.topLine}>
+            <Text style={styles.name} numberOfLines={2}>
+              {title}
+            </Text>
+            {rating != null ? (
+              <View style={styles.rating}>
+                <Ionicons name="star" size={11} color={colors.brand} />
+                <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
+              </View>
+            ) : null}
           </View>
-        </View>
-      </Pressable>
-    </Link>
-  );
-}
-
-/** Full-width list card — clinics search. */
-export function ClinicGridCard({ item }: { item: PracticeListItem }) {
-  const doc = doctorName(item);
-  const specialty = item.specialty ?? "General";
-  const city = item.locations?.[0]?.city;
-  const photo = practicePhotoUrl(item);
-  const title = doc.startsWith("Dr") ? doc : `Dr. ${doc}`;
-
-  return (
-    <Link href={`/(app)/doctor/${item.slug}` as Href} asChild>
-      <Pressable style={styles.listCard}>
-        <ClinicAvatar name={doc} uri={photo} size={64} radius={radii.lg} />
-        <View style={styles.listBody}>
-          <Text style={styles.listName} numberOfLines={2}>
-            {title}
-          </Text>
-          <Text style={styles.listMeta} numberOfLines={1}>
+          <Text style={styles.specialty} numberOfLines={1}>
             {specialty}
-            {city ? ` · ${city}` : ""}
           </Text>
-          {item.reviewSummary && item.reviewSummary.count > 0 ? (
-            <View style={styles.listRating}>
-              <StarRating
-                average={item.reviewSummary.average}
-                count={item.reviewSummary.count}
-                compact
-              />
+          {title !== item.name ? (
+            <Text style={styles.clinic} numberOfLines={1}>
+              {item.name}
+            </Text>
+          ) : null}
+          {city ? (
+            <View style={styles.meta}>
+              <Ionicons name="location-outline" size={12} color={colors.inkFaint} />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {city}
+                {item.consultationFee != null ? ` · ₹${item.consultationFee}` : ""}
+              </Text>
             </View>
           ) : null}
-          <View style={styles.listBtn}>
-            <Text style={styles.listBtnText}>Book visit</Text>
-            <Ionicons name="arrow-forward" size={13} color={colors.brand} />
-          </View>
         </View>
-      </Pressable>
-    </Link>
+      </View>
+      <View style={styles.bookBtn}>
+        <Text style={styles.bookText}>Book Visit</Text>
+      </View>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  featured: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.lg,
-    backgroundColor: colors.white,
-    borderRadius: radii.xxl,
-    padding: space.xl,
-    ...shadows.card,
-  },
-  featuredBody: {
-    flex: 1,
-    minWidth: 0,
-  },
-  featuredKicker: {
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: colors.brand,
-    marginBottom: 6,
-  },
-  featuredName: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.ink,
-    letterSpacing: -0.4,
-  },
-  featuredMeta: {
-    marginTop: 4,
-    fontSize: 13,
-    color: colors.inkSoft,
-  },
-  featuredFooter: {
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  availablePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  availableDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.success,
-  },
-  available: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: colors.success,
-  },
-  appointmentBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.navy,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: radii.sm,
-  },
-  appointmentBtnText: {
-    color: colors.white,
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: -0.1,
-  },
-  listCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    width: "100%",
+  card: {
     backgroundColor: colors.white,
     borderRadius: radii.xl,
     padding: space.lg,
     ...shadows.soft,
   },
-  listBody: {
+  row: {
+    flexDirection: "row",
+    gap: space.lg,
+  },
+  body: {
     flex: 1,
     minWidth: 0,
+    justifyContent: "center",
   },
-  listName: {
+  topLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+  },
+  name: {
+    flex: 1,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.ink,
     lineHeight: 21,
     letterSpacing: -0.3,
   },
-  listMeta: {
-    marginTop: 4,
-    fontSize: 13,
-    color: colors.inkSoft,
-  },
-  listRating: {
-    marginTop: 6,
-  },
-  listBtn: {
-    marginTop: 12,
-    alignSelf: "flex-start",
+  rating: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 3,
     backgroundColor: colors.brandLight,
-    borderRadius: radii.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    borderRadius: radii.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  listBtnText: {
-    fontSize: 12,
+  ratingText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.brand,
+  },
+  specialty: {
+    marginTop: 4,
+    fontSize: 13,
     fontWeight: "600",
     color: colors.brand,
-    letterSpacing: -0.1,
+  },
+  clinic: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.inkSoft,
+  },
+  meta: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.inkFaint,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  bookBtn: {
+    marginTop: space.md,
+    backgroundColor: colors.brandLight,
+    borderRadius: radii.pill,
+    paddingVertical: 11,
+    alignItems: "center",
+  },
+  bookText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.brand,
   },
 });

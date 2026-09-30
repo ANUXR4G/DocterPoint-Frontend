@@ -1,46 +1,48 @@
+import { Ionicons } from "@expo/vector-icons";
+import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
-import { colors, radii, space } from "@/lib/theme";
+import { colors, shadows, space } from "@/lib/theme";
 
 type Props = {
   name: string;
-  subtitle: string;
+  specialty: string;
+  /** Clinic name / city line under the specialty. */
+  detail?: string;
   photoUri?: string | null;
-  reviewAverage?: number | null;
-  reviewCount?: number;
+  stats: { label: string; value: string }[];
 };
 
-export function ClinicProfileHero({
-  name,
-  subtitle,
-  photoUri,
-  reviewAverage,
-  reviewCount = 0,
-}: Props) {
+export function ClinicProfileHero({ name, specialty, detail, photoUri, stats }: Props) {
   return (
     <View style={styles.wrap}>
-      <ClinicAvatar
-        name={name}
-        uri={photoUri}
-        size={96}
-        radius={radii.pill}
-        style={styles.avatar}
-      />
+      <View>
+        <ClinicAvatar
+          name={name.replace(/^Dr\.?\s*/i, "")}
+          uri={photoUri}
+          size={112}
+          radius={32}
+          style={styles.avatar}
+        />
+        <View style={styles.verified}>
+          <Ionicons name="checkmark-done" size={13} color={colors.white} />
+        </View>
+      </View>
       <Text style={styles.name}>{name}</Text>
-      <Text style={styles.subtitle}>{subtitle}</Text>
+      <Text style={styles.specialty}>{specialty}</Text>
+      {detail ? <Text style={styles.detail}>{detail}</Text> : null}
 
-      {reviewCount > 0 && reviewAverage != null ? (
+      {stats.length ? (
         <View style={styles.stats}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{reviewAverage.toFixed(1)}</Text>
-            <Text style={styles.statLabel}>Rating</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{reviewCount}</Text>
-            <Text style={styles.statLabel}>
-              {reviewCount === 1 ? "Review" : "Reviews"}
-            </Text>
-          </View>
+          {stats.map((s, i) => (
+            <Fragment key={s.label}>
+              {i > 0 ? <View style={styles.divider} /> : null}
+              <View style={styles.stat}>
+                <Text style={styles.statLabel}>{s.label}</Text>
+                <Text style={styles.statValue}>{s.value}</Text>
+              </View>
+            </Fragment>
+          ))}
         </View>
       ) : null}
     </View>
@@ -50,56 +52,74 @@ export function ClinicProfileHero({
 const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
-    paddingVertical: space.lg,
-    marginBottom: space.md,
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
   },
   avatar: {
     borderWidth: 4,
     borderColor: colors.white,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 4,
+  },
+  verified: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: colors.success,
+    borderWidth: 3,
+    borderColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadows.soft,
   },
   name: {
-    marginTop: space.md,
+    marginTop: space.lg,
     fontSize: 22,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.ink,
+    letterSpacing: -0.5,
     textAlign: "center",
   },
-  subtitle: {
-    marginTop: 6,
+  specialty: {
+    marginTop: 4,
     fontSize: 14,
+    fontWeight: "600",
+    color: colors.brand,
+    textAlign: "center",
+  },
+  detail: {
+    marginTop: 4,
+    fontSize: 13,
     color: colors.inkSoft,
     textAlign: "center",
     paddingHorizontal: space.lg,
   },
   stats: {
-    flexDirection: "row",
-    gap: space.md,
     marginTop: space.lg,
-    width: "100%",
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    paddingVertical: space.md,
+    flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.lineStrong,
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.ink,
+  stat: {
+    alignItems: "center",
+    paddingHorizontal: space.xl,
+  },
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    height: 30,
+    backgroundColor: colors.lineStrong,
   },
   statLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: colors.inkFaint,
+  },
+  statValue: {
     marginTop: 4,
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.inkSoft,
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.ink,
   },
 });

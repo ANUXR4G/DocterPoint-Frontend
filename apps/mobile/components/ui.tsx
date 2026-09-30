@@ -107,7 +107,7 @@ export function PrimaryButton({
         ? colors.danger
         : tone === "ghost"
           ? "transparent"
-          : colors.navy;
+          : colors.brand;
   return (
     <PressableScale
       onPress={onPress}
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   brandMark: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.brand,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   },
   btn: {
     paddingVertical: 15,
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
     minHeight: 52,
@@ -346,10 +346,8 @@ const styles = StyleSheet.create({
   btnSecondary: {
     paddingVertical: 13,
     paddingHorizontal: 16,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.paperRaised,
+    borderRadius: radii.pill,
+    backgroundColor: colors.sky100,
     alignItems: "center",
   },
   btnSecondaryText: {
@@ -358,18 +356,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
-    borderRadius: radii.sm,
+    borderRadius: radii.pill,
     marginRight: 8,
     marginBottom: 8,
     backgroundColor: colors.white,
   },
   chipActive: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
   },
   chipText: {
     fontSize: 12,
@@ -378,6 +376,7 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     color: colors.white,
+    fontWeight: "600",
   },
   segment: {
     flexDirection: "row",

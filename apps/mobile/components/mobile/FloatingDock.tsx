@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ComponentProps, ReactNode } from "react";
-import { useState } from "react";
 import {
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   View,
   type GestureResponderEvent,
 } from "react-native";
@@ -51,18 +51,21 @@ const TAB_ICONS: Record<
   string,
   { label: string; active: IconName; idle: IconName }
 > = {
-  home: { label: "Dashboard", active: "home", idle: "home-outline" },
-  doctors: { label: "Find clinics", active: "business", idle: "business-outline" },
-  appointments: { label: "My Bookings", active: "calendar", idle: "calendar-outline" },
+  home: { label: "Home", active: "home", idle: "home-outline" },
+  doctors: { label: "Clinics", active: "medkit", idle: "medkit-outline" },
+  appointments: { label: "Bookings", active: "calendar", idle: "calendar-outline" },
   profile: { label: "Profile", active: "person", idle: "person-outline" },
 };
 
 /** Even px sizes stay sharp on @2x/@3x — never scale icon glyphs. */
-const ICON_SIZE = 24;
-const BUBBLE = 44;
+const ICON_SIZE = 22;
+
+/** Detail screens with their own bottom action bar. */
+const HIDE_ON = new Set(["doctor/[slug]"]);
 
 function DockItem({
   label,
+  a11yLabel,
   iconActive,
   iconIdle,
   focused,
@@ -70,60 +73,56 @@ function DockItem({
   onLongPress,
 }: {
   label: string;
+  a11yLabel: string;
   iconActive: IconName;
   iconIdle: IconName;
   focused: boolean;
   onPress: (e: GestureResponderEvent) => void;
   onLongPress: (e: GestureResponderEvent) => void;
 }) {
-  const [pressed, setPressed] = useState(false);
-
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: focused }}
-      accessibilityLabel={label}
+      accessibilityLabel={a11yLabel}
       onPress={onPress}
       onLongPress={onLongPress}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      style={styles.itemHit}
+      style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
       hitSlop={4}
     >
-      <View
-        style={[
-          styles.bubble,
-          focused && styles.bubbleFocused,
-          pressed && styles.bubblePressed,
-        ]}
-      >
-        <View style={styles.iconSlot} collapsable={false}>
-          <Ionicons
-            name={focused ? iconActive : iconIdle}
-            size={ICON_SIZE}
-            color={focused ? colors.navy : colors.inkSoft}
-          />
-        </View>
+      <View style={styles.iconSlot} collapsable={false}>
+        <Ionicons
+          name={focused ? iconActive : iconIdle}
+          size={ICON_SIZE}
+          color={focused ? colors.brand : colors.inkFaint}
+        />
       </View>
+      <Text
+        style={[styles.label, focused && styles.labelActive]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
-/**
- * Compact floating dock — icons only, crisp vector glyphs (no scale blur).
- */
+/** Floating labelled tab bar — teal active tab, matches the patient web portal nav. */
 export function FloatingDock({
   state,
   descriptors,
   navigation,
 }: FloatingDockProps) {
+  const current = state.routes[state.index];
+  if (current && HIDE_ON.has(current.name)) return null;
+
   const visible = state.routes.filter((route) => {
     const options = descriptors[route.key]?.options;
     return options?.href !== null;
   });
 
   const focusedVisibleIndex = visible.findIndex(
-    (route) => state.routes[state.index]?.key === route.key,
+    (route) => current?.key === route.key,
   );
 
   return (
@@ -131,12 +130,8 @@ export function FloatingDock({
       <View style={styles.dockShell}>
         <View style={styles.dockClip}>
           <BlurView
-            intensity={Platform.OS === "ios" ? 55 : 80}
-            tint={
-              Platform.OS === "ios"
-                ? "systemThinMaterialLight"
-                : "light"
-            }
+            intensity={Platform.OS === "ios" ? 60 : 80}
+            tint={Platform.OS === "ios" ? "systemThinMaterialLight" : "light"}
             blurMethod="dimezisBlurView"
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
@@ -153,14 +148,15 @@ export function FloatingDock({
               const label =
                 typeof options?.tabBarLabel === "string"
                   ? options.tabBarLabel
-                  : typeof options?.title === "string"
-                    ? options.title
-                    : meta.label;
+                  : meta.label;
+              const a11yLabel =
+                typeof options?.title === "string" ? options.title : label;
 
               return (
                 <DockItem
                   key={route.key}
                   label={label}
+                  a11yLabel={a11yLabel}
                   iconActive={meta.active}
                   iconIdle={meta.idle}
                   focused={focused}
@@ -196,68 +192,59 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: dockLayout.bottom,
-    alignItems: "center",
     paddingHorizontal: dockLayout.horizontal,
   },
   dockShell: {
     borderRadius: dockLayout.radius,
     shadowColor: "#0B1220",
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.16,
-    shadowRadius: 22,
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
     elevation: 12,
-    maxWidth: "100%",
   },
   dockClip: {
     height: dockLayout.height,
     borderRadius: dockLayout.radius,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255, 255, 255, 0.85)",
+    borderColor: "rgba(255, 255, 255, 0.9)",
     backgroundColor:
       Platform.OS === "ios"
-        ? "rgba(255, 255, 255, 0.55)"
-        : "rgba(255, 255, 255, 0.94)",
-    paddingHorizontal: 8,
+        ? "rgba(255, 255, 255, 0.7)"
+        : "rgba(255, 255, 255, 0.97)",
     justifyContent: "center",
   },
   wash: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(255, 255, 255, 0.35)",
+    backgroundColor: "rgba(255, 255, 255, 0.45)",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
     zIndex: 1,
   },
-  itemHit: {
+  item: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    width: 52,
-    height: 52,
+    paddingVertical: 6,
   },
-  bubble: {
-    width: BUBBLE,
-    height: BUBBLE,
-    borderRadius: BUBBLE / 2,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
-  },
-  bubbleFocused: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(17, 24, 39, 0.08)",
-  },
-  bubblePressed: {
-    opacity: 0.72,
+  itemPressed: {
+    opacity: 0.6,
   },
   iconSlot: {
     width: ICON_SIZE,
     height: ICON_SIZE,
     alignItems: "center",
     justifyContent: "center",
+  },
+  label: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.inkFaint,
+  },
+  labelActive: {
+    color: colors.brand,
   },
 });

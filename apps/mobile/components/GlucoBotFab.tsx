@@ -77,7 +77,10 @@ export function GlucoBotFab() {
     };
   }, [keyboardHeight, windowHeight, insets.top]);
 
-  if (HIDDEN_ON.some((p) => pathname === p || pathname.endsWith("/queries"))) {
+  if (
+    HIDDEN_ON.some((p) => pathname === p || pathname.endsWith("/queries")) ||
+    pathname.includes("/doctor/")
+  ) {
     return null;
   }
 

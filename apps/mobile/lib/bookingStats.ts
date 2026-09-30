@@ -1,4 +1,8 @@
-import { practiceDayKey } from "@/lib/practiceTime";
+import {
+  formatPracticeTime,
+  PRACTICE_TIMEZONE,
+  practiceDayKey,
+} from "@/lib/practiceTime";
 import { colors } from "@/lib/theme";
 import {
   bookingWhen,
@@ -113,6 +117,46 @@ export function nextVisitLabel(booking: ProctoBooking | undefined) {
   if (diffDays <= 0) return "Today";
   if (diffDays === 1) return "Tomorrow";
   return `In ${diffDays} days`;
+}
+
+/** "Today, 10:30 AM" · "Tomorrow · Token #4" · "Fri, 3 Oct, 9:00 AM" (clinic time zone). */
+export function visitDayTime(booking: ProctoBooking): string {
+  const whenMs = bookingWhenMs(booking);
+  if (!whenMs) return "Scheduled";
+  const day = nextVisitLabel(booking);
+  const dayText =
+    day === "Today" || day === "Tomorrow"
+      ? day
+      : new Date(whenMs).toLocaleDateString("en-IN", {
+          timeZone: PRACTICE_TIMEZONE,
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+        });
+  const token = booking.tokenNumber ?? booking.token_number;
+  if (booking.mode === "TOKEN_BASED" && token != null) {
+    return `${dayText} · Token #${token}`;
+  }
+  const slot = booking.slotStart ?? booking.slot_start;
+  return slot ? `${dayText}, ${formatPracticeTime(slot)}` : dayText;
+}
+
+/** Relative start for timed visits: "in 45 minutes", "in 3 hours", "in 2 days". */
+export function visitCountdown(booking: ProctoBooking, now = Date.now()): string {
+  const slot = booking.slotStart ?? booking.slot_start;
+  if (!slot) {
+    const day = nextVisitLabel(booking);
+    return day === "Today" ? "Visit today" : day.toLowerCase();
+  }
+  const mins = Math.round((new Date(slot).getTime() - now) / 60_000);
+  if (Number.isNaN(mins)) return "";
+  if (mins <= -30) return "Earlier today";
+  if (mins <= 0) return "Starting now";
+  if (mins < 60) return `in ${mins} minute${mins === 1 ? "" : "s"}`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `in ${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.round(hours / 24);
+  return `in ${days} day${days === 1 ? "" : "s"}`;
 }
 
 export function nextVisitSubtitle(booking: ProctoBooking | undefined) {

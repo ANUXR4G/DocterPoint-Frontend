@@ -1,22 +1,25 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { StarRating } from "@/components/StarRating";
 import { ClinicProfileHero } from "@/components/mobile/ClinicProfileHero";
+import { ScreenHeader } from "@/components/mobile/ScreenHeader";
 import {
   Chip,
   EmptyState,
   ErrorText,
-  Field,
   HintText,
   Loading,
-  Panel,
   Screen,
 } from "@/components/ui";
 import { VoiceField } from "@/components/VoiceField";
 import { api } from "@/lib/api";
+import { withDrTitle } from "@/lib/doctorName";
 import { practicePhotoUrl } from "@/lib/media";
-import { colors, radii, space } from "@/lib/theme";
+import { PressableScale } from "@/lib/motion";
+import { colors, radii, shadows, space } from "@/lib/theme";
 import { formatPracticeTime } from "@/lib/practiceTime";
 import type { PatientProfile, PracticeReview, ReviewSummary } from "@/lib/types";
 
@@ -66,6 +69,9 @@ function ymd(d: Date) {
 export default function PracticeBookScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const slotWidth = Math.floor((windowWidth - space.xl * 2 - 20) / 3);
   const [practice, setPractice] = useState<PracticeDetail | null>(null);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [date, setDate] = useState(() => ymd(new Date()));
@@ -79,6 +85,7 @@ export default function PracticeBookScreen() {
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [phone, setPhone] = useState("");
+  const [weekPage, setWeekPage] = useState(0);
 
   const doctors = useMemo(() => {
     if (!practice?.members) return [];
@@ -92,21 +99,22 @@ export default function PracticeBookScreen() {
 
   const location = practice?.locations?.[0];
 
-  const dayOptions = useMemo(() => {
+  const days = useMemo(() => {
     return Array.from({ length: 14 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() + i);
-      if (d.getDay() === 0) return null;
       return {
         value: ymd(d),
-        label: d.toLocaleDateString("en-IN", {
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-        }),
+        dow: d.toLocaleDateString("en-IN", { weekday: "short" }).slice(0, 2).toUpperCase(),
+        day: d.getDate(),
+        month: d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+        closed: d.getDay() === 0,
       };
-    }).filter(Boolean) as { value: string; label: string }[];
+    });
   }, []);
+  const visibleDays = days.slice(weekPage * 7, weekPage * 7 + 7);
+  const monthLabel =
+    (visibleDays.find((d) => d.value === date) ?? visibleDays[0])?.month ?? "";
 
   useEffect(() => {
     if (!slug) return;
@@ -230,245 +238,353 @@ export default function PracticeBookScreen() {
   if (!practice) {
     return (
       <Screen>
-        <ErrorText text={error || "Not found"} />
+        <ScreenHeader title="Appointment" back />
+        <View style={styles.content}>
+          <ErrorText text={error || "Not found"} />
+        </View>
       </Screen>
     );
   }
 
-  const primaryDoctor = doctors[0]?.name ?? practice.name;
+  const primaryDoctor = doctors.find((d) => d.id === providerId)?.name ?? doctors[0]?.name;
+  const heroName = withDrTitle(primaryDoctor) || practice.name;
   const reviewCount = practice.reviewSummary?.count ?? 0;
+  const reviewAverage = practice.reviewSummary?.average;
+  const stats = [
+    practice.consultationFee != null
+      ? { label: "Fee", value: `₹${practice.consultationFee}` }
+      : null,
+    reviewCount > 0 && reviewAverage != null
+      ? { label: "Rating", value: reviewAverage.toFixed(1) }
+      : null,
+    reviewCount > 0 ? { label: "Reviews", value: String(reviewCount) } : null,
+  ].filter(Boolean) as { label: string; value: string }[];
+  const cannotBook =
+    booking ||
+    !mode ||
+    (mode === "TIME_BASED" && !selectedSlot) ||
+    (mode === "TOKEN_BASED" && !tokens.length);
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content}>
+    <Screen style={styles.screen}>
+      <ScreenHeader title="Appointment" back />
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 150 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <ClinicProfileHero
-          name={practice.name}
-          subtitle={`${practice.specialty ?? "General physician"}${
-            location ? ` · ${location.city}` : ""
-          }${primaryDoctor ? ` · ${primaryDoctor}` : ""}`}
+          name={heroName}
+          specialty={practice.specialty?.trim() || "General physician"}
+          detail={heroName !== practice.name
+            ? `${practice.name}${location?.city ? ` · ${location.city}` : ""}`
+            : location?.city}
           photoUri={practicePhotoUrl(practice)}
-          reviewCount={reviewCount}
-          reviewAverage={practice.reviewSummary?.average}
+          stats={stats}
         />
-
-        {practice.reviewSummary && practice.reviewSummary.count > 0 ? (
-          <View style={styles.ratingRow}>
-            <StarRating
-              average={practice.reviewSummary.average}
-              count={practice.reviewSummary.count}
-            />
-          </View>
-        ) : null}
-
-        <View style={styles.about}>
-          <Text style={styles.aboutTitle}>About clinic</Text>
-          <Text style={styles.aboutBody}>
-            {location?.address
-              ? `${practice.name} at ${location.address}, ${location.city}. `
-              : `${practice.name} — `}
-            {practice.consultationFee != null
-              ? `Consultation from ₹${practice.consultationFee}. `
-              : ""}
-            Book a slot or token below for your visit.
-          </Text>
-        </View>
-
-        {practice.reviewsEnabled !== false &&
-        (practice.reviews?.length ?? 0) > 0 ? (
-          <View style={styles.block}>
-            <Text style={styles.label}>Patient reviews</Text>
-            {(practice.reviews ?? []).slice(0, 5).map((r) => (
-              <View key={r.id} style={styles.reviewCard}>
-                <Text style={styles.reviewStars}>
-                  {"★".repeat(r.rating)}{" "}
-                  <Text style={styles.reviewAuthor}>{r.authorName}</Text>
-                </Text>
-                {r.body ? (
-                  <Text style={styles.reviewBody}>{r.body}</Text>
-                ) : null}
-              </View>
-            ))}
-          </View>
-        ) : null}
 
         {doctors.length > 1 ? (
           <View style={styles.block}>
-            <Text style={styles.label}>Doctor</Text>
-            <View style={styles.chips}>
-              {doctors.map((d) => (
-                <Chip
-                  key={d.id}
-                  label={d.name}
-                  active={providerId === d.id}
-                  onPress={() => setProviderId(d.id)}
-                />
-              ))}
-            </View>
+            <Text style={styles.blockTitle}>Doctor</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.row}>
+                {doctors.map((d) => (
+                  <Chip
+                    key={d.id}
+                    label={withDrTitle(d.name) || d.name}
+                    active={providerId === d.id}
+                    onPress={() => setProviderId(d.id)}
+                  />
+                ))}
+              </View>
+            </ScrollView>
           </View>
         ) : null}
 
         <View style={styles.block}>
-          <Text style={styles.label}>Date</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.chips}>
-              {dayOptions.map((d) => (
-                <Chip
-                  key={d.value}
-                  label={d.label}
-                  active={date === d.value}
-                  onPress={() => setDate(d.value)}
-                />
-              ))}
+          <View style={styles.monthRow}>
+            <Text style={styles.blockTitle}>{monthLabel}</Text>
+            <View style={styles.row}>
+              <PressableScale
+                style={[styles.arrow, weekPage === 0 && styles.arrowOff]}
+                disabled={weekPage === 0}
+                onPress={() => setWeekPage(0)}
+                accessibilityRole="button"
+                accessibilityLabel="Previous week"
+              >
+                <Ionicons name="chevron-back" size={16} color={colors.inkSoft} />
+              </PressableScale>
+              <PressableScale
+                style={[styles.arrow, weekPage === 1 && styles.arrowOff]}
+                disabled={weekPage === 1}
+                onPress={() => setWeekPage(1)}
+                accessibilityRole="button"
+                accessibilityLabel="Next week"
+              >
+                <Ionicons name="chevron-forward" size={16} color={colors.inkSoft} />
+              </PressableScale>
             </View>
-          </ScrollView>
+          </View>
+          <View style={styles.week}>
+            {visibleDays.map((d) => {
+              const active = date === d.value;
+              return (
+                <PressableScale
+                  key={d.value}
+                  wrapStyle={styles.grow}
+                  style={[styles.day, active && styles.dayActive]}
+                  disabled={d.closed}
+                  onPress={() => setDate(d.value)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active, disabled: d.closed }}
+                  accessibilityLabel={`${d.dow} ${d.day}${d.closed ? ", closed" : ""}`}
+                >
+                  <Text style={[styles.dayDow, active && styles.dayTextActive]}>{d.dow}</Text>
+                  <Text style={[styles.dayNum, active && styles.dayTextActive]}>{d.day}</Text>
+                </PressableScale>
+              );
+            })}
+          </View>
         </View>
 
         {mode === "TIME_BASED" ? (
           <View style={styles.block}>
-            <Text style={styles.label}>Available slots</Text>
+            <Text style={styles.blockTitle}>Available slots</Text>
             {slots.length === 0 ? (
               <EmptyState text="No open slots this day." />
             ) : (
-              <View style={styles.chips}>
-                {slots.slice(0, 16).map((s) => {
+              <View style={styles.slots}>
+                {slots.map((s) => {
                   const start =
-                    typeof s.start === "string"
-                      ? s.start
-                      : new Date(s.start).toISOString();
-                  const label = formatPracticeTime(start);
+                    typeof s.start === "string" ? s.start : new Date(s.start).toISOString();
+                  const active = selectedSlot === start;
                   return (
-                    <Chip
+                    <PressableScale
                       key={start}
-                      label={label}
-                      active={selectedSlot === start}
+                      wrapStyle={{ width: slotWidth }}
+                      style={[styles.slot, active && styles.slotActive]}
                       onPress={() => {
                         setMode("TIME_BASED");
                         setSelectedSlot(start);
                       }}
-                    />
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text style={[styles.slotText, active && styles.slotTextActive]}>
+                        {formatPracticeTime(start)}
+                      </Text>
+                    </PressableScale>
                   );
                 })}
               </View>
             )}
           </View>
         ) : mode === "TOKEN_BASED" ? (
-          <Panel>
-            <Text style={styles.tokenTitle}>
-              Next token #{tokens[0]?.nextToken ?? "—"}
-            </Text>
-            <Text style={styles.meta}>
-              {tokens[0]?.sessionStart}–{tokens[0]?.sessionEnd} on {date}
-            </Text>
-            <HintText text="Confirm to take this token for the day." />
-          </Panel>
+          <View style={styles.block}>
+            <Text style={styles.blockTitle}>Token for the day</Text>
+            <View style={styles.tokenCard}>
+              <View style={styles.tokenIcon}>
+                <Ionicons name="ticket-outline" size={20} color={colors.brand} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tokenTitle}>
+                  {tokens.length ? `Next token #${tokens[0]?.nextToken ?? "—"}` : "No tokens left"}
+                </Text>
+                {tokens[0] ? (
+                  <Text style={styles.meta}>
+                    {tokens[0].sessionStart}–{tokens[0].sessionEnd}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.block}>
+            <EmptyState text="No bookings open on this day. Try another date." />
+          </View>
+        )}
+
+        <View style={styles.block}>
+          <VoiceField
+            label="Reason for visit"
+            value={disease}
+            onChangeText={setDisease}
+            placeholder="Describe symptoms, how long, and what you need help with"
+            micAriaLabel="Describe your problem by voice"
+          />
+          <HintText text="Required for the doctor. AI turns this into a short visit brief in their remarks." />
+        </View>
+
+        <View style={styles.aboutCard}>
+          <Text style={styles.aboutTitle}>About the clinic</Text>
+          <Text style={styles.aboutBody}>
+            {location?.address
+              ? `${practice.name} at ${location.address}, ${location.city}.`
+              : practice.name}
+          </Text>
+        </View>
+
+        {practice.reviewsEnabled !== false && (practice.reviews?.length ?? 0) > 0 ? (
+          <View style={styles.block}>
+            <View style={styles.monthRow}>
+              <Text style={styles.blockTitle}>Patient reviews</Text>
+              {reviewCount > 0 ? (
+                <StarRating average={practice.reviewSummary?.average ?? null} count={reviewCount} compact />
+              ) : null}
+            </View>
+            {(practice.reviews ?? []).slice(0, 5).map((r) => (
+              <View key={r.id} style={styles.reviewCard}>
+                <Text style={styles.reviewStars}>
+                  {"★".repeat(r.rating)} <Text style={styles.reviewAuthor}>{r.authorName}</Text>
+                </Text>
+                {r.body ? <Text style={styles.reviewBody}>{r.body}</Text> : null}
+              </View>
+            ))}
+          </View>
         ) : null}
+      </ScrollView>
 
-        <VoiceField
-          label="What is the problem?"
-          value={disease}
-          onChangeText={setDisease}
-          placeholder="Describe symptoms, how long, and what you need help with"
-          micAriaLabel="Describe your problem by voice"
-        />
-        <HintText text="Required for the doctor. AI turns this into a short visit brief in their remarks." />
-
+      <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
         <ErrorText text={error} />
         {message ? <HintText text={message} /> : null}
-
-        <Pressable
-          style={[
-            styles.bookCta,
-            (booking ||
-              !mode ||
-              (mode === "TIME_BASED" && !selectedSlot) ||
-              (mode === "TOKEN_BASED" && !tokens.length)) &&
-              styles.bookCtaDisabled,
-          ]}
+        <PressableScale
+          style={[styles.bookCta, cannotBook && styles.bookCtaDisabled]}
           onPress={book}
-          disabled={
-            booking ||
-            !mode ||
-            (mode === "TIME_BASED" && !selectedSlot) ||
-            (mode === "TOKEN_BASED" && !tokens.length)
-          }
+          disabled={cannotBook}
+          accessibilityRole="button"
         >
           <Text style={styles.bookCtaText}>
-            {booking ? "Booking…" : "Book appointment"}
+            {booking ? "Booking…" : "Confirm Appointment"}
           </Text>
-        </Pressable>
-      </ScrollView>
+        </PressableScale>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.lg, paddingBottom: 48 },
-  bookCta: {
-    backgroundColor: colors.brand,
-    borderRadius: radii.pill,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginBottom: space.lg,
-    shadowColor: colors.brand,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  bookCtaText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  bookCtaDisabled: {
-    opacity: 0.45,
-  },
-  about: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: space.md,
-    marginBottom: space.lg,
-    borderWidth: 1,
-    borderColor: colors.lineStrong,
-  },
-  aboutTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: colors.ink,
-    marginBottom: 8,
-  },
-  aboutBody: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: colors.inkSoft,
-  },
-  block: { marginBottom: space.lg },
-  label: {
-    fontSize: 12,
+  screen: { backgroundColor: colors.paper },
+  content: { paddingHorizontal: space.xl, paddingTop: space.sm },
+  block: { marginTop: space.xl },
+  blockTitle: {
+    fontSize: 17,
     fontWeight: "700",
-    color: colors.inkSoft,
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    color: colors.ink,
+    letterSpacing: -0.3,
+    marginBottom: space.md,
   },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  ratingRow: { marginBottom: space.lg },
+  row: { flexDirection: "row", gap: space.sm },
+  monthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  arrow: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.md,
+    ...shadows.soft,
+  },
+  arrowOff: { opacity: 0.4 },
+  week: { flexDirection: "row", justifyContent: "space-between", gap: 6 },
+  grow: { flex: 1 },
+  day: {
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: radii.pill,
+    backgroundColor: colors.white,
+  },
+  dayActive: {
+    backgroundColor: colors.brand,
+    paddingVertical: 18,
+    marginVertical: -6,
+    ...shadows.brand,
+  },
+  dayDow: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    color: colors.inkFaint,
+  },
+  dayNum: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.ink,
+  },
+  dayTextActive: { color: colors.white },
+  slots: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  slot: {
+    alignItems: "center",
+    paddingVertical: 14,
+    borderRadius: radii.pill,
+    backgroundColor: colors.white,
+    ...shadows.soft,
+  },
+  slotActive: { backgroundColor: colors.brand, ...shadows.brand },
+  slotText: { fontSize: 13, fontWeight: "700", color: colors.ink },
+  slotTextActive: { color: colors.white },
+  tokenCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    padding: space.lg,
+    ...shadows.soft,
+  },
+  tokenIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.brandLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tokenTitle: { fontWeight: "700", fontSize: 16, color: colors.ink },
+  meta: { marginTop: 3, color: colors.inkSoft, fontSize: 13 },
+  aboutCard: {
+    marginTop: space.xl,
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    padding: space.lg,
+    ...shadows.soft,
+  },
+  aboutTitle: { fontSize: 15, fontWeight: "700", color: colors.ink, marginBottom: 6 },
+  aboutBody: { fontSize: 14, lineHeight: 21, color: colors.inkSoft },
   reviewCard: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.paperRaised,
-    padding: space.md,
+    backgroundColor: colors.white,
+    padding: space.lg,
     marginBottom: space.sm,
-    borderRadius: 2,
+    borderRadius: radii.lg,
+    ...shadows.soft,
   },
   reviewStars: { fontSize: 14, color: "#b45309", fontWeight: "700" },
   reviewAuthor: { color: colors.ink, fontWeight: "600" },
-  reviewBody: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.inkSoft,
+  reviewBody: { marginTop: 6, fontSize: 13, lineHeight: 19, color: colors.inkSoft },
+  footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: space.xl,
+    paddingTop: space.md,
+    backgroundColor: colors.paper,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    ...shadows.card,
   },
-  tokenTitle: { fontWeight: "700", fontSize: 16, color: colors.ink },
-  meta: { marginTop: 4, color: colors.inkSoft, fontSize: 13 },
+  bookCta: {
+    backgroundColor: colors.brand,
+    borderRadius: radii.pill,
+    paddingVertical: 18,
+    alignItems: "center",
+    ...shadows.brand,
+  },
+  bookCtaText: { color: colors.white, fontSize: 16, fontWeight: "700" },
+  bookCtaDisabled: { opacity: 0.45 },
 });

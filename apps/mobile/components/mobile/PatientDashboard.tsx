@@ -2,6 +2,7 @@ import { useRouter, type Href } from "expo-router";
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import { AnimatedView, PressableScale } from "@/lib/motion";
 import {
   bookingStatusLabel,
@@ -10,10 +11,12 @@ import {
   getCompletedBookings,
   getUpcomingBookings,
   latestPrescription,
-  nextVisitLabel,
+  sortBookingsByWhen,
+  visitCountdown,
+  visitDayTime,
 } from "@/lib/bookingStats";
 import { withDrTitle } from "@/lib/doctorName";
-import { colors, radii, shadows, space, type } from "@/lib/theme";
+import { colors, radii, shadows, space } from "@/lib/theme";
 import { bookingWhen, type ProctoBooking } from "@/lib/types";
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -28,13 +31,14 @@ function doctorLine(b: ProctoBooking) {
   return withDrTitle(b.provider?.name || b.providerName) || "Doctor to be assigned";
 }
 
-/** Patient dashboard (mirrors web /patient/dashboard): stats, next visit, upcoming list, current medicines. */
+/** Patient dashboard (mirrors web /patient/dashboard): next visit, quick actions, summary, medicines. */
 export function PatientDashboard({ bookings, loading }: Props) {
   const router = useRouter();
   const upcoming = useMemo(() => getUpcomingBookings(bookings), [bookings]);
   const completed = useMemo(() => getCompletedBookings(bookings), [bookings]);
   const clinics = useMemo(() => getClinicCount(bookings), [bookings]);
   const prescription = useMemo(() => latestPrescription(bookings), [bookings]);
+  const latest = useMemo(() => sortBookingsByWhen(bookings, "desc")[0], [bookings]);
   const nextVisit = upcoming[0];
   const later = upcoming.slice(1, 4);
   const placeholder = loading && bookings.length === 0;
@@ -43,10 +47,32 @@ export function PatientDashboard({ bookings, loading }: Props) {
   const openVisits = () => router.push("/(app)/appointments");
   const openClinics = () => router.push("/(app)/doctors");
 
-  const stats: {
+  const actions: { label: string; icon: IconName; onPress: () => void }[] = [
+    { label: "Book", icon: "add-circle-outline", onPress: openClinics },
+    {
+      label: "Chat",
+      icon: "chatbubble-ellipses-outline",
+      onPress: () => {
+        const target = nextVisit ?? latest;
+        if (target) openVisit(target.id);
+        else router.push("/(app)/queries");
+      },
+    },
+    {
+      label: "Calendar",
+      icon: "calendar-outline",
+      onPress: () => router.push("/(app)/record"),
+    },
+    {
+      label: "Rx",
+      icon: "medkit-outline",
+      onPress: () => (prescription ? openVisit(prescription.booking.id) : openVisits()),
+    },
+  ];
+
+  const summary: {
     label: string;
     value: string;
-    hint: string;
     icon: IconName;
     tint: string;
     bg: string;
@@ -55,8 +81,7 @@ export function PatientDashboard({ bookings, loading }: Props) {
     {
       label: "Upcoming",
       value: placeholder ? "—" : String(upcoming.length),
-      hint: "Active bookings",
-      icon: "calendar-outline",
+      icon: "time-outline",
       tint: colors.brand,
       bg: colors.brandLight,
       onPress: openVisits,
@@ -64,7 +89,6 @@ export function PatientDashboard({ bookings, loading }: Props) {
     {
       label: "Completed",
       value: placeholder ? "—" : String(completed.length),
-      hint: "Past visits",
       icon: "checkmark-done-outline",
       tint: colors.success,
       bg: colors.emeraldLight,
@@ -73,94 +97,101 @@ export function PatientDashboard({ bookings, loading }: Props) {
     {
       label: "Clinics",
       value: placeholder ? "—" : String(clinics),
-      hint: "Visited",
       icon: "business-outline",
       tint: colors.rose,
       bg: colors.roseLight,
       onPress: openClinics,
     },
-    {
-      label: "Next visit",
-      value: placeholder ? "—" : nextVisit ? nextVisitLabel(nextVisit) : "None",
-      hint: nextVisit ? nextVisit.practice?.name || "Clinic" : "Book a clinic",
-      icon: "time-outline",
-      tint: "#b45309",
-      bg: colors.amberLight,
-      onPress: () => (nextVisit ? openVisit(nextVisit.id) : openClinics()),
-    },
   ];
 
   return (
     <View>
-      <AnimatedView from="up" delay={20}>
-        <Text style={styles.eyebrow}>Patient dashboard</Text>
-        <Text style={styles.title}>Your care at a glance</Text>
-      </AnimatedView>
-
-      <AnimatedView from="up" delay={60} style={styles.grid}>
-        {stats.map((s) => (
-          <View key={s.label} style={styles.statCell}>
-            <PressableScale
-              style={styles.stat}
-              onPress={s.onPress}
-              accessibilityRole="button"
-              accessibilityLabel={`${s.label}: ${s.value}. ${s.hint}`}
-            >
-              <View style={[styles.statIcon, { backgroundColor: s.bg }]}>
-                <Ionicons name={s.icon} size={16} color={s.tint} />
-              </View>
-              <Text style={styles.statLabel}>{s.label}</Text>
-              <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-                {s.value}
-              </Text>
-              <Text style={styles.statHint} numberOfLines={1}>
-                {s.hint}
-              </Text>
-            </PressableScale>
-          </View>
-        ))}
-      </AnimatedView>
-
       {nextVisit ? (
-        <AnimatedView from="up" delay={120} style={styles.section}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionLabel}>Next up</Text>
-            <PressableScale onPress={openVisits}>
-              <Text style={styles.sectionAction}>All visits</Text>
-            </PressableScale>
-          </View>
-          <VisitRow booking={nextVisit} featured onPress={() => openVisit(nextVisit.id)} />
+        <AnimatedView from="up" delay={40}>
+          <UpcomingCard
+            booking={nextVisit}
+            onOpen={() => openVisit(nextVisit.id)}
+            onAll={openVisits}
+          />
+        </AnimatedView>
+      ) : !placeholder ? (
+        <AnimatedView from="up" delay={40} style={styles.card}>
+          <Text style={styles.overline}>Upcoming appointment</Text>
+          <Text style={styles.emptyTitle}>No visits booked</Text>
+          <Text style={styles.emptyBody}>
+            Book a clinic and your next visit shows up here with reminders.
+          </Text>
+          <PressableScale style={[styles.primaryBtn, styles.emptyBtn]} onPress={openClinics}>
+            <Text style={styles.primaryText}>Book a visit</Text>
+          </PressableScale>
         </AnimatedView>
       ) : null}
 
+      <AnimatedView from="up" delay={90} style={styles.actions}>
+        {actions.map((a) => (
+          <PressableScale
+            key={a.label}
+            style={styles.action}
+            onPress={a.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={a.label}
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name={a.icon} size={24} color={colors.brand} />
+            </View>
+            <Text style={styles.actionLabel}>{a.label}</Text>
+          </PressableScale>
+        ))}
+      </AnimatedView>
+
+      <AnimatedView from="up" delay={130} style={styles.section}>
+        <SectionHead title="Health summary" action="See all" onAction={openVisits} />
+        <View style={styles.summary}>
+          {summary.map((s) => (
+            <PressableScale
+              key={s.label}
+              wrapStyle={styles.grow}
+              style={styles.summaryTile}
+              onPress={s.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={`${s.label}: ${s.value}`}
+            >
+              <View style={[styles.summaryIcon, { backgroundColor: s.bg }]}>
+                <Ionicons name={s.icon} size={16} color={s.tint} />
+              </View>
+              <Text style={styles.summaryValue} numberOfLines={1}>
+                {s.value}
+              </Text>
+              <Text style={styles.summaryLabel}>{s.label}</Text>
+            </PressableScale>
+          ))}
+        </View>
+      </AnimatedView>
+
       {later.length ? (
         <AnimatedView from="up" delay={160} style={styles.section}>
-          <Text style={[styles.sectionLabel, styles.sectionLabelGap]}>Later</Text>
+          <SectionHead
+            title="Coming up"
+            action={upcoming.length > 4 ? `+${upcoming.length - 4} more` : "All"}
+            onAction={openVisits}
+          />
           <View style={styles.list}>
             {later.map((b) => (
               <VisitRow key={b.id} booking={b} onPress={() => openVisit(b.id)} />
             ))}
           </View>
-          {upcoming.length > 4 ? (
-            <PressableScale style={styles.moreBtn} onPress={openVisits}>
-              <Text style={styles.moreText}>
-                +{upcoming.length - 4} more upcoming · View all
-              </Text>
-            </PressableScale>
-          ) : null}
         </AnimatedView>
       ) : null}
 
       {prescription ? (
         <AnimatedView from="up" delay={200} style={styles.section}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionLabel}>Your medicines</Text>
-            <PressableScale onPress={() => openVisit(prescription.booking.id)}>
-              <Text style={styles.sectionAction}>Open visit</Text>
-            </PressableScale>
-          </View>
+          <SectionHead
+            title="Your medicines"
+            action="Open visit"
+            onAction={() => openVisit(prescription.booking.id)}
+          />
           <PressableScale
-            style={styles.medCard}
+            style={styles.card}
             onPress={() => openVisit(prescription.booking.id)}
             accessibilityRole="button"
             accessibilityLabel="Open the visit with this prescription"
@@ -170,26 +201,28 @@ export function PatientDashboard({ bookings, loading }: Props) {
               {prescription.booking.practice?.name || "Clinic"} ·{" "}
               {bookingWhen(prescription.booking)}
             </Text>
-            {prescription.medicines.slice(0, 4).map((m, i) => (
-              <View key={`${m.name}-${i}`} style={styles.medRow}>
-                <View style={styles.medDot}>
-                  <Ionicons name="medkit-outline" size={13} color={colors.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.medName} numberOfLines={1}>
-                    {m.name.trim()}
-                    {m.amount?.trim() ? (
-                      <Text style={styles.medAmount}> · {m.amount.trim()}</Text>
-                    ) : null}
-                  </Text>
-                  {m.times?.length ? (
-                    <Text style={styles.medTimes} numberOfLines={1}>
-                      {m.times.join(" · ")}
+            <View style={styles.medList}>
+              {prescription.medicines.slice(0, 4).map((m, i) => (
+                <View key={`${m.name}-${i}`} style={styles.medRow}>
+                  <View style={styles.medDot}>
+                    <Ionicons name="medkit-outline" size={14} color={colors.brand} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.medName} numberOfLines={1}>
+                      {m.name.trim()}
+                      {m.amount?.trim() ? (
+                        <Text style={styles.medAmount}> · {m.amount.trim()}</Text>
+                      ) : null}
                     </Text>
-                  ) : null}
+                    {m.times?.length ? (
+                      <Text style={styles.medTimes} numberOfLines={1}>
+                        {m.times.join(" · ")}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))}
+            </View>
             {prescription.medicines.length > 4 ? (
               <Text style={styles.medMore}>
                 +{prescription.medicines.length - 4} more in the visit
@@ -202,103 +235,280 @@ export function PatientDashboard({ bookings, loading }: Props) {
   );
 }
 
-function VisitRow({
+export function SectionHead({
+  title,
+  action,
+  onAction,
+}: {
+  title: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <View style={styles.sectionHead}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {action && onAction ? (
+        <PressableScale style={styles.sectionAction} onPress={onAction}>
+          <Text style={styles.sectionActionText}>{action}</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.brand} />
+        </PressableScale>
+      ) : null}
+    </View>
+  );
+}
+
+function UpcomingCard({
   booking,
-  featured,
-  onPress,
+  onOpen,
+  onAll,
 }: {
   booking: ProctoBooking;
-  featured?: boolean;
-  onPress: () => void;
+  onOpen: () => void;
+  onAll: () => void;
 }) {
+  const tone = bookingStatusTone(booking.status);
+  const doctor = doctorLine(booking);
+  const clinic = booking.practice?.name || "Clinic visit";
+  const specialty = booking.practice?.specialty?.trim();
+  const countdown = visitCountdown(booking);
+  const sameAsDoctor =
+    clinic.replace(/^Dr\.?\s*/i, "").toLowerCase() ===
+    doctor.replace(/^Dr\.?\s*/i, "").toLowerCase();
+  const meta = [specialty, sameAsDoctor ? null : clinic].filter(Boolean).join(" · ");
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <Text style={styles.overline}>Upcoming appointment</Text>
+        <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.statusText, { color: tone.fg }]}>
+            {bookingStatusLabel(booking.status)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.doctorRow}>
+        <ClinicAvatar name={doctor.replace(/^Dr\.?\s*/i, "")} size={56} radius={28} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.doctorName} numberOfLines={1}>
+            {doctor}
+          </Text>
+          <Text style={styles.doctorMeta} numberOfLines={1}>
+            {meta || clinic}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.timeBox}>
+        <View style={styles.timeIcon}>
+          <Ionicons name="calendar" size={18} color={colors.brand} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.timeMain} numberOfLines={1}>
+            {visitDayTime(booking)}
+          </Text>
+          {countdown ? <Text style={styles.timeSub}>{countdown}</Text> : null}
+        </View>
+      </View>
+
+      <View style={styles.btnRow}>
+        <PressableScale
+          wrapStyle={styles.grow}
+          style={styles.primaryBtn}
+          onPress={onOpen}
+          accessibilityRole="button"
+          accessibilityLabel="View visit details"
+        >
+          <Text style={styles.primaryText}>View visit</Text>
+        </PressableScale>
+        <PressableScale
+          wrapStyle={styles.grow}
+          style={styles.secondaryBtn}
+          onPress={onAll}
+          accessibilityRole="button"
+          accessibilityLabel="All bookings"
+        >
+          <Text style={styles.secondaryText}>All bookings</Text>
+        </PressableScale>
+      </View>
+    </View>
+  );
+}
+
+function VisitRow({ booking, onPress }: { booking: ProctoBooking; onPress: () => void }) {
   const tone = bookingStatusTone(booking.status);
   const clinic = booking.practice?.name || "Clinic visit";
   return (
     <PressableScale
-      style={[styles.visit, featured && styles.visitFeatured]}
+      style={styles.visit}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${clinic}, ${bookingWhen(booking)}, ${bookingStatusLabel(booking.status)}`}
+      accessibilityLabel={`${clinic}, ${visitDayTime(booking)}, ${bookingStatusLabel(booking.status)}`}
     >
-      {featured ? <View style={styles.visitAccent} /> : null}
-      <View style={{ flex: 1 }}>
+      <View style={styles.visitIcon}>
+        <Ionicons name="calendar-outline" size={18} color={colors.brand} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.visitClinic} numberOfLines={1}>
           {clinic}
         </Text>
         <Text style={styles.visitMeta} numberOfLines={1}>
-          {doctorLine(booking)}
-        </Text>
-        <Text style={styles.visitWhen} numberOfLines={1}>
-          {bookingWhen(booking)}
+          {visitDayTime(booking)} · {doctorLine(booking)}
         </Text>
       </View>
-      <View style={styles.visitRight}>
-        <View style={[styles.badge, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.badgeText, { color: tone.fg }]}>
-            {bookingStatusLabel(booking.status)}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.inkFaint} />
+      <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+        <Text style={[styles.statusText, { color: tone.fg }]}>
+          {bookingStatusLabel(booking.status)}
+        </Text>
       </View>
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  eyebrow: {
-    ...type.overline,
-    color: colors.inkFaint,
+  grow: { flex: 1 },
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: 28,
+    padding: space.xl,
+    ...shadows.card,
   },
-  title: {
-    marginTop: 6,
-    fontSize: 22,
-    fontWeight: "600",
-    color: colors.ink,
-    letterSpacing: -0.5,
+  cardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
   },
-  grid: {
+  overline: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: colors.brand,
+  },
+  statusPill: {
+    borderRadius: radii.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  doctorRow: {
     marginTop: space.lg,
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: space.md,
   },
-  statCell: {
-    flexBasis: "47%",
-    flexGrow: 1,
+  doctorName: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.ink,
+    letterSpacing: -0.3,
   },
-  stat: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: space.lg,
-    ...shadows.soft,
-  },
-  statIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: space.sm,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: "600",
+  doctorMeta: {
+    marginTop: 3,
+    fontSize: 13,
     color: colors.inkSoft,
   },
-  statValue: {
-    marginTop: 2,
-    fontSize: 24,
-    fontWeight: "600",
-    color: colors.ink,
-    letterSpacing: -0.6,
+  timeBox: {
+    marginTop: space.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    backgroundColor: colors.sky100,
+    borderRadius: 20,
+    padding: 14,
   },
-  statHint: {
+  timeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timeMain: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.ink,
+  },
+  timeSub: {
     marginTop: 2,
     fontSize: 12,
-    color: colors.inkFaint,
+    color: colors.inkSoft,
+  },
+  btnRow: {
+    marginTop: space.lg,
+    flexDirection: "row",
+    gap: space.md,
+  },
+  primaryBtn: {
+    backgroundColor: colors.brand,
+    borderRadius: radii.pill,
+    paddingVertical: 15,
+    alignItems: "center",
+    ...shadows.brand,
+  },
+  primaryText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  secondaryBtn: {
+    backgroundColor: colors.sky100,
+    borderRadius: radii.pill,
+    paddingVertical: 15,
+    alignItems: "center",
+  },
+  secondaryText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  emptyTitle: {
+    marginTop: space.md,
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.ink,
+    letterSpacing: -0.3,
+  },
+  emptyBody: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.inkSoft,
+  },
+  emptyBtn: {
+    marginTop: space.lg,
+  },
+  actions: {
+    marginTop: space.xl,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  action: {
+    alignItems: "center",
+    width: 72,
+  },
+  actionIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 22,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadows.soft,
+  },
+  actionLabel: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.ink,
   },
   section: {
-    marginTop: space.xl,
+    marginTop: space.xxl,
   },
   sectionHead: {
     flexDirection: "row",
@@ -306,17 +516,51 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: space.md,
   },
-  sectionLabel: {
-    ...type.overline,
-    color: colors.inkFaint,
-  },
-  sectionLabelGap: {
-    marginBottom: space.md,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.ink,
+    letterSpacing: -0.4,
   },
   sectionAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  sectionActionText: {
     fontSize: 13,
     fontWeight: "600",
     color: colors.brand,
+  },
+  summary: {
+    flexDirection: "row",
+    gap: space.md,
+  },
+  summaryTile: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: space.md,
+    ...shadows.soft,
+  },
+  summaryIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  summaryValue: {
+    marginTop: space.sm,
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.ink,
+    letterSpacing: -0.5,
+  },
+  summaryLabel: {
+    marginTop: 1,
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.inkSoft,
   },
   list: {
     gap: space.sm,
@@ -327,72 +571,34 @@ const styles = StyleSheet.create({
     gap: space.md,
     backgroundColor: colors.white,
     borderRadius: radii.lg,
-    padding: space.lg,
-    overflow: "hidden",
+    padding: space.md,
     ...shadows.soft,
   },
-  visitFeatured: {
-    borderRadius: radii.xl,
-    paddingLeft: space.lg + 4,
-  },
-  visitAccent: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
-    backgroundColor: colors.brand,
+  visitIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: colors.brandLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
   visitClinic: {
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: colors.ink,
-    letterSpacing: -0.2,
   },
   visitMeta: {
-    marginTop: 3,
-    fontSize: 13,
+    marginTop: 2,
+    fontSize: 12,
     color: colors.inkSoft,
-  },
-  visitWhen: {
-    marginTop: 3,
-    fontSize: 13,
-    fontWeight: "500",
-    color: colors.ink,
-  },
-  visitRight: {
-    alignItems: "flex-end",
-    gap: space.sm,
-  },
-  badge: {
-    borderRadius: radii.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  moreBtn: {
-    marginTop: space.sm,
-    alignSelf: "flex-start",
-    paddingVertical: 6,
-  },
-  moreText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.brand,
-  },
-  medCard: {
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    padding: space.lg,
-    gap: space.md,
-    ...shadows.soft,
   },
   medFrom: {
     fontSize: 12,
     color: colors.inkFaint,
+  },
+  medList: {
+    marginTop: space.md,
+    gap: space.md,
   },
   medRow: {
     flexDirection: "row",
@@ -400,10 +606,10 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   medDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: colors.emeraldLight,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.brandLight,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -419,9 +625,10 @@ const styles = StyleSheet.create({
   medTimes: {
     marginTop: 2,
     fontSize: 12,
-    color: colors.accent,
+    color: colors.brand,
   },
   medMore: {
+    marginTop: space.md,
     fontSize: 12,
     fontWeight: "600",
     color: colors.brand,

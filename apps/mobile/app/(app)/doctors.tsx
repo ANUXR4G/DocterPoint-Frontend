@@ -1,14 +1,10 @@
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { ClinicGridCard } from "@/components/mobile/ClinicCards";
-import { MobileHomeHeader } from "@/components/mobile/MobileHomeHeader";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FlatList, StyleSheet, Text, View } from "react-native";
+import { ClinicCard } from "@/components/mobile/ClinicCards";
+import { ScreenHeader } from "@/components/mobile/ScreenHeader";
 import { SearchBar } from "@/components/mobile/SearchBar";
+import { SPECIALTIES, SpecialtyChips } from "@/components/mobile/SpecialtyRow";
 import {
   EmptyState,
   ErrorText,
@@ -21,12 +17,19 @@ import {
   getCachedPractices,
   setCachedPractices,
 } from "@/lib/dataCache";
+import { dockClearance } from "@/lib/dockLayout";
 import { colors, space } from "@/lib/theme";
 import type { PracticeListItem } from "@/lib/types";
 
+const SPECIALTY_QUERIES = new Set<string>(SPECIALTIES.map((s) => s.query));
+
 export default function DoctorsScreen() {
   const params = useLocalSearchParams<{ q?: string }>();
-  const [q, setQ] = useState(params.q ?? "");
+  const initial = params.q ?? "";
+  const [text, setText] = useState(SPECIALTY_QUERIES.has(initial) ? "" : initial);
+  const [specialty, setSpecialty] = useState<string | undefined>(
+    SPECIALTY_QUERIES.has(initial) ? initial : undefined,
+  );
   const [practices, setPractices] = useState<PracticeListItem[]>(
     () => (!params.q ? getCachedPractices() ?? [] : []),
   );
@@ -34,14 +37,13 @@ export default function DoctorsScreen() {
     () => Boolean(params.q) || !getCachedPractices(),
   );
   const [error, setError] = useState("");
+  const loadGen = useRef(0);
 
-  const load = useCallback(async (opts?: { soft?: boolean }) => {
+  const query = (text.trim() || specialty || "").trim();
+
+  const load = useCallback(async (q: string, opts?: { soft?: boolean }) => {
     const soft = Boolean(opts?.soft);
-    const searchParams = new URLSearchParams();
-    if (q.trim()) searchParams.set("q", q.trim());
-    const qs = searchParams.toString();
-
-    if (soft && !qs) {
+    if (soft && !q) {
       const cached = getCachedPractices();
       if (cached) {
         setPractices(cached);
@@ -49,57 +51,72 @@ export default function DoctorsScreen() {
         return;
       }
     }
-
-    if (!soft) setLoading(true);
+    const gen = ++loadGen.current;
+    setLoading(true);
     setError("");
     const res = await api<PracticeListItem[]>(
-      `/procto/practices${qs ? `?${qs}` : ""}`,
+      `/procto/practices${q ? `?${new URLSearchParams({ q })}` : ""}`,
     );
-    if (!soft) setLoading(false);
+    if (gen !== loadGen.current) return;
+    setLoading(false);
     if (res.status !== "successful") {
-      if (!soft) {
-        setError(
-          `${res.message || "Failed to load clinics"} (API: ${getApiUrl()})`,
-        );
-      }
+      setError(`${res.message || "Failed to load clinics"} (API: ${getApiUrl()})`);
       return;
     }
     const next = Array.isArray(res.data) ? res.data : [];
     setPractices(next);
-    if (!qs) setCachedPractices(next);
-  }, [q]);
+    if (!q) setCachedPractices(next);
+  }, []);
 
   useEffect(() => {
-    setQ(params.q ?? "");
+    const next = params.q ?? "";
+    if (SPECIALTY_QUERIES.has(next)) {
+      setSpecialty(next);
+      setText("");
+    } else {
+      setText(next);
+    }
   }, [params.q]);
 
   useEffect(() => {
-    void load({ soft: true });
-  }, [load]);
+    const t = setTimeout(() => void load(query, { soft: true }), text ? 350 : 0);
+    return () => clearTimeout(t);
+  }, [query, text, load]);
 
   return (
     <Screen style={styles.screen}>
-      <MobileHomeHeader title="Find clinics" showProfile={false} />
+      <ScreenHeader title="Find a clinic" />
       <FlatList
         data={practices}
         keyExtractor={(d) => d.id}
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={
           <View style={styles.header}>
             <SearchBar
-              value={q}
-              onChangeText={setQ}
-              placeholder="Search clinic, specialty, or city"
-              onSubmit={() => void load()}
+              value={text}
+              onChangeText={(t) => {
+                setText(t);
+                if (t.trim()) setSpecialty(undefined);
+              }}
+              placeholder="Search doctor, clinic or city…"
+              onSubmit={() => void load(query)}
             />
-            <View style={{ marginTop: space.lg }}>
-              <PrimaryButton label="Search" onPress={() => void load()} busy={loading} />
+            <View style={styles.chips}>
+              <SpecialtyChips
+                active={specialty}
+                onSelect={(q) => {
+                  setSpecialty(q);
+                  setText("");
+                }}
+              />
             </View>
             <ErrorText text={error} />
             {error ? (
-              <View style={{ marginTop: space.md }}>
-                <PrimaryButton label="Retry" onPress={() => void load()} busy={loading} />
+              <View style={{ marginTop: space.sm }}>
+                <PrimaryButton label="Retry" onPress={() => void load(query)} busy={loading} />
               </View>
             ) : null}
           </View>
@@ -110,10 +127,10 @@ export default function DoctorsScreen() {
           ) : error ? (
             <EmptyState text="Could not load clinics. Check your connection and retry." />
           ) : (
-            <EmptyState text="No clinics found. Try another search." />
+            <EmptyState text="No clinics found. Try another search or specialty." />
           )
         }
-        renderItem={({ item }) => <ClinicGridCard item={item} />}
+        renderItem={({ item }) => <ClinicCard item={item} />}
         ListFooterComponent={
           !loading && !error && practices.length > 0 ? (
             <Text style={styles.count}>
@@ -131,14 +148,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
   },
   content: {
-    padding: space.xl,
-    paddingBottom: 100,
+    paddingHorizontal: space.xl,
+    paddingTop: space.xs,
+    paddingBottom: dockClearance + space.xl,
   },
   header: {
-    marginBottom: space.xl,
+    marginBottom: space.lg,
+  },
+  chips: {
+    marginTop: space.lg,
   },
   separator: {
-    height: space.md,
+    height: space.lg,
   },
   count: {
     textAlign: "center",

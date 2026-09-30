@@ -115,6 +115,7 @@ export default function AppLayout() {
           options={{
             href: null,
             title: "Appointment",
+            headerShown: false,
           }}
         />
         <Tabs.Screen
