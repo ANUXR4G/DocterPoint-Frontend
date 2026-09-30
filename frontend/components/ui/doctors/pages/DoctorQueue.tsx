@@ -347,7 +347,7 @@ export default function DoctorQueue({
             </select>
           </label>
         ) : null}
-        {!isClinicAdmin && actorUserId ? (
+        {!isClinicAdmin && actorUserId && memberships[0]?.practice.type !== "SOLO" ? (
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
             Showing your appointments (clinic can view the full roster)
           </p>
