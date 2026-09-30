@@ -28,6 +28,28 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        {/* Must run before hydration: Next throws this when a refresh arrives before the router mounts (dev restarts, stale chunks). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var KEY = 'gg-router-init-reload';
+                function recover(err) {
+                  var msg = String((err && err.message) || err || '');
+                  if (msg.indexOf('Router action dispatched before initialization') === -1) return;
+                  try {
+                    var last = Number(sessionStorage.getItem(KEY) || 0);
+                    if (Date.now() - last < 15000) return;
+                    sessionStorage.setItem(KEY, String(Date.now()));
+                  } catch (e) {}
+                  location.reload();
+                }
+                addEventListener('error', function(e) { recover(e.error || e.message); });
+                addEventListener('unhandledrejection', function(e) { recover(e.reason); });
+              })();
+            `,
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `
