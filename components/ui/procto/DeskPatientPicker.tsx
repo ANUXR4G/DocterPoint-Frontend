@@ -73,6 +73,8 @@ export default function DeskPatientPicker({
   const [needsRelationship, setNeedsRelationship] = useState(false)
   const [saving, setSaving] = useState(false)
   const [registerError, setRegisterError] = useState("")
+  const [conflicts, setConflicts] = useState<DeskPatient[]>([])
+  const [linkingId, setLinkingId] = useState("")
   const searchRef = useRef<HTMLInputElement>(null)
   const relationRef = useRef<HTMLSelectElement>(null)
 
@@ -119,7 +121,23 @@ export default function DeskPatientPicker({
       setName(q)
     }
     setRegisterError("")
+    setConflicts([])
     setMode("register")
+  }
+
+  /** Patients new to this clinic join its patient list as soon as the desk picks them. */
+  async function pick(p: DeskPatient, onError: (msg: string) => void) {
+    if (p.knownHere) return onChange(p)
+    setLinkingId(p.patientId)
+    const res = await proctoService.linkDeskPatient(practiceId, p.patientId)
+    setLinkingId("")
+    if (res.status === "successful" && res.data) {
+      setMode("search")
+      setQuery("")
+      setConflicts([])
+      return onChange(res.data)
+    }
+    onError(res.message || "Could not add the patient to your clinic.")
   }
 
   async function register() {
@@ -154,6 +172,10 @@ export default function DeskPatientPicker({
     if (/choose how this patient is related/i.test(msg)) {
       setNeedsRelationship(true)
       window.setTimeout(() => relationRef.current?.focus(), 0)
+    }
+    if (/already registered/i.test(msg)) {
+      const found = await proctoService.searchDeskPatients(practiceId, digits)
+      setConflicts(found.status === "successful" ? (found.data?.patients ?? []) : [])
     }
   }
 
@@ -249,6 +271,7 @@ export default function DeskPatientPicker({
               onChange={(e) => {
                 setPhone(e.target.value)
                 setNeedsRelationship(false)
+                setConflicts([])
               }}
               placeholder="10-digit mobile"
               inputMode="tel"
@@ -336,6 +359,43 @@ export default function DeskPatientPicker({
             {registerError}
           </p>
         ) : null}
+        {conflicts.length ? (
+          <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/60">
+            <p className="px-3.5 pt-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+              Already on GlucoGuide with this mobile — add them to your clinic
+            </p>
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {conflicts.map((p) => (
+                <li key={p.patientId} className="flex items-center gap-3 px-3.5 py-2.5">
+                  <Avatar name={p.name} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-slate-900 dark:text-white">
+                      {p.name}{" "}
+                      <span className="font-mono text-[11px] font-semibold text-slate-500">
+                        {p.mrn ?? "—"}
+                      </span>
+                    </span>
+                    <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                      {patientMeta(p)}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={!!linkingId}
+                    onClick={() => void pick(p, setRegisterError)}
+                    className="shrink-0 rounded-full bg-[var(--theme-primary)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
+                  >
+                    {linkingId === p.patientId
+                      ? "Adding…"
+                      : p.knownHere
+                        ? "Select"
+                        : "Add to clinic & select"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             New patients get an MRN with your clinic prefix; patients already
@@ -395,8 +455,9 @@ export default function DeskPatientPicker({
             <li key={p.patientId}>
               <button
                 type="button"
-                onClick={() => onChange(p)}
-                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-700/60"
+                disabled={!!linkingId}
+                onClick={() => void pick(p, setSearchError)}
+                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-slate-50 disabled:opacity-60 dark:hover:bg-slate-700/60"
               >
                 <Avatar name={p.name} />
                 <span className="min-w-0 flex-1">
@@ -410,7 +471,11 @@ export default function DeskPatientPicker({
                   </span>
                   <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
                     {patientMeta(p)}
-                    {p.knownHere ? "" : " · new to this clinic"}
+                    {linkingId === p.patientId
+                      ? " · adding to your clinic…"
+                      : p.knownHere
+                        ? ""
+                        : " · new to this clinic — picking adds them"}
                   </span>
                 </span>
               </button>

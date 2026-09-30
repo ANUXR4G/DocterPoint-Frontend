@@ -407,6 +407,12 @@ export const proctoService = {
       body: JSON.stringify(body),
     }) as Promise<ProctoResult<DeskPatient>>,
 
+  /** Add a patient registered elsewhere on GlucoGuide to this clinic's patient list. */
+  linkDeskPatient: (practiceId: string, patientId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/desk-patients/${patientId}/link`, {
+      method: "POST",
+    }) as Promise<ProctoResult<DeskPatient>>,
+
   getAuditLog: (
     practiceId: string,
     q: { action?: string; providerId?: string; from?: string; to?: string; before?: string; limit?: number } = {},
