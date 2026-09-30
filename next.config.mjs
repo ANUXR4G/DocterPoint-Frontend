@@ -4,8 +4,8 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
   env: {
-    NEXT_PUBLIC_BUILD_ID:
-      process.env.VERCEL_GIT_COMMIT_SHA || `local-${Date.now()}`,
+    // Empty outside Vercel deploys: dev restarts must not flag open tabs as stale.
+    NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA || "",
   },
   // Playwright / curl often use 127.0.0.1 while Next defaults to localhost
   allowedDevOrigins: ["127.0.0.1", "localhost"],

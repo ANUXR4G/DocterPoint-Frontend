@@ -8,6 +8,7 @@ import DeskPatientPicker, {
   deskLabelClass,
 } from "@/components/ui/procto/DeskPatientPicker"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
+import { dashboardPortalRoot } from "@/lib/portalRoot"
 
 type Props = {
   open: boolean
@@ -293,6 +294,6 @@ export default function EmergencyWalkInModal({
         </div>
       </div>
     </div>,
-    document.querySelector(".dashboard-app") ?? document.body,
+    dashboardPortalRoot(),
   )
 }
