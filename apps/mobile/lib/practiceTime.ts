@@ -3,6 +3,16 @@
  */
 export const PRACTICE_TIMEZONE = "Asia/Kolkata";
 
+/** Calendar day in the clinic's time zone, e.g. "2026-09-30" (sortable). */
+export function practiceDayKey(ms: number): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: PRACTICE_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(ms));
+}
+
 export function formatPracticeTime(
   input: Date | string | null | undefined,
   empty = "—",

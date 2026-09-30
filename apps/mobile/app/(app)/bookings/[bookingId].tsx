@@ -19,6 +19,7 @@ import {
   SectionTitle,
 } from "@/components/ui";
 import { api } from "@/lib/api";
+import { withDrTitle } from "@/lib/doctorName";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { patchBookingFields } from "@/lib/liveBooking";
 import { getSessionUserId } from "@/lib/sessionUser";
@@ -156,7 +157,7 @@ export default function BookingDetailScreen() {
 
         <Panel style={styles.panel}>
           <SectionTitle>Visit details</SectionTitle>
-          <Detail label="Doctor" value={display.provider?.name || "—"} />
+          <Detail label="Doctor" value={withDrTitle(display.provider?.name) || "—"} />
           <Detail
             label="Location"
             value={

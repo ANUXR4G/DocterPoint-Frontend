@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { FeaturedClinicCard } from "@/components/mobile/ClinicCards";
 import { MobileHomeHeader } from "@/components/mobile/MobileHomeHeader";
+import { PatientDashboard } from "@/components/mobile/PatientDashboard";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { SearchBar } from "@/components/mobile/SearchBar";
 import { SpecialtyRow } from "@/components/mobile/SpecialtyRow";
@@ -24,10 +25,7 @@ import {
 } from "@/lib/dataCache";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { colors, shadows, radii, space, type } from "@/lib/theme";
-import {
-  bookingWhen,
-  type PracticeListItem,
-} from "@/lib/types";
+import type { PracticeListItem } from "@/lib/types";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -35,6 +33,7 @@ export default function HomeScreen() {
     bookings,
     liveConnected,
     loading: bookingsLoading,
+    ready: bookingsReady,
     error: bookingsError,
     refresh: refreshBookings,
   } = usePatientLive();
@@ -142,7 +141,31 @@ export default function HomeScreen() {
             </View>
           </AnimatedView>
         ) : null}
-        <AnimatedView from="up" delay={40} style={styles.heroCard}>
+
+        <PatientDashboard
+          bookings={bookings}
+          loading={bookingsLoading || !bookingsReady}
+        />
+
+        {!nextVisit && !displayError && bookingsReady ? (
+          <AnimatedView from="up" delay={140} style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="calendar-outline" size={22} color={colors.brand} />
+            </View>
+            <Text style={styles.emptyTitle}>Your calendar is clear</Text>
+            <Text style={styles.emptyBody}>
+              When you book a visit, it will appear here with reminders.
+            </Text>
+            <PressableScale
+              style={styles.emptyBtn}
+              onPress={() => router.push("/(app)/doctors")}
+            >
+              <Text style={styles.emptyBtnText}>Explore clinics</Text>
+            </PressableScale>
+          </AnimatedView>
+        ) : null}
+
+        <AnimatedView from="up" delay={40} style={[styles.heroCard, styles.heroGap]}>
 
           <Text style={styles.heroEyebrow}>GlucoGuide Care</Text>
           <Text style={styles.heroTitle}>
@@ -204,65 +227,6 @@ export default function HomeScreen() {
           </AnimatedView>
         ) : null}
 
-        {nextVisit ? (
-          <AnimatedView from="up" delay={240} style={styles.section}>
-            <Text style={styles.sectionLabel}>Upcoming</Text>
-            <PressableScale
-              style={styles.upcomingCard}
-              onPress={() => router.push("/(app)/appointments")}
-            >
-              <View style={styles.upcomingAccent} />
-              <View style={styles.upcomingDate}>
-                <Text style={styles.upcomingDay}>
-                  {new Date(
-                    nextVisit.slotStart ||
-                      nextVisit.slot_start ||
-                      nextVisit.sessionDate ||
-                      nextVisit.session_date ||
-                      Date.now(),
-                  ).toLocaleDateString("en-IN", { weekday: "short" })}
-                </Text>
-                <Text style={styles.upcomingNum}>
-                  {new Date(
-                    nextVisit.slotStart ||
-                      nextVisit.slot_start ||
-                      nextVisit.sessionDate ||
-                      nextVisit.session_date ||
-                      Date.now(),
-                  ).getDate()}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.upcomingTitle} numberOfLines={1}>
-                  {nextVisit.practice?.name || "Clinic visit"}
-                </Text>
-                <Text style={styles.upcomingMeta}>{bookingWhen(nextVisit)}</Text>
-              </View>
-              <Ionicons
-                name="arrow-forward"
-                size={16}
-                color={colors.inkFaint}
-              />
-            </PressableScale>
-          </AnimatedView>
-        ) : null}
-        {!nextVisit && !error ? (
-          <AnimatedView from="up" delay={240} style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="calendar-outline" size={22} color={colors.brand} />
-            </View>
-            <Text style={styles.emptyTitle}>Your calendar is clear</Text>
-            <Text style={styles.emptyBody}>
-              When you book a visit, it will appear here with reminders.
-            </Text>
-            <PressableScale
-              style={styles.emptyBtn}
-              onPress={() => router.push("/(app)/doctors")}
-            >
-              <Text style={styles.emptyBtnText}>Explore clinics</Text>
-            </PressableScale>
-          </AnimatedView>
-        ) : null}
       </ScrollView>
     </Screen>
   );
@@ -291,6 +255,9 @@ const styles = StyleSheet.create({
     paddingBottom: space.lg,
     overflow: "hidden",
     ...shadows.float,
+  },
+  heroGap: {
+    marginTop: space.xxl,
   },
   heroEyebrow: {
     ...type.overline,
@@ -367,58 +334,8 @@ const styles = StyleSheet.create({
     color: colors.brand,
     letterSpacing: -0.1,
   },
-  upcomingCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    padding: space.lg,
-    overflow: "hidden",
-    ...shadows.soft,
-  },
-  upcomingAccent: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
-    backgroundColor: colors.brand,
-  },
-  upcomingDate: {
-    width: 52,
-    alignItems: "center",
-    backgroundColor: colors.brandLight,
-    borderRadius: radii.md,
-    paddingVertical: 10,
-    marginLeft: 4,
-  },
-  upcomingDay: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.brand,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  upcomingNum: {
-    fontSize: 22,
-    fontWeight: "500",
-    color: colors.ink,
-    letterSpacing: -0.6,
-  },
-  upcomingTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.ink,
-    letterSpacing: -0.2,
-  },
-  upcomingMeta: {
-    marginTop: 4,
-    fontSize: 13,
-    color: colors.inkSoft,
-  },
   emptyCard: {
-    marginTop: space.xxl,
+    marginTop: space.xl,
     backgroundColor: colors.white,
     borderRadius: radii.xl,
     padding: space.xl,

@@ -24,6 +24,8 @@ export type ProctoBooking = {
   location?: { name?: string; city?: string; address?: string };
   provider?: { id?: string; name?: string | null };
   providerName?: string | null;
+  /** Times are labels such as "Morning" or "Every 4 hours". */
+  medicines?: { name: string; amount?: string; times?: string[] }[] | null;
 };
 
 export type ReviewSummary = {
@@ -44,7 +46,6 @@ export type BookingDetail = ProctoBooking & {
   patientName?: string | null;
   consultationType?: string | null;
   doctorRemarks?: string | null;
-  medicines?: { name: string; amount?: string; times?: string[] }[] | null;
   documents?: { name: string; url: string; uploadedAt?: string }[] | null;
   reviewEligibility?: {
     canReview: boolean;

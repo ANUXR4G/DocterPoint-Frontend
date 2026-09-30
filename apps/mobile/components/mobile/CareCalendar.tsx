@@ -18,6 +18,7 @@ import {
   ymd,
 } from "@/lib/calendarDates";
 import { bookingWhenMs } from "@/lib/bookingStats";
+import { withDrTitle } from "@/lib/doctorName";
 import { bookingWhen, type ProctoBooking } from "@/lib/types";
 import { formatPracticeTime } from "@/lib/practiceTime";
 import { colors, radii, shadows, space } from "@/lib/theme";
@@ -117,7 +118,7 @@ function BookingRow({
         </Text>
         <Text style={styles.bookingMeta} numberOfLines={1}>
           {timeLabel(booking)}
-          {booking.provider?.name ? ` · Dr ${booking.provider.name}` : ""}
+          {booking.provider?.name ? ` · ${withDrTitle(booking.provider.name)}` : ""}
         </Text>
       </View>
       <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>

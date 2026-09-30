@@ -19,26 +19,16 @@ import {
 } from "@/components/ui";
 import { AnimatedView, PressableScale } from "@/lib/motion";
 import { api } from "@/lib/api";
+import {
+  bookingStatusLabel,
+  bookingStatusTone as statusTone,
+  isUpcomingBooking,
+  sortBookingsByWhen,
+} from "@/lib/bookingStats";
+import { withDrTitle } from "@/lib/doctorName";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { colors, shadows, radii, space } from "@/lib/theme";
-import {
-  bookingWhen,
-  isPastStatus,
-  isUpcomingStatus,
-} from "@/lib/types";
-
-function statusTone(status: string) {
-  const s = (status || "").toUpperCase();
-  if (s === "IN_PROGRESS") return { bg: colors.amberLight, fg: "#b45309" };
-  if (s === "COMPLETED") return { bg: colors.emeraldLight, fg: colors.success };
-  if (s === "ACCEPTED" || s === "CONFIRMED")
-    return { bg: colors.brandMist, fg: colors.brand };
-  if (s === "WAITING" || s === "CHECKED_IN")
-    return { bg: colors.brandLight, fg: colors.brand };
-  if (s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW")
-    return { bg: colors.brandMist, fg: colors.inkSoft };
-  return { bg: colors.brandLight, fg: colors.inkSoft };
-}
+import { bookingWhen } from "@/lib/types";
 
 type ViewMode = "list" | "calendar";
 
@@ -64,11 +54,15 @@ export default function AppointmentsScreen() {
     }, [refresh]),
   );
 
-  const filtered = items.filter((b) => {
-    if (scope === "upcoming") return isUpcomingStatus(b.status);
-    if (scope === "past") return isPastStatus(b.status);
-    return true;
-  });
+  const now = Date.now();
+  const filtered = sortBookingsByWhen(
+    items.filter((b) => {
+      if (scope === "upcoming") return isUpcomingBooking(b, now);
+      if (scope === "past") return !isUpcomingBooking(b, now);
+      return true;
+    }),
+    scope === "upcoming" ? "asc" : "desc",
+  );
 
   function cancel(id: string) {
     Alert.alert("Cancel visit?", "This cannot be undone.", [
@@ -178,7 +172,7 @@ export default function AppointmentsScreen() {
                 const isCompleted =
                   (item.status || "").toUpperCase() === "COMPLETED";
                 const provider =
-                  item.provider?.name || item.providerName || "Doctor";
+                  withDrTitle(item.provider?.name || item.providerName) || "Doctor";
                 const tone = statusTone(item.status);
                 return (
                   <AnimatedView
@@ -200,7 +194,7 @@ export default function AppointmentsScreen() {
                           style={[styles.badge, { backgroundColor: tone.bg }]}
                         >
                           <Text style={[styles.badgeText, { color: tone.fg }]}>
-                            {(item.status || "").replace(/_/g, " ")}
+                            {bookingStatusLabel(item.status)}
                           </Text>
                         </View>
                       </View>
