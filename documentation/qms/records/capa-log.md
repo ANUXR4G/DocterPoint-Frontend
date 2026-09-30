@@ -40,6 +40,20 @@ Append new entries at the top. Do not delete closed records.
 - **Status:** Verified
 - **Docs updated:** capa-log.md, risk-register.md (R34), decisions.md, flow.md
 
+### NC-20260930-04
+- **Date opened:** 2026-09-30
+- **Severity:** 3
+- **Process:** P-BOOK
+- **Description:** Recurrence of NC-20260930-02 — a patient registered at Dr. Priya Nair's clinic (via WhatsApp) still got "already registered" at Dr. Ananya Sharma Clinic's desk and did not appear in that clinic's Patients tab.
+- **Evidence:** Rahul Kumar (PNCMR00000008, WhatsApp at Dr. Priya Nair): no `practice_patients` row, booking or chat at Dr. Ananya Sharma Clinic; desk register with a short name / different date of birth → 409 "This mobile is already registered to Rahul Kumar…"; full-mobile search → `knownHere=false`; Patients tab 3 rows without him.
+- **Containment:** Desk could still pick the patient via full-mobile search and book them.
+- **Root cause:** NC-20260930-02 only linked on an exact name + date-of-birth match. Every other path that says "already registered" (name typed differently, primary account on the number, DOB mismatch) refused without offering the existing patient, and picking a "new to this clinic" search result only selected them for the booking — nothing added them to the clinic's list.
+- **Corrective action:** `POST /procto/practices/:id/desk-patients/:patientId/link` (active member + `booking:update`) adds an existing patient to the clinic list; the picker calls it whenever the desk picks a patient new to the clinic; a refused registration lists the patients already on that mobile with **Add to clinic & select**; same first name + same date of birth on the number counts as the same person.
+- **Owner / due:** Engineering / 2026-09-30
+- **Verification:** Refusal reproduced (409, `knownHere=false`, not in Patients tab); link fake id 404, non-member 403; link Rahul Kumar → Patients tab 4 rows incl. him, name search `knownHere=true`; picker UI shows the "Already on GlucoGuide with this mobile" list after the 409; 229 backend tests; tsc; production build.
+- **Status:** Verified
+- **Docs updated:** capa-log.md, flow.md, decisions.md, risk-register.md (R33)
+
 ### NC-20260930-02
 - **Date opened:** 2026-09-30
 - **Severity:** 3

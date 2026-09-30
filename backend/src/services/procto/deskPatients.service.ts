@@ -243,7 +243,14 @@ export async function registerDeskPatient(
   if (staff) throw new AppError(409, "That mobile belongs to a clinic staff account. Use the patient's own number.");
   if (emailTaken) throw new AppError(409, "That email is already registered. Search for the patient instead.");
   const key = (n: string | null | undefined) => (n ?? "").toLowerCase().replace(/\s*·.*$/, "").replace(/\s+/g, " ").trim();
-  const same = onNumber.find((u) => key(u.name) === key(name));
+  const first = (n: string | null | undefined) => key(n).split(" ")[0] ?? "";
+  const same =
+    onNumber.find((u) => key(u.name) === key(name)) ??
+    onNumber.find(
+      (u) =>
+        first(u.name) === first(name) &&
+        normalizeDateOfBirth(u.patient?.dateOfBirth ?? "") === dateOfBirth,
+    );
   if (same) return addExistingPatient(practiceId, actorUserId, same, dateOfBirth);
   const owner = pickPrimaryPatientUser(onNumber.filter((u) => last10(u.phone) === d10));
   if (owner && !relationship) {
@@ -313,6 +320,24 @@ async function addExistingPatient(
       `${existing.name?.trim() || "This patient"} is already registered on this number with a different date of birth. Check the details with the patient, or pick them from the search results.`,
     );
   }
+  return addToClinic(practiceId, actorUserId, existing);
+}
+
+/**
+ * Desk picked a patient found by full mobile or MRN who is registered elsewhere on GlucoGuide:
+ * add them to this clinic's patient list so they show on the Patients tab before any booking.
+ */
+export async function linkDeskPatient(practiceId: string, actorUserId: string, patientUserId: string) {
+  await assertDeskMember(practiceId, actorUserId);
+  const existing = await prisma.user.findFirst({
+    where: { id: patientUserId, role: "user", patient: { isNot: null } },
+    select: PATIENT_SELECT,
+  });
+  if (!existing) throw new AppError(404, "Patient not found. Search again by mobile or MRN.");
+  return addToClinic(practiceId, actorUserId, existing);
+}
+
+async function addToClinic(practiceId: string, actorUserId: string, existing: PatientRow): Promise<DeskPatient> {
   const scope = await knownScope(practiceId);
   const wasKnown = scope.ids.has(existing.id);
   await linkPatientToPractice(practiceId, existing.id, "desk_link", actorUserId);
