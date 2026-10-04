@@ -1,7 +1,7 @@
 import { Link } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { PressableScale } from "@/lib/motion";
 import { colors, radii, space } from "@/lib/theme";
 
@@ -39,7 +39,7 @@ export function MobileHomeHeader({
         {showProfile ? (
           <Link href="/(app)/profile" asChild>
             <PressableScale style={styles.avatar} accessibilityLabel="Profile">
-              <Ionicons name="person-outline" size={18} color={colors.ink} />
+              <SvgIcon name="personOutline" size={18} color={colors.ink} />
             </PressableScale>
           </Link>
         ) : null}

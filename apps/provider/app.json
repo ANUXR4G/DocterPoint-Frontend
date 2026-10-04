@@ -31,7 +31,28 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "http://localhost:3001"
-    }
+      "apiUrl": "https://docterpoint-backend-production.up.railway.app",
+      "router": {},
+      "eas": {
+        "projectId": "430b14c0-0eff-4337-98c5-711bb787849c"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.glucoguide.doctor",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow GlucoGuide Doctor to convert speech to text for Mira help.",
+        "NSMicrophoneUsageDescription": "Allow GlucoGuide Doctor to record your voice for help chat."
+      }
+    },
+    "android": {
+      "package": "com.glucoguide.doctor",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
+    },
+    "owner": "anuxr4g"
   }
 }

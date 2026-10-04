@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -9,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import {
   PremiumAtmosphere,
@@ -199,7 +199,7 @@ export default function ProfileScreen() {
                 {photoBusy ? (
                   <ActivityIndicator size="small" color={colors.white} />
                 ) : (
-                  <Ionicons name="camera" size={14} color={colors.white} />
+                  <SvgIcon name="camera" size={14} color={colors.white} />
                 )}
               </View>
             </Pressable>
@@ -278,13 +278,13 @@ export default function ProfileScreen() {
             style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
           >
             <View style={styles.menuIcon}>
-              <Ionicons name="help-buoy-outline" size={20} color={colors.brand} />
+              <SvgIcon name="help" size={20} color={colors.brand} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.menuLabel}>Help & Support</Text>
               <Text style={styles.menuHint}>Messages from your clinic and Mira</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.inkSoft} />
+            <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -296,7 +296,7 @@ export default function ProfileScreen() {
             ]}
           >
             <View style={[styles.menuIcon, { backgroundColor: "#fdecec" }]}>
-              <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+              <SvgIcon name="logout" size={20} color={colors.danger} />
             </View>
             <Text style={[styles.menuLabel, { flex: 1, color: colors.danger }]}>Sign out</Text>
           </Pressable>

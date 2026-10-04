@@ -1,7 +1,7 @@
 import { useRouter, type Href } from "expo-router";
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { SvgIcon, type SvgIconName } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import { AnimatedView, PressableScale } from "@/lib/motion";
 import {
@@ -18,8 +18,6 @@ import {
 import { withDrTitle } from "@/lib/doctorName";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import { bookingWhen, type ProctoBooking } from "@/lib/types";
-
-type IconName = keyof typeof Ionicons.glyphMap;
 
 type Props = {
   bookings: ProctoBooking[];
@@ -47,11 +45,11 @@ export function PatientDashboard({ bookings, loading }: Props) {
   const openVisits = () => router.push("/(app)/appointments");
   const openClinics = () => router.push("/(app)/doctors");
 
-  const actions: { label: string; icon: IconName; onPress: () => void }[] = [
-    { label: "Book", icon: "add-circle-outline", onPress: openClinics },
+  const actions: { label: string; icon: SvgIconName; onPress: () => void }[] = [
+    { label: "Book", icon: "addCircle", onPress: openClinics },
     {
       label: "Chat",
-      icon: "chatbubble-ellipses-outline",
+      icon: "chatOutline",
       onPress: () => {
         const target = nextVisit ?? latest;
         if (target) openVisit(target.id);
@@ -60,12 +58,12 @@ export function PatientDashboard({ bookings, loading }: Props) {
     },
     {
       label: "Calendar",
-      icon: "calendar-outline",
+      icon: "calendarOutline",
       onPress: () => router.push("/(app)/record"),
     },
     {
       label: "Rx",
-      icon: "medkit-outline",
+      icon: "medkitOutline",
       onPress: () => (prescription ? openVisit(prescription.booking.id) : openVisits()),
     },
   ];
@@ -73,7 +71,7 @@ export function PatientDashboard({ bookings, loading }: Props) {
   const summary: {
     label: string;
     value: string;
-    icon: IconName;
+    icon: SvgIconName;
     tint: string;
     bg: string;
     onPress: () => void;
@@ -81,7 +79,7 @@ export function PatientDashboard({ bookings, loading }: Props) {
     {
       label: "Upcoming",
       value: placeholder ? "—" : String(upcoming.length),
-      icon: "time-outline",
+      icon: "clock",
       tint: colors.brand,
       bg: colors.brandLight,
       onPress: openVisits,
@@ -89,7 +87,7 @@ export function PatientDashboard({ bookings, loading }: Props) {
     {
       label: "Completed",
       value: placeholder ? "—" : String(completed.length),
-      icon: "checkmark-done-outline",
+      icon: "checkDone",
       tint: colors.success,
       bg: colors.emeraldLight,
       onPress: openVisits,
@@ -97,7 +95,7 @@ export function PatientDashboard({ bookings, loading }: Props) {
     {
       label: "Clinics",
       value: placeholder ? "—" : String(clinics),
-      icon: "business-outline",
+      icon: "business",
       tint: colors.rose,
       bg: colors.roseLight,
       onPress: openClinics,
@@ -137,7 +135,7 @@ export function PatientDashboard({ bookings, loading }: Props) {
             accessibilityLabel={a.label}
           >
             <View style={styles.actionIcon}>
-              <Ionicons name={a.icon} size={24} color={colors.brand} />
+              <SvgIcon name={a.icon} size={24} color={colors.brand} />
             </View>
             <Text style={styles.actionLabel}>{a.label}</Text>
           </PressableScale>
@@ -157,7 +155,7 @@ export function PatientDashboard({ bookings, loading }: Props) {
               accessibilityLabel={`${s.label}: ${s.value}`}
             >
               <View style={[styles.summaryIcon, { backgroundColor: s.bg }]}>
-                <Ionicons name={s.icon} size={16} color={s.tint} />
+                <SvgIcon name={s.icon} size={16} color={s.tint} />
               </View>
               <Text style={styles.summaryValue} numberOfLines={1}>
                 {s.value}
@@ -205,7 +203,7 @@ export function PatientDashboard({ bookings, loading }: Props) {
               {prescription.medicines.slice(0, 4).map((m, i) => (
                 <View key={`${m.name}-${i}`} style={styles.medRow}>
                   <View style={styles.medDot}>
-                    <Ionicons name="medkit-outline" size={14} color={colors.brand} />
+                    <SvgIcon name="medkitOutline" size={14} color={colors.brand} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.medName} numberOfLines={1}>
@@ -250,7 +248,7 @@ export function SectionHead({
       {action && onAction ? (
         <PressableScale style={styles.sectionAction} onPress={onAction}>
           <Text style={styles.sectionActionText}>{action}</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.brand} />
+          <SvgIcon name="chevronRight" size={14} color={colors.brand} />
         </PressableScale>
       ) : null}
     </View>
@@ -301,7 +299,7 @@ function UpcomingCard({
 
       <View style={styles.timeBox}>
         <View style={styles.timeIcon}>
-          <Ionicons name="calendar" size={18} color={colors.brand} />
+          <SvgIcon name="calendar" size={18} color={colors.brand} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.timeMain} numberOfLines={1}>
@@ -346,7 +344,7 @@ function VisitRow({ booking, onPress }: { booking: ProctoBooking; onPress: () =>
       accessibilityLabel={`${clinic}, ${visitDayTime(booking)}, ${bookingStatusLabel(booking.status)}`}
     >
       <View style={styles.visitIcon}>
-        <Ionicons name="calendar-outline" size={18} color={colors.brand} />
+        <SvgIcon name="calendarOutline" size={18} color={colors.brand} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.visitClinic} numberOfLines={1}>

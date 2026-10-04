@@ -1,5 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
-import type { ComponentProps, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import {
   Platform,
@@ -10,10 +9,9 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SvgIcon, type SvgIconName } from "@/components/icons/SvgIcon";
 import { dockLayout } from "@/lib/dockLayout";
 import { colors, shadows } from "@/lib/theme";
-
-type IconName = ComponentProps<typeof Ionicons>["name"];
 
 type TabRoute = {
   key: string;
@@ -59,30 +57,30 @@ const DOCK_ORDER = [
 
 const TAB_ICONS: Record<
   string,
-  { label: string; active: IconName; idle: IconName }
+  { label: string; active: SvgIconName; idle: SvgIconName }
 > = {
-  dashboard: { label: "Dashboard", active: "home", idle: "home-outline" },
-  queue: { label: "Queue", active: "list", idle: "list-outline" },
+  dashboard: { label: "Dashboard", active: "home", idle: "homeOutline" },
+  queue: { label: "Queue", active: "list", idle: "listOutline" },
   appointments: {
     label: "Appointments",
-    active: "calendar-number",
-    idle: "calendar-number-outline",
+    active: "calendarNumber",
+    idle: "calendarNumberOutline",
   },
   calendar: {
     label: "Calendar",
     active: "calendar",
-    idle: "calendar-outline",
+    idle: "calendarOutline",
   },
-  patients: { label: "Patients", active: "people", idle: "people-outline" },
+  patients: { label: "Patients", active: "people", idle: "peopleOutline" },
   analytics: {
     label: "Analytics",
-    active: "stats-chart",
-    idle: "stats-chart-outline",
+    active: "chart",
+    idle: "chartOutline",
   },
   profile: {
     label: "More",
-    active: "ellipsis-horizontal",
-    idle: "ellipsis-horizontal-outline",
+    active: "more",
+    idle: "moreOutline",
   },
 };
 
@@ -98,8 +96,8 @@ function DockItem({
   onLongPress,
 }: {
   label: string;
-  iconActive: IconName;
-  iconIdle: IconName;
+  iconActive: SvgIconName;
+  iconIdle: SvgIconName;
   focused: boolean;
   onPress: (e: GestureResponderEvent) => void;
   onLongPress: (e: GestureResponderEvent) => void;
@@ -126,7 +124,7 @@ function DockItem({
         ]}
       >
         <View style={styles.iconSlot} collapsable={false}>
-          <Ionicons
+          <SvgIcon
             name={focused ? iconActive : iconIdle}
             size={ICON_SIZE}
             color={focused ? colors.brand : colors.inkSoft}
@@ -260,7 +258,7 @@ const styles = StyleSheet.create({
   bubbleFocused: {
     backgroundColor: colors.brandLight,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(37, 99, 235, 0.18)",
+    borderColor: "rgba(58, 141, 154, 0.28)",
   },
   bubblePressed: {
     opacity: 0.72,

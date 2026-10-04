@@ -1,5 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
-import type { ComponentProps, ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   Platform,
   Pressable,
@@ -9,10 +8,9 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import { BlurView } from "expo-blur";
+import { SvgIcon, type SvgIconName } from "@/components/icons/SvgIcon";
 import { dockLayout } from "@/lib/dockLayout";
 import { colors } from "@/lib/theme";
-
-type IconName = ComponentProps<typeof Ionicons>["name"];
 
 type TabRoute = {
   key: string;
@@ -49,12 +47,16 @@ export type FloatingDockProps = {
 
 const TAB_ICONS: Record<
   string,
-  { label: string; active: IconName; idle: IconName }
+  { label: string; active: SvgIconName; idle: SvgIconName }
 > = {
-  home: { label: "Home", active: "home", idle: "home-outline" },
-  doctors: { label: "Clinics", active: "medkit", idle: "medkit-outline" },
-  appointments: { label: "Bookings", active: "calendar", idle: "calendar-outline" },
-  profile: { label: "Profile", active: "person", idle: "person-outline" },
+  home: { label: "Home", active: "home", idle: "homeOutline" },
+  doctors: { label: "Clinics", active: "medkit", idle: "medkitOutline" },
+  appointments: {
+    label: "Bookings",
+    active: "calendar",
+    idle: "calendarOutline",
+  },
+  profile: { label: "Profile", active: "person", idle: "personOutline" },
 };
 
 /** Even px sizes stay sharp on @2x/@3x — never scale icon glyphs. */
@@ -74,8 +76,8 @@ function DockItem({
 }: {
   label: string;
   a11yLabel: string;
-  iconActive: IconName;
-  iconIdle: IconName;
+  iconActive: SvgIconName;
+  iconIdle: SvgIconName;
   focused: boolean;
   onPress: (e: GestureResponderEvent) => void;
   onLongPress: (e: GestureResponderEvent) => void;
@@ -91,7 +93,7 @@ function DockItem({
       hitSlop={4}
     >
       <View style={styles.iconSlot} collapsable={false}>
-        <Ionicons
+        <SvgIcon
           name={focused ? iconActive : iconIdle}
           size={ICON_SIZE}
           color={focused ? colors.brand : colors.inkFaint}

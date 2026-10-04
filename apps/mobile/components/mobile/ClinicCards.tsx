@@ -1,6 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import { withDrTitle } from "@/lib/doctorName";
 import { practicePhotoUrl } from "@/lib/media";
@@ -39,7 +39,7 @@ export function ClinicCard({ item }: { item: PracticeListItem }) {
             </Text>
             {rating != null ? (
               <View style={styles.rating}>
-                <Ionicons name="star" size={11} color={colors.brand} />
+                <SvgIcon name="star" size={11} color={colors.brand} />
                 <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
               </View>
             ) : null}
@@ -54,7 +54,7 @@ export function ClinicCard({ item }: { item: PracticeListItem }) {
           ) : null}
           {city ? (
             <View style={styles.meta}>
-              <Ionicons name="location-outline" size={12} color={colors.inkFaint} />
+              <SvgIcon name="location" size={12} color={colors.inkFaint} />
               <Text style={styles.metaText} numberOfLines={1}>
                 {city}
                 {item.consultationFee != null ? ` · ₹${item.consultationFee}` : ""}

@@ -1,7 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { PressableScale } from "@/lib/motion";
 import { colors, shadows, space } from "@/lib/theme";
 
@@ -28,7 +28,7 @@ export function ScreenHeader({ title, back = false, alignLeft = false }: Props) 
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons name="chevron-back" size={20} color={colors.ink} />
+          <SvgIcon name="chevronLeft" size={20} color={colors.ink} />
         </PressableScale>
       ) : null}
       <Text

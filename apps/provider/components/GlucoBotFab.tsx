@@ -1,5 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { usePathname } from "expo-router";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { useState } from "react";
 import {
   Modal,
@@ -39,8 +39,8 @@ export function GlucoBotFab() {
           },
         ]}
       >
-        <Ionicons
-          name={open ? "close" : "chatbubbles"}
+        <SvgIcon
+          name={open ? "close" : "chat"}
           size={24}
           color={colors.white}
         />
@@ -76,7 +76,7 @@ export function GlucoBotFab() {
                 style={styles.closeButton}
                 accessibilityLabel="Close"
               >
-                <Ionicons name="close" size={22} color={colors.brand} />
+                <SvgIcon name="close" size={22} color={colors.brand} />
               </Pressable>
             </View>
             <MiraChat compact />

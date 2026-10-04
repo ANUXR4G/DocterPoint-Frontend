@@ -43,7 +43,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "http://localhost:3001"
+      "apiUrl": "https://docterpoint-backend-production.up.railway.app",
+      "router": {},
+      "eas": {
+        "projectId": "d4129030-33ef-4cea-a0a0-17cebf857ce9"
+      }
     },
     "ios": {
       "infoPlist": {
@@ -53,7 +57,16 @@
       "bundleIdentifier": "com.anonymous.glucoguide-patient"
     },
     "android": {
-      "softwareKeyboardLayoutMode": "pan"
+      "package": "com.glucoguide.patient",
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     }
   }
 }

@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { StarRating } from "@/components/StarRating";
 import { ClinicProfileHero } from "@/components/mobile/ClinicProfileHero";
 import { ScreenHeader } from "@/components/mobile/ScreenHeader";
@@ -324,7 +324,7 @@ export default function PracticeBookScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Previous week"
               >
-                <Ionicons name="chevron-back" size={16} color={colors.inkSoft} />
+                <SvgIcon name="chevronLeft" size={16} color={colors.inkSoft} />
               </PressableScale>
               <PressableScale
                 style={[styles.arrow, weekPage === 1 && styles.arrowOff]}
@@ -333,7 +333,7 @@ export default function PracticeBookScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Next week"
               >
-                <Ionicons name="chevron-forward" size={16} color={colors.inkSoft} />
+                <SvgIcon name="chevronRight" size={16} color={colors.inkSoft} />
               </PressableScale>
             </View>
           </View>
@@ -395,7 +395,7 @@ export default function PracticeBookScreen() {
             <Text style={styles.blockTitle}>Token for the day</Text>
             <View style={styles.tokenCard}>
               <View style={styles.tokenIcon}>
-                <Ionicons name="ticket-outline" size={20} color={colors.brand} />
+                <SvgIcon name="ticket" size={20} color={colors.brand} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.tokenTitle}>

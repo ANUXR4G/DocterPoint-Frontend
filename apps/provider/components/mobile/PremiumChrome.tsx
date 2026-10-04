@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: "48%",
-    backgroundColor: "#F7F9FC",
+    backgroundColor: "#F0F7F8",
     opacity: 0.95,
   },
   orbBlue: {
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: "rgba(37, 99, 235, 0.10)",
+    backgroundColor: "rgba(58, 141, 154, 0.12)",
   },
   orbTeal: {
     position: "absolute",
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: "rgba(13, 148, 136, 0.08)",
+    backgroundColor: "rgba(15, 118, 110, 0.08)",
   },
   orbAmber: {
     position: "absolute",

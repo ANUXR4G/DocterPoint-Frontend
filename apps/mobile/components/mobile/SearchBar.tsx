@@ -1,5 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, TextInput, View } from "react-native";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { colors, radii, shadows, space } from "@/lib/theme";
 
 type Props = {
@@ -20,12 +20,13 @@ export function SearchBar({
 }: Props) {
   return (
     <View style={[styles.wrap, dark && styles.wrapDark]}>
-      <Ionicons
-        name="search"
-        size={18}
-        color={dark ? "rgba(255,255,255,0.5)" : colors.inkFaint}
-        style={styles.icon}
-      />
+      <View style={styles.icon}>
+        <SvgIcon
+          name="search"
+          size={18}
+          color={dark ? "rgba(255,255,255,0.5)" : colors.inkFaint}
+        />
+      </View>
       <TextInput
         value={value}
         onChangeText={onChangeText}

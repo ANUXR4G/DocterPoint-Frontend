@@ -8,7 +8,7 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { TypedText } from "@/components/TypedText";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -59,7 +59,7 @@ function MicButton({
         pressed && !disabled && styles.micButtonPressed,
       ]}
     >
-      <Ionicons
+      <SvgIcon
         name={active ? "stop" : "mic"}
         size={20}
         color={active ? "#dc2626" : colors.ink}
@@ -296,7 +296,7 @@ export function MiraChat({ compact = false, style }: Props) {
               style={styles.toolBtn}
               accessibilityLabel="Back to chat"
             >
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.ink} />
+              <SvgIcon name="chatOutline" size={20} color={colors.ink} />
             </Pressable>
           ) : (
             <>
@@ -305,14 +305,14 @@ export function MiraChat({ compact = false, style }: Props) {
                 style={styles.toolBtn}
                 accessibilityLabel="Open chat history"
               >
-                <Ionicons name="time-outline" size={20} color={colors.ink} />
+                <SvgIcon name="clock" size={20} color={colors.ink} />
               </Pressable>
               <Pressable
                 onPress={startNewChat}
                 style={styles.toolBtn}
                 accessibilityLabel="Start new chat"
               >
-                <Ionicons name="create-outline" size={20} color={colors.ink} />
+                <SvgIcon name="edit" size={20} color={colors.ink} />
               </Pressable>
             </>
           )}
@@ -327,7 +327,7 @@ export function MiraChat({ compact = false, style }: Props) {
               style={styles.toolBtn}
               accessibilityLabel="Back to chat"
             >
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.ink} />
+              <SvgIcon name="chatOutline" size={20} color={colors.ink} />
             </Pressable>
           ) : (
             <>
@@ -336,14 +336,14 @@ export function MiraChat({ compact = false, style }: Props) {
                 style={styles.toolBtn}
                 accessibilityLabel="Open chat history"
               >
-                <Ionicons name="time-outline" size={20} color={colors.ink} />
+                <SvgIcon name="clock" size={20} color={colors.ink} />
               </Pressable>
               <Pressable
                 onPress={startNewChat}
                 style={styles.toolBtn}
                 accessibilityLabel="Start new chat"
               >
-                <Ionicons name="create-outline" size={20} color={colors.ink} />
+                <SvgIcon name="edit" size={20} color={colors.ink} />
               </Pressable>
             </>
           )}
@@ -398,14 +398,14 @@ export function MiraChat({ compact = false, style }: Props) {
                     accessibilityLabel="Delete chat"
                     style={styles.historyDelete}
                   >
-                    <Ionicons name="trash-outline" size={18} color={colors.inkSoft} />
+                    <SvgIcon name="trash" size={18} color={colors.inkSoft} />
                   </Pressable>
                 </Pressable>
               )}
             />
           )}
           <Pressable onPress={startNewChat} style={styles.newChatBanner}>
-            <Ionicons name="add-circle-outline" size={18} color={colors.brand} />
+            <SvgIcon name="addCircle" size={18} color={colors.brand} />
             <Text style={styles.newChatBannerText}>New chat</Text>
           </Pressable>
         </View>

@@ -1,6 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { type ComponentProps, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -12,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SvgIcon, type SvgIconName } from "@/components/icons/SvgIcon";
 import { Chip, PageTitle } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { clearSession } from "@/lib/api";
@@ -32,13 +32,11 @@ import {
 import { colors, radii, shadows, space } from "@/lib/theme";
 import { doctorWebPath } from "@/lib/webPortal";
 
-type IconName = ComponentProps<typeof Ionicons>["name"];
-
 type MenuItem = {
   key: string;
   label: string;
   hint: string;
-  icon: IconName;
+  icon: SvgIconName;
   /** In-app screen; otherwise `web` opens the same page on the web portal. */
   href?: Href;
   web?: string;
@@ -127,7 +125,7 @@ export default function MoreScreen() {
       key: "notifications",
       label: "Notifications",
       hint: "Booking alerts and WhatsApp delivery",
-      icon: "notifications-outline",
+      icon: "bell",
       href: "/(app)/notifications" as Href,
       badge: openAlerts,
     },
@@ -137,7 +135,7 @@ export default function MoreScreen() {
             key: "doctors",
             label: "Doctors",
             hint: "Clinic roster and doctor settings (web)",
-            icon: "medkit-outline" as IconName,
+            icon: "medkit" as SvgIconName,
             web: "/clinic/doctors",
           },
         ]
@@ -146,7 +144,7 @@ export default function MoreScreen() {
       key: "support",
       label: "Patient Support",
       hint: "WhatsApp chats handed to the clinic",
-      icon: "chatbubbles-outline",
+      icon: "chatOutline",
       href: "/(app)/inbox",
     },
     ...(isReception
@@ -156,7 +154,7 @@ export default function MoreScreen() {
             key: "audit",
             label: "Audit log",
             hint: "Who changed what, and when (web)",
-            icon: "document-text-outline" as IconName,
+            icon: "document" as SvgIconName,
             web: "/doctor/audit",
           },
         ]),
@@ -164,28 +162,28 @@ export default function MoreScreen() {
       key: "analytics",
       label: "Analytics",
       hint: "Visits, trends and doctor breakdown",
-      icon: "stats-chart-outline",
+      icon: "chartOutline",
       href: "/(app)/analytics",
     },
     {
       key: "payments",
       label: "Payments",
       hint: "Visit payments and payment requests",
-      icon: "card-outline",
+      icon: "card",
       href: "/(app)/payments" as Href,
     },
     {
       key: "hours",
       label: canManage ? "Hours & blocks" : "My hours",
       hint: canManage ? "Clinic hours, slots and leave" : "Your weekly hours and leave",
-      icon: "time-outline",
+      icon: "clock",
       href: "/(app)/schedule",
     },
     {
       key: "subscription",
       label: "Subscription",
       hint: "Plan, trial and WhatsApp line",
-      icon: "diamond-outline",
+      icon: "diamond",
       href: "/(app)/subscriptions",
     },
   ];
@@ -195,14 +193,14 @@ export default function MoreScreen() {
       key: "settings",
       label: "Settings",
       hint: "Account, practice profile and theme (web)",
-      icon: "settings-outline",
+      icon: "settings",
       web: "/settings",
     },
     {
       key: "help",
       label: "Help & Support",
       hint: "Ask Mira about GlucoGuide",
-      icon: "help-buoy-outline",
+      icon: "help",
       href: "/(app)/queries",
     },
   ];
@@ -291,7 +289,7 @@ export default function MoreScreen() {
           style={({ pressed }) => [styles.group, styles.row, pressed && styles.rowPressed]}
         >
           <View style={[styles.iconWrap, styles.iconDanger]}>
-            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+            <SvgIcon name="logout" size={20} color={colors.danger} />
           </View>
           <Text style={[styles.label, { color: colors.danger }]}>Sign out</Text>
         </Pressable>
@@ -340,7 +338,7 @@ function PhotoTile({
           {busy ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Ionicons name="camera" size={13} color="#fff" />
+            <SvgIcon name="camera" size={13} color="#fff" />
           )}
         </View>
       </Pressable>
@@ -372,7 +370,7 @@ function MenuGroup({ items, onOpen }: { items: MenuItem[]; onOpen: (i: MenuItem)
           ]}
         >
           <View style={styles.iconWrap}>
-            <Ionicons name={item.icon} size={20} color={colors.brand} />
+            <SvgIcon name={item.icon} size={20} color={colors.brand} />
           </View>
           <View style={styles.text}>
             <Text style={styles.label}>{item.label}</Text>
@@ -385,8 +383,8 @@ function MenuGroup({ items, onOpen }: { items: MenuItem[]; onOpen: (i: MenuItem)
               <Text style={styles.badgeText}>{item.badge > 99 ? "99+" : item.badge}</Text>
             </View>
           ) : null}
-          <Ionicons
-            name={item.web ? "open-outline" : "chevron-forward"}
+          <SvgIcon
+            name={item.web ? "open" : "chevronRight"}
             size={18}
             color={colors.inkSoft}
           />

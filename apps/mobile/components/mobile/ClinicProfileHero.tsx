@@ -1,6 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import { colors, shadows, space } from "@/lib/theme";
 
@@ -25,7 +25,7 @@ export function ClinicProfileHero({ name, specialty, detail, photoUri, stats }: 
           style={styles.avatar}
         />
         <View style={styles.verified}>
-          <Ionicons name="checkmark-done" size={13} color={colors.white} />
+          <SvgIcon name="checkDone" size={13} color={colors.white} />
         </View>
       </View>
       <Text style={styles.name}>{name}</Text>

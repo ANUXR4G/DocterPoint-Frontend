@@ -2,7 +2,7 @@
 
 Patient app for GlucoGuide — find clinics, book visits, and see WhatsApp/web bookings.
 
-Talks to the canonical API at `backend/` (`:3001`).
+Talks to the canonical API at `backend/` (`:3001` locally). Shipped builds use `https://docterpoint-backend-production.up.railway.app` (`app.json` → `extra.apiUrl`; override with `EXPO_PUBLIC_API_URL` in `.env` for local dev).
 
 ## Auth
 

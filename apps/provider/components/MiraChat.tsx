@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
@@ -51,7 +51,7 @@ function MicButton({
         pressed && !disabled && styles.micButtonPressed,
       ]}
     >
-      <Ionicons
+      <SvgIcon
         name={active ? "stop" : "mic"}
         size={20}
         color={active ? colors.white : colors.brand}

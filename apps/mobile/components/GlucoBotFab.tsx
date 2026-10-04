@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { usePathname } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -105,7 +105,7 @@ export function GlucoBotFab() {
             },
           ]}
         >
-          <Ionicons name="chatbubbles" size={24} color={colors.white} />
+          <SvgIcon name="chat" size={24} color={colors.white} />
         </Pressable>
       ) : null}
 
@@ -143,11 +143,7 @@ export function GlucoBotFab() {
             <View style={styles.sheetHeader}>
               <View style={styles.sheetTitleRow}>
                 <View style={styles.sheetIcon}>
-                  <Ionicons
-                    name="chatbubbles"
-                    size={18}
-                    color={colors.brand}
-                  />
+                  <SvgIcon name="chat" size={18} color={colors.brand} />
                 </View>
                 <View>
                   <Text style={styles.sheetTitle}>Mira</Text>
@@ -159,7 +155,7 @@ export function GlucoBotFab() {
                 style={styles.closeButton}
                 accessibilityLabel="Close help chat"
               >
-                <Ionicons name="close" size={22} color={colors.inkSoft} />
+                <SvgIcon name="close" size={22} color={colors.inkSoft} />
               </Pressable>
             </View>
 

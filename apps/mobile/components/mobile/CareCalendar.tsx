@@ -6,7 +6,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import {
   addMonths,
   formatDayTitle,
@@ -126,7 +126,7 @@ function BookingRow({
           {(booking.status || "").replace(/_/g, " ")}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.inkFaint} />
+      <SvgIcon name="chevronRight" size={16} color={colors.inkFaint} />
     </Pressable>
   );
 }
@@ -188,7 +188,7 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
             style={styles.navBtn}
             hitSlop={8}
           >
-            <Ionicons name="chevron-back" size={20} color={colors.ink} />
+            <SvgIcon name="chevronLeft" size={20} color={colors.ink} />
           </Pressable>
           <Pressable onPress={goCurrentMonth} style={styles.monthBtn}>
             <Text style={styles.monthBtnText}>Month</Text>
@@ -198,7 +198,7 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
             style={styles.navBtn}
             hitSlop={8}
           >
-            <Ionicons name="chevron-forward" size={20} color={colors.ink} />
+            <SvgIcon name="chevronRight" size={20} color={colors.ink} />
           </Pressable>
         </View>
         <Text style={styles.title} numberOfLines={1}>

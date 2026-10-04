@@ -1,41 +1,64 @@
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { ThinkingOrb, type OrbState, type OrbTheme } from "expo-thinking-orbs";
 import { colors, space, type } from "@/lib/theme";
 
+/** Doctor-app loader copy — clinic / queue focused (not generic “Searching”). */
+const LOADER_ORB_STATES: { state: OrbState; label: string }[] = [
+  { state: "working", label: "Opening clinic desk…" },
+  { state: "searching", label: "Loading today’s visits…" },
+  { state: "solving", label: "Syncing queue…" },
+  { state: "listening", label: "Checking appointments…" },
+  { state: "composing", label: "Preparing patient list…" },
+  { state: "shaping", label: "Almost ready…" },
+];
+
 type ThinkingLoaderProps = {
+  /** Pin a single state; omit on fullPage to cycle clinic messages. */
+  state?: OrbState;
   size?: 20 | 64;
   label?: string;
   fullPage?: boolean;
-  theme?: "light" | "dark";
-  style?: StyleProp<ViewStyle>;
-  /** Kept for API parity with patient app. */
-  state?: string;
   cycleMs?: number;
+  theme?: OrbTheme;
+  style?: StyleProp<ViewStyle>;
 };
 
 /**
- * Loading indicator — ActivityIndicator fallback (no native orb package).
- * Matches patient ThinkingLoader props so screens can share call sites.
+ * Same thinking-orbs loader as the patient app; bottom text is GlucoGuide Doctor.
  */
 export function ThinkingLoader({
+  state,
   size = 64,
   label = "Loading",
   fullPage = false,
+  cycleMs = 1400,
   theme = "light",
   style,
 }: ThinkingLoaderProps) {
-  const color = theme === "dark" ? colors.white : colors.navy;
-  const spinner = (
-    <ActivityIndicator
-      size={size >= 48 ? "large" : "small"}
-      color={color}
-      accessibilityLabel={label}
+  const [cycleIndex, setCycleIndex] = useState(0);
+  const shouldCycle = fullPage && state == null && label === "Loading";
+
+  useEffect(() => {
+    if (!shouldCycle) return;
+    const id = setInterval(() => {
+      setCycleIndex((i) => (i + 1) % LOADER_ORB_STATES.length);
+    }, cycleMs);
+    return () => clearInterval(id);
+  }, [shouldCycle, cycleMs]);
+
+  const active = shouldCycle
+    ? LOADER_ORB_STATES[cycleIndex]!
+    : (LOADER_ORB_STATES.find((s) => s.state === state) ?? LOADER_ORB_STATES[0]!);
+
+  const displayLabel = shouldCycle ? active.label : label;
+
+  const orb = (
+    <ThinkingOrb
+      state={active.state}
+      size={size}
+      theme={theme}
+      accessibilityLabel={displayLabel}
     />
   );
 
@@ -43,10 +66,10 @@ export function ThinkingLoader({
     return (
       <View
         accessibilityRole="progressbar"
-        accessibilityLabel={label}
+        accessibilityLabel={displayLabel}
         style={[styles.inline, style]}
       >
-        {spinner}
+        {orb}
       </View>
     );
   }
@@ -54,11 +77,11 @@ export function ThinkingLoader({
   return (
     <View
       accessibilityRole="progressbar"
-      accessibilityLabel={label}
-      style={[styles.full, style]}
+      accessibilityLabel={displayLabel}
+      style={[styles.fullPage, style]}
     >
-      {spinner}
-      <Text style={styles.label}>{label}</Text>
+      {orb}
+      <Text style={styles.label}>{displayLabel}</Text>
     </View>
   );
 }
@@ -68,7 +91,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  full: {
+  fullPage: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -76,7 +99,10 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   label: {
-    ...type.label,
+    ...type.caption,
+    minHeight: 20,
     color: colors.inkSoft,
+    textAlign: "center",
+    paddingHorizontal: space.xl,
   },
 });

@@ -7,7 +7,7 @@ import {
   View,
   type TextInputProps,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { colors, space } from "@/lib/theme";
 
@@ -20,7 +20,7 @@ type VoiceFieldProps = TextInputProps & {
 
 function MicIcon({ active }: { active: boolean }) {
   return (
-    <Ionicons
+    <SvgIcon
       name={active ? "stop" : "mic"}
       size={18}
       color={active ? "#dc2626" : colors.ink}
