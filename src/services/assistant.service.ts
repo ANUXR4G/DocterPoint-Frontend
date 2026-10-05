@@ -1,15 +1,15 @@
 import { AppError } from "../core/response.js";
-import { llmChatProviders, llmAvailable } from "../lib/llm.js";
+import { llmAvailable, llmMiraProviders } from "../lib/llm.js";
 
 export type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
 };
 
-const QA_SYSTEM = `You are Mira in the GlucoGuide patient app (India clinic booking + light diabetes care navigation).
+const QA_SYSTEM = `You are Mira in the GlucoGuide patient and doctor apps (India clinic booking + light diabetes care navigation).
 
 OUTPUT RULES (strict):
-- Reply with ONLY the final message the patient should read.
+- Reply with ONLY the final message the user should read.
 - Never include planning, analysis, drafts, self-talk, or “I should…”.
 - Never include <think> blocks, reasoning, or system/prompt mentions.
 - 1–3 short sentences. Plain text. No markdown, bullets, or numbered lists.
@@ -18,13 +18,12 @@ OUTPUT RULES (strict):
 - Never invent clinic hours, fees, or phone numbers — send them to Find clinics or WhatsApp the clinic.
 - Not a doctor: for symptoms, say book a visit or seek urgent care — once, briefly.
 
-You help with: Find clinics, booking (slot/token), WhatsApp (REGISTER / BOOK / STATUS), login, and brief non-clinical lifestyle tips.`;
+You help with: Find clinics, booking (slot/token), WhatsApp (REGISTER / BOOK / STATUS), login, queue basics for clinic staff, and brief non-clinical lifestyle tips.`;
 
-/** Strip Qwen/HF thinking + planning leakage; keep only user-facing text. */
+/** Strip leaked planning / think blocks; keep only user-facing text. */
 export function cleanAssistantReply(raw: string): string {
   let text = String(raw ?? "");
 
-  // Common think / reasoning wrappers from Qwen-family models.
   text = text
     .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
     .replace(/<\/?think\b[^>]*>/gi, "")
@@ -32,7 +31,6 @@ export function cleanAssistantReply(raw: string): string {
     .replace(/<\/?thinking\b[^>]*>/gi, "")
     .replace(/```(?:thinking|reasoning)[\s\S]*?```/gi, "");
 
-  // If the model pasted reasoning then a final answer marker.
   const finalMarkers = [
     /(?:^|\n)\s*(?:final(?:\s+answer)?|answer|reply)\s*:\s*/i,
     /(?:^|\n)\s*(?:here's|here is)\s+(?:my|the)\s+(?:reply|answer)\s*:\s*/i,
@@ -44,7 +42,6 @@ export function cleanAssistantReply(raw: string): string {
     }
   }
 
-  // Drop chain-of-thought paragraphs that talk about the prompt / drafting.
   const paragraphs = text
     .split(/\n{2,}/)
     .map((p) => p.trim())
@@ -55,7 +52,6 @@ export function cleanAssistantReply(raw: string): string {
   if (kept.length) {
     text = kept.join("\n\n");
   } else if (paragraphs.some((p) => planningLike.test(p))) {
-    // Entire payload was planning — do not show it.
     return "";
   }
 
@@ -68,7 +64,6 @@ export function cleanAssistantReply(raw: string): string {
     .replace(/[ \t]+\n/g, "\n")
     .trim();
 
-  // Still looks like internal monologue → keep last 1–2 sentences only.
   if (
     /\b(we need|let'?s craft|the user (?:said|asked)|i should)\b/i.test(text) &&
     text.length > 180
@@ -80,7 +75,6 @@ export function cleanAssistantReply(raw: string): string {
     text = sentences.slice(-2).join(" ").trim();
   }
 
-  // Hard cap — chat bubbles shouldn't essay.
   if (text.length > 420) {
     const cut = text.slice(0, 420);
     const lastStop = Math.max(
@@ -95,14 +89,19 @@ export function cleanAssistantReply(raw: string): string {
 }
 
 function extractUserFacingReply(message?: {
-  content?: string;
+  content?: string | Array<{ type?: string; text?: string }>;
   reasoning?: string;
 }): string {
-  // Never treat raw `reasoning` as the chat reply — that is the unwanted dump.
-  const fromContent = cleanAssistantReply(message?.content ?? "");
+  const rawContent = message?.content;
+  const contentText = Array.isArray(rawContent)
+    ? rawContent
+        .map((part) => (typeof part?.text === "string" ? part.text : ""))
+        .join("\n")
+    : String(rawContent ?? "");
+
+  const fromContent = cleanAssistantReply(contentText);
   if (fromContent) return fromContent;
 
-  // Last resort: if content was empty but reasoning somehow embeds a final line.
   const fromReasoning = cleanAssistantReply(message?.reasoning ?? "");
   if (
     fromReasoning &&
@@ -113,18 +112,6 @@ function extractUserFacingReply(message?: {
   }
 
   return "";
-}
-
-type Provider = {
-  label: string;
-  url: string;
-  apiKey: string;
-  model: string;
-  jsonObject?: boolean;
-};
-
-function chatProviders(): Provider[] {
-  return llmChatProviders();
 }
 
 export function assistantAvailable(): boolean {
@@ -147,7 +134,7 @@ export const AssistantService = {
       throw new AppError(400, "Message is too long (max 2000 characters).");
     }
 
-    const providers = chatProviders();
+    const providers = llmMiraProviders();
     if (!providers.length) {
       throw new AppError(
         503,
@@ -172,13 +159,10 @@ export const AssistantService = {
       ? `\nSigned-in name (use sparingly): ${input.userName}.`
       : "";
 
-    // Soft /no_think for Qwen when hard switch is ignored by a route.
-    const userContent = `${message}\n\n/no_think`;
-
     const messages: ChatMessage[] = [
       { role: "system", content: QA_SYSTEM + systemExtra },
       ...history,
-      { role: "user", content: userContent },
+      { role: "user", content: message },
     ];
 
     let lastError = "Assistant provider failed.";
@@ -187,7 +171,6 @@ export const AssistantService = {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 45_000);
       try {
-        const isHuggingFace = /huggingface/i.test(provider.label);
         const res = await fetch(provider.url, {
           method: "POST",
           signal: controller.signal,
@@ -197,19 +180,19 @@ export const AssistantService = {
           },
           body: JSON.stringify({
             model: provider.model,
-            temperature: 0.35,
-            top_p: 0.8,
+            temperature: 0.4,
+            top_p: 0.9,
             messages,
-            max_tokens: 160,
-            ...(isHuggingFace
-              ? { chat_template_kwargs: { enable_thinking: false } }
-              : {}),
+            max_tokens: 220,
           }),
         });
 
         const data = (await res.json()) as {
           choices?: Array<{
-            message?: { content?: string; reasoning?: string };
+            message?: {
+              content?: string | Array<{ type?: string; text?: string }>;
+              reasoning?: string;
+            };
           }>;
           error?: { message?: string } | string;
         };

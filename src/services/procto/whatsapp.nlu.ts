@@ -1039,13 +1039,13 @@ async function parseWithLlm(
   text: string,
   contextHint?: string,
 ): Promise<(NluResult & { provider?: string }) | null> {
-  // WhatsApp: OpenAI only (skip HF/DeepSeek sequential timeouts).
+  // WhatsApp: OpenAI first; DeepSeek only if OpenAI key missing (never HF).
   const providers = llmChatProviders()
-    .slice()
     .filter((p) => p.label === "OpenAI")
     .concat(
-      // If OpenAI missing, try DeepSeek once (still skip cold HF).
-      llmChatProviders().filter((p) => p.label === "DeepSeek"),
+      llmChatProviders({ includeOpenAi: false, includeDeepSeek: true }).filter(
+        (p) => p.label === "DeepSeek",
+      ),
     );
   const unique = providers.filter(
     (p, i, arr) => arr.findIndex((x) => x.label === p.label) === i,
