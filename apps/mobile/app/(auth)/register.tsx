@@ -314,7 +314,7 @@ export default function RegisterScreen() {
           subtitle={
             step === "profile"
               ? "Optional ID scan and email, then finish your details. Sign-in stays WhatsApp OTP."
-              : "We verify your number with a WhatsApp code from +91 99900 52082."
+              : "We verify your number with a WhatsApp code from +91 99900 52082. Include country code if outside India."
           }
         />
 
@@ -334,14 +334,14 @@ export default function RegisterScreen() {
               onChangeText={setPhone}
               keyboardType="phone-pad"
               autoCapitalize="none"
-              placeholder="10-digit mobile"
+              placeholder="e.g. 9876543210 or +9715…"
             />
             <ErrorText text={error} />
             <PrimaryButton
               label="Send WhatsApp OTP"
               onPress={() => void requestOtp()}
               busy={busy}
-              disabled={phone.replace(/\D/g, "").length < 10}
+              disabled={phone.replace(/\D/g, "").length < 8}
             />
           </>
         ) : null}

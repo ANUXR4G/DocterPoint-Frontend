@@ -154,7 +154,7 @@ export default function LoginScreen() {
         <PageTitle
           eyebrow="Patient care"
           title="Sign in with mobile"
-          subtitle="Enter your number. GlucoGuide sends a one-time code on WhatsApp from +91 99900 52082."
+          subtitle="Enter your mobile number (with country code if outside India). GlucoGuide sends a one-time code on WhatsApp from +91 99900 52082."
         />
 
         <AnimatedView from="up" delay={120} style={styles.card}>
@@ -166,14 +166,14 @@ export default function LoginScreen() {
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
                 autoCapitalize="none"
-                placeholder="10-digit mobile"
+                placeholder="e.g. 9876543210 or +9715…"
               />
               <ErrorText text={error} />
               <PrimaryButton
                 label="Send WhatsApp OTP"
                 onPress={requestOtp}
                 busy={busy}
-                disabled={phone.replace(/\D/g, "").length < 10}
+                disabled={phone.replace(/\D/g, "").length < 8}
               />
             </>
           ) : (

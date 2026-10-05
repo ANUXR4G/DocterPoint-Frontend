@@ -29,13 +29,31 @@ type OtpRecord = {
 const memoryOtp = new Map<string, OtpRecord>();
 const memoryCooldown = new Map<string, number>();
 
-export function normalizeIndianMobile(input: string): string {
-  const digits = String(input || "").replace(/\D/g, "");
-  const last10 = digits.slice(-10);
-  if (last10.length !== 10 || !/^[6-9]/.test(last10)) {
-    throw new AppError(400, "Enter a valid 10-digit Indian mobile number.");
+/**
+ * Normalize patient login phone to digits for OTP storage / WhatsApp send.
+ * - Bare 10 digits or 91+10 → last 10 (legacy India storage)
+ * - Other country codes (8–15 digits) kept as full MSISDN
+ */
+export function normalizePatientMobile(input: string): string {
+  let digits = String(input || "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length < 8 || digits.length > 15) {
+    throw new AppError(
+      400,
+      "Enter a valid mobile number (include country code if outside India).",
+    );
   }
-  return last10;
+  // India with country code → keep legacy 10-digit storage for existing users.
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return digits.slice(2);
+  }
+  if (digits.length === 10) return digits;
+  return digits;
+}
+
+/** @deprecated Use normalizePatientMobile — kept for callers that still import the old name. */
+export function normalizeIndianMobile(input: string): string {
+  return normalizePatientMobile(input);
 }
 
 function otpKey(phone: string): string {
@@ -199,7 +217,7 @@ async function deliverOtp(phone: string, code: string): Promise<{
 export class PhoneOtpAuthService {
   /** Request a login OTP on WhatsApp from GlucoGuide's number. */
   static async requestOtp(input: { phone: string }, res: Response) {
-    const phone = normalizeIndianMobile(input.phone);
+    const phone = normalizePatientMobile(input.phone);
 
     if (await onCooldown(phone)) {
       throw new AppError(
@@ -241,7 +259,7 @@ export class PhoneOtpAuthService {
     input: { phone: string; code: string; name?: string },
     res: Response,
   ) {
-    const phone = normalizeIndianMobile(input.phone);
+    const phone = normalizePatientMobile(input.phone);
     const code = String(input.code || "").replace(/\D/g, "");
     if (code.length !== OTP_LEN) {
       throw new AppError(400, "Enter the 6-digit code from WhatsApp.");
