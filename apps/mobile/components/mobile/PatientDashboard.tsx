@@ -7,6 +7,7 @@ import { AnimatedView, PressableScale } from "@/lib/motion";
 import {
   bookingStatusLabel,
   bookingStatusTone,
+  effectiveBookingStatus,
   getClinicCount,
   getCompletedBookings,
   getUpcomingBookings,
@@ -264,7 +265,8 @@ function UpcomingCard({
   onOpen: () => void;
   onAll: () => void;
 }) {
-  const tone = bookingStatusTone(booking.status);
+  const displayStatus = effectiveBookingStatus(booking);
+  const tone = bookingStatusTone(displayStatus);
   const doctor = doctorLine(booking);
   const clinic = booking.practice?.name || "Clinic visit";
   const specialty = booking.practice?.specialty?.trim();
@@ -280,7 +282,7 @@ function UpcomingCard({
         <Text style={styles.overline}>Upcoming appointment</Text>
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
           <Text style={[styles.statusText, { color: tone.fg }]}>
-            {bookingStatusLabel(booking.status)}
+            {bookingStatusLabel(displayStatus)}
           </Text>
         </View>
       </View>
@@ -334,14 +336,15 @@ function UpcomingCard({
 }
 
 function VisitRow({ booking, onPress }: { booking: ProctoBooking; onPress: () => void }) {
-  const tone = bookingStatusTone(booking.status);
+  const displayStatus = effectiveBookingStatus(booking);
+  const tone = bookingStatusTone(displayStatus);
   const clinic = booking.practice?.name || "Clinic visit";
   return (
     <PressableScale
       style={styles.visit}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${clinic}, ${visitDayTime(booking)}, ${bookingStatusLabel(booking.status)}`}
+      accessibilityLabel={`${clinic}, ${visitDayTime(booking)}, ${bookingStatusLabel(displayStatus)}`}
     >
       <View style={styles.visitIcon}>
         <SvgIcon name="calendarOutline" size={18} color={colors.brand} />
@@ -356,7 +359,7 @@ function VisitRow({ booking, onPress }: { booking: ProctoBooking; onPress: () =>
       </View>
       <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
         <Text style={[styles.statusText, { color: tone.fg }]}>
-          {bookingStatusLabel(booking.status)}
+          {bookingStatusLabel(displayStatus)}
         </Text>
       </View>
     </PressableScale>

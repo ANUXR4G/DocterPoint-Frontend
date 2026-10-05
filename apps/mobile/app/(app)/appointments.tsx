@@ -22,6 +22,7 @@ import { api } from "@/lib/api";
 import {
   bookingStatusLabel,
   bookingStatusTone as statusTone,
+  effectiveBookingStatus,
   isUpcomingBooking,
   sortBookingsByWhen,
 } from "@/lib/bookingStats";
@@ -162,18 +163,21 @@ export default function AppointmentsScreen() {
               <EmptyState text="No visits here yet. Find a clinic or book on WhatsApp." />
             ) : (
               filtered.map((item, index) => {
-                const canCancel = [
-                  "SCHEDULED",
-                  "REQUESTED",
-                  "ACCEPTED",
-                  "BOOKED",
-                  "CONFIRMED",
-                ].includes((item.status || "").toUpperCase());
+                const displayStatus = effectiveBookingStatus(item, now);
+                const canCancel =
+                  displayStatus !== "NO_SHOW" &&
+                  [
+                    "SCHEDULED",
+                    "REQUESTED",
+                    "ACCEPTED",
+                    "BOOKED",
+                    "CONFIRMED",
+                  ].includes((item.status || "").toUpperCase());
                 const isCompleted =
                   (item.status || "").toUpperCase() === "COMPLETED";
                 const provider =
                   withDrTitle(item.provider?.name || item.providerName) || "Doctor";
-                const tone = statusTone(item.status);
+                const tone = statusTone(displayStatus);
                 return (
                   <AnimatedView
                     key={item.id}
@@ -194,7 +198,7 @@ export default function AppointmentsScreen() {
                           style={[styles.badge, { backgroundColor: tone.bg }]}
                         >
                           <Text style={[styles.badgeText, { color: tone.fg }]}>
-                            {bookingStatusLabel(item.status)}
+                            {bookingStatusLabel(displayStatus)}
                           </Text>
                         </View>
                       </View>

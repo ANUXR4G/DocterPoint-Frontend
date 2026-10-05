@@ -17,10 +17,14 @@ import {
   startOfDay,
   ymd,
 } from "@/lib/calendarDates";
-import { bookingWhenMs } from "@/lib/bookingStats";
+import {
+  bookingStatusLabel,
+  bookingWhenMs,
+  effectiveBookingStatus,
+} from "@/lib/bookingStats";
 import { withDrTitle } from "@/lib/doctorName";
 import { bookingWhen, type ProctoBooking } from "@/lib/types";
-import { formatPracticeTime } from "@/lib/practiceTime";
+import { formatPracticeTime, practiceDayKey } from "@/lib/practiceTime";
 import { colors, radii, shadows, space } from "@/lib/theme";
 
 type Props = {
@@ -36,7 +40,7 @@ const CELL_MIN_H = 52;
 function bookingDayKey(b: ProctoBooking): string | null {
   const ms = bookingWhenMs(b);
   if (!ms) return null;
-  return ymd(new Date(ms));
+  return practiceDayKey(ms);
 }
 
 function timeLabel(b: ProctoBooking): string {
@@ -57,7 +61,8 @@ function statusTone(status: string) {
     return { bg: colors.brandLight, fg: colors.brand };
   if (s === "ACCEPTED" || s === "CONFIRMED")
     return { bg: colors.brandMist, fg: colors.brand };
-  if (s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW")
+  if (s === "NO_SHOW") return { bg: colors.purpleLight, fg: colors.purple };
+  if (s === "CANCELED" || s === "CANCELLED")
     return { bg: colors.roseLight, fg: colors.danger };
   // Scheduled / upcoming
   return { bg: colors.amberLight, fg: "#CA8A04" };
@@ -68,24 +73,32 @@ const CELL_STATUS = {
   completed: { bg: colors.success, fg: colors.white },
   scheduled: { bg: "#EAB308", fg: colors.ink },
   cancelled: { bg: colors.danger, fg: colors.white },
+  noShow: { bg: colors.purple, fg: colors.white },
 } as const;
 
 function isCancelledStatus(status: string) {
   const s = (status || "").toUpperCase();
-  return s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW";
+  return s === "CANCELED" || s === "CANCELLED";
+}
+
+function isNoShowStatus(status: string) {
+  return (status || "").toUpperCase() === "NO_SHOW";
 }
 
 function isCompletedStatus(status: string) {
   return (status || "").toUpperCase() === "COMPLETED";
 }
 
-/** Pick one tile color when a day has mixed statuses (scheduled > cancelled > completed). */
+/** Pick one tile color when a day has mixed statuses (scheduled > no-show > cancelled > completed). */
 function dayCellStatusColor(list: ProctoBooking[]) {
-  const hasScheduled = list.some(
-    (b) => !isCompletedStatus(b.status) && !isCancelledStatus(b.status),
+  const statuses = list.map((b) => effectiveBookingStatus(b));
+  const hasScheduled = statuses.some(
+    (s) =>
+      !isCompletedStatus(s) && !isCancelledStatus(s) && !isNoShowStatus(s),
   );
   if (hasScheduled) return CELL_STATUS.scheduled;
-  if (list.some((b) => isCancelledStatus(b.status))) return CELL_STATUS.cancelled;
+  if (statuses.some((s) => isNoShowStatus(s))) return CELL_STATUS.noShow;
+  if (statuses.some((s) => isCancelledStatus(s))) return CELL_STATUS.cancelled;
   return CELL_STATUS.completed;
 }
 
@@ -105,7 +118,8 @@ function BookingRow({
   booking: ProctoBooking;
   onPress: () => void;
 }) {
-  const tone = statusTone(booking.status);
+  const displayStatus = effectiveBookingStatus(booking);
+  const tone = statusTone(displayStatus);
   return (
     <Pressable
       onPress={onPress}
@@ -123,7 +137,7 @@ function BookingRow({
       </View>
       <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
         <Text style={[styles.statusPillText, { color: tone.fg }]}>
-          {(booking.status || "").replace(/_/g, " ")}
+          {bookingStatusLabel(displayStatus)}
         </Text>
       </View>
       <SvgIcon name="chevronRight" size={16} color={colors.inkFaint} />

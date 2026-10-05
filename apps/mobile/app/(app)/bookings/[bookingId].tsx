@@ -19,6 +19,11 @@ import {
   SectionTitle,
 } from "@/components/ui";
 import { api } from "@/lib/api";
+import {
+  bookingStatusLabel,
+  bookingStatusTone,
+  effectiveBookingStatus,
+} from "@/lib/bookingStats";
 import { withDrTitle } from "@/lib/doctorName";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { patchBookingFields } from "@/lib/liveBooking";
@@ -29,20 +34,6 @@ import {
   consultationTypeLabel,
   type BookingDetail,
 } from "@/lib/types";
-
-function statusTone(status: string) {
-  const s = (status || "").toUpperCase();
-  if (s === "COMPLETED") return { bg: "#d1fae5", text: "#047857" };
-  if (s === "IN_PROGRESS") return { bg: "#fef3c7", text: "#b45309" };
-  if (s === "WAITING" || s === "CHECKED_IN")
-    return { bg: "#ede9fe", text: "#6d28d9" };
-  if (s === "ACCEPTED" || s === "CONFIRMED")
-    return { bg: "#ccfbf1", text: "#0f766e" };
-  if (s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW") {
-    return { bg: "#f1f5f9", text: "#64748b" };
-  }
-  return { bg: "#dbeafe", text: "#1d4ed8" };
-}
 
 export default function BookingDetailScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
@@ -112,7 +103,8 @@ export default function BookingDetailScreen() {
     );
   }
 
-  const tone = statusTone(display.status);
+  const displayStatus = effectiveBookingStatus(display);
+  const tone = bookingStatusTone(displayStatus);
   const isCompleted = display.status === "COMPLETED";
   const practiceId = display.practiceId ?? display.practice?.id ?? null;
   const canReview =
@@ -144,8 +136,8 @@ export default function BookingDetailScreen() {
         />
 
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.statusText, { color: tone.text }]}>
-            {(display.status || "").replace(/_/g, " ")}
+          <Text style={[styles.statusText, { color: tone.fg }]}>
+            {bookingStatusLabel(displayStatus)}
           </Text>
         </View>
 

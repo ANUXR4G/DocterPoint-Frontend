@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CountryPhoneField } from "@/components/CountryPhoneField";
 import {
   Atmosphere,
   BrandMark,
@@ -20,6 +21,12 @@ import {
 } from "@/components/ui";
 import { AnimatedView } from "@/lib/motion";
 import { api, setRefreshToken, setToken } from "@/lib/api";
+import {
+  composeLoginPhone,
+  DEFAULT_COUNTRY,
+  nationalDigitsReady,
+  type CountryDial,
+} from "@/lib/countries";
 import { registerForPush } from "@/lib/push";
 import { colors, shadows, radii, space } from "@/lib/theme";
 
@@ -29,12 +36,15 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState<CountryDial>(DEFAULT_COUNTRY);
+  const [national, setNational] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
   const [busy, setBusy] = useState(false);
   const [debugOtp, setDebugOtp] = useState("");
+
+  const fullPhone = composeLoginPhone(country, national);
 
   async function afterAuth(access?: string, refresh?: string) {
     if (access) await setToken(access);
@@ -72,7 +82,7 @@ export default function LoginScreen() {
         expiresInSec?: number;
       }>("/auth/otp/request", {
         method: "POST",
-        body: JSON.stringify({ phone: phone.trim() }),
+        body: JSON.stringify({ phone: fullPhone }),
       });
       if (res.status !== "successful") {
         setError(res.message || "Could not send OTP");
@@ -96,7 +106,7 @@ export default function LoginScreen() {
       const res = await api("/auth/otp/verify", {
         method: "POST",
         body: JSON.stringify({
-          phone: phone.trim(),
+          phone: fullPhone,
           code: otp.trim(),
         }),
       });
@@ -154,32 +164,36 @@ export default function LoginScreen() {
         <PageTitle
           eyebrow="Patient care"
           title="Sign in with mobile"
-          subtitle="Enter your mobile number (with country code if outside India). GlucoGuide sends a one-time code on WhatsApp from +91 99900 52082."
+          subtitle="Choose your country, enter your mobile number, then verify with WhatsApp OTP from +91 99900 52082."
         />
 
         <AnimatedView from="up" delay={120} style={styles.card}>
           {step === "phone" ? (
             <>
-              <Field
-                label="Mobile number"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                autoCapitalize="none"
-                placeholder="e.g. 9876543210 or +9715…"
+              <CountryPhoneField
+                country={country}
+                onCountryChange={setCountry}
+                national={national}
+                onNationalChange={setNational}
+                placeholder={
+                  country.dial === "91" ? "10-digit mobile" : "Mobile number"
+                }
               />
               <ErrorText text={error} />
               <PrimaryButton
                 label="Send WhatsApp OTP"
                 onPress={requestOtp}
                 busy={busy}
-                disabled={phone.replace(/\D/g, "").length < 8}
+                disabled={!nationalDigitsReady(national)}
               />
             </>
           ) : (
             <>
               <Text style={styles.hint}>
                 {hint || "Enter the 6-digit code from WhatsApp"}
+              </Text>
+              <Text style={styles.toNumber}>
+                To +{country.dial} {national.replace(/\D/g, "")}
               </Text>
               {debugOtp ? (
                 <Text style={styles.debug}>Dev code: {debugOtp}</Text>
@@ -252,8 +266,14 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 13,
     color: colors.inkSoft,
-    marginBottom: space.md,
+    marginBottom: space.sm,
     lineHeight: 19,
+  },
+  toNumber: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.ink,
+    marginBottom: space.md,
   },
   debug: {
     fontSize: 12,

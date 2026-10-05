@@ -10,6 +10,18 @@ import {
   type ProctoBooking,
 } from "@/lib/types";
 
+/** Open statuses the clinic never closed — past days → show as No show. */
+const STALE_OPEN_STATUSES = new Set([
+  "SCHEDULED",
+  "REQUESTED",
+  "ACCEPTED",
+  "CONFIRMED",
+  "WAITING",
+  "CHECKED_IN",
+  "IN_PROGRESS",
+  "BOOKED",
+]);
+
 export function bookingStatusTone(status: string) {
   const s = (status || "").toUpperCase();
   if (s === "IN_PROGRESS") return { bg: colors.amberLight, fg: "#b45309" };
@@ -18,7 +30,8 @@ export function bookingStatusTone(status: string) {
     return { bg: colors.brandMist, fg: colors.brand };
   if (s === "WAITING" || s === "CHECKED_IN")
     return { bg: colors.brandLight, fg: colors.brand };
-  if (s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW")
+  if (s === "NO_SHOW") return { bg: colors.purpleLight, fg: colors.purple };
+  if (s === "CANCELED" || s === "CANCELLED")
     return { bg: colors.brandMist, fg: colors.inkSoft };
   return { bg: colors.brandLight, fg: colors.inkSoft };
 }
@@ -27,7 +40,7 @@ export function bookingStatusLabel(status: string) {
   const s = (status || "").toUpperCase();
   if (s === "WAITING") return "In waiting";
   if (s === "IN_PROGRESS") return "In consultation";
-  if (s === "NO_SHOW") return "Missed";
+  if (s === "NO_SHOW") return "No show";
   if (s === "CANCELED" || s === "CANCELLED") return "Cancelled";
   const words = s.replace(/_/g, " ").toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
@@ -59,9 +72,14 @@ export function bookingWhenMs(b: ProctoBooking): number {
   }
   const session = b.sessionDate ?? b.session_date;
   if (session) {
+    const key = String(session).slice(0, 10);
+    // Date-only → clinic noon so the calendar day does not shift with device TZ.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+      const t = Date.parse(`${key}T12:00:00+05:30`);
+      if (!Number.isNaN(t)) return t;
+    }
     const d = new Date(session);
     if (!Number.isNaN(d.getTime())) {
-      d.setHours(12, 0, 0, 0);
       return d.getTime();
     }
   }
@@ -78,11 +96,28 @@ export function sortBookingsByWhen(
   });
 }
 
-/** Active status and today or later (clinic day) — visits from past days the clinic never closed are not upcoming. */
+/** Clinic never closed the visit and the visit day is before today (clinic TZ). */
+export function isStaleOpenBooking(b: ProctoBooking, now = Date.now()) {
+  const s = (b.status || "").toUpperCase();
+  if (!STALE_OPEN_STATUSES.has(s)) return false;
+  const ms = bookingWhenMs(b);
+  if (!ms) return false;
+  return practiceDayKey(ms) < practiceDayKey(now);
+}
+
+/** Status for badges — past open visits display as No show. */
+export function effectiveBookingStatus(b: ProctoBooking, now = Date.now()) {
+  if (isStaleOpenBooking(b, now)) return "NO_SHOW";
+  return b.status || "";
+}
+
+/** Active status and today or later (clinic day) — past open visits are not upcoming. */
 export function isUpcomingBooking(b: ProctoBooking, now = Date.now()) {
+  if (isStaleOpenBooking(b, now)) return false;
   if (!isUpcomingStatus(b.status)) return false;
   const ms = bookingWhenMs(b);
-  return !ms || practiceDayKey(ms) >= practiceDayKey(now);
+  if (!ms) return false;
+  return practiceDayKey(ms) >= practiceDayKey(now);
 }
 
 export function getUpcomingBookings(bookings: ProctoBooking[]) {

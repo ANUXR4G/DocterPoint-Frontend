@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CountryPhoneField } from "@/components/CountryPhoneField";
 import {
   IdDocumentScanSection,
   type IdentityDocumentsPayload,
@@ -31,6 +32,12 @@ import {
   validatePan,
 } from "@/lib/indianIdInput";
 import { api, setRefreshToken, setToken } from "@/lib/api";
+import {
+  composeLoginPhone,
+  DEFAULT_COUNTRY,
+  nationalDigitsReady,
+  type CountryDial,
+} from "@/lib/countries";
 import { registerForPush } from "@/lib/push";
 import { colors, space } from "@/lib/theme";
 import {
@@ -84,7 +91,8 @@ export default function RegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState<CountryDial>(DEFAULT_COUNTRY);
+  const [national, setNational] = useState("");
   const [otp, setOtp] = useState("");
   const [hint, setHint] = useState("");
   const [debugOtp, setDebugOtp] = useState("");
@@ -100,6 +108,8 @@ export default function RegisterScreen() {
   const [error, setError] = useState("");
   const [wantEmail, setWantEmail] = useState<"yes" | "no" | null>(null);
   const [email, setEmail] = useState("");
+
+  const fullPhone = composeLoginPhone(country, national);
 
   const handleProfileChange = useCallback(
     (next: ProfileDraft | ((prev: ProfileDraft) => ProfileDraft)) => {
@@ -129,7 +139,7 @@ export default function RegisterScreen() {
         from?: string;
       }>("/auth/otp/request", {
         method: "POST",
-        body: JSON.stringify({ phone: phone.trim() }),
+        body: JSON.stringify({ phone: fullPhone }),
       });
       if (res.status !== "successful") {
         setError(res.message || "Could not send OTP");
@@ -140,7 +150,7 @@ export default function RegisterScreen() {
       if (res.data?.debugOtp) setDebugOtp(res.data.debugOtp);
       setProfile((prev) => ({
         ...prev,
-        contactNumber: phone.replace(/\D/g, "").slice(-10) || prev.contactNumber,
+        contactNumber: fullPhone || prev.contactNumber,
       }));
       setStep("otp");
     } catch (err) {
@@ -157,7 +167,7 @@ export default function RegisterScreen() {
       const res = await api("/auth/otp/verify", {
         method: "POST",
         body: JSON.stringify({
-          phone: phone.trim(),
+          phone: fullPhone,
           code: otp.trim(),
           name: profile.name.trim() || undefined,
         }),
@@ -314,7 +324,7 @@ export default function RegisterScreen() {
           subtitle={
             step === "profile"
               ? "Optional ID scan and email, then finish your details. Sign-in stays WhatsApp OTP."
-              : "We verify your number with a WhatsApp code from +91 99900 52082. Include country code if outside India."
+              : "Choose your country (default India +91). We verify with a WhatsApp code from +91 99900 52082."
           }
         />
 
@@ -328,20 +338,21 @@ export default function RegisterScreen() {
               }
               placeholder="As on your ID"
             />
-            <Field
-              label="Mobile number *"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-              placeholder="e.g. 9876543210 or +9715…"
+            <CountryPhoneField
+              country={country}
+              onCountryChange={setCountry}
+              national={national}
+              onNationalChange={setNational}
+              placeholder={
+                country.dial === "91" ? "10-digit mobile" : "Mobile number"
+              }
             />
             <ErrorText text={error} />
             <PrimaryButton
               label="Send WhatsApp OTP"
               onPress={() => void requestOtp()}
               busy={busy}
-              disabled={phone.replace(/\D/g, "").length < 8}
+              disabled={!nationalDigitsReady(national)}
             />
           </>
         ) : null}

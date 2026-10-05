@@ -20,6 +20,8 @@ export const colors = {
   roseLight: "#FFF1F2",
   emeraldLight: "#ECFDF5",
   amberLight: "#FFFBEB",
+  purple: "#7C3AED",
+  purpleLight: "#F3E8FF",
   white: "#FFFFFF",
   navy: "#111827",
   navySoft: "#1F2937",
