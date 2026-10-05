@@ -23,13 +23,15 @@ import {
 } from "@/components/ui";
 import { DashMetric, PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { usePracticeLiveRefresh } from "@/lib/PracticeLiveContext";
+import {
+  usePracticeLive,
+  usePracticeLiveRefresh,
+} from "@/lib/PracticeLiveContext";
 import { usePractice } from "@/lib/practiceContext";
 import {
   cancelPaymentRequest,
   createPaymentRequest,
   fetchPayments,
-  fetchPracticePatients,
   refreshPaymentRequest,
   resendPaymentRequest,
   type PaymentRequestRow,
@@ -354,7 +356,7 @@ function RequestForm({
   onClose: () => void;
   onSent: (row: PaymentRequestRow) => void;
 }) {
-  const [patients, setPatients] = useState<PracticePatient[]>([]);
+  const { patients } = usePracticeLive();
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<PracticePatient | null>(null);
   const [name, setName] = useState("");
@@ -364,15 +366,6 @@ function RequestForm({
   const [days, setDays] = useState(7);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!practiceId) return;
-    void fetchPracticePatients(practiceId).then((res) => {
-      if (res.status === "successful" && Array.isArray(res.data)) {
-        setPatients(res.data);
-      }
-    });
-  }, [practiceId]);
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();

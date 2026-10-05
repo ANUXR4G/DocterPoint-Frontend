@@ -10,13 +10,64 @@ export type PracticeMembership = {
     specialty?: string | null;
     type?: string;
     bgSrc?: string | null;
-    locations: Array<{ id: string; name: string; city: string }>;
+    consultationFee?: number | null;
+    advanceBookingAmount?: number | null;
+    scheduleNoticeHours?: number | null;
+    registrationNo?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    whatsappBusinessNumber?: string | null;
+    locations: Array<{
+      id: string;
+      name: string;
+      city: string;
+      address?: string | null;
+    }>;
     members: Array<{
       role: string;
       userId: string;
-      user: { id: string; name: string | null; imgSrc?: string | null };
+      isActive?: boolean;
+      user: {
+        id: string;
+        name: string | null;
+        email?: string | null;
+        phone?: string | null;
+        imgSrc?: string | null;
+        doctor?: {
+          licenseNo?: string | null;
+          description?: string | null;
+        } | null;
+      };
     }>;
   };
+};
+
+export type AuditAction =
+  | "SLOT_CREATED"
+  | "SLOT_REMOVED"
+  | "OVERRIDE_CREATED"
+  | "OVERRIDE_REMOVED"
+  | "WALK_IN_ADDED"
+  | "PATIENT_REGISTERED";
+
+export type AuditEvent = {
+  id: string;
+  action: AuditAction;
+  actorUserId: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  providerId: string | null;
+  summary: string;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type AuditLogPage = {
+  scope: "ANY" | "OWN";
+  events: AuditEvent[];
+  nextBefore: string | null;
 };
 
 export type VisitDocument = {

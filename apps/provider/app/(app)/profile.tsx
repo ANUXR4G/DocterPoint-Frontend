@@ -3,7 +3,6 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,7 +25,6 @@ import {
 } from "@/lib/practiceContext";
 import { updateMyPhoto, updatePracticeLogo } from "@/lib/procto";
 import { colors, radii, shadows, space } from "@/lib/theme";
-import { doctorWebPath } from "@/lib/webPortal";
 
 /** Account — photos, practice switch, sign out. Portal pages live in the sidebar. */
 export default function AccountScreen() {
@@ -161,7 +159,7 @@ export default function AccountScreen() {
         <View style={styles.group}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => void Linking.openURL(doctorWebPath("/settings"))}
+            onPress={() => router.push("/(app)/settings" as never)}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           >
             <View style={styles.iconWrap}>
@@ -170,10 +168,10 @@ export default function AccountScreen() {
             <View style={styles.text}>
               <Text style={styles.label}>Settings</Text>
               <Text style={styles.hint} numberOfLines={1}>
-                Account, practice profile and theme (web)
+                Practice profile, fees and contact
               </Text>
             </View>
-            <SvgIcon name="open" size={18} color={colors.inkSoft} />
+            <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />
           </Pressable>
         </View>
 

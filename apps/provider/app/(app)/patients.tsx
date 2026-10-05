@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Image,
   Pressable,
@@ -22,35 +22,23 @@ import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { resolveMediaUrl } from "@/lib/media";
 import { usePractice } from "@/lib/practiceContext";
+import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { contentBottomPad } from "@/lib/dockLayout";
-import { fetchPracticePatients } from "@/lib/procto";
-import type { PracticePatient } from "@/lib/types";
 import { colors, radii, shadows, space } from "@/lib/theme";
 
 export default function PatientsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { practiceId, membership } = usePractice();
-  const [rows, setRows] = useState<PracticePatient[]>([]);
+  const { membership } = usePractice();
+  const {
+    patients: rows,
+    error: liveError,
+    refresh,
+  } = usePracticeLive();
   const [q, setQ] = useState("");
-  const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!practiceId) return;
-    const res = await fetchPracticePatients(practiceId);
-    if (res.status === "successful") {
-      setRows((res.data as PracticePatient[]) ?? []);
-      setError("");
-    } else {
-      setError(res.message || "Could not load patients");
-    }
-  }, [practiceId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const error = liveError || "";
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -85,7 +73,7 @@ export default function PatientsScreen() {
             refreshing={refreshing}
             onRefresh={async () => {
               setRefreshing(true);
-              await load();
+              await refresh();
               setRefreshing(false);
             }}
             tintColor={colors.brand}

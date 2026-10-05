@@ -89,7 +89,8 @@ export function buildSidebarNav(
       key: "doctors",
       label: "Doctors",
       icon: "medkit",
-      web: "/clinic/doctors",
+      href: "/(app)/doctors",
+      match: ["/doctors"],
       section: "practice",
     });
   }
@@ -108,7 +109,8 @@ export function buildSidebarNav(
       key: "audit",
       label: "Audit log",
       icon: "document",
-      web: "/doctor/audit",
+      href: "/(app)/audit",
+      match: ["/audit"],
       section: "practice",
     });
   }
@@ -156,7 +158,8 @@ export function buildSidebarNav(
       key: "settings",
       label: "Settings",
       icon: "settings",
-      web: "/settings",
+      href: "/(app)/settings",
+      match: ["/settings"],
       section: "account",
     },
     {

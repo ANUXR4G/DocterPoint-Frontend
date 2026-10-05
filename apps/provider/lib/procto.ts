@@ -1,5 +1,6 @@
 import { api, setRefreshToken, setToken } from "@/lib/api";
 import type {
+  AuditLogPage,
   BookingRow,
   OverrideRow,
   PracticeMembership,
@@ -9,6 +10,27 @@ import type {
 
 export async function fetchMyPractices() {
   return api<PracticeMembership[]>("/procto/practices/mine");
+}
+
+/** Memberships + bookings + patients in one round-trip (cuts shell waterfall). */
+export async function fetchPracticeBootstrap(opts?: {
+  date?: string;
+  from?: string;
+  to?: string;
+  practiceId?: string;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.date) params.set("date", opts.date);
+  if (opts?.from) params.set("from", opts.from);
+  if (opts?.to) params.set("to", opts.to);
+  if (opts?.practiceId) params.set("practiceId", opts.practiceId);
+  const qs = params.toString();
+  return api<{
+    memberships: PracticeMembership[];
+    practiceId?: string;
+    bookings: BookingRow[];
+    patients: PracticePatient[];
+  }>(`/procto/practices/mine/bootstrap${qs ? `?${qs}` : ""}`);
 }
 
 export async function fetchPracticeBookings(
@@ -125,6 +147,66 @@ export async function updatePracticeLogo(practiceId: string, bgSrc: string | nul
   return api(`/procto/practices/${practiceId}/profile`, {
     method: "PATCH",
     body: JSON.stringify({ bgSrc }),
+  });
+}
+
+/** Practice profile fields (name, fees, address, contact, …). */
+export async function updatePracticeProfile(
+  practiceId: string,
+  body: Record<string, unknown>,
+) {
+  return api(`/procto/practices/${practiceId}/profile`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function fetchAuditLog(
+  practiceId: string,
+  q: {
+    action?: string;
+    providerId?: string;
+    from?: string;
+    to?: string;
+    before?: string;
+    limit?: number;
+  } = {},
+) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) {
+    if (v !== undefined && v !== "") params.set(k, String(v));
+  }
+  const qs = params.toString();
+  return api<AuditLogPage>(
+    `/procto/practices/${practiceId}/audit${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function createPracticeDoctor(
+  practiceId: string,
+  body: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    specialty?: string;
+    licenseNo?: string;
+  },
+) {
+  return api(`/procto/practices/${practiceId}/doctors`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function setPracticeMemberActive(
+  practiceId: string,
+  userId: string,
+  isActive: boolean,
+) {
+  return api(`/procto/practices/${practiceId}/members/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ isActive }),
   });
 }
 
@@ -262,6 +344,7 @@ export type PracticeBilling = {
     planName: string | null;
     maxBookingsPerMonth: number | null;
     bookingsUsedThisPeriod: number;
+    features?: Record<string, unknown>;
   };
   scheduledPlan?: ClinicPlan | null;
   pendingCheckoutPlan?: ClinicPlan | null;

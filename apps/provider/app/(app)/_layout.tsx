@@ -11,36 +11,97 @@ import { AppTopBar } from "@/components/mobile/AppTopBar";
 import { Loading } from "@/components/ui";
 import { clearSession } from "@/lib/api";
 import {
+  beginBootstrapFetch,
+  endBootstrapFetch,
+  getCachedMemberships,
+  getCachedPracticeIndex,
+  nearBookingRange,
+  setBootstrapSeed,
+  setCachedMemberships,
+  setCachedPracticeIndex,
+} from "@/lib/dataCache";
+import {
   PracticeProvider,
   pickProviderId,
 } from "@/lib/practiceContext";
 import { PracticeLiveProvider } from "@/lib/PracticeLiveContext";
-import { fetchMyPractices } from "@/lib/procto";
+import { fetchMyPractices, fetchPracticeBootstrap } from "@/lib/procto";
 import type { PracticeMembership } from "@/lib/types";
 import { colors, radii, space } from "@/lib/theme";
 
 export default function AppLayout() {
   const router = useRouter();
-  const [memberships, setMemberships] = useState<PracticeMembership[]>([]);
-  const [practiceIndex, setPracticeIndex] = useState(0);
-  const [ready, setReady] = useState(false);
+  const cachedMemberships = getCachedMemberships();
+  const [memberships, setMemberships] = useState<PracticeMembership[]>(
+    () => cachedMemberships ?? [],
+  );
+  const [practiceIndex, setPracticeIndexState] = useState(() => {
+    const cached = getCachedPracticeIndex();
+    const list = cachedMemberships ?? [];
+    return cached < list.length ? cached : 0;
+  });
+  const [ready, setReady] = useState(() => Boolean(cachedMemberships?.length));
   const [loadError, setLoadError] = useState("");
+
+  const setPracticeIndex = useCallback((i: number) => {
+    setPracticeIndexState(i);
+    setCachedPracticeIndex(i);
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoadError("");
+    const list = memberships.length
+      ? memberships
+      : getCachedMemberships() ?? [];
+    const idx = Math.min(practiceIndex, Math.max(list.length - 1, 0));
+    const practiceId = list[idx]?.practice.id;
+    const range = nearBookingRange();
+
+    beginBootstrapFetch();
+    const boot = await fetchPracticeBootstrap({
+      from: range.from,
+      to: range.to,
+      practiceId,
+    });
+
+    if (boot.status === "successful" && boot.data?.memberships) {
+      const next = boot.data.memberships as PracticeMembership[];
+      setMemberships(next);
+      setCachedMemberships(next);
+      const resolvedId = boot.data.practiceId || practiceId;
+      if (resolvedId) {
+        setBootstrapSeed({
+          practiceId: resolvedId,
+          bookings: Array.isArray(boot.data.bookings) ? boot.data.bookings : [],
+          patients: Array.isArray(boot.data.patients) ? boot.data.patients : [],
+        });
+      } else {
+        endBootstrapFetch();
+      }
+      setReady(true);
+      return;
+    }
+
+    // Fallback: memberships only (live layer loads bookings next).
     const res = await fetchMyPractices();
     if (res.status !== "successful") {
+      endBootstrapFetch();
       await clearSession();
       router.replace("/(auth)/login");
       return;
     }
-    setMemberships((res.data as PracticeMembership[]) ?? []);
+    const next = (res.data as PracticeMembership[]) ?? [];
+    setMemberships(next);
+    setCachedMemberships(next);
+    endBootstrapFetch();
     setReady(true);
-  }, [router]);
+  }, [router, memberships, practiceIndex]);
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    // Cold start / cache hydrate once; pull-to-refresh uses practice.refresh later.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const membership = memberships[practiceIndex] ?? memberships[0] ?? null;
   const providerId = pickProviderId(membership);
@@ -55,7 +116,7 @@ export default function AppLayout() {
       setPracticeIndex,
       refresh,
     }),
-    [memberships, membership, providerId, practiceIndex, refresh],
+    [memberships, membership, providerId, practiceIndex, setPracticeIndex, refresh],
   );
 
   async function handleLogout() {
@@ -197,6 +258,18 @@ export default function AppLayout() {
                 <Tabs.Screen
                   name="queries"
                   options={{ href: null, title: "Help & Support" }}
+                />
+                <Tabs.Screen
+                  name="settings"
+                  options={{ href: null, title: "Settings" }}
+                />
+                <Tabs.Screen
+                  name="doctors"
+                  options={{ href: null, title: "Doctors" }}
+                />
+                <Tabs.Screen
+                  name="audit"
+                  options={{ href: null, title: "Audit log" }}
                 />
               </Tabs>
               <AppSidebar />

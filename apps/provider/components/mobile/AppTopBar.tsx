@@ -20,6 +20,9 @@ const TITLE_BY_PATH: { match: string; title: string }[] = [
   { match: "/inbox", title: "Patient Support" },
   { match: "/notifications", title: "Notifications" },
   { match: "/queries", title: "Help" },
+  { match: "/settings", title: "Settings" },
+  { match: "/doctors", title: "Doctors" },
+  { match: "/audit", title: "Audit log" },
   { match: "/visit/", title: "Visit" },
 ];
 

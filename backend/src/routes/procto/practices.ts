@@ -60,6 +60,7 @@ router.get(
           date: req.query.date as string | undefined,
           from: req.query.from as string | undefined,
           to: req.query.to as string | undefined,
+          practiceId: req.query.practiceId as string | undefined,
         },
       );
       return ResponseHandler.fetchSuccessful(

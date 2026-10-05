@@ -9,13 +9,24 @@ import {
   type ReactNode,
 } from "react";
 import { useProctoLiveSocket } from "@/hooks/useLiveSocket";
+import {
+  fullBookingRange,
+  getCachedBookings,
+  getCachedPatients,
+  nearBookingRange,
+  setCachedBookings,
+  setCachedPatients,
+  takeBootstrapSeed,
+  waitForBootstrapSeed,
+} from "@/lib/dataCache";
 import { applyLiveBookingEvent, patchBookingFields } from "@/lib/liveBooking";
 import { selfProviderScope, usePractice } from "@/lib/practiceContext";
 import {
   fetchPracticeBookings,
+  fetchPracticeBootstrap,
   fetchPracticePatients,
 } from "@/lib/procto";
-import { addDays, type BookingRow, type PracticePatient, ymd } from "@/lib/types";
+import type { BookingRow, PracticePatient } from "@/lib/types";
 import { practiceDateIso } from "@/lib/practiceTime";
 
 type PracticeLiveValue = {
@@ -53,23 +64,29 @@ function matchesProvider(b: BookingRow, providerId: string | undefined) {
   );
 }
 
-/** One procto practice WS + shared ±90d bookings for the doctor Expo shell. */
+function mergeBookings(prev: BookingRow[], next: BookingRow[]): BookingRow[] {
+  if (!prev.length) return next;
+  const byId = new Map(prev.map((b) => [b.id, b]));
+  for (const b of next) byId.set(b.id, b);
+  return Array.from(byId.values());
+}
+
+/** One procto practice WS + shared bookings for the doctor Expo shell. */
 export function PracticeLiveProvider({ children }: { children: ReactNode }) {
   const { practiceId, membership } = usePractice();
   const selfProviderId = selfProviderScope(membership);
 
-  const range = useMemo(() => {
-    const today = new Date();
-    return {
-      from: ymd(addDays(today, -90)),
-      to: ymd(addDays(today, 90)),
-    };
-  }, []);
+  const cachedBookings = practiceId ? getCachedBookings(practiceId) : null;
+  const cachedPatients = practiceId ? getCachedPatients(practiceId) : null;
 
-  const [bookings, setBookings] = useState<BookingRow[]>([]);
-  const [patients, setPatients] = useState<PracticePatient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [ready, setReady] = useState(false);
+  const [bookings, setBookings] = useState<BookingRow[]>(
+    () => cachedBookings ?? [],
+  );
+  const [patients, setPatients] = useState<PracticePatient[]>(
+    () => cachedPatients ?? [],
+  );
+  const [loading, setLoading] = useState(() => !cachedBookings);
+  const [ready, setReady] = useState(() => Boolean(cachedBookings));
   const [liveConnected, setLiveConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bookingTick, setBookingTick] = useState(0);
@@ -79,34 +96,92 @@ export function PracticeLiveProvider({ children }: { children: ReactNode }) {
   const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSoftAt = useRef(0);
   const loadGen = useRef(0);
+  const expandedRange = useRef(false);
 
   const refresh = useCallback(
-    async (opts?: { soft?: boolean; force?: boolean }) => {
+    async (opts?: {
+      soft?: boolean;
+      force?: boolean;
+      /** Near window first; full ±90d expand in background. */
+      expand?: boolean;
+    }) => {
       if (!practiceId) return;
       const soft = Boolean(opts?.soft);
+      const expand = Boolean(opts?.expand);
       const gen = ++loadGen.current;
       if (!soft) {
         setLoading(true);
         setError(null);
       }
+
+      const range = expand ? fullBookingRange() : nearBookingRange();
+      let shouldExpand = false;
+
       try {
-        const [bRes, pRes] = await Promise.all([
-          fetchPracticeBookings(practiceId, {
-            from: range.from,
-            to: range.to,
-            providerId: selfProviderId,
-          }),
-          fetchPracticePatients(practiceId),
-        ]);
+        // Prefer bootstrap for a single round-trip.
+        const boot = await fetchPracticeBootstrap({
+          from: range.from,
+          to: range.to,
+          practiceId,
+        });
         if (gen !== loadGen.current) return;
-        if (bRes.status === "successful" && Array.isArray(bRes.data)) {
-          setBookings(bRes.data as BookingRow[]);
-        } else if (!soft) {
-          setBookings([]);
-          setError(bRes.message || "Could not load bookings.");
-        }
-        if (pRes.status === "successful" && Array.isArray(pRes.data)) {
-          setPatients(pRes.data as PracticePatient[]);
+
+        if (boot.status === "successful" && boot.data) {
+          const nextBookings = Array.isArray(boot.data.bookings)
+            ? (boot.data.bookings as BookingRow[])
+            : [];
+          const nextPatients = Array.isArray(boot.data.patients)
+            ? (boot.data.patients as PracticePatient[])
+            : [];
+          setBookings((prev) =>
+            expand ? mergeBookings(prev, nextBookings) : nextBookings,
+          );
+          if (nextPatients.length || !soft) setPatients(nextPatients);
+          setCachedBookings(
+            practiceId,
+            expand
+              ? mergeBookings(
+                  getCachedBookings(practiceId) ?? [],
+                  nextBookings,
+                )
+              : nextBookings,
+          );
+          if (nextPatients.length || !soft) {
+            setCachedPatients(practiceId, nextPatients);
+          }
+          setError(null);
+          shouldExpand = !expand && !expandedRange.current;
+        } else {
+          // Fallback: parallel list endpoints
+          const [bRes, pRes] = await Promise.all([
+            fetchPracticeBookings(practiceId, {
+              from: range.from,
+              to: range.to,
+              providerId: selfProviderId,
+            }),
+            fetchPracticePatients(practiceId),
+          ]);
+          if (gen !== loadGen.current) return;
+          if (bRes.status === "successful" && Array.isArray(bRes.data)) {
+            const next = bRes.data as BookingRow[];
+            setBookings((prev) =>
+              expand ? mergeBookings(prev, next) : next,
+            );
+            setCachedBookings(
+              practiceId,
+              expand
+                ? mergeBookings(getCachedBookings(practiceId) ?? [], next)
+                : next,
+            );
+          } else if (!soft) {
+            setBookings([]);
+            setError(bRes.message || "Could not load bookings.");
+          }
+          if (pRes.status === "successful" && Array.isArray(pRes.data)) {
+            setPatients(pRes.data as PracticePatient[]);
+            setCachedPatients(practiceId, pRes.data as PracticePatient[]);
+          }
+          shouldExpand = !expand && !expandedRange.current;
         }
       } catch {
         if (!soft) {
@@ -118,22 +193,82 @@ export function PracticeLiveProvider({ children }: { children: ReactNode }) {
           setLoading(false);
           setReady(true);
         }
+        // Expand after first paint — do not bump loadGen before ready settles.
+        if (shouldExpand && gen === loadGen.current) {
+          expandedRange.current = true;
+          void refresh({ soft: true, expand: true });
+        }
       }
     },
-    [practiceId, range.from, range.to, selfProviderId],
+    [practiceId, selfProviderId],
   );
 
   useEffect(() => {
+    let cancelled = false;
     setLiveConnected(false);
-    setBookings([]);
-    setPatients([]);
-    setReady(false);
-    setLoading(true);
-    void refresh();
+    expandedRange.current = false;
+
+    const applySeed = (seed: {
+      bookings: BookingRow[];
+      patients: PracticePatient[];
+    }) => {
+      if (cancelled) return;
+      setBookings(seed.bookings);
+      setPatients(seed.patients);
+      setReady(true);
+      setLoading(false);
+      setError(null);
+      expandedRange.current = true;
+      void refresh({ soft: true, expand: true });
+    };
+
+    const run = async () => {
+      if (!practiceId) {
+        setBookings([]);
+        setPatients([]);
+        setReady(false);
+        setLoading(false);
+        return;
+      }
+
+      const immediate = takeBootstrapSeed(practiceId);
+      if (immediate) {
+        applySeed(immediate);
+        return;
+      }
+
+      const cachedB = getCachedBookings(practiceId);
+      const cachedP = getCachedPatients(practiceId);
+      if (cachedB) {
+        setBookings(cachedB);
+        if (cachedP) setPatients(cachedP);
+        setReady(true);
+        setLoading(false);
+      } else {
+        setBookings([]);
+        setPatients([]);
+        setReady(false);
+        setLoading(true);
+      }
+
+      // Layout bootstrap may still be in flight — wait so we do not double-hit near window.
+      const late = await waitForBootstrapSeed(practiceId);
+      if (cancelled) return;
+      if (late) {
+        applySeed(late);
+        return;
+      }
+
+      void refresh({ soft: Boolean(cachedB) });
+    };
+
+    void run();
+
     return () => {
+      cancelled = true;
       if (softTimer.current) clearTimeout(softTimer.current);
     };
-  }, [refresh]);
+  }, [practiceId, refresh]);
 
   function scheduleSoftRefresh() {
     const now = Date.now();
@@ -142,7 +277,7 @@ export function PracticeLiveProvider({ children }: { children: ReactNode }) {
     softTimer.current = setTimeout(() => {
       lastSoftAt.current = Date.now();
       setBookingTick((n) => n + 1);
-      void refresh({ soft: true, force: true });
+      void refresh({ soft: true, force: true, expand: true });
     }, 400);
   }
 
@@ -184,6 +319,7 @@ export function PracticeLiveProvider({ children }: { children: ReactNode }) {
         if (needsRefresh || event.event === "booking_created") {
           scheduleSoftRefresh();
         }
+        if (practiceId) setCachedBookings(practiceId, filtered);
         return filtered;
       });
     },
@@ -194,11 +330,13 @@ export function PracticeLiveProvider({ children }: { children: ReactNode }) {
 
   const patchBooking = useCallback(
     (id: string, patch: Partial<BookingRow>) => {
-      setBookings((prev) =>
-        prev.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-      );
+      setBookings((prev) => {
+        const next = prev.map((b) => (b.id === id ? { ...b, ...patch } : b));
+        if (practiceId) setCachedBookings(practiceId, next);
+        return next;
+      });
     },
-    [],
+    [practiceId],
   );
 
   const bookingsOnDate = useCallback(

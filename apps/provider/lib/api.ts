@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store";
+import { clearProviderDataCache } from "./dataCache";
 import { resolveApiUrl } from "./resolveApiUrl";
 
 const API_PREFIX = "/api/v1";
@@ -52,6 +53,7 @@ export async function setRefreshToken(token: string | null): Promise<void> {
 export async function clearSession(): Promise<void> {
   cachedAccessToken = null;
   cachedRefreshToken = null;
+  clearProviderDataCache();
   await SecureStore.deleteItemAsync(TOKEN_KEY);
   await SecureStore.deleteItemAsync(REFRESH_KEY);
 }
