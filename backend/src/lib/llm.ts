@@ -10,17 +10,20 @@ export type LlmChatProvider = {
 };
 
 /**
- * Shared OpenAI-compatible chat providers.
- * OpenAI first when set; Hugging Face / DeepSeek as fallbacks only.
+ * OpenAI-compatible chat providers for Mira / NLU-style text chat.
+ * OpenAI only by default — Hugging Face is opt-in (vision/OCR may still use it).
  */
 export function llmChatProviders(opts?: {
-  /** Include OpenAI (gpt-4o-mini). */
+  /** Include OpenAI (gpt-4o-mini). Default true. */
   includeOpenAi?: boolean;
-  /** Include DeepSeek text fallback. */
+  /** Include DeepSeek text fallback. Default false for Mira reliability. */
   includeDeepSeek?: boolean;
+  /** Include Hugging Face. Default false — Mira must not depend on HF. */
+  includeHuggingFace?: boolean;
 }): LlmChatProvider[] {
   const includeOpenAi = opts?.includeOpenAi !== false;
-  const includeDeepSeek = opts?.includeDeepSeek !== false;
+  const includeDeepSeek = opts?.includeDeepSeek === true;
+  const includeHuggingFace = opts?.includeHuggingFace === true;
   const out: LlmChatProvider[] = [];
 
   if (includeOpenAi && settings.openaiApiKey) {
@@ -28,12 +31,12 @@ export function llmChatProviders(opts?: {
       label: "OpenAI",
       url: "https://api.openai.com/v1/chat/completions",
       apiKey: settings.openaiApiKey,
-      model: "gpt-4o-mini",
+      model: process.env.OPENAI_CHAT_MODEL?.trim() || "gpt-4o-mini",
       jsonObject: true,
     });
   }
 
-  if (settings.hfToken) {
+  if (includeHuggingFace && settings.hfToken) {
     out.push({
       label: "Hugging Face",
       url: `${settings.hfBaseUrl}/chat/completions`,
@@ -55,13 +58,20 @@ export function llmChatProviders(opts?: {
   return out;
 }
 
-export function llmAvailable(): boolean {
-  return Boolean(
-    settings.hfToken || settings.openaiApiKey || settings.deepseekApiKey,
-  );
+/** Mira + patient/doctor app chatbot — OpenAI only. */
+export function llmMiraProviders(): LlmChatProvider[] {
+  return llmChatProviders({
+    includeOpenAi: true,
+    includeDeepSeek: false,
+    includeHuggingFace: false,
+  });
 }
 
-/** Vision / OCR providers for ID and visiting-card images. OpenAI first when set (typically faster). */
+export function llmAvailable(): boolean {
+  return llmMiraProviders().length > 0;
+}
+
+/** Vision / OCR providers for ID and visiting-card images. OpenAI first. */
 export function llmVisionProviders(): LlmChatProvider[] {
   const out: LlmChatProvider[] = [];
 
@@ -70,7 +80,7 @@ export function llmVisionProviders(): LlmChatProvider[] {
       label: "OpenAI",
       url: "https://api.openai.com/v1/chat/completions",
       apiKey: settings.openaiApiKey,
-      model: "gpt-4o-mini",
+      model: process.env.OPENAI_OCR_MODEL?.trim() || "gpt-4o-mini",
       jsonObject: true,
     });
   }

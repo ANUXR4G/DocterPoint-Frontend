@@ -147,8 +147,18 @@ export async function api<T = unknown>(
     normalized.startsWith("/auth/token/refresh");
 
   const controller = new AbortController();
-  const timeoutMs = 20000;
+  // Mira chat / STT need longer than default REST calls (OpenAI round-trip).
+  const timeoutMs = normalized.startsWith("/assistant/") ? 55_000 : 20_000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const external = init?.signal;
+  if (external) {
+    if (external.aborted) controller.abort();
+    else {
+      external.addEventListener("abort", () => controller.abort(), {
+        once: true,
+      });
+    }
+  }
 
   let res: Response;
   try {

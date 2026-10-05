@@ -75,17 +75,12 @@ export async function buildDoctorVisitBrief(
   }
   if (!llmAvailable()) {
     console.warn(
-      "[patientProblemBrief] no LLM keys (OPENAI_API_KEY / HF_TOKEN / DEEPSEEK_API_KEY)",
+      "[patientProblemBrief] no LLM keys (set OPENAI_API_KEY)",
     );
     return { brief: fallbackBrief(raw), source: "fallback" };
   }
 
-  // Prefer OpenAI first (billing restored); HF / DeepSeek remain as fallbacks.
-  const providers = llmChatProviders().slice().sort((a, b) => {
-    const rank = (p: { label: string }) =>
-      /openai/i.test(p.label) ? 0 : /deepseek/i.test(p.label) ? 1 : 2;
-    return rank(a) - rank(b);
-  });
+  const providers = llmChatProviders();
   console.info(
     `[patientProblemBrief] trying providers: ${providers.map((p) => p.label).join(", ") || "(none)"}`,
   );
@@ -95,7 +90,6 @@ export async function buildDoctorVisitBrief(
     const timeoutMs = /openai/i.test(provider.label) ? 20_000 : 25_000;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const isHuggingFace = /huggingface/i.test(provider.label);
       const res = await fetch(provider.url, {
         method: "POST",
         signal: controller.signal,
@@ -111,13 +105,10 @@ export async function buildDoctorVisitBrief(
             { role: "system", content: SYSTEM },
             {
               role: "user",
-              content: `Patient's problem / reason for visit:\n"""${raw}"""\n\n/no_think`,
+              content: `Patient's problem / reason for visit:\n"""${raw}"""`,
             },
           ],
           max_tokens: 320,
-          ...(isHuggingFace
-            ? { chat_template_kwargs: { enable_thinking: false } }
-            : {}),
         }),
       });
 

@@ -15,11 +15,18 @@ export async function assistantChat(
   message: string,
   history: AssistantChatMessage[],
 ) {
-  return api<{ reply: string; provider?: string; mode?: string }>(
-    "/assistant/chat",
-    {
-      method: "POST",
-      body: JSON.stringify({ message, history }),
-    },
-  );
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 55_000);
+  try {
+    return await api<{ reply: string; provider?: string; mode?: string }>(
+      "/assistant/chat",
+      {
+        method: "POST",
+        body: JSON.stringify({ message, history }),
+        signal: controller.signal,
+      },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }
