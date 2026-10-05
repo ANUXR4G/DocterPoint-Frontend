@@ -108,7 +108,7 @@ export default function PatientPhoneOtpLogin() {
             autoComplete="tel"
           />
           <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
-            10-digit Indian mobile number
+            Mobile number (include country code if outside India)
           </p>
           {error ? (
             <p className="text-sm font-medium text-rose-600">{error}</p>
@@ -116,7 +116,7 @@ export default function PatientPhoneOtpLogin() {
           <Button
             typeBtn="button"
             className="gg-btn center !w-full !border-transparent !py-3.5 !text-base"
-            disabled={busy || phone.replace(/\D/g, "").length < 10}
+            disabled={busy || phone.replace(/\D/g, "").length < 8}
             onClick={() => void requestOtp()}
           >
             {busy ? "Sending…" : "Send WhatsApp OTP"}
