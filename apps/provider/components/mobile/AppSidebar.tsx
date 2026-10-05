@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -16,7 +15,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { usePathname, useRouter } from "expo-router";
+import { usePathname, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgIcon } from "@/components/icons/SvgIcon";
 import {
@@ -31,7 +30,6 @@ import {
   type SidebarNavItem,
 } from "@/lib/sidebarNav";
 import { colors, radii, shadows, space } from "@/lib/theme";
-import { doctorWebPath } from "@/lib/webPortal";
 
 type SidebarCtx = {
   open: boolean;
@@ -97,8 +95,8 @@ export function AppSidebar() {
   const onOpen = useCallback(
     (item: SidebarNavItem) => {
       closeSidebar();
-      if (item.href) router.push(item.href as never);
-      else if (item.web) void Linking.openURL(doctorWebPath(item.web));
+      // In-app only — Doctors / Audit / Settings never leave the Expo app.
+      router.navigate(item.href as Href);
     },
     [closeSidebar, router],
   );
@@ -198,9 +196,6 @@ export function AppSidebar() {
                           {item.badge > 99 ? "99+" : item.badge}
                         </Text>
                       </View>
-                    ) : null}
-                    {item.web ? (
-                      <SvgIcon name="open" size={14} color={colors.inkFaint} />
                     ) : null}
                   </Pressable>
                 </View>

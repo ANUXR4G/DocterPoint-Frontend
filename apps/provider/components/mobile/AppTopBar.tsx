@@ -1,7 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { usePathname } from "expo-router";
-import { SvgIcon } from "@/components/icons/SvgIcon";
-import { useAppSidebar } from "@/components/mobile/AppSidebar";
 import { usePractice } from "@/lib/practiceContext";
 import { colors, space } from "@/lib/theme";
 
@@ -33,24 +31,14 @@ function titleForPath(pathname: string): string {
   return "GlucoGuide";
 }
 
-/** Slim top bar: menu + screen title + clinic name. */
+/** Slim top bar: screen title + clinic name (nav is the bottom dock). */
 export function AppTopBar() {
-  const { openSidebar } = useAppSidebar();
   const pathname = usePathname();
   const { membership } = usePractice();
   const title = titleForPath(pathname);
 
   return (
     <View style={styles.bar}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open menu"
-        onPress={openSidebar}
-        style={styles.menuBtn}
-        hitSlop={6}
-      >
-        <SvgIcon name="menu" size={20} color={colors.ink} />
-      </Pressable>
       <View style={styles.text}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -73,16 +61,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
-  },
-  menuBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
   },
   text: { flex: 1, minWidth: 0 },
   title: {

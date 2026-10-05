@@ -26,7 +26,7 @@ import {
 import { updateMyPhoto, updatePracticeLogo } from "@/lib/procto";
 import { colors, radii, shadows, space } from "@/lib/theme";
 
-/** Account — photos, practice switch, sign out. Portal pages live in the sidebar. */
+/** Account — photos, practice switch, sign out. Portal pages live in the bottom dock. */
 export default function AccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -159,7 +159,7 @@ export default function AccountScreen() {
         <View style={styles.group}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push("/(app)/settings" as never)}
+            onPress={() => router.navigate("/(app)/settings" as never)}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           >
             <View style={styles.iconWrap}>
@@ -168,11 +168,47 @@ export default function AccountScreen() {
             <View style={styles.text}>
               <Text style={styles.label}>Settings</Text>
               <Text style={styles.hint} numberOfLines={1}>
-                Practice profile, fees and contact
+                Practice profile, fees and contact — in this app
               </Text>
             </View>
             <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />
           </Pressable>
+          {isClinicAdmin ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.navigate("/(app)/doctors" as never)}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            >
+              <View style={styles.iconWrap}>
+                <SvgIcon name="medkit" size={20} color={colors.brand} />
+              </View>
+              <View style={styles.text}>
+                <Text style={styles.label}>Doctors</Text>
+                <Text style={styles.hint} numberOfLines={1}>
+                  Add or deactivate doctors — in this app
+                </Text>
+              </View>
+              <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />
+            </Pressable>
+          ) : null}
+          {isClinicAdmin || membership?.role === "DOCTOR" ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.navigate("/(app)/audit" as never)}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            >
+              <View style={styles.iconWrap}>
+                <SvgIcon name="document" size={20} color={colors.brand} />
+              </View>
+              <View style={styles.text}>
+                <Text style={styles.label}>Audit log</Text>
+                <Text style={styles.hint} numberOfLines={1}>
+                  Practice activity history — in this app
+                </Text>
+              </View>
+              <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />
+            </Pressable>
+          ) : null}
         </View>
 
         <Pressable

@@ -9,10 +9,8 @@ export type SidebarNavItem = {
   key: string;
   label: string;
   icon: SvgIconName;
-  /** In-app route (expo-router). */
-  href?: string;
-  /** Opens the web portal when set. */
-  web?: string;
+  /** In-app route only (expo-router). Never open website / WhatsApp from here. */
+  href: string;
   match?: string[];
   badge?: number;
   section?: "care" | "practice" | "account";

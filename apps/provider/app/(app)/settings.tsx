@@ -227,8 +227,8 @@ export default function SettingsScreen() {
         <View style={styles.linksCard}>
           <Text style={styles.linksTitle}>Also in the app</Text>
           <Text style={styles.hint}>
-            Hours & blocks, Subscription, and Payments are in the sidebar menu —
-            no website required.
+            Hours & blocks, Subscription, and Payments are in the bottom dock —
+            scroll sideways to open them. No website required.
           </Text>
         </View>
       </ScrollView>

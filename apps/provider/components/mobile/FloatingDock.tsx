@@ -1,151 +1,98 @@
-import type { ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
+  Text,
   View,
-  type GestureResponderEvent,
 } from "react-native";
 import { BlurView } from "expo-blur";
+import { usePathname, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgIcon, type SvgIconName } from "@/components/icons/SvgIcon";
 import { dockLayout } from "@/lib/dockLayout";
+import { usePractice } from "@/lib/practiceContext";
+import {
+  buildSidebarNav,
+  sidebarItemActive,
+  type SidebarNavItem,
+} from "@/lib/sidebarNav";
 import { colors, shadows } from "@/lib/theme";
 
-type TabRoute = {
-  key: string;
-  name: string;
-  params?: object;
-};
+const ICON_SIZE = 22;
+const ITEM_W = 64;
 
-export type FloatingDockProps = {
-  state: {
-    index: number;
-    routes: TabRoute[];
-  };
-  descriptors: Record<
-    string,
-    {
-      options: {
-        title?: string;
-        tabBarLabel?: string | ((props: unknown) => ReactNode);
-        href?: string | null;
-        tabBarAccessibilityLabel?: string;
-      };
-    }
-  >;
-  navigation: {
-    emit: (event: {
-      type: string;
-      target: string;
-      canPreventDefault?: boolean;
-    }) => { defaultPrevented: boolean };
-    navigate: (name: string, params?: object) => void;
-  };
-};
-
-/** Only these routes get a dock icon, in the web portal sidebar's order. */
-const DOCK_ORDER = [
-  "dashboard",
-  "queue",
-  "appointments",
-  "patients",
-  "calendar",
-  "profile",
-] as const;
-
-const TAB_ICONS: Record<
-  string,
-  { label: string; active: SvgIconName; idle: SvgIconName }
-> = {
-  dashboard: { label: "Dashboard", active: "home", idle: "homeOutline" },
-  queue: { label: "Queue", active: "list", idle: "listOutline" },
-  appointments: {
-    label: "Appointments",
-    active: "calendarNumber",
-    idle: "calendarNumberOutline",
-  },
-  calendar: {
-    label: "Calendar",
-    active: "calendar",
-    idle: "calendarOutline",
-  },
-  patients: { label: "Patients", active: "people", idle: "peopleOutline" },
-  analytics: {
-    label: "Analytics",
-    active: "chart",
-    idle: "chartOutline",
-  },
-  profile: {
-    label: "More",
-    active: "more",
-    idle: "moreOutline",
-  },
-};
-
-const ICON_SIZE = 24;
-const BUBBLE = 44;
+/** Prefer outline when idle if the glyph set has one. */
+function idleIcon(name: SvgIconName): SvgIconName {
+  const outline = `${name}Outline` as SvgIconName;
+  const known: SvgIconName[] = [
+    "homeOutline",
+    "listOutline",
+    "calendarOutline",
+    "calendarNumberOutline",
+    "peopleOutline",
+    "chartOutline",
+    "moreOutline",
+    "chatOutline",
+  ];
+  return known.includes(outline) ? outline : name;
+}
 
 function DockItem({
-  label,
-  iconActive,
-  iconIdle,
+  item,
   focused,
   onPress,
-  onLongPress,
 }: {
-  label: string;
-  iconActive: SvgIconName;
-  iconIdle: SvgIconName;
+  item: SidebarNavItem;
   focused: boolean;
-  onPress: (e: GestureResponderEvent) => void;
-  onLongPress: (e: GestureResponderEvent) => void;
+  onPress: () => void;
 }) {
   const [pressed, setPressed] = useState(false);
-
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: focused }}
-      accessibilityLabel={label}
+      accessibilityLabel={item.label}
       onPress={onPress}
-      onLongPress={onLongPress}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
-      style={styles.itemHit}
-      hitSlop={4}
+      style={[styles.itemHit, pressed && styles.itemPressed]}
+      hitSlop={2}
     >
-      <View
-        style={[
-          styles.bubble,
-          focused && styles.bubbleFocused,
-          pressed && styles.bubblePressed,
-        ]}
-      >
-        <View style={styles.iconSlot} collapsable={false}>
-          <SvgIcon
-            name={focused ? iconActive : iconIdle}
-            size={ICON_SIZE}
-            color={focused ? colors.brand : colors.inkSoft}
-          />
-        </View>
+      <View style={[styles.bubble, focused && styles.bubbleFocused]}>
+        <SvgIcon
+          name={focused ? item.icon : idleIcon(item.icon)}
+          size={ICON_SIZE}
+          color={focused ? colors.brand : colors.inkSoft}
+        />
+        {item.badge && item.badge > 0 ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {item.badge > 99 ? "99+" : String(item.badge)}
+            </Text>
+          </View>
+        ) : null}
       </View>
+      <Text
+        style={[styles.label, focused && styles.labelFocused]}
+        numberOfLines={1}
+      >
+        {item.label}
+      </Text>
     </Pressable>
   );
 }
 
-export function FloatingDock({
-  state,
-  descriptors,
-  navigation,
-}: FloatingDockProps) {
+/**
+ * Scrollable bottom dock with every portal destination (former sidebar list).
+ */
+export function FloatingDock() {
   const insets = useSafeAreaInsets();
-  const byName = new Map(state.routes.map((r) => [r.name, r]));
-  const visible = DOCK_ORDER.map((name) => byName.get(name)).filter(
-    (r): r is TabRoute => !!r,
-  );
-  const focusedKey = state.routes[state.index]?.key;
+  const router = useRouter();
+  const pathname = usePathname();
+  const { membership } = usePractice();
+  const items = useMemo(() => buildSidebarNav(membership), [membership]);
 
   return (
     <View
@@ -164,41 +111,29 @@ export function FloatingDock({
             pointerEvents="none"
           />
           <View style={styles.wash} pointerEvents="none" />
-          <View style={styles.row}>
-            {visible.map((route) => {
-              const meta = TAB_ICONS[route.name]!;
-              const focused = route.key === focusedKey;
-              const options = descriptors[route.key]?.options;
-              const label =
-                typeof options?.title === "string" ? options.title : meta.label;
-
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            bounces
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.row}
+          >
+            {items.map((item) => {
+              const focused = sidebarItemActive(item, pathname);
               return (
                 <DockItem
-                  key={route.key}
-                  label={label}
-                  iconActive={meta.active}
-                  iconIdle={meta.idle}
+                  key={item.key}
+                  item={item}
                   focused={focused}
                   onPress={() => {
-                    const event = navigation.emit({
-                      type: "tabPress",
-                      target: route.key,
-                      canPreventDefault: true,
-                    });
-                    if (!focused && !event.defaultPrevented) {
-                      navigation.navigate(route.name);
-                    }
-                  }}
-                  onLongPress={() => {
-                    navigation.emit({
-                      type: "tabLongPress",
-                      target: route.key,
-                    });
+                    if (focused) return;
+                    // Always stay inside the Expo app — never Linking / WhatsApp / web.
+                    router.navigate(item.href as Href);
                   }}
                 />
               );
             })}
-          </View>
+          </ScrollView>
         </View>
       </View>
     </View>
@@ -212,10 +147,12 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     paddingHorizontal: dockLayout.horizontal,
+    zIndex: 40,
   },
   dockShell: {
     borderRadius: dockLayout.radius,
     maxWidth: "100%",
+    width: "100%",
   },
   dockClip: {
     height: dockLayout.height,
@@ -227,30 +164,34 @@ const styles = StyleSheet.create({
       Platform.OS === "ios"
         ? "rgba(255, 255, 255, 0.55)"
         : "rgba(255, 255, 255, 0.94)",
-    paddingHorizontal: 8,
     justifyContent: "center",
   },
   wash: {
-    ...StyleSheet.absoluteFill,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: "rgba(255, 255, 255, 0.35)",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 8,
     gap: 2,
-    zIndex: 1,
+    minHeight: dockLayout.height,
   },
   itemHit: {
+    width: ITEM_W,
     alignItems: "center",
     justifyContent: "center",
-    width: 52,
-    height: 52,
+    paddingVertical: 6,
   },
+  itemPressed: { opacity: 0.72 },
   bubble: {
-    width: BUBBLE,
-    height: BUBBLE,
-    borderRadius: BUBBLE / 2,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.92)",
@@ -260,13 +201,32 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(58, 141, 154, 0.28)",
   },
-  bubblePressed: {
-    opacity: 0.72,
+  label: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "600",
+    color: colors.inkFaint,
+    textAlign: "center",
+    maxWidth: ITEM_W - 4,
   },
-  iconSlot: {
-    width: ICON_SIZE,
-    height: ICON_SIZE,
+  labelFocused: {
+    color: colors.brand,
+  },
+  badge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.danger,
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
   },
 });

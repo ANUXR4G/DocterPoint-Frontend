@@ -295,34 +295,16 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
                         {d.getDate()}
                       </Text>
                       {hasBooking && statusColor ? (
-                        <View style={styles.dotsRow}>
-                          {list.slice(0, 3).map((b) => (
-                            <View
-                              key={b.id}
-                              style={[
-                                styles.eventDot,
-                                {
-                                  backgroundColor:
-                                    statusColor.fg === colors.ink
-                                      ? "rgba(9,14,23,0.45)"
-                                      : "rgba(255,255,255,0.9)",
-                                },
-                              ]}
-                            />
-                          ))}
-                          {list.length > 3 ? (
-                            <Text
-                              style={[
-                                styles.cellMoreBooked,
-                                { color: statusColor.fg },
-                              ]}
-                            >
-                              +{list.length - 3}
-                            </Text>
-                          ) : null}
-                        </View>
+                        <Text
+                          style={[
+                            styles.cellCount,
+                            { color: statusColor.fg },
+                          ]}
+                        >
+                          {list.length}
+                        </Text>
                       ) : (
-                        <View style={styles.dotsPlaceholder} />
+                        <View style={styles.countPlaceholder} />
                       )}
                     </Pressable>
                   );
@@ -483,26 +465,16 @@ const styles = StyleSheet.create({
   dayNumMuted: { color: colors.inkFaint },
   dayNumToday: { color: colors.brand },
   dayNumSelectedEmpty: { color: colors.white },
-  dotsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 3,
-    marginTop: 4,
-    minHeight: 8,
-  },
-  dotsPlaceholder: {
-    marginTop: 4,
-    height: 8,
-  },
-  eventDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  cellMoreBooked: {
-    fontSize: 8,
+  cellCount: {
+    marginTop: 2,
+    fontSize: 11,
     fontWeight: "700",
+    lineHeight: 14,
+    textAlign: "center",
+  },
+  countPlaceholder: {
+    marginTop: 2,
+    height: 14,
   },
   dayCard: {
     backgroundColor: colors.white,
