@@ -3174,13 +3174,14 @@ export const PracticeService = {
     });
   },
 
-  /** One round-trip for doctor queue/dashboard: memberships + today's bookings. */
+  /** One round-trip for doctor queue/dashboard: memberships + bookings (+ patients). */
   async getDashboardBootstrap(
     userId: string,
     opts?: {
       date?: string;
       from?: string;
       to?: string;
+      practiceId?: string;
       includePatients?: boolean;
     },
   ) {
@@ -3188,8 +3189,14 @@ export const PracticeService = {
       practiceId?: string;
       practice?: { id?: string };
     }>;
-    const first = memberships[0];
-    const practiceId = first?.practiceId || first?.practice?.id;
+    const wanted = opts?.practiceId?.trim();
+    const pick =
+      (wanted
+        ? memberships.find(
+            (m) => (m.practiceId || m.practice?.id) === wanted,
+          )
+        : undefined) ?? memberships[0];
+    const practiceId = pick?.practiceId || pick?.practice?.id;
     if (!practiceId) {
       return {
         memberships,
