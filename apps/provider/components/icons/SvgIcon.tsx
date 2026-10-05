@@ -38,7 +38,8 @@ export type SvgIconName =
   | "open"
   | "bell"
   | "mic"
-  | "stop";
+  | "stop"
+  | "menu";
 
 type Props = {
   name: SvgIconName;
@@ -325,6 +326,14 @@ export function SvgIcon({
       return (
         <Svg {...common}>
           <Rect x="6" y="6" width="12" height="12" rx="2" fill={color} stroke="none" />
+        </Svg>
+      );
+    case "menu":
+      return (
+        <Svg {...common}>
+          <Line x1="4" y1="7" x2="20" y2="7" />
+          <Line x1="4" y1="12" x2="20" y2="12" />
+          <Line x1="4" y1="17" x2="20" y2="17" />
         </Svg>
       );
     default:

@@ -1,12 +1,13 @@
 import { Tabs, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GlucoBotFab } from "@/components/GlucoBotFab";
 import {
-  FloatingDock,
-  type FloatingDockProps,
-} from "@/components/mobile/FloatingDock";
+  AppSidebar,
+  SidebarProvider,
+} from "@/components/mobile/AppSidebar";
+import { AppTopBar } from "@/components/mobile/AppTopBar";
 import { Loading } from "@/components/ui";
 import { clearSession } from "@/lib/api";
 import {
@@ -123,87 +124,86 @@ export default function AppLayout() {
   return (
     <PracticeProvider value={value}>
       <PracticeLiveProvider>
-      <SafeAreaView
-        style={{ flex: 1, backgroundColor: colors.paper }}
-        edges={["top", "left", "right"]}
-      >
-        <Tabs
-          tabBar={(props) => (
-            <FloatingDock {...(props as FloatingDockProps)} />
-          )}
-          screenOptions={{
-            headerShown: false,
-            headerStyle: {
-              backgroundColor: colors.paper,
-            },
-            headerShadowVisible: false,
-            headerTitleStyle: {
-              color: colors.ink,
-              fontWeight: "600",
-              fontSize: 17,
-              letterSpacing: -0.35,
-            },
-            headerTintColor: colors.navy,
-            // Root SafeAreaView already clears the status bar
-            headerStatusBarHeight: 0,
-            tabBarActiveTintColor: colors.navy,
-            tabBarInactiveTintColor: colors.inkSoft,
-            tabBarStyle: {
-              position: "absolute",
-              backgroundColor: "transparent",
-              borderTopWidth: 0,
-              elevation: 0,
-            },
-            sceneStyle: {
-              backgroundColor: colors.paper,
-            },
-          }}
-        >
-          <Tabs.Screen name="dashboard" options={{ title: "Dashboard" }} />
-          <Tabs.Screen name="queue" options={{ title: "Queue" }} />
-          <Tabs.Screen name="appointments" options={{ title: "Appointments" }} />
-          <Tabs.Screen name="patients" options={{ title: "Patients" }} />
-          <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
-          <Tabs.Screen
-            name="analytics"
-            options={{ href: null, title: "Analytics", headerShown: true }}
-          />
-          <Tabs.Screen
-            name="payments"
-            options={{ href: null, title: "Payments", headerShown: true }}
-          />
-          <Tabs.Screen name="profile" options={{ title: "More" }} />
-          <Tabs.Screen
-            name="subscriptions"
-            options={{ href: null, title: "Subscription", headerShown: true }}
-          />
-          <Tabs.Screen
-            name="visit/[bookingId]"
-            options={{ href: null, title: "Visit", headerShown: true }}
-          />
-          <Tabs.Screen
-            name="schedule"
-            options={{ href: null, title: "Hours & blocks", headerShown: true }}
-          />
-          <Tabs.Screen
-            name="overrides"
-            options={{ href: null, headerShown: true }}
-          />
-          <Tabs.Screen
-            name="inbox"
-            options={{ href: null, title: "Patient Support", headerShown: true }}
-          />
-          <Tabs.Screen
-            name="notifications"
-            options={{ href: null, title: "Notifications", headerShown: true }}
-          />
-          <Tabs.Screen
-            name="queries"
-            options={{ href: null, title: "Help & Support", headerShown: true }}
-          />
-        </Tabs>
-        <GlucoBotFab />
-      </SafeAreaView>
+        <SidebarProvider>
+          <SafeAreaView
+            style={{ flex: 1, backgroundColor: colors.paper }}
+            edges={["top", "left", "right"]}
+          >
+            <View style={{ flex: 1 }}>
+              <AppTopBar />
+              <Tabs
+                tabBar={() => null}
+                screenOptions={{
+                  headerShown: false,
+                  headerStyle: {
+                    backgroundColor: colors.paper,
+                  },
+                  headerShadowVisible: false,
+                  headerTitleStyle: {
+                    color: colors.ink,
+                    fontWeight: "600",
+                    fontSize: 17,
+                    letterSpacing: -0.35,
+                  },
+                  headerTintColor: colors.navy,
+                  headerStatusBarHeight: 0,
+                  tabBarStyle: { display: "none" },
+                  sceneStyle: {
+                    backgroundColor: colors.paper,
+                  },
+                }}
+              >
+                <Tabs.Screen name="dashboard" options={{ title: "Dashboard" }} />
+                <Tabs.Screen name="queue" options={{ title: "Queue" }} />
+                <Tabs.Screen
+                  name="appointments"
+                  options={{ title: "Appointments" }}
+                />
+                <Tabs.Screen name="patients" options={{ title: "Patients" }} />
+                <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
+                <Tabs.Screen
+                  name="analytics"
+                  options={{ href: null, title: "Analytics" }}
+                />
+                <Tabs.Screen
+                  name="payments"
+                  options={{ href: null, title: "Payments" }}
+                />
+                <Tabs.Screen name="profile" options={{ title: "Account" }} />
+                <Tabs.Screen
+                  name="subscriptions"
+                  options={{ href: null, title: "Subscription" }}
+                />
+                <Tabs.Screen
+                  name="visit/[bookingId]"
+                  options={{ href: null, title: "Visit" }}
+                />
+                <Tabs.Screen
+                  name="schedule"
+                  options={{ href: null, title: "Hours & blocks" }}
+                />
+                <Tabs.Screen
+                  name="overrides"
+                  options={{ href: null, title: "Blocks" }}
+                />
+                <Tabs.Screen
+                  name="inbox"
+                  options={{ href: null, title: "Patient Support" }}
+                />
+                <Tabs.Screen
+                  name="notifications"
+                  options={{ href: null, title: "Notifications" }}
+                />
+                <Tabs.Screen
+                  name="queries"
+                  options={{ href: null, title: "Help & Support" }}
+                />
+              </Tabs>
+              <AppSidebar />
+              <GlucoBotFab />
+            </View>
+          </SafeAreaView>
+        </SidebarProvider>
       </PracticeLiveProvider>
     </PracticeProvider>
   );

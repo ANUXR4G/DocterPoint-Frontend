@@ -1,5 +1,5 @@
-import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SvgIcon, type SvgIconName } from "@/components/icons/SvgIcon";
+import { SvgIcon } from "@/components/icons/SvgIcon";
 import { Chip, PageTitle } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { clearSession } from "@/lib/api";
@@ -24,47 +24,27 @@ import {
   usePractice,
   usePracticeLabel,
 } from "@/lib/practiceContext";
-import {
-  fetchPracticeNotifications,
-  updateMyPhoto,
-  updatePracticeLogo,
-} from "@/lib/procto";
+import { updateMyPhoto, updatePracticeLogo } from "@/lib/procto";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import { doctorWebPath } from "@/lib/webPortal";
 
-type MenuItem = {
-  key: string;
-  label: string;
-  hint: string;
-  icon: SvgIconName;
-  /** In-app screen; otherwise `web` opens the same page on the web portal. */
-  href?: Href;
-  web?: string;
-  badge?: number;
-};
-
-/**
- * "More" = the rest of the web portal sidebar (same order, names and role rules);
- * the dock already carries Dashboard, Queue, Appointments, Patients and Calendar.
- */
-export default function MoreScreen() {
+/** Account — photos, practice switch, sign out. Portal pages live in the sidebar. */
+export default function AccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const {
     memberships,
     membership,
-    practiceId,
     practiceIndex,
     setPracticeIndex,
     refresh,
   } = usePractice();
   const label = usePracticeLabel(membership);
-  const [openAlerts, setOpenAlerts] = useState(0);
-
   const isClinicAdmin = isClinicAdminRole(membership?.role);
   const canManage = canManagePractice(membership);
-  const isReception = membership?.role === "RECEPTIONIST";
-  const me = membership?.practice.members.find((m) => m.userId === membership.userId)?.user;
+  const me = membership?.practice.members.find(
+    (m) => m.userId === membership.userId,
+  )?.user;
   const [photoBusy, setPhotoBusy] = useState<"me" | "logo" | null>(null);
   const [photoError, setPhotoError] = useState("");
 
@@ -107,109 +87,6 @@ export default function MoreScreen() {
     setPhotoBusy(null);
   }
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!practiceId) return;
-      let alive = true;
-      void fetchPracticeNotifications(practiceId, { take: 1 }).then((res) => {
-        if (alive && res.status === "successful") setOpenAlerts(res.data?.total ?? 0);
-      });
-      return () => {
-        alive = false;
-      };
-    }, [practiceId]),
-  );
-
-  const practiceItems: MenuItem[] = [
-    {
-      key: "notifications",
-      label: "Notifications",
-      hint: "Booking alerts and WhatsApp delivery",
-      icon: "bell",
-      href: "/(app)/notifications" as Href,
-      badge: openAlerts,
-    },
-    ...(isClinicAdmin
-      ? [
-          {
-            key: "doctors",
-            label: "Doctors",
-            hint: "Clinic roster and doctor settings (web)",
-            icon: "medkit" as SvgIconName,
-            web: "/clinic/doctors",
-          },
-        ]
-      : []),
-    {
-      key: "support",
-      label: "Patient Support",
-      hint: "WhatsApp chats handed to the clinic",
-      icon: "chatOutline",
-      href: "/(app)/inbox",
-    },
-    ...(isReception
-      ? []
-      : [
-          {
-            key: "audit",
-            label: "Audit log",
-            hint: "Who changed what, and when (web)",
-            icon: "document" as SvgIconName,
-            web: "/doctor/audit",
-          },
-        ]),
-    {
-      key: "analytics",
-      label: "Analytics",
-      hint: "Visits, trends and doctor breakdown",
-      icon: "chartOutline",
-      href: "/(app)/analytics",
-    },
-    {
-      key: "payments",
-      label: "Payments",
-      hint: "Visit payments and payment requests",
-      icon: "card",
-      href: "/(app)/payments" as Href,
-    },
-    {
-      key: "hours",
-      label: canManage ? "Hours & blocks" : "My hours",
-      hint: canManage ? "Clinic hours, slots and leave" : "Your weekly hours and leave",
-      icon: "clock",
-      href: "/(app)/schedule",
-    },
-    {
-      key: "subscription",
-      label: "Subscription",
-      hint: "Plan, trial and WhatsApp line",
-      icon: "diamond",
-      href: "/(app)/subscriptions",
-    },
-  ];
-
-  const accountItems: MenuItem[] = [
-    {
-      key: "settings",
-      label: "Settings",
-      hint: "Account, practice profile and theme (web)",
-      icon: "settings",
-      web: "/settings",
-    },
-    {
-      key: "help",
-      label: "Help & Support",
-      hint: "Ask Mira about GlucoGuide",
-      icon: "help",
-      href: "/(app)/queries",
-    },
-  ];
-
-  function open(item: MenuItem) {
-    if (item.href) router.push(item.href);
-    else if (item.web) void Linking.openURL(doctorWebPath(item.web));
-  }
-
   async function signOut() {
     await clearSession();
     router.replace("/(auth)/login");
@@ -222,7 +99,10 @@ export default function MoreScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: space.lg, paddingBottom: contentBottomPad(insets.bottom) },
+          {
+            paddingTop: space.lg,
+            paddingBottom: contentBottomPad(insets.bottom),
+          },
         ]}
       >
         <PageTitle
@@ -277,16 +157,34 @@ export default function MoreScreen() {
           </>
         ) : null}
 
-        <Text style={styles.section}>Practice</Text>
-        <MenuGroup items={practiceItems} onOpen={open} />
-
         <Text style={styles.section}>Account</Text>
-        <MenuGroup items={accountItems} onOpen={open} />
+        <View style={styles.group}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void Linking.openURL(doctorWebPath("/settings"))}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          >
+            <View style={styles.iconWrap}>
+              <SvgIcon name="settings" size={20} color={colors.brand} />
+            </View>
+            <View style={styles.text}>
+              <Text style={styles.label}>Settings</Text>
+              <Text style={styles.hint} numberOfLines={1}>
+                Account, practice profile and theme (web)
+              </Text>
+            </View>
+            <SvgIcon name="open" size={18} color={colors.inkSoft} />
+          </Pressable>
+        </View>
 
         <Pressable
           accessibilityRole="button"
           onPress={() => void signOut()}
-          style={({ pressed }) => [styles.group, styles.row, pressed && styles.rowPressed]}
+          style={({ pressed }) => [
+            styles.group,
+            styles.row,
+            pressed && styles.rowPressed,
+          ]}
         >
           <View style={[styles.iconWrap, styles.iconDanger]}>
             <SvgIcon name="logout" size={20} color={colors.danger} />
@@ -318,12 +216,15 @@ function PhotoTile({
   onRemove: () => void;
 }) {
   const radius = round ? 36 : 18;
-  const initial = name.replace(/^Dr\.?\s*/i, "").trim().charAt(0).toUpperCase() || "?";
+  const initial =
+    name.replace(/^Dr\.?\s*/i, "").trim().charAt(0).toUpperCase() || "?";
   return (
     <View style={styles.photoTile}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={uri ? `Change ${label.toLowerCase()}` : `Add ${label.toLowerCase()}`}
+        accessibilityLabel={
+          uri ? `Change ${label.toLowerCase()}` : `Add ${label.toLowerCase()}`
+        }
         onPress={onChange}
         disabled={disabled}
       >
@@ -344,52 +245,17 @@ function PhotoTile({
       </Pressable>
       <Text style={styles.photoLabel}>{label}</Text>
       {uri ? (
-        <Pressable accessibilityRole="button" onPress={onRemove} disabled={disabled} hitSlop={8}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onRemove}
+          disabled={disabled}
+          hitSlop={8}
+        >
           <Text style={styles.photoRemove}>Remove</Text>
         </Pressable>
       ) : (
         <Text style={styles.hint}>Tap to add</Text>
       )}
-    </View>
-  );
-}
-
-function MenuGroup({ items, onOpen }: { items: MenuItem[]; onOpen: (i: MenuItem) => void }) {
-  return (
-    <View style={styles.group}>
-      {items.map((item, i) => (
-        <Pressable
-          key={item.key}
-          accessibilityRole="button"
-          accessibilityLabel={item.badge ? `${item.label}, ${item.badge} open` : item.label}
-          onPress={() => onOpen(item)}
-          style={({ pressed }) => [
-            styles.row,
-            i > 0 && styles.rowDivider,
-            pressed && styles.rowPressed,
-          ]}
-        >
-          <View style={styles.iconWrap}>
-            <SvgIcon name={item.icon} size={20} color={colors.brand} />
-          </View>
-          <View style={styles.text}>
-            <Text style={styles.label}>{item.label}</Text>
-            <Text style={styles.hint} numberOfLines={1}>
-              {item.hint}
-            </Text>
-          </View>
-          {item.badge ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{item.badge > 99 ? "99+" : item.badge}</Text>
-            </View>
-          ) : null}
-          <SvgIcon
-            name={item.web ? "open" : "chevronRight"}
-            size={18}
-            color={colors.inkSoft}
-          />
-        </Pressable>
-      ))}
     </View>
   );
 }
@@ -405,66 +271,28 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: colors.inkSoft,
     marginBottom: space.sm,
-    marginTop: space.sm,
   },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.sm,
-  },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   group: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
     backgroundColor: colors.white,
     borderRadius: radii.xl,
     marginBottom: space.lg,
     overflow: "hidden",
-    ...shadows.card,
+    ...shadows.soft,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    minHeight: 56,
-  },
-  rowDivider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.lineStrong,
-  },
-  rowPressed: { backgroundColor: colors.paper },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.paper,
-  },
-  iconDanger: { backgroundColor: "#fdecec" },
-  text: { flex: 1, minWidth: 0 },
-  label: { fontSize: 15, fontWeight: "600", color: colors.ink },
-  hint: { marginTop: 2, fontSize: 12, color: colors.inkSoft },
-  badge: {
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: 6,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.danger,
-  },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   photoGroup: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    paddingVertical: space.lg,
+    gap: space.lg,
+    padding: space.lg,
   },
-  photoTile: { alignItems: "center", gap: 4, minWidth: 110 },
-  photo: { width: 72, height: 72, backgroundColor: colors.paper },
-  photoEmpty: { alignItems: "center", justifyContent: "center" },
-  photoInitial: { fontSize: 26, fontWeight: "700", color: colors.brand },
+  photoTile: { alignItems: "center", gap: 6, flex: 1 },
+  photo: { width: 72, height: 72 },
+  photoEmpty: {
+    backgroundColor: colors.brandLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoInitial: { fontSize: 24, fontWeight: "700", color: colors.brand },
   photoBadge: {
     position: "absolute",
     right: -2,
@@ -472,18 +300,38 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
+    backgroundColor: colors.brand,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.brand,
     borderWidth: 2,
     borderColor: colors.white,
   },
-  photoLabel: { marginTop: 6, fontSize: 14, fontWeight: "600", color: colors.ink },
+  photoLabel: { fontSize: 13, fontWeight: "600", color: colors.ink },
   photoRemove: { fontSize: 12, fontWeight: "600", color: colors.danger },
   photoError: {
-    marginTop: -space.sm,
-    marginBottom: space.md,
-    fontSize: 13,
     color: colors.danger,
+    marginTop: -space.md,
+    marginBottom: space.lg,
+    fontSize: 13,
   },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: 14,
+  },
+  rowPressed: { backgroundColor: colors.brandMist },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.brandLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconDanger: { backgroundColor: "#fdecec" },
+  text: { flex: 1, minWidth: 0 },
+  label: { fontSize: 16, fontWeight: "600", color: colors.ink },
+  hint: { marginTop: 2, fontSize: 12, color: colors.inkSoft },
 });

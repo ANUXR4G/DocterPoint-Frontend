@@ -17,12 +17,10 @@ import {
   SurfaceCard,
 } from "@/components/ui";
 import {
-  DashLinkCard,
   DashMetric,
   PremiumAtmosphere,
 } from "@/components/mobile/PremiumChrome";
 import {
-  canManagePractice,
   isClinicAdminRole,
   usePractice,
 } from "@/lib/practiceContext";
@@ -31,7 +29,7 @@ import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
 import { withDrTitle } from "@/lib/doctorName";
 import { nextActions, whenLabel, ymd, type BookingRow } from "@/lib/types";
 import { formatPracticeTime } from "@/lib/practiceTime";
-import { colors, dashOrder, space, type DashTone } from "@/lib/theme";
+import { colors, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
 import {
   countQueueStatusFilters,
@@ -39,13 +37,6 @@ import {
 } from "@/lib/bookingStatus";
 
 const QUEUE_PREVIEW = 5;
-
-type QuickLink = {
-  title: string;
-  body: string;
-  href: string;
-  tone: DashTone;
-};
 
 function queueWhen(b: BookingRow) {
   if (b.mode === "TOKEN_BASED") return `Token #${b.tokenNumber ?? "?"}`;
@@ -72,7 +63,6 @@ export default function DashboardScreen() {
 
   const practiceName = membership?.practice.name ?? "your clinic";
   const isClinicAdmin = isClinicAdminRole(membership?.role);
-  const canManage = canManagePractice(membership);
   const isIndependent = membership?.practice.type === "SOLO";
   const isStaffDoctor =
     !isIndependent && !isClinicAdmin && membership?.role === "DOCTOR";
@@ -104,67 +94,6 @@ export default function DashboardScreen() {
   const subtitle = isStaffDoctor
     ? `You are signed in under ${practiceName}. Manage your own queue and patients; the clinic oversees the full roster.`
     : `${practiceName} · live queue and summary metrics.`;
-
-  const quickLinks: QuickLink[] = useMemo(() => {
-    const links: QuickLink[] = [
-      {
-        title: "Calendar",
-        body: "Month view of upcoming visits",
-        href: "/(app)/calendar",
-        tone: "sky",
-      },
-      {
-        title: "Patients",
-        body: isStaffDoctor
-          ? "Your patients and visit history"
-          : "Clinic roster and visit history",
-        href: "/(app)/patients",
-        tone: "blue",
-      },
-      {
-        title: "Appointments",
-        body: "Search and filter all visits",
-        href: "/(app)/appointments",
-        tone: "emerald",
-      },
-      {
-        title: "Analytics",
-        body: "Patients and bookings over time",
-        href: "/(app)/analytics",
-        tone: "teal",
-      },
-      {
-        title: "Patient Support",
-        body: "WhatsApp support chats with patients",
-        href: "/(app)/inbox",
-        tone: "amber",
-      },
-    ];
-    if (canManage) {
-      links.push(
-        {
-          title: "Hours & blocks",
-          body: "Weekly hours, leave and day blocks",
-          href: "/(app)/schedule",
-          tone: dashOrder[1]!,
-        },
-        {
-          title: "Subscription",
-          body: "Trial, subscription, WhatsApp line",
-          href: "/(app)/subscriptions",
-          tone: "coral",
-        },
-      );
-    } else {
-      links.push({
-        title: "My hours",
-        body: "Your weekly hours and leave",
-        href: "/(app)/schedule",
-        tone: dashOrder[1]!,
-      });
-    }
-    return links;
-  }, [canManage, isStaffDoctor]);
 
   return (
     <View style={styles.root}>
@@ -198,7 +127,7 @@ export default function DashboardScreen() {
 
         {memberships.length > 1 ? (
           <Text style={styles.switchHint}>
-            Switch practice anytime from More.
+            Switch practice anytime from Account in the menu.
           </Text>
         ) : null}
 
@@ -238,9 +167,9 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.sectionRow}>
-          <Text style={styles.section}>Today's queue</Text>
+          <Text style={styles.section}>{"Today's queue"}</Text>
           <Chip
-            label="Full-screen queue →"
+            label="Full queue →"
             onPress={() => router.push("/(app)/queue")}
           />
         </View>
@@ -306,17 +235,6 @@ export default function DashboardScreen() {
             {finished.length} finished today.
           </Text>
         ) : null}
-
-        <Text style={styles.section}>Dashboard</Text>
-        {quickLinks.map((link) => (
-          <DashLinkCard
-            key={link.href}
-            title={link.title}
-            body={link.body}
-            tone={link.tone}
-            onPress={() => router.push(link.href as never)}
-          />
-        ))}
       </ScrollView>
     </View>
   );

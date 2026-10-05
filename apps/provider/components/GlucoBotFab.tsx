@@ -34,7 +34,7 @@ export function GlucoBotFab() {
           styles.fab,
           shadows.soft,
           {
-            bottom: dockClearance + Math.max(insets.bottom, 0) + 8,
+            bottom: Math.max(insets.bottom, 12) + dockClearance,
             right: Math.max(insets.right, 16),
           },
         ]}

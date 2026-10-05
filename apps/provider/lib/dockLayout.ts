@@ -1,33 +1,31 @@
 import { Platform } from "react-native";
-import { radii, space } from "@/lib/theme";
+import { space } from "@/lib/theme";
 
 /**
- * Compact icon-only floating dock metrics.
- * Keep Mira FAB clearance in sync with the custom tab bar.
+ * Content insets after the bottom dock was replaced by a sidebar menu.
+ * Keep Mira FAB clearance in sync with GlucoBotFab.
  */
 export const dockLayout = {
-  bottom: Platform.OS === "ios" ? 18 : 12,
-  height: 58,
+  /** No floating dock — keep keys for older call sites. */
+  bottom: 0,
+  height: 0,
   horizontal: 20,
-  radius: radii.xxl,
-  contentGap: 8,
+  radius: 0,
+  contentGap: 0,
 } as const;
 
-/** Padding from the screen bottom so content clears the floating dock. */
-export const dockClearance =
-  dockLayout.bottom + dockLayout.height + dockLayout.contentGap;
-
-/** Mira FAB size — keep in sync with GlucoBotFab. */
+/** Space reserved under scroll content for the Mira FAB. */
 export const fabSize = 56;
 
-/**
- * Scroll content bottom pad so lists clear the floating dock
- * (and optionally the Mira FAB that sits above it).
- */
+/** Padding so lists clear the home indicator + optional Mira FAB. */
 export function contentBottomPad(
   insetsBottom = 0,
   opts?: { fab?: boolean },
 ) {
-  const base = dockClearance + Math.max(insetsBottom, 0) + space.xl;
+  const base =
+    Math.max(insetsBottom, Platform.OS === "ios" ? 8 : 4) + space.xl;
   return opts?.fab ? base + fabSize + space.sm : base;
 }
+
+/** Former dock clearance — now just a small bottom gap for the FAB. */
+export const dockClearance = space.md;
