@@ -132,7 +132,7 @@ export function bookingNextActions(
     case "WAITING":
     case "CHECKED_IN":
       return [
-        { status: "IN_PROGRESS", label: "Start appointment" },
+        { status: "IN_PROGRESS", label: "Start consultation" },
         { status: "NO_SHOW", label: "No-show" },
         { status: "CANCELED", label: "Cancel" },
       ]
