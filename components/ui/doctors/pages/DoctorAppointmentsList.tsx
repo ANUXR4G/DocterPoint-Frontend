@@ -42,6 +42,15 @@ import {
   usePracticeDashboard,
 } from "@/contexts/PracticeDashboardContext"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import { withDrTitle } from "@/lib/doctorName"
+
+function bookingDoctorName(b: ProctoBooking): string {
+  const raw =
+    b.provider?.name?.trim() ||
+    (b as { providerName?: string | null }).providerName?.trim() ||
+    ""
+  return withDrTitle(raw) || "—"
+}
 
 function bookingPeerUserId(b: ProctoBooking): string | null {
   const id = (b.patient?.id || b.patientId || "").trim()
@@ -509,11 +518,9 @@ export default function DoctorAppointmentsList({
                     Arrived: {formatArrival(b)}
                   </p>
                 ) : null}
-                {isClinic ? (
-                  <p className="mt-1 text-xs text-neutral-500">
-                    Doctor: {b.provider?.name?.trim() || "—"}
-                  </p>
-                ) : null}
+                <p className="mt-1 text-xs text-neutral-500">
+                  Doctor: {bookingDoctorName(b)}
+                </p>
                 {chiefComplaintOf(b) ? (
                   <p className="mt-1 line-clamp-2 text-xs text-neutral-700 dark:text-slate-300">
                     <span className="opacity-60">Chief complaint: </span>
@@ -560,7 +567,7 @@ export default function DoctorAppointmentsList({
                 <tr>
                   <th className="px-4 py-3">Patient</th>
                   <th className="px-4 py-3">MRN</th>
-                  {isClinic ? <th className="px-4 py-3">Doctor</th> : null}
+                  <th className="px-4 py-3">Doctor</th>
                   <th className="px-4 py-3">When</th>
                   <th className="px-4 py-3">Arrival</th>
                   <th className="min-w-[180px] px-4 py-3">Chief complaint</th>
@@ -585,11 +592,9 @@ export default function DoctorAppointmentsList({
                     <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums tracking-wide">
                       {b.patient?.mrn?.trim() || "—"}
                     </td>
-                    {isClinic ? (
-                      <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
-                        {b.provider?.name?.trim() || "—"}
-                      </td>
-                    ) : null}
+                    <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
+                      {bookingDoctorName(b)}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
                       {formatBookingWhenDetailed(b)}
                       {isEmergencyWalkIn(b) ? (
