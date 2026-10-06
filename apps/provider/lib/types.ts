@@ -205,7 +205,7 @@ export function nextActions(status: string): Array<{ status: string; label: stri
     case "WAITING":
     case "CHECKED_IN":
       return [
-        { status: "IN_PROGRESS", label: "Start" },
+        { status: "IN_PROGRESS", label: "Start consultation" },
         { status: "NO_SHOW", label: "No-show" },
         { status: "CANCELED", label: "Cancel" },
       ];
