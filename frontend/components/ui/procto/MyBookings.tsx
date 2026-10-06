@@ -14,6 +14,7 @@ import {
   formatPracticeDateTime,
 } from "@/lib/practiceTime"
 import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
+import { withDrTitle } from "@/lib/doctorName"
 
 type PatientBooking = ProctoBooking & {
   doctorRemarks?: string | null
@@ -44,6 +45,14 @@ function bookedOnLabel(booking: PatientBooking) {
 
 function dash(v: string | null | undefined) {
   return v?.trim() ? v : "—"
+}
+
+function doctorLabel(b: PatientBooking) {
+  const raw =
+    b.provider?.name?.trim() ||
+    (b as { providerName?: string | null }).providerName?.trim() ||
+    ""
+  return withDrTitle(raw) || "—"
 }
 
 function canCancelStatus(status: string) {
@@ -237,7 +246,7 @@ export default function MyBookings() {
                       {b.practice?.name ?? "Practice"}
                     </p>
                     <p className="truncate text-xs text-neutral-500">
-                      {dash(b.provider?.name)}
+                      {doctorLabel(b)}
                     </p>
                   </div>
                   <div
@@ -332,7 +341,7 @@ export default function MyBookings() {
                         </p>
                       </td>
                       <td className="px-3 py-3">
-                        <p className="font-medium">{dash(b.provider?.name)}</p>
+                        <p className="font-medium">{doctorLabel(b)}</p>
                         {b.provider?.licenseNo ? (
                           <p className="text-xs opacity-60">
                             Lic. {b.provider.licenseNo}

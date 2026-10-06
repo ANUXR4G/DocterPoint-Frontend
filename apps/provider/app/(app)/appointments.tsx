@@ -247,12 +247,17 @@ export default function AppointmentsScreen() {
                       </View>
                       <Text style={styles.when}>{whenLabel(b)}</Text>
                       <Text style={styles.meta}>
-                        {b.disease ||
-                          consultationTypeLabel(b.consultationType) ||
-                          b.mode?.replace(/_/g, " ")}
-                        {b.provider?.name && !isStaffOnly
-                          ? ` · ${b.provider.name}`
-                          : ""}
+                        {[
+                          b.provider?.name
+                            ? `Dr. ${b.provider.name.replace(/^Dr\.?\s*/i, "")}`
+                            : null,
+                          b.disease ||
+                            consultationTypeLabel(b.consultationType) ||
+                            b.mode?.replace(/_/g, " ") ||
+                            null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </Text>
                       <View style={styles.actions}>
                         <Text style={styles.viewHint}>Tap for visit →</Text>
