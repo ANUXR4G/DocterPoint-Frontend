@@ -1518,6 +1518,112 @@ export const BookingService = {
     };
   },
 
+  /**
+   * Patient app/portal: attach a file to their own visit, post it in care chat
+   * for the doctor, and alert the clinic inbox.
+   */
+  async attachPatientDocument(
+    bookingId: string,
+    input: { name?: string; url?: string; caption?: string },
+    actorUserId: string,
+  ) {
+    const booking = await prisma.practiceBooking.findUnique({
+      where: { id: bookingId },
+      include: { practice: { select: { name: true } } },
+    });
+    if (!booking) ResponseHandler.notFoundError("booking not found.");
+    const existing = booking!;
+
+    if (!existing.patientId || existing.patientId !== actorUserId) {
+      throw new AppError(
+        403,
+        "You can only attach documents to your own appointments.",
+      );
+    }
+    if (
+      existing.status === BookingStatus.CANCELED ||
+      existing.status === BookingStatus.NO_SHOW
+    ) {
+      throw new AppError(
+        400,
+        "This visit is closed, so documents cannot be attached.",
+      );
+    }
+    if (!existing.providerId) {
+      throw new AppError(
+        400,
+        "This visit has no doctor assigned yet, so there is no chat to send to.",
+      );
+    }
+
+    const { isClinicDocumentUrl } = await import("../chat.whatsappFanout.js");
+    const url = String(input.url || "").trim();
+    if (!isClinicDocumentUrl(url)) {
+      throw new AppError(400, "Upload the file first, then attach it.");
+    }
+    const name = String(input.name || "").trim().slice(0, 120) || "Document";
+    const caption = String(input.caption || "").trim().slice(0, 900);
+
+    const docs = normalizeBookingDocuments(
+      Array.isArray(existing.documents)
+        ? (existing.documents as Array<{
+            name?: string;
+            url?: string;
+            uploadedAt?: string;
+          }>)
+        : [],
+    );
+    if (docs.length >= MAX_SHARED_VISIT_DOCUMENTS) {
+      throw new AppError(
+        400,
+        `This visit already has ${MAX_SHARED_VISIT_DOCUMENTS} documents.`,
+      );
+    }
+    const doc = { name, url, uploadedAt: new Date().toISOString() };
+    const updated = await prisma.practiceBooking.update({
+      where: { id: bookingId },
+      data: { documents: [...docs, doc] as unknown as Prisma.InputJsonValue },
+      include: {
+        practice: {
+          select: {
+            name: true,
+            slug: true,
+            specialty: true,
+            consultationFee: true,
+          },
+        },
+        location: { select: { name: true, address: true, city: true } },
+      },
+    });
+
+    void broadcastProctoEvent(
+      existing.practiceId,
+      { event: "booking_updated", booking: serializeBooking(updated) },
+      updated.patientId,
+    ).catch(() => undefined);
+    void import("../opsSocket.js")
+      .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
+      .catch(() => undefined);
+
+    const { ChatService } = await import("../chat.js");
+    const message = await ChatService.sendDirectMessage(
+      actorUserId,
+      existing.providerId,
+      `📎 ${name}\n${url}${caption ? `\n${caption}` : ""}`,
+      { whatsappFanOut: false },
+    );
+
+    void NotificationService.enqueueClinicDocumentAttached(bookingId, name, {
+      kind: "visit",
+    }).catch(() => undefined);
+
+    return {
+      booking: await this.enrichBooking(updated),
+      document: doc,
+      message,
+    };
+  },
+
   async getById(bookingId: string) {
     const booking = await prisma.practiceBooking.findUnique({
       where: { id: bookingId },
