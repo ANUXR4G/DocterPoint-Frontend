@@ -217,8 +217,8 @@ export default function ClinicalMastersPanel({
             type="button"
             onClick={() =>
               setAllergies((prev) => [
-                ...prev,
                 { category: "Food", name: "", description: "" },
+                ...prev,
               ])
             }
             className="text-sm font-semibold text-teal-700 hover:underline dark:text-teal-300"
@@ -329,7 +329,7 @@ export default function ClinicalMastersPanel({
           ))}
           <button
             type="button"
-            onClick={() => setPainScales((prev) => [...prev, ""])}
+            onClick={() => setPainScales((prev) => ["", ...prev])}
             className="text-sm font-semibold text-teal-700 hover:underline dark:text-teal-300"
           >
             Add scale

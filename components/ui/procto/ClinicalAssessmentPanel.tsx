@@ -344,7 +344,7 @@ export default function ClinicalAssessmentPanel({
             onClick={() =>
               commit({
                 ...local,
-                pain: [...(local.pain ?? []), emptyPain()],
+                pain: [emptyPain(), ...(local.pain ?? [])],
               })
             }
             className="mt-2 text-sm font-semibold text-teal-700 hover:underline dark:text-teal-300"
@@ -533,7 +533,7 @@ export default function ClinicalAssessmentPanel({
               commit({
                 ...local,
                 noKnownAllergies: false,
-                allergies: [...(local.allergies ?? []), emptyAllergy()],
+                allergies: [emptyAllergy(), ...(local.allergies ?? [])],
               })
             }
             className="mt-2 text-sm font-semibold text-teal-700 hover:underline dark:text-teal-300"
