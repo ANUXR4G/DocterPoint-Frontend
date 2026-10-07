@@ -115,7 +115,7 @@ export default function ClinicalMastersPanel({
             type="button"
             disabled={busy}
             onClick={() => void save()}
-            className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="rounded-lg bg-[var(--theme-primary)] px-4 py-2 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)] disabled:opacity-60"
           >
             {busy ? "Saving…" : "Save masters"}
           </button>
@@ -221,7 +221,7 @@ export default function ClinicalMastersPanel({
                 ...prev,
               ])
             }
-            className="rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
+            className="rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)]"
           >
             Add allergy
           </button>
@@ -330,7 +330,7 @@ export default function ClinicalMastersPanel({
           <button
             type="button"
             onClick={() => setPainScales((prev) => ["", ...prev])}
-            className="rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
+            className="rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)]"
           >
             Add scale
           </button>

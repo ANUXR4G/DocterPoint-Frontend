@@ -202,7 +202,7 @@ export default function ClinicalAssessmentPanel({
                   onClick={() => setBreakfast(v)}
                   className={`rounded-md border px-3 py-1 text-sm font-semibold ${
                     local.vitals?.breakfast === v
-                      ? "border-teal-700 bg-teal-700 text-white"
+                      ? "border-[var(--theme-primary)] bg-[var(--theme-primary)] text-[var(--theme-primary-foreground)]"
                       : "border-neutral-300 dark:border-neutral-600"
                   }`}
                 >
@@ -347,7 +347,7 @@ export default function ClinicalAssessmentPanel({
                 pain: [emptyPain(), ...(local.pain ?? [])],
               })
             }
-            className="mt-2 rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
+            className="mt-2 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)]"
           >
             Add pain assessment
           </button>
@@ -366,7 +366,7 @@ export default function ClinicalAssessmentPanel({
             <button
               type="button"
               onClick={setNoKnownAllergies}
-              className="rounded-md border border-teal-700 px-3 py-1.5 text-xs font-bold text-teal-800 dark:text-teal-200"
+              className="rounded-md border border-[var(--theme-primary)] px-3 py-1.5 text-xs font-bold text-[var(--theme-primary)]"
             >
               No Known Allergies
             </button>
@@ -536,7 +536,7 @@ export default function ClinicalAssessmentPanel({
                 allergies: [emptyAllergy(), ...(local.allergies ?? [])],
               })
             }
-            className="mt-2 rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
+            className="mt-2 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)]"
           >
             Add allergy
           </button>
