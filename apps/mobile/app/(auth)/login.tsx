@@ -28,6 +28,7 @@ import {
   type CountryDial,
 } from "@/lib/countries";
 import { registerForPush } from "@/lib/push";
+import { friendlyWhatsAppError } from "@/lib/whatsappErrors";
 import { colors, shadows, radii, space } from "@/lib/theme";
 
 type Step = "phone" | "otp";
@@ -85,7 +86,7 @@ export default function LoginScreen() {
         body: JSON.stringify({ phone: fullPhone }),
       });
       if (res.status !== "successful") {
-        setError(res.message || "Could not send OTP");
+        setError(friendlyWhatsAppError(res.message));
         return;
       }
       const from = res.data?.from || "9990052082";
@@ -93,7 +94,11 @@ export default function LoginScreen() {
       if (res.data?.debugOtp) setDebugOtp(res.data.debugOtp);
       setStep("otp");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send OTP");
+      setError(
+        friendlyWhatsAppError(
+          err instanceof Error ? err.message : "Could not send OTP",
+        ),
+      );
     } finally {
       setBusy(false);
     }

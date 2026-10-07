@@ -26,6 +26,7 @@ import {
   PrimaryButton,
   SectionTitle,
 } from "@/components/ui";
+import { friendlyWhatsAppError } from "@/lib/whatsappErrors";
 import {
   parseAadhaarInput,
   validateAadhar,
@@ -142,7 +143,7 @@ export default function RegisterScreen() {
         body: JSON.stringify({ phone: fullPhone }),
       });
       if (res.status !== "successful") {
-        setError(res.message || "Could not send OTP");
+        setError(friendlyWhatsAppError(res.message));
         return;
       }
       const from = res.data?.from || "9990052082";
@@ -154,7 +155,11 @@ export default function RegisterScreen() {
       }));
       setStep("otp");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send OTP");
+      setError(
+        friendlyWhatsAppError(
+          err instanceof Error ? err.message : "Could not send OTP",
+        ),
+      );
     } finally {
       setBusy(false);
     }

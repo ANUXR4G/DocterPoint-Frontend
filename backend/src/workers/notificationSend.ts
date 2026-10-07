@@ -3,6 +3,7 @@
  */
 import { prisma } from "../db/prisma.js";
 import { sendNotificationWhatsApp } from "../services/procto/whatsapp.client.js";
+import { isMetaDisplayNameBlocked } from "../services/procto/whatsapp.metaErrors.js";
 
 export async function processNotificationEvent(notificationId: string): Promise<{
   skipped?: boolean;
@@ -101,11 +102,13 @@ export async function processNotificationEvent(notificationId: string): Promise<
 
   // Meta test / unverified display names reject both template and free-form
   // (#131037). Record as SKIPPED so the queue drains; ops must approve display name.
-  const errMsg = result.error ?? "";
+  const errMsg = result.errorDetail ?? result.error ?? "";
   const metaDisplayBlocked =
     !result.ok &&
     !result.simulated &&
-    (/131037/.test(errMsg) || /display name/i.test(errMsg));
+    (result.errorCode === 131037 ||
+      isMetaDisplayNameBlocked(errMsg) ||
+      isMetaDisplayNameBlocked(result.error));
 
   if (metaDisplayBlocked) {
     await prisma.notificationEvent.update({
@@ -116,6 +119,7 @@ export async function processNotificationEvent(notificationId: string): Promise<
         payload: {
           ...payload,
           error: errMsg,
+          userFacingReason: result.error,
           metaBlocked: "display_name_approval",
         },
       },

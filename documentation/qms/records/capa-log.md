@@ -376,6 +376,20 @@ Append new entries at the top. Do not delete closed records.
 - **Status:** Verified
 - **Docs updated:** capa-log
 
+### NC-20261007-01
+- **Date opened:** 2026-10-07
+- **Severity:** 3
+- **Process:** P-AUTH / Patient WhatsApp OTP
+- **Description:** Patient app/web showed raw Meta `#131037` (“display name approval”) when OTP send failed.
+- **Evidence:** Graph error surface via `phoneOtpAuth.deliverOtp` → `AppError(502, delivered.error)` with unmapped Meta message; Expo login/register displayed `res.message` verbatim.
+- **Containment:** Map `#131037` in `whatsapp.metaErrors.ts`; OTP path returns patient-safe copy; mobile + web OTP forms also map known Meta strings.
+- **Root cause:** Client dropped Meta `error.code` and never translated 131037 for users (ops-only SKIPPED path existed for notifications).
+- **Corrective action:** Shared Meta error parser on all Graph sends; OTP short-circuits on 131037; docs § Meta error #131037.
+- **Owner / due:** Engineering / 2026-10-07
+- **Verification:** `npx tsx --test src/services/procto/whatsapp.metaErrors.test.ts`; backend `tsc`.
+- **Status:** Verified
+- **Docs updated:** Whatsapp-Meta-Rules.md, capa-log
+
 ### NC-20260927-04
 - **Date opened:** 2026-09-27
 - **Severity:** 2

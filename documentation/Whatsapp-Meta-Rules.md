@@ -177,6 +177,15 @@ Do not mark a pool number **LIVE** until:
 
 SLA remains Meta-controlled (often 24–72h). Never promise “instant WhatsApp live” in sales copy.
 
+### Meta error #131037 (display name)
+
+When Graph returns `(#131037) … display name approval…`:
+
+- **Cause:** Business / display name not approved on that Meta phone id (or Railway env points at the wrong phone id).
+- **OTP (patient app / web login):** Backend maps to a clear patient message via `whatsapp.metaErrors.ts` — never show raw Meta text.
+- **Notifications:** Worker marks the event `SKIPPED` with `metaBlocked: display_name_approval` (queue drains; ops fix Meta).
+- **Ops fix:** Approve display name in WhatsApp Manager; confirm `GLUCOGUIDE_OTP_PHONE_NUMBER_ID` / clinic `wabaPhoneNumberId` match the approved LIVE number.
+
 ---
 
 ## 9. Incident response (quality drop / restriction)
