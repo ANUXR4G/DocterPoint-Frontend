@@ -88,4 +88,31 @@ export async function sendCareMessage(peerUserId: string, content: string) {
   return { error: "", message: normalizeMsg(res.data) };
 }
 
+/** Patient attaches a file to their visit and posts it in care chat. */
+export async function attachPatientVisitDocument(
+  bookingId: string,
+  doc: { name: string; url: string; caption?: string },
+) {
+  const res = await api<{
+    message?: Record<string, unknown>;
+    document?: { name: string; url: string; uploadedAt?: string };
+  }>(`/procto/bookings/${bookingId}/patient-document`, {
+    method: "POST",
+    body: JSON.stringify(doc),
+  });
+  if (res.status !== "successful" || !res.data) {
+    return {
+      error: res.message || "Could not attach document",
+      message: null as CareChatMessage | null,
+      document: null as { name: string; url: string; uploadedAt?: string } | null,
+    };
+  }
+  const raw = res.data.message;
+  return {
+    error: "",
+    message: raw ? normalizeMsg(raw) : null,
+    document: res.data.document ?? null,
+  };
+}
+
 export { normalizeMsg };

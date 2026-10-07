@@ -24,6 +24,10 @@ import { getSessionUserId } from "@/lib/sessionUser"
 import { patchBookingFields } from "@/lib/liveBooking"
 import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
 import {
+  BOOKING_DOCUMENT_ACCEPT,
+  uploadBookingDocument,
+} from "@/lib/uploadBookingDocument"
+import {
   consultationTypeLabel,
   formatBookingWhenDetailed,
 } from "@/lib/bookingDisplay"
@@ -191,6 +195,8 @@ export default function PatientVisitPage() {
   const [cancelBusy, setCancelBusy] = useState(false)
   const [flash, setFlash] = useState("")
   const [detailLoaded, setDetailLoaded] = useState(false)
+  const [attachBusy, setAttachBusy] = useState(false)
+  const [attachError, setAttachError] = useState("")
 
   const loadDetail = useCallback(async (opts?: { silent?: boolean }) => {
     if (!bookingId) return
@@ -263,6 +269,32 @@ export default function PatientVisitPage() {
       await loadDetail({ silent: true })
     } else {
       setFlash(res.message || "Cancel failed.")
+    }
+  }
+
+  async function onAttachDocument(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file || !booking) return
+    setAttachBusy(true)
+    setAttachError("")
+    try {
+      const uploaded = await uploadBookingDocument(file)
+      const res = await proctoService.attachPatientDocument(booking.id, {
+        name: uploaded.name,
+        url: uploaded.url,
+      })
+      if (res.status !== "successful") {
+        setAttachError(res.message || "Could not attach document.")
+        return
+      }
+      await refresh({ silent: true })
+      await loadDetail({ silent: true })
+      setFlash("Document attached for your doctor.")
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Upload failed.")
+    } finally {
+      setAttachBusy(false)
     }
   }
 
@@ -518,7 +550,9 @@ export default function PatientVisitPage() {
 
           <SectionCard title="Documents" icon={IconFileText}>
             {documents.length === 0 ? (
-              <EmptyNote>No documents attached to this visit.</EmptyNote>
+              <EmptyNote>
+                No documents yet. Attach a lab report or photo for your doctor.
+              </EmptyNote>
             ) : (
               <ul className="space-y-2">
                 {documents.map((d, idx) => (
@@ -540,6 +574,25 @@ export default function PatientVisitPage() {
                 ))}
               </ul>
             )}
+            {booking.status !== "CANCELED" && booking.status !== "NO_SHOW" ? (
+              <div className="mt-3">
+                <label className="inline-flex h-10 cursor-pointer items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700">
+                  <input
+                    type="file"
+                    accept={BOOKING_DOCUMENT_ACCEPT}
+                    className="hidden"
+                    disabled={attachBusy}
+                    onChange={(e) => void onAttachDocument(e)}
+                  />
+                  {attachBusy ? "Uploading…" : "Attach document"}
+                </label>
+                {attachError ? (
+                  <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                    {attachError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </SectionCard>
         </div>
 
@@ -605,9 +658,11 @@ export default function PatientVisitPage() {
               selfUserId={selfId}
               peerUserId={peerId}
               peerName={withDrTitle(doctor?.name) || "Doctor"}
-              subtitle="Message your doctor about this visit. Clinic replies also go to WhatsApp. Do not share emergencies here — call the clinic."
+              subtitle="Message your doctor about this visit. Attach reports here too. Clinic replies also go to WhatsApp. Do not share emergencies here — call the clinic."
               bookingId={booking.id}
               threadSince={booking.createdAt ?? booking.created_at ?? null}
+              attachAs="patient"
+              onDocumentShared={() => void refresh()}
             />
           </div>
         )

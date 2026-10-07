@@ -439,6 +439,28 @@ router.post(
   },
 );
 
+/** Patient attaches a file to their own visit + care chat (app / portal). */
+router.post(
+  "/:id/patient-document",
+  requireAuth("booking:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await BookingService.attachPatientDocument(
+        param(req.params.id),
+        {
+          name: req.body?.name,
+          url: req.body?.url,
+          caption: req.body?.caption,
+        },
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "document attached.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get(
   "/:id",
   attachSessionIfPresent(),

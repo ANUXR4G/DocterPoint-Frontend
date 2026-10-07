@@ -15,6 +15,7 @@ import {
   Loading,
   PageTitle,
   Panel,
+  PrimaryButton,
   Screen,
   SectionTitle,
 } from "@/components/ui";
@@ -24,6 +25,7 @@ import {
   bookingStatusTone,
   effectiveBookingStatus,
 } from "@/lib/bookingStats";
+import { attachPatientVisitDocument } from "@/lib/chat";
 import { withDrTitle } from "@/lib/doctorName";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { patchBookingFields } from "@/lib/liveBooking";
@@ -34,6 +36,11 @@ import {
   consultationTypeLabel,
   type BookingDetail,
 } from "@/lib/types";
+import {
+  pickVisitDocument,
+  pickVisitPhoto,
+  uploadVisitFile,
+} from "@/lib/visitUpload";
 
 export default function BookingDetailScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
@@ -43,6 +50,8 @@ export default function BookingDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selfUserId, setSelfUserId] = useState<string | null>(null);
+  const [attaching, setAttaching] = useState(false);
+  const [attachError, setAttachError] = useState("");
 
   const fromShared = sharedBookings.find((b) => b.id === bookingId) ?? null;
 
@@ -113,11 +122,42 @@ export default function BookingDetailScreen() {
     isCompleted && display.reviewEligibility?.alreadyReviewed === true;
   const medicines = Array.isArray(display.medicines) ? display.medicines : [];
   const documents = Array.isArray(display.documents) ? display.documents : [];
+  const canAttachDocs =
+    displayStatus !== "CANCELED" && displayStatus !== "NO_SHOW";
   const showVisitSummary =
     isCompleted ||
     Boolean(display.doctorRemarks?.trim()) ||
-    medicines.length > 0 ||
-    documents.length > 0;
+    medicines.length > 0;
+
+  async function attachFile(kind: "photo" | "file") {
+    const id = display?.id;
+    if (!id || attaching || !canAttachDocs) return;
+    setAttachError("");
+    const picked =
+      kind === "photo" ? await pickVisitPhoto() : await pickVisitDocument();
+    if (picked === "denied") {
+      setAttachError("Photo access was blocked. Allow photos in Settings.");
+      return;
+    }
+    if (!picked) return;
+    setAttaching(true);
+    try {
+      const uploaded = await uploadVisitFile(picked);
+      const res = await attachPatientVisitDocument(id, {
+        name: uploaded.name,
+        url: uploaded.url,
+      });
+      if (res.error) {
+        setAttachError(res.error);
+        return;
+      }
+      await load({ soft: true });
+    } catch {
+      setAttachError("Could not attach that file. Try again.");
+    } finally {
+      setAttaching(false);
+    }
+  }
 
   return (
     <Screen>
@@ -196,27 +236,46 @@ export default function BookingDetailScreen() {
                 ))
               )}
             </Panel>
-
-            <Panel style={styles.panel}>
-              <SectionTitle>Documents</SectionTitle>
-              {documents.length === 0 ? (
-                <Text style={styles.muted}>No documents attached.</Text>
-              ) : (
-                documents.map((d, idx) => (
-                  <Pressable
-                    key={`${d.url}-${idx}`}
-                    onPress={() => {
-                      if (d.url) void Linking.openURL(d.url);
-                    }}
-                    style={styles.docRow}
-                  >
-                    <Text style={styles.docLink}>{d.name || "View document"}</Text>
-                  </Pressable>
-                ))
-              )}
-            </Panel>
           </>
         ) : null}
+
+        <Panel style={styles.panel}>
+          <SectionTitle>Documents</SectionTitle>
+          {documents.length === 0 ? (
+            <Text style={styles.muted}>
+              No documents yet. Attach a lab report or photo for your doctor.
+            </Text>
+          ) : (
+            documents.map((d, idx) => (
+              <Pressable
+                key={`${d.url}-${idx}`}
+                onPress={() => {
+                  if (d.url) void Linking.openURL(d.url);
+                }}
+                style={styles.docRow}
+              >
+                <Text style={styles.docLink}>{d.name || "View document"}</Text>
+              </Pressable>
+            ))
+          )}
+          {canAttachDocs ? (
+            <View style={styles.attachRow}>
+              <PrimaryButton
+                label={attaching ? "Uploading…" : "Add photo"}
+                onPress={() => void attachFile("photo")}
+                busy={attaching}
+                tone="ghost"
+              />
+              <PrimaryButton
+                label="Add file / PDF"
+                onPress={() => void attachFile("file")}
+                busy={attaching}
+                tone="ghost"
+              />
+            </View>
+          ) : null}
+          <ErrorText text={attachError} />
+        </Panel>
 
         {selfUserId && display.provider?.id ? (
           <CareChatPanel
@@ -227,9 +286,10 @@ export default function BookingDetailScreen() {
                 ? `Dr. ${display.provider.name.trim().replace(/^(?:dr\.\s*|dr\s+)+/i, "")}`
                 : "Doctor"
             }
-            subtitle="Doctor messages also arrive on WhatsApp. Do not use this for emergencies."
+            subtitle="Doctor messages also arrive on WhatsApp. Attach reports with Photo or File below. Do not use this for emergencies."
             bookingId={display.id}
             threadSince={display.createdAt ?? display.created_at ?? null}
+            onDocumentAttached={() => void load({ soft: true })}
           />
         ) : null}
 
@@ -299,6 +359,10 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
   },
   panel: { marginBottom: space.md },
+  attachRow: {
+    marginTop: space.md,
+    gap: space.sm,
+  },
   detail: { marginTop: space.sm },
   detailLabel: {
     fontSize: 11,
