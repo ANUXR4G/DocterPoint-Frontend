@@ -197,7 +197,7 @@ export default function ClinicalMastersPanel({
                           }
                           setVitals(next)
                         }}
-                        className="w-24 rounded-md border border-neutral-300 bg-transparent px-2 py-1 text-sm disabled:opacity-50 dark:border-neutral-600"
+                        className="w-24 rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm text-neutral-900 placeholder:text-neutral-400 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-white dark:placeholder:text-neutral-500"
                       />
                     </td>
                   ))}

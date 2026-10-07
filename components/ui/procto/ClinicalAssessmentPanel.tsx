@@ -12,19 +12,46 @@ import {
 } from "@/lib/clinicalMasters"
 
 const BAND_COLORS: Record<VitalBand, string> = {
-  critical_low: "bg-sky-100 border-sky-300",
-  low: "bg-indigo-100 border-indigo-300",
-  normal: "bg-emerald-100 border-emerald-300",
-  high: "bg-rose-100 border-rose-300",
-  critical_high: "bg-red-200 border-red-400",
+  critical_low:
+    "bg-sky-100 border-sky-300 text-sky-950 dark:bg-sky-950/60 dark:border-sky-600 dark:text-sky-100",
+  low: "bg-indigo-100 border-indigo-300 text-indigo-950 dark:bg-indigo-950/60 dark:border-indigo-600 dark:text-indigo-100",
+  normal:
+    "bg-emerald-100 border-emerald-300 text-emerald-950 dark:bg-emerald-950/50 dark:border-emerald-600 dark:text-emerald-100",
+  high: "bg-rose-100 border-rose-300 text-rose-950 dark:bg-rose-950/50 dark:border-rose-600 dark:text-rose-100",
+  critical_high:
+    "bg-red-200 border-red-400 text-red-950 dark:bg-red-950/60 dark:border-red-500 dark:text-red-100",
 }
 
+const VITAL_INPUT_BASE =
+  "bg-white text-neutral-900 placeholder:text-neutral-400 dark:bg-neutral-900 dark:text-white dark:placeholder:text-neutral-500"
+
 const BAND_LEGEND = [
-  { key: "critical_low" as const, label: "Critical Low", className: "bg-sky-100" },
-  { key: "low" as const, label: "Low", className: "bg-indigo-100" },
-  { key: "normal" as const, label: "Normal", className: "bg-emerald-100" },
-  { key: "high" as const, label: "High", className: "bg-rose-100" },
-  { key: "critical_high" as const, label: "Critical High", className: "bg-red-200" },
+  {
+    key: "critical_low" as const,
+    label: "Critical Low",
+    className: "bg-sky-100 text-sky-950 dark:bg-sky-950/60 dark:text-sky-100",
+  },
+  {
+    key: "low" as const,
+    label: "Low",
+    className: "bg-indigo-100 text-indigo-950 dark:bg-indigo-950/60 dark:text-indigo-100",
+  },
+  {
+    key: "normal" as const,
+    label: "Normal",
+    className:
+      "bg-emerald-100 text-emerald-950 dark:bg-emerald-950/50 dark:text-emerald-100",
+  },
+  {
+    key: "high" as const,
+    label: "High",
+    className: "bg-rose-100 text-rose-950 dark:bg-rose-950/50 dark:text-rose-100",
+  },
+  {
+    key: "critical_high" as const,
+    label: "Critical High",
+    className: "bg-red-200 text-red-950 dark:bg-red-950/60 dark:text-red-100",
+  },
 ]
 
 type PainRow = NonNullable<ClinicalAssessment["pain"]>[number]
@@ -203,7 +230,7 @@ export default function ClinicalAssessmentPanel({
                   className={`rounded-md border px-3 py-1 text-sm font-semibold ${
                     local.vitals?.breakfast === v
                       ? "border-[var(--theme-primary)] bg-[var(--theme-primary)] text-[var(--theme-primary-foreground)]"
-                      : "border-neutral-300 dark:border-neutral-600"
+                      : "border-neutral-300 text-neutral-800 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
                   }`}
                 >
                   {v ? "Yes" : "No"}
@@ -237,8 +264,10 @@ export default function ClinicalAssessmentPanel({
                   value={rawVal ?? ""}
                   placeholder="Enter value"
                   onChange={(e) => setVital(m.key, e.target.value)}
-                  className={`mt-1 w-full rounded-md border px-2 py-1.5 text-sm ${
-                    band ? BAND_COLORS[band] : "border-neutral-300 dark:border-neutral-600"
+                  className={`mt-1 w-full rounded-md border px-2 py-1.5 text-sm ${VITAL_INPUT_BASE} ${
+                    band
+                      ? BAND_COLORS[band]
+                      : "border-neutral-300 dark:border-neutral-600"
                   } disabled:opacity-70`}
                 />
               </label>
