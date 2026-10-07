@@ -76,30 +76,6 @@ function statusTone(status: string) {
   return { bg: colors.amberLight, fg: "#CA8A04" };
 }
 
-const CELL_STATUS = {
-  completed: { bg: colors.success, fg: colors.white },
-  scheduled: { bg: "#EAB308", fg: colors.ink },
-  cancelled: { bg: colors.danger, fg: colors.white },
-} as const;
-
-function isCancelledStatus(status: string) {
-  const s = (status || "").toUpperCase();
-  return s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW";
-}
-
-function isCompletedStatus(status: string) {
-  return (status || "").toUpperCase() === "COMPLETED";
-}
-
-function dayCellStatusColor(list: BookingRow[]) {
-  const hasScheduled = list.some(
-    (b) => !isCompletedStatus(b.status) && !isCancelledStatus(b.status),
-  );
-  if (hasScheduled) return CELL_STATUS.scheduled;
-  if (list.some((b) => isCancelledStatus(b.status))) return CELL_STATUS.cancelled;
-  return CELL_STATUS.completed;
-}
-
 function chunkWeeks<T>(items: T[], size: number): T[][] {
   const rows: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -208,26 +184,9 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
         <Text style={styles.title} numberOfLines={1}>
           {formatMonthTitle(monthCursor)}
         </Text>
-        <View style={styles.legend}>
-          <View style={styles.legendItem}>
-            <View
-              style={[styles.legendSwatch, { backgroundColor: CELL_STATUS.scheduled.bg }]}
-            />
-            <Text style={styles.legendText}>Upcoming</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View
-              style={[styles.legendSwatch, { backgroundColor: CELL_STATUS.cancelled.bg }]}
-            />
-            <Text style={styles.legendText}>Cancelled</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View
-              style={[styles.legendSwatch, { backgroundColor: CELL_STATUS.completed.bg }]}
-            />
-            <Text style={styles.legendText}>Completed</Text>
-          </View>
-        </View>
+        <Text style={styles.legendHint}>
+          Numbers mark busy days — status colours show on each appointment.
+        </Text>
       </View>
 
       <View style={styles.monthCard}>
@@ -255,9 +214,6 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
                   const today = isSameDay(d, new Date());
                   const isSelected = selected ? isSameDay(d, selected) : false;
                   const hasBooking = list.length > 0;
-                  const statusColor = hasBooking
-                    ? dayCellStatusColor(list)
-                    : null;
                   return (
                     <Pressable
                       key={key}
@@ -269,14 +225,10 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
                           marginRight: colIdx < COLS - 1 ? CELL_GAP : 0,
                         },
                         !inMonth && styles.dayCellMuted,
-                        today &&
-                          !hasBooking &&
-                          !isSelected &&
-                          styles.dayCellToday,
+                        today && !isSelected && styles.dayCellToday,
                         isSelected &&
                           !hasBooking &&
                           styles.dayCellSelectedEmpty,
-                        statusColor ? { backgroundColor: statusColor.bg } : null,
                         isSelected &&
                           hasBooking &&
                           styles.dayCellBookedSelected,
@@ -286,27 +238,16 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
                         style={[
                           styles.dayNum,
                           !inMonth && styles.dayNumMuted,
-                          today &&
-                            !hasBooking &&
-                            !isSelected &&
-                            styles.dayNumToday,
+                          today && !isSelected && styles.dayNumToday,
                           isSelected &&
                             !hasBooking &&
                             styles.dayNumSelectedEmpty,
-                          statusColor ? { color: statusColor.fg } : null,
                         ]}
                       >
                         {d.getDate()}
                       </Text>
-                      {hasBooking && statusColor ? (
-                        <Text
-                          style={[
-                            styles.cellCount,
-                            { color: statusColor.fg },
-                          ]}
-                        >
-                          {list.length}
-                        </Text>
+                      {hasBooking ? (
+                        <Text style={styles.cellCount}>{list.length}</Text>
                       ) : (
                         <View style={styles.countPlaceholder} />
                       )}
@@ -328,7 +269,7 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
           </Text>
           {dayBookings.length === 0 ? (
             <Text style={styles.emptyDayDetail}>
-              No visits on this date. Tap a colored date to see appointments.
+              No visits on this date. Tap a numbered date to see appointments.
             </Text>
           ) : (
             dayBookings.map((b) => (
@@ -387,27 +328,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     paddingVertical: 2,
   },
-  legend: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 14,
+  legendHint: {
     marginTop: 4,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  legendSwatch: {
-    width: 12,
-    height: 12,
-    borderRadius: 4,
-  },
-  legendText: {
+    textAlign: "center",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.inkSoft,
+    lineHeight: 17,
+    paddingHorizontal: space.md,
   },
   monthCard: {
     backgroundColor: colors.white,
@@ -475,6 +403,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 14,
     textAlign: "center",
+    color: colors.brand,
   },
   countPlaceholder: {
     marginTop: 2,

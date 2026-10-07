@@ -36,6 +36,24 @@ import {
 type ViewMode = "list" | "calendar";
 type Scope = "upcoming" | "past" | "all" | "active";
 
+/** Left accent colour — same status map previously used on calendar day cells. */
+function statusAccent(status: string) {
+  const s = String(status || "").toUpperCase();
+  const fg =
+    s === "COMPLETED"
+      ? colors.ok
+      : s === "CANCELED" || s === "CANCELLED"
+        ? colors.danger
+        : s === "NO_SHOW"
+          ? "#7C3AED"
+          : s === "IN_PROGRESS"
+            ? "#b45309"
+            : s === "WAITING" || s === "CHECKED_IN"
+              ? colors.brand
+              : "#A16207";
+  return { borderLeftColor: fg, borderLeftWidth: 4 } as const;
+}
+
 function bookingWhenMs(b: BookingRow): number {
   if (b.slotStart) {
     const t = new Date(b.slotStart).getTime();
@@ -237,7 +255,10 @@ export default function AppointmentsScreen() {
                     delay={Math.min(index * 50, 200)}
                   >
                     <PressableScale
-                      style={styles.card}
+                      style={[
+                        styles.card,
+                        statusAccent(b.status),
+                      ]}
                       onPress={() =>
                         router.push(`/(app)/visit/${b.id}` as Href)
                       }

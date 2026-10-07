@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CareCalendar } from "@/components/mobile/CareCalendar";
 import {
   Chip,
@@ -27,6 +28,7 @@ import {
   sortBookingsByWhen,
 } from "@/lib/bookingStats";
 import { withDrTitle } from "@/lib/doctorName";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { colors, shadows, radii, space } from "@/lib/theme";
 import { bookingWhen } from "@/lib/types";
@@ -35,6 +37,7 @@ type ViewMode = "list" | "calendar";
 
 export default function AppointmentsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const {
     bookings: items,
     loading,
@@ -93,7 +96,10 @@ export default function AppointmentsScreen() {
   return (
     <Screen>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: contentBottomPad(insets.bottom) },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -185,7 +191,10 @@ export default function AppointmentsScreen() {
                     delay={Math.min(index * 50, 200)}
                   >
                     <PressableScale
-                      style={styles.card}
+                      style={[
+                        styles.card,
+                        { borderLeftColor: tone.fg, borderLeftWidth: 4 },
+                      ]}
                       onPress={() =>
                         router.push(`/(app)/bookings/${item.id}` as Href)
                       }
@@ -256,7 +265,7 @@ export default function AppointmentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.xl, paddingBottom: 130 },
+  content: { padding: space.xl },
   viewSwitch: {
     flexDirection: "row",
     flexWrap: "wrap",

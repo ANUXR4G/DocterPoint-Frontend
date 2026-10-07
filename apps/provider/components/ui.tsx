@@ -258,35 +258,39 @@ export function StatusBadge({ status }: { status: string }) {
   const tone =
     s === "COMPLETED"
       ? colors.ok
-      : s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW"
+      : s === "CANCELED" || s === "CANCELLED"
         ? colors.danger
-        : s === "IN_PROGRESS"
-          ? colors.accent
-          : s === "ACCEPTED" ||
-              s === "CONFIRMED" ||
-              s === "SCHEDULED" ||
-              s === "REQUESTED" ||
-              s === "BOOKED"
-            ? colors.brandDeep
+        : s === "NO_SHOW"
+          ? "#7C3AED"
+          : s === "IN_PROGRESS"
+            ? "#b45309"
             : s === "WAITING" || s === "CHECKED_IN"
               ? colors.brand
-              : colors.inkSoft;
+              : s === "ACCEPTED" ||
+                  s === "CONFIRMED" ||
+                  s === "SCHEDULED" ||
+                  s === "REQUESTED" ||
+                  s === "BOOKED"
+                ? "#A16207"
+                : colors.inkSoft;
   const bg =
     s === "COMPLETED"
       ? colors.emeraldLight
-      : s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW"
+      : s === "CANCELED" || s === "CANCELLED"
         ? colors.roseLight
-      : s === "IN_PROGRESS"
-        ? "rgba(15, 118, 110, 0.10)"
-        : s === "WAITING" || s === "CHECKED_IN"
-          ? colors.brandLight
-          : s === "ACCEPTED" ||
-              s === "CONFIRMED" ||
-              s === "SCHEDULED" ||
-              s === "REQUESTED" ||
-              s === "BOOKED"
-            ? colors.sky100
-            : colors.sky50;
+        : s === "NO_SHOW"
+          ? "#F3E8FF"
+          : s === "IN_PROGRESS"
+            ? colors.amberLight
+            : s === "WAITING" || s === "CHECKED_IN"
+              ? colors.brandLight
+              : s === "ACCEPTED" ||
+                  s === "CONFIRMED" ||
+                  s === "SCHEDULED" ||
+                  s === "REQUESTED" ||
+                  s === "BOOKED"
+                ? "#FEF3C7"
+                : colors.sky50;
   const label =
     s === "WAITING" || s === "CHECKED_IN"
       ? "In waiting"

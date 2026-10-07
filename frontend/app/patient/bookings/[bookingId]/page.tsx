@@ -20,6 +20,7 @@ import {
 import { proctoService } from "@/lib/services/procto"
 import PracticeReviewForm from "@/components/ui/procto/PracticeReviewForm"
 import CareChatPanel from "@/components/ui/procto/CareChatPanel"
+import { bookingStatusTone } from "@/lib/bookingStatusTone"
 import { getSessionUserId } from "@/lib/sessionUser"
 import { patchBookingFields } from "@/lib/liveBooking"
 import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
@@ -87,19 +88,6 @@ function formatLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function statusTone(status: string) {
-  switch ((status || "").toUpperCase()) {
-    case "IN_PROGRESS":
-      return "bg-amber-500/15 text-amber-800 ring-1 ring-amber-500/30 dark:text-amber-200"
-    case "COMPLETED":
-      return "bg-emerald-500/15 text-emerald-800 ring-1 ring-emerald-500/30 dark:text-emerald-200"
-    case "CANCELED":
-    case "NO_SHOW":
-      return "bg-neutral-500/10 text-neutral-600 ring-1 ring-neutral-400/30 dark:text-neutral-300"
-    default:
-      return "bg-blue-500/10 text-blue-800 ring-1 ring-blue-500/25 dark:text-sky-100"
-  }
-}
 
 function LoadingSkeleton() {
   return (
@@ -399,7 +387,7 @@ export default function PatientVisitPage() {
 
             <div className="flex shrink-0 flex-col items-end gap-2">
               <span
-                className={`inline-flex h-8 items-center rounded-full px-3.5 text-xs font-bold uppercase ${statusTone(booking.status)}`}
+                className={`inline-flex h-8 items-center rounded-full px-3.5 text-xs font-bold uppercase ${bookingStatusTone(booking.status)}`}
               >
                 {formatLabel(booking.status)}
               </span>

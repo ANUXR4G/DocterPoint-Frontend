@@ -277,7 +277,7 @@ function UpcomingCard({
   const meta = [specialty, sameAsDoctor ? null : clinic].filter(Boolean).join(" · ");
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { borderLeftColor: tone.fg, borderLeftWidth: 4 }]}>
       <View style={styles.cardTop}>
         <Text style={styles.overline}>Upcoming appointment</Text>
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
@@ -341,13 +341,13 @@ function VisitRow({ booking, onPress }: { booking: ProctoBooking; onPress: () =>
   const clinic = booking.practice?.name || "Clinic visit";
   return (
     <PressableScale
-      style={styles.visit}
+      style={[styles.visit, { borderLeftColor: tone.fg, borderLeftWidth: 4 }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${clinic}, ${visitDayTime(booking)}, ${bookingStatusLabel(displayStatus)}`}
     >
       <View style={styles.visitIcon}>
-        <SvgIcon name="calendarOutline" size={18} color={colors.brand} />
+        <SvgIcon name="calendarOutline" size={18} color={tone.fg} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.visitClinic} numberOfLines={1}>

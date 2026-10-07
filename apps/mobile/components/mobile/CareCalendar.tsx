@@ -19,6 +19,7 @@ import {
 } from "@/lib/calendarDates";
 import {
   bookingStatusLabel,
+  bookingStatusTone,
   bookingWhenMs,
   effectiveBookingStatus,
 } from "@/lib/bookingStats";
@@ -53,56 +54,6 @@ function timeLabel(b: ProctoBooking): string {
   return "—";
 }
 
-function statusTone(status: string) {
-  const s = (status || "").toUpperCase();
-  if (s === "COMPLETED") return { bg: colors.emeraldLight, fg: colors.success };
-  if (s === "IN_PROGRESS") return { bg: colors.amberLight, fg: "#b45309" };
-  if (s === "WAITING" || s === "CHECKED_IN")
-    return { bg: colors.brandLight, fg: colors.brand };
-  if (s === "ACCEPTED" || s === "CONFIRMED")
-    return { bg: colors.brandMist, fg: colors.brand };
-  if (s === "NO_SHOW") return { bg: colors.purpleLight, fg: colors.purple };
-  if (s === "CANCELED" || s === "CANCELLED")
-    return { bg: colors.roseLight, fg: colors.danger };
-  // Scheduled / upcoming
-  return { bg: colors.amberLight, fg: "#CA8A04" };
-}
-
-/** Calendar tile colors by booking status. */
-const CELL_STATUS = {
-  completed: { bg: colors.success, fg: colors.white },
-  scheduled: { bg: "#EAB308", fg: colors.ink },
-  cancelled: { bg: colors.danger, fg: colors.white },
-  noShow: { bg: colors.purple, fg: colors.white },
-} as const;
-
-function isCancelledStatus(status: string) {
-  const s = (status || "").toUpperCase();
-  return s === "CANCELED" || s === "CANCELLED";
-}
-
-function isNoShowStatus(status: string) {
-  return (status || "").toUpperCase() === "NO_SHOW";
-}
-
-function isCompletedStatus(status: string) {
-  return (status || "").toUpperCase() === "COMPLETED";
-}
-
-/** Pick one tile color when a day has mixed statuses (scheduled > no-show > cancelled > completed). */
-function dayCellStatusColor(list: ProctoBooking[]) {
-  const statuses = list.map((b) => effectiveBookingStatus(b));
-  const hasScheduled = statuses.some(
-    (s) =>
-      !isCompletedStatus(s) && !isCancelledStatus(s) && !isNoShowStatus(s),
-  );
-  if (hasScheduled) return CELL_STATUS.scheduled;
-  if (statuses.some((s) => isNoShowStatus(s))) return CELL_STATUS.noShow;
-  if (statuses.some((s) => isCancelledStatus(s))) return CELL_STATUS.cancelled;
-  return CELL_STATUS.completed;
-}
-
-
 function chunkWeeks<T>(items: T[], size: number): T[][] {
   const rows: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -119,7 +70,7 @@ function BookingRow({
   onPress: () => void;
 }) {
   const displayStatus = effectiveBookingStatus(booking);
-  const tone = statusTone(displayStatus);
+  const tone = bookingStatusTone(displayStatus);
   return (
     <Pressable
       onPress={onPress}
@@ -218,35 +169,9 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
         <Text style={styles.title} numberOfLines={1}>
           {formatMonthTitle(monthCursor)}
         </Text>
-        <View style={styles.legend}>
-          <View style={styles.legendItem}>
-            <View
-              style={[
-                styles.legendSwatch,
-                { backgroundColor: CELL_STATUS.scheduled.bg },
-              ]}
-            />
-            <Text style={styles.legendText}>Upcoming</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View
-              style={[
-                styles.legendSwatch,
-                { backgroundColor: CELL_STATUS.cancelled.bg },
-              ]}
-            />
-            <Text style={styles.legendText}>Cancelled</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View
-              style={[
-                styles.legendSwatch,
-                { backgroundColor: CELL_STATUS.completed.bg },
-              ]}
-            />
-            <Text style={styles.legendText}>Completed</Text>
-          </View>
-        </View>
+        <Text style={styles.legendHint}>
+          Dots mark days with visits — status colours show on each appointment.
+        </Text>
       </View>
 
       <View style={styles.monthCard}>
@@ -274,9 +199,6 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
                   const today = isSameDay(d, new Date());
                   const isSelected = selected ? isSameDay(d, selected) : false;
                   const hasBooking = list.length > 0;
-                  const statusColor = hasBooking
-                    ? dayCellStatusColor(list)
-                    : null;
                   return (
                     <Pressable
                       key={key}
@@ -288,16 +210,10 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
                           marginRight: colIdx < COLS - 1 ? CELL_GAP : 0,
                         },
                         !inMonth && styles.dayCellMuted,
-                        today &&
-                          !hasBooking &&
-                          !isSelected &&
-                          styles.dayCellToday,
+                        today && !isSelected && styles.dayCellToday,
                         isSelected &&
                           !hasBooking &&
                           styles.dayCellSelectedEmpty,
-                        statusColor
-                          ? { backgroundColor: statusColor.bg }
-                          : null,
                         isSelected &&
                           hasBooking &&
                           styles.dayCellBookedSelected,
@@ -307,41 +223,27 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
                         style={[
                           styles.dayNum,
                           !inMonth && styles.dayNumMuted,
-                          today &&
-                            !hasBooking &&
-                            !isSelected &&
-                            styles.dayNumToday,
+                          today && !isSelected && styles.dayNumToday,
                           isSelected &&
                             !hasBooking &&
                             styles.dayNumSelectedEmpty,
-                          statusColor ? { color: statusColor.fg } : null,
                         ]}
                       >
                         {d.getDate()}
                       </Text>
-                      {hasBooking && statusColor ? (
+                      {hasBooking ? (
                         <View style={styles.dotsRow}>
                           {list.slice(0, 3).map((b) => (
                             <View
                               key={b.id}
                               style={[
                                 styles.eventDot,
-                                {
-                                  backgroundColor:
-                                    statusColor.fg === colors.ink
-                                      ? "rgba(9,14,23,0.45)"
-                                      : "rgba(255,255,255,0.9)",
-                                },
+                                { backgroundColor: colors.brand },
                               ]}
                             />
                           ))}
                           {list.length > 3 ? (
-                            <Text
-                              style={[
-                                styles.cellMoreBooked,
-                                { color: statusColor.fg },
-                              ]}
-                            >
+                            <Text style={styles.cellMore}>
                               +{list.length - 3}
                             </Text>
                           ) : null}
@@ -367,7 +269,7 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
           </Text>
           {dayBookings.length === 0 ? (
             <Text style={styles.emptyDayDetail}>
-              No visits on this date. Tap a colored date to see your bookings.
+              No visits on this date. Tap a dotted date to see your bookings.
             </Text>
           ) : (
             dayBookings.map((b) => (
@@ -426,27 +328,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     paddingVertical: 2,
   },
-  legend: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 14,
+  legendHint: {
     marginTop: 4,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  legendSwatch: {
-    width: 12,
-    height: 12,
-    borderRadius: 4,
-  },
-  legendText: {
+    textAlign: "center",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.inkSoft,
+    lineHeight: 17,
+    paddingHorizontal: space.md,
   },
   monthCard: {
     backgroundColor: colors.white,
@@ -525,9 +414,9 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 2.5,
   },
-  cellMoreBooked: {
+  cellMore: {
     fontSize: 8,
-    color: "rgba(255,255,255,0.85)",
+    color: colors.brand,
     fontWeight: "700",
   },
   dayCard: {

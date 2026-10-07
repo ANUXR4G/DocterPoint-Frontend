@@ -22,18 +22,20 @@ const STALE_OPEN_STATUSES = new Set([
   "BOOKED",
 ]);
 
+/** Status pill colours (same meanings previously used on calendar day cells). */
 export function bookingStatusTone(status: string) {
   const s = (status || "").toUpperCase();
   if (s === "IN_PROGRESS") return { bg: colors.amberLight, fg: "#b45309" };
   if (s === "COMPLETED") return { bg: colors.emeraldLight, fg: colors.success };
-  if (s === "ACCEPTED" || s === "CONFIRMED")
-    return { bg: colors.brandMist, fg: colors.brand };
   if (s === "WAITING" || s === "CHECKED_IN")
     return { bg: colors.brandLight, fg: colors.brand };
+  if (s === "ACCEPTED" || s === "CONFIRMED")
+    return { bg: colors.brandMist, fg: colors.brand };
   if (s === "NO_SHOW") return { bg: colors.purpleLight, fg: colors.purple };
   if (s === "CANCELED" || s === "CANCELLED")
-    return { bg: colors.brandMist, fg: colors.inkSoft };
-  return { bg: colors.brandLight, fg: colors.inkSoft };
+    return { bg: colors.roseLight, fg: colors.danger };
+  // Scheduled / upcoming — amber (was calendar day fill)
+  return { bg: "#FEF3C7", fg: "#A16207" };
 }
 
 export function bookingStatusLabel(status: string) {
