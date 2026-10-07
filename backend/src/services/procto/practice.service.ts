@@ -2857,6 +2857,7 @@ export const PracticeService = {
       phone?: string;
       email?: string;
       bgSrc?: string | null;
+      clinicalMasters?: unknown;
       location?: {
         id?: string;
         name?: string;
@@ -2997,6 +2998,14 @@ export const PracticeService = {
             ? { email: data.email.trim().toLowerCase() || null }
             : {}),
           ...(nextBgSrc !== undefined ? { bgSrc: nextBgSrc } : {}),
+          ...(data.clinicalMasters !== undefined
+            ? {
+                clinicalMasters:
+                  data.clinicalMasters === null
+                    ? Prisma.DbNull
+                    : (data.clinicalMasters as Prisma.InputJsonValue),
+              }
+            : {}),
           ...(faqDirty ? { faqKb } : {}),
         },
       });
@@ -3108,6 +3117,7 @@ export const PracticeService = {
             phone: true,
             email: true,
             whatsappBusinessNumber: true,
+            clinicalMasters: true,
             isDirectoryListed: true,
             bgSrc: true,
             isActive: true,

@@ -1112,6 +1112,7 @@ export const BookingService = {
         frequency?: string;
       }>;
       documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
+      clinicalAssessment?: unknown;
       status?: BookingStatus;
     },
     actorUserId: string,
@@ -1159,6 +1160,13 @@ export const BookingService = {
       data.documents !== undefined
         ? normalizeBookingDocuments(data.documents)
         : undefined;
+    const { normalizeClinicalAssessment } = await import(
+      "../../lib/clinicalMasters.js"
+    );
+    const clinicalAssessment =
+      data.clinicalAssessment !== undefined
+        ? normalizeClinicalAssessment(data.clinicalAssessment)
+        : undefined;
     const nextStatus = data.status ? parseBookingStatus(data.status) : undefined;
 
     const prevMedsKey = JSON.stringify(existing.medicines ?? []);
@@ -1189,12 +1197,26 @@ export const BookingService = {
           : {}),
         ...(medicines !== undefined ? { medicines } : {}),
         ...(documents !== undefined ? { documents } : {}),
+        ...(clinicalAssessment !== undefined
+          ? {
+              clinicalAssessment:
+                clinicalAssessment === null
+                  ? Prisma.DbNull
+                  : (clinicalAssessment as Prisma.InputJsonValue),
+            }
+          : {}),
         ...(nextStatus ? { status: nextStatus } : {}),
         ...arrivalPatch(existing.arrivedAt, nextStatus),
       },
       include: {
         practice: {
-          select: { name: true, slug: true, specialty: true, consultationFee: true },
+          select: {
+            name: true,
+            slug: true,
+            specialty: true,
+            consultationFee: true,
+            clinicalMasters: true,
+          },
         },
         location: { select: { name: true, address: true, city: true } },
       },
@@ -1500,7 +1522,16 @@ export const BookingService = {
     const booking = await prisma.practiceBooking.findUnique({
       where: { id: bookingId },
       include: {
-        practice: { select: { id: true, name: true, slug: true, specialty: true, consultationFee: true } },
+        practice: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            specialty: true,
+            consultationFee: true,
+            clinicalMasters: true,
+          },
+        },
         location: { select: { name: true, address: true, city: true } },
       },
     });

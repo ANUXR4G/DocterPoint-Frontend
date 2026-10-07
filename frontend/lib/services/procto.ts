@@ -489,6 +489,7 @@ export const proctoService = {
       doctorRemarks?: string | null;
       medicines?: Array<{ name: string; amount?: string; times?: string[] }>;
       documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
+      clinicalAssessment?: unknown;
       status?: string;
     },
   ) =>
@@ -823,6 +824,7 @@ export type ProctoBooking = {
   doctorRemarks?: string | null;
   medicines?: Array<{ name: string; amount?: string; times?: string[] }> | null;
   documents?: Array<{ name: string; url: string; uploadedAt?: string }> | null;
+  clinicalAssessment?: unknown;
 };
 
 export type PracticeNotification = {

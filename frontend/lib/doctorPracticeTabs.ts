@@ -3,6 +3,7 @@ export type PracticeTab =
   | "setup"
   | "doctors"
   | "inbox"
+  | "clinical"
 
 /** In-page tabs under Settings → Practice (sidebar label: Practice). */
 export const PRACTICE_TAB_LABELS: Record<PracticeTab, string> = {
@@ -10,6 +11,7 @@ export const PRACTICE_TAB_LABELS: Record<PracticeTab, string> = {
   setup: "Hours & blocks",
   doctors: "Doctors",
   inbox: "WhatsApp",
+  clinical: "Clinical",
 }
 
 /** Standalone doctor/clinic patients page (not under Settings). */
@@ -39,7 +41,8 @@ export function legacyPracticeTabHref(tab: string): string {
     normalized === "calendar" ||
     normalized === "setup" ||
     normalized === "doctors" ||
-    normalized === "inbox"
+    normalized === "inbox" ||
+    normalized === "clinical"
   ) {
     return practiceTabHref(normalized as PracticeTab)
   }

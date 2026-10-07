@@ -370,6 +370,8 @@ model Practice {
   whatsappWebhookSecret    String?      @map("whatsapp_webhook_secret")
   /// Structured FAQ answers for the WhatsApp bot (DocLine §9.2 / §11) — never free-form medical knowledge.
   faqKb                    Json?        @map("faq_kb")
+  /// Practice overrides for vitals thresholds, allergy catalog, pain scales (falls back to platform defaults).
+  clinicalMasters          Json?        @map("clinical_masters")
   /// When false, directory listing is hidden (e.g. subscription suspended).
   isDirectoryListed        Boolean      @default(true) @map("is_directory_listed")
   bgSrc                    String?      @map("bg_src")
@@ -560,6 +562,8 @@ model PracticeBooking {
   doctorRemarks    String?        @map("doctor_remarks")
   medicines        Json?
   documents        Json?
+  /// Visit-scoped vitals, pain assessment, and allergies (see clinicalMasters defaults).
+  clinicalAssessment Json?        @map("clinical_assessment")
   /// When the patient reached the clinic (first move to WAITING / IN_PROGRESS / COMPLETED).
   arrivedAt        DateTime?      @map("arrived_at") @db.Timestamptz(6)
   /// Pre-visit payment: null = not asked, PENDING (link sent), PAID, EXPIRED, CANCELLED, DECLINED (pay at clinic).
