@@ -2296,7 +2296,11 @@ type PracticeCtx = Omit<Practice, "razorpayKeySecretEnc" | "razorpayWebhookSecre
 };
 
 function normalizePhone(from: string): string {
-  const digits = from.replace(/\D/g, "");
+  let digits = from.replace(/\D/g, "");
+  // Strip trunk international prefixes that sneak into stored values (00971…).
+  while (digits.startsWith("00") && digits.length > 11) {
+    digits = digits.slice(2);
+  }
   // Keep full WhatsApp MSISDN (country + national), e.g. 9715… / 9198…
   if (digits.length >= 11 && digits.length <= 15) return digits;
   if (digits.length === 10) return digits;

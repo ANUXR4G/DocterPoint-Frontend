@@ -61,29 +61,54 @@ type WhatsAppDocStatus =
   | "opted_out"
   | "no_phone"
   | "no_line"
+  | "skipped"
   | "failed"
 
 function whatsappNotice(
   status: WhatsAppDocStatus | undefined,
   error?: string,
-): { text: string; tone: "ok" | "warn" } {
-  const saved = "Saved to the appointment"
+  kind: "document" | "message" = "document",
+): { text: string; tone: "ok" | "warn" } | null {
+  if (!status || status === "skipped") return null
+  const saved =
+    kind === "document" ? "Saved to the appointment" : "Sent in chat"
   switch (status) {
     case "sent":
-      return { text: `Sent on WhatsApp and ${saved.toLowerCase()}.`, tone: "ok" }
+      return {
+        text:
+          kind === "document"
+            ? `Sent on WhatsApp and ${saved.toLowerCase()}.`
+            : "Sent on WhatsApp.",
+        tone: "ok",
+      }
     case "simulated":
-      return { text: `${saved}. WhatsApp is simulated on this server.`, tone: "ok" }
+      return {
+        text: `${saved}. WhatsApp is simulated on this server.`,
+        tone: "ok",
+      }
     case "template":
       return {
-        text: `${saved}. The patient hasn't messaged in 24 h, so WhatsApp sent a notice to open the app instead of the file.`,
+        text:
+          kind === "document"
+            ? `${saved}. The patient hasn't messaged in 24 h, so WhatsApp sent a notice to open the app instead of the file.`
+            : `${saved}. Outside the 24 h WhatsApp window — a short notice was sent asking them to open the app.`,
         tone: "ok",
       }
     case "opted_out":
-      return { text: `${saved}. Not sent on WhatsApp — the patient replied STOP.`, tone: "warn" }
+      return {
+        text: `${saved}. Not sent on WhatsApp — the patient replied STOP.`,
+        tone: "warn",
+      }
     case "no_phone":
-      return { text: `${saved}. Not sent on WhatsApp — no WhatsApp number on file.`, tone: "warn" }
+      return {
+        text: `${saved}. Not sent on WhatsApp — no WhatsApp number on file.`,
+        tone: "warn",
+      }
     case "no_line":
-      return { text: `${saved}. Not sent on WhatsApp — the clinic's WhatsApp line isn't set up.`, tone: "warn" }
+      return {
+        text: `${saved}. Not sent on WhatsApp — the clinic's WhatsApp line isn't set up.`,
+        tone: "warn",
+      }
     default:
       return {
         text: `${saved}, but WhatsApp delivery failed${error ? ` (${error})` : ""}.`,
@@ -407,7 +432,7 @@ export default function CareChatPanel({
               text: "Attached to this visit and sent in chat for your doctor.",
               tone: "ok",
             }
-          : whatsappNotice(data.whatsapp?.status, data.whatsapp?.error),
+          : whatsappNotice(data.whatsapp?.status, data.whatsapp?.error, "document"),
       )
       onDocumentShared?.()
     } catch (e) {
@@ -445,9 +470,17 @@ export default function CareChatPanel({
     )
     try {
       const created = await chatService.sendDirectMessage(peerUserId, item.content)
-      const msg = normalizeMsg(created as Record<string, unknown>)
+      const raw = created as Record<string, unknown> & {
+        whatsapp?: { status?: WhatsAppDocStatus; error?: string }
+      }
+      const msg = normalizeMsg(raw)
       setMessages((prev) => addOnce(prev, msg))
       setPending((prev) => prev.filter((p) => p.tempId !== item.tempId))
+      if (attachAs === "clinic" && raw.whatsapp?.status) {
+        setNotice(
+          whatsappNotice(raw.whatsapp.status, raw.whatsapp.error, "message"),
+        )
+      }
     } catch (e) {
       setPending((prev) =>
         prev.map((p) =>

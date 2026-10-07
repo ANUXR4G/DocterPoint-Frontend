@@ -38,12 +38,19 @@ function failFromMeta(
   };
 }
 
-function formatE164(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  // Already international (WhatsApp `from` / stored MSISDN) — keep as-is.
+/**
+ * Normalize to Meta `to` digits (no +).
+ * Strip trunk `00…` prefixes; keep full international MSISDNs; only invent
+ * India `91` for bare 10-digit mobiles that look Indian (start 6–9).
+ * Never force `91` onto US/other 10-digit values (e.g. corrupted `1507801104`).
+ */
+export function formatE164(phone: string): string {
+  let digits = phone.replace(/\D/g, "");
+  while (digits.startsWith("00") && digits.length > 11) {
+    digits = digits.slice(2);
+  }
   if (digits.length >= 11 && digits.length <= 15) return digits;
-  // Bare 10-digit Indian mobile (legacy) → prepend 91 only then.
-  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return `91${digits}`;
   return digits;
 }
 

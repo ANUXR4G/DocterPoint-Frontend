@@ -78,7 +78,12 @@ export async function sendCareMessage(peerUserId: string, content: string) {
     return {
       error: res.message || "Failed to send",
       message: null as CareChatMessage | null,
+      whatsapp: null as { status?: string; error?: string } | null,
     };
   }
-  return { error: "", message: normalizeMsg(res.data) };
+  const whatsapp =
+    res.data.whatsapp && typeof res.data.whatsapp === "object"
+      ? (res.data.whatsapp as { status?: string; error?: string })
+      : null;
+  return { error: "", message: normalizeMsg(res.data), whatsapp };
 }

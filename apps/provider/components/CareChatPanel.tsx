@@ -63,6 +63,7 @@ export function CareChatPanel({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [waNotice, setWaNotice] = useState("");
 
   const load = useCallback(
     async (opts?: { soft?: boolean }) => {
@@ -146,6 +147,19 @@ export function CareChatPanel({
       return [...prev, res.message!];
     });
     setDraft("");
+    const wa = res.whatsapp?.status;
+    if (wa === "sent" || wa === "simulated") {
+      setWaNotice("Also sent on WhatsApp.");
+    } else if (wa === "template") {
+      setWaNotice("WhatsApp notice sent (patient outside 24h window).");
+    } else if (wa === "failed" || wa === "no_phone" || wa === "no_line" || wa === "opted_out") {
+      setWaNotice(
+        res.whatsapp?.error ||
+          "Chat saved, but WhatsApp did not deliver this message.",
+      );
+    } else {
+      setWaNotice("");
+    }
   }
 
   if (isCollapsible && !open) {
@@ -234,6 +248,7 @@ export function CareChatPanel({
       </View>
 
       <ErrorText text={error} />
+      {waNotice ? <Text style={styles.waNotice}>{waNotice}</Text> : null}
       <View style={styles.composer}>
         <TextInput
           value={draft}
@@ -344,6 +359,13 @@ const styles = StyleSheet.create({
   },
   stampPeer: {
     color: colors.inkFaint,
+  },
+  waNotice: {
+    marginHorizontal: space.md,
+    marginBottom: space.sm,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.inkSoft,
   },
   composer: {
     borderTopWidth: StyleSheet.hairlineWidth,
