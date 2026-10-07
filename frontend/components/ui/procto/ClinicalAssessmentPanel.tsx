@@ -174,7 +174,7 @@ export default function ClinicalAssessmentPanel({
       {/* VITALS */}
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-teal-800 dark:text-teal-300">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
             Vitals
           </h2>
           <div className="flex flex-wrap gap-1">
@@ -251,7 +251,7 @@ export default function ClinicalAssessmentPanel({
 
       {/* PAIN */}
       <div>
-        <h2 className="text-sm font-bold uppercase tracking-wide text-teal-800 dark:text-teal-300">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
           Pain assessment
         </h2>
         <div className="mt-3 overflow-x-auto">
@@ -359,7 +359,7 @@ export default function ClinicalAssessmentPanel({
       {/* ALLERGIES */}
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-teal-800 dark:text-teal-300">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
             Allergies
           </h2>
           {!readOnly ? (

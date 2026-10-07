@@ -133,7 +133,7 @@ export default function ClinicalMastersPanel({
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-teal-800 dark:text-teal-300">
+          <h3 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
             Vital master
           </h3>
           <div className="flex flex-wrap gap-1.5">
@@ -210,7 +210,7 @@ export default function ClinicalMastersPanel({
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-teal-800 dark:text-teal-300">
+          <h3 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
             Allergy master
           </h3>
           <button
@@ -301,7 +301,7 @@ export default function ClinicalMastersPanel({
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-teal-800 dark:text-teal-300">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
           Pain scales
         </h3>
         <div className="space-y-2">
