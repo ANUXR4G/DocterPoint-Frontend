@@ -520,6 +520,13 @@ export const proctoService = {
       body: JSON.stringify(doc),
     }),
 
+  /** Finished visit: send clinic log / Rx summary to patient WhatsApp (VISIT_SUMMARY). */
+  sendClinicLogWhatsApp: (bookingId: string) =>
+    proctoFetch(`/procto/bookings/${bookingId}/send-clinic-log`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
   /** Patient attaches a file to their own visit and posts it in care chat. */
   attachPatientDocument: (
     bookingId: string,

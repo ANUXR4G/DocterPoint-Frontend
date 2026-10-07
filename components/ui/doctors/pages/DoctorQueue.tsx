@@ -21,6 +21,7 @@ import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import ClinicBookAppointmentModal from "@/components/ui/procto/ClinicBookAppointmentModal"
 import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
+import PrescriptionActionsMenu from "@/components/ui/procto/PrescriptionActionsMenu"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
@@ -441,6 +442,12 @@ export default function DoctorQueue({
                     ariaLabel={`Update status for ${name}`}
                     onChange={(status) => void onStatus(b.id, status)}
                   />
+                  <PrescriptionActionsMenu
+                    bookingId={b.id}
+                    enabled={
+                      String(b.status || "").toUpperCase() === "COMPLETED"
+                    }
+                  />
                   <PaymentStatusButton
                     bookingId={b.id}
                     status={b.paymentStatus ?? b.payment_status}
@@ -590,6 +597,13 @@ export default function DoctorQueue({
                           showSelect={allowStatusControl}
                           ariaLabel={`Update status for ${name}`}
                           onChange={(status) => void onStatus(b.id, status)}
+                        />
+                        <PrescriptionActionsMenu
+                          bookingId={b.id}
+                          enabled={
+                            String(b.status || "").toUpperCase() ===
+                            "COMPLETED"
+                          }
                         />
                         <Link
                           href={`/doctor/queue/${b.id}`}

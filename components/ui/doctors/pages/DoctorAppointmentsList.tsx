@@ -37,6 +37,7 @@ import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import ClinicBookAppointmentModal from "@/components/ui/procto/ClinicBookAppointmentModal"
 import AppointmentChatModal from "@/components/ui/procto/AppointmentChatModal"
+import PrescriptionActionsMenu from "@/components/ui/procto/PrescriptionActionsMenu"
 import {
   bookingDateIso,
   usePracticeDashboard,
@@ -541,6 +542,12 @@ export default function DoctorAppointmentsList({
                     patientName={b.patientName || b.patient?.name}
                     onOpen={() => setChatBooking(b)}
                   />
+                  <PrescriptionActionsMenu
+                    bookingId={b.id}
+                    enabled={
+                      String(b.status || "").toUpperCase() === "COMPLETED"
+                    }
+                  />
                   <PaymentStatusButton
                     bookingId={b.id}
                     status={b.paymentStatus ?? b.payment_status}
@@ -574,6 +581,7 @@ export default function DoctorAppointmentsList({
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Payment</th>
                   <th className="px-4 py-3">Chat</th>
+                  <th className="px-4 py-3">Rx</th>
                   <th className="px-4 py-3 text-right">Visit</th>
                 </tr>
               </thead>
@@ -637,6 +645,14 @@ export default function DoctorAppointmentsList({
                         enabled={Boolean(bookingPeerUserId(b))}
                         patientName={b.patientName || b.patient?.name}
                         onOpen={() => setChatBooking(b)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <PrescriptionActionsMenu
+                        bookingId={b.id}
+                        enabled={
+                          String(b.status || "").toUpperCase() === "COMPLETED"
+                        }
                       />
                     </td>
                     <td className="px-4 py-3 text-right">
