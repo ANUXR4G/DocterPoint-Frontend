@@ -20,6 +20,7 @@ import {
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import ClinicBookAppointmentModal from "@/components/ui/procto/ClinicBookAppointmentModal"
+import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
@@ -178,6 +179,17 @@ export default function DoctorQueue({
     const arrivedAt = (res.data as { arrivedAt?: string | null } | undefined)
       ?.arrivedAt
     if (arrivedAt !== undefined) patchBooking(id, { arrivedAt })
+  }
+
+  function onPaymentUpdate(
+    id: string,
+    patch: {
+      paymentStatus: string | null
+      paymentAmount: number | null
+      paidAt: string | null
+    },
+  ) {
+    patchBooking(id, patch)
   }
 
   const showLoading = (!ready && loading) || (ready && !hydrated)
@@ -429,6 +441,20 @@ export default function DoctorQueue({
                     ariaLabel={`Update status for ${name}`}
                     onChange={(status) => void onStatus(b.id, status)}
                   />
+                  <PaymentStatusButton
+                    bookingId={b.id}
+                    status={b.paymentStatus ?? b.payment_status}
+                    amount={b.paymentAmount ?? b.payment_amount}
+                    patientName={name}
+                    patientPhone={
+                      b.patientPhone ||
+                      b.patient_phone ||
+                      b.patient?.contactNumber ||
+                      b.patient?.phone
+                    }
+                    compact
+                    onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
+                  />
                   <Link
                     href={`/doctor/queue/${b.id}`}
                     className="shrink-0 text-xs font-bold text-[var(--theme-primary)] hover:underline"
@@ -468,6 +494,9 @@ export default function DoctorQueue({
                   Age
                 </th>
                 <th className="min-w-[120px] px-3 py-3 font-semibold">Doctor</th>
+                <th className="whitespace-nowrap px-3 py-3 font-semibold">
+                  Payment
+                </th>
                 <th className="sticky right-0 z-30 whitespace-nowrap border-l border-neutral-200 bg-neutral-100 px-3 py-3 font-semibold dark:border-neutral-700 dark:bg-neutral-800">
                   Actions
                 </th>
@@ -534,6 +563,22 @@ export default function DoctorQueue({
                     </td>
                     <td className="px-3 py-3 align-middle">
                       {dash(b.provider?.name ?? undefined)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 align-middle">
+                      <PaymentStatusButton
+                        bookingId={b.id}
+                        status={b.paymentStatus ?? b.payment_status}
+                        amount={b.paymentAmount ?? b.payment_amount}
+                        patientName={name}
+                        patientPhone={
+                          b.patientPhone ||
+                          b.patient_phone ||
+                          p?.contactNumber ||
+                          p?.phone
+                        }
+                        compact
+                        onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
+                      />
                     </td>
                     <td className="sticky right-0 z-10 whitespace-nowrap border-l border-neutral-200 bg-white px-3 py-3 align-middle dark:border-neutral-700 dark:bg-neutral-900">
                       <div className="inline-flex flex-nowrap items-center gap-1.5">
