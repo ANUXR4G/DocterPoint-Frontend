@@ -608,9 +608,9 @@ export const BookingService = {
       include: { practice: true, location: true },
     });
 
-    void NotificationService.enqueueConfirmation(booking.id, {
-      skipPatientTemplate: true,
-    }).catch(() => undefined);
+    // Walk-ins still need patient WhatsApp (check-in / booking confirm).
+    // Skipping left doctor-portal adds with no patient message.
+    void NotificationService.enqueueConfirmation(booking.id).catch(() => undefined);
     void broadcastProctoEvent(
       booking.practiceId,
       { event: "booking_created", booking: serializeBooking(booking) },

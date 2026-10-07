@@ -103,13 +103,17 @@ function formatMedicinesPreview(
   return medLines.join("; ").slice(0, 280);
 }
 
+function last10Digits(phone: string | null | undefined): string {
+  return String(phone || "").replace(/\D/g, "").slice(-10);
+}
+
 /** Prefer practice phone, then owner/doctor user phone. */
 export async function resolveClinicNotifyPhone(practiceId: string): Promise<string | null> {
   const practice = await prisma.practice.findUnique({
     where: { id: practiceId },
     select: { phone: true },
   });
-  if (practice?.phone?.trim()) return practice.phone.replace(/\D/g, "").slice(-10);
+  if (practice?.phone?.trim()) return last10Digits(practice.phone);
 
   const owner = await prisma.practiceMember.findFirst({
     where: {
@@ -120,8 +124,31 @@ export async function resolveClinicNotifyPhone(practiceId: string): Promise<stri
     include: { user: { select: { phone: true } } },
     orderBy: { role: "asc" },
   });
-  const phone = owner?.user?.phone?.replace(/\D/g, "").slice(-10);
+  const phone = last10Digits(owner?.user?.phone);
   return phone || null;
+}
+
+/**
+ * True when `phone` is this practice's WhatsApp bot (or the platform OTP line).
+ * Meta rejects sends to your own phone id (#100) — clinic inbox must stay in-app.
+ */
+export async function isClinicWhatsAppBotPhone(
+  practiceId: string,
+  phone: string | null | undefined,
+): Promise<boolean> {
+  const digits = last10Digits(phone);
+  if (digits.length < 10) return false;
+
+  const wa = await prisma.whatsAppNumber.findFirst({
+    where: { practiceId },
+    select: { phoneNumber: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (wa?.phoneNumber && last10Digits(wa.phoneNumber) === digits) return true;
+
+  const { settings } = await import("../../config/index.js");
+  const otp = last10Digits(settings.glucoguideOtpPhone);
+  return Boolean(otp && otp === digits);
 }
 
 async function createAndEnqueue(data: {
@@ -263,16 +290,22 @@ async function enqueueClinicInbox(data: {
   const clinicTo = forceInApp
     ? ""
     : await resolveClinicNotifyPhone(data.practiceId);
+  // Never WhatsApp the clinic bot number itself — Meta (#100) + no human inbox.
+  const botSelf =
+    Boolean(clinicTo) &&
+    (await isClinicWhatsAppBotPhone(data.practiceId, clinicTo));
+  const inAppOnly = forceInApp || !clinicTo || botSelf;
   return createAndEnqueue({
     practiceId: data.practiceId,
     bookingId: data.bookingId,
     type: data.type,
     payload: {
       ...data.payload,
-      to: clinicTo || "",
+      to: inAppOnly ? "" : clinicTo || "",
       templateKey: data.templateKey,
       recipientRole: "clinic",
-      inAppOnly: forceInApp || !clinicTo,
+      inAppOnly,
+      ...(botSelf ? { error: "clinic phone is WhatsApp bot — inbox only" } : {}),
     },
   });
 }
