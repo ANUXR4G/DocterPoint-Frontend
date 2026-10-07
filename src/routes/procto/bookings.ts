@@ -439,6 +439,27 @@ router.post(
   },
 );
 
+/** Finished visit: re-send clinic log / prescription summary on patient WhatsApp. */
+router.post(
+  "/:id/send-clinic-log",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await BookingService.sendClinicLogWhatsApp(
+        param(req.params.id),
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(
+        res,
+        "clinic log queued for WhatsApp.",
+        data,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 /** Patient attaches a file to their own visit + care chat (app / portal). */
 router.post(
   "/:id/patient-document",
