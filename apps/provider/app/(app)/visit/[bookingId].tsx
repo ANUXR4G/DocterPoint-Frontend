@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { CareChatPanel } from "@/components/CareChatPanel";
+import { ClinicalAssessmentPanel } from "@/components/ClinicalAssessmentPanel";
 import {
   Chip,
   ErrorText,
@@ -23,6 +24,10 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { uploadVisitFile } from "@/lib/cloudinary";
+import {
+  normalizeClinicalAssessment,
+  type ClinicalAssessment,
+} from "@/lib/clinicalMasters";
 import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { resolveMediaUrl } from "@/lib/media";
 import {
@@ -30,6 +35,7 @@ import {
   updateBookingStatus,
   updateVisit,
 } from "@/lib/procto";
+import { usePractice } from "@/lib/practiceContext";
 import { getSessionUserId } from "@/lib/sessionUser";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { patchBookingFields } from "@/lib/liveBooking";
@@ -98,6 +104,7 @@ export default function VisitScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { membership } = usePractice();
   const {
     bookings: sharedBookings,
     bookingTick,
@@ -109,6 +116,8 @@ export default function VisitScreen() {
   const [remarks, setRemarks] = useState("");
   const [medicines, setMedicines] = useState<Med[]>([]);
   const [documents, setDocuments] = useState<VisitDocument[]>([]);
+  const [clinicalAssessment, setClinicalAssessment] =
+    useState<ClinicalAssessment | null>(null);
   const [medName, setMedName] = useState("");
   const [medAmount, setMedAmount] = useState("");
   const [medTimes, setMedTimes] = useState<string[]>([]);
@@ -132,9 +141,11 @@ export default function VisitScreen() {
       setRemarks(doctorRemarksForEdit(b.doctorRemarks));
       setMedicines(Array.isArray(b.medicines) ? b.medicines : []);
       setDocuments(Array.isArray(b.documents) ? b.documents : []);
+      setClinicalAssessment(normalizeClinicalAssessment(b.clinicalAssessment));
     } else {
       if (Array.isArray(b.medicines)) setMedicines(b.medicines);
       if (Array.isArray(b.documents)) setDocuments(b.documents);
+      // Keep local clinical edits — silent refresh must not wipe typing.
     }
     setError("");
   }, [bookingId]);
@@ -192,6 +203,7 @@ export default function VisitScreen() {
       doctorRemarks: remarks,
       medicines: next,
       documents: docsToSave,
+      clinicalAssessment: clinicalAssessment ?? null,
     })
     setBusy(false)
     if (res.status !== "successful") {
@@ -201,6 +213,7 @@ export default function VisitScreen() {
     }
     await load({ silent: true })
   }
+
 
   function addMedicine() {
     const name = medName.trim();
@@ -263,6 +276,7 @@ export default function VisitScreen() {
       doctorRemarks: remarks,
       medicines,
       documents,
+      clinicalAssessment: clinicalAssessment ?? null,
       ...(alsoStatus ? { status: alsoStatus } : {}),
     });
     setBusy(false);
@@ -484,6 +498,17 @@ export default function VisitScreen() {
             </Text>
           ) : null}
         </View>
+
+        <Text style={styles.section}>Clinical assessment</Text>
+        <ClinicalAssessmentPanel
+          mastersRaw={
+            membership?.practice.clinicalMasters ??
+            booking.practice?.clinicalMasters
+          }
+          value={clinicalAssessment}
+          readOnly={completed}
+          onChange={setClinicalAssessment}
+        />
 
         <Text style={styles.section}>Remarks</Text>
         <Text style={styles.lockedHint}>

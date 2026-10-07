@@ -39,6 +39,7 @@ export type PracticeMembership = {
         } | null;
       };
     }>;
+    clinicalMasters?: unknown;
   };
 };
 
@@ -93,8 +94,14 @@ export type BookingRow = {
   doctorRemarks?: string | null;
   medicines?: Array<{ name: string; amount?: string; times?: string[] }> | null;
   documents?: VisitDocument[] | null;
+  clinicalAssessment?: unknown;
   provider?: { id?: string; name?: string | null } | null;
-  practice?: { id?: string; name?: string; specialty?: string | null } | null;
+  practice?: {
+    id?: string;
+    name?: string;
+    specialty?: string | null;
+    clinicalMasters?: unknown;
+  } | null;
   location?: { name?: string; address?: string; city?: string } | null;
   patient?: {
     id?: string | null;

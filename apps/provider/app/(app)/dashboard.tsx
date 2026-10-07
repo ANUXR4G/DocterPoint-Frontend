@@ -131,6 +131,29 @@ export default function DashboardScreen() {
           </Text>
         ) : null}
 
+        <View style={styles.quickLinks}>
+          {(
+            [
+              { label: "Patient Support", href: "/(app)/inbox" },
+              { label: "Appointments", href: "/(app)/appointments" },
+              { label: "Patients", href: "/(app)/patients" },
+              { label: "Calendar", href: "/(app)/calendar" },
+              { label: "Analytics", href: "/(app)/analytics" },
+              { label: "Notifications", href: "/(app)/notifications" },
+              isIndependent || isClinicAdmin
+                ? { label: "Subscription", href: "/(app)/subscriptions" }
+                : { label: "My hours", href: "/(app)/schedule" },
+              { label: "Settings", href: "/(app)/settings" },
+            ] as Array<{ label: string; href: string }>
+          ).map((item) => (
+            <Chip
+              key={item.href}
+              label={item.label}
+              onPress={() => router.push(item.href as never)}
+            />
+          ))}
+        </View>
+
         <ErrorText text={error} />
 
         <View style={styles.metricsRow}>
@@ -275,6 +298,12 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: space.sm,
     marginBottom: space.xs,
+  },
+  quickLinks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    paddingVertical: space.xs,
   },
   queueNote: {
     fontSize: 13,

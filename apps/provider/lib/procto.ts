@@ -65,6 +65,7 @@ export async function updateVisit(
     doctorRemarks?: string;
     medicines?: Array<{ name: string; amount?: string; times?: string[] }>;
     documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
+    clinicalAssessment?: unknown;
     status?: string;
   },
 ) {
