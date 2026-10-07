@@ -75,6 +75,44 @@ export function freeGapAt(
   return from < to ? { from, to } : null
 }
 
+/**
+ * Free segment inside a schedule hour/extra window for desk booking.
+ * `visits` = existing appointment ranges; breaks/blocked are excluded.
+ */
+export function bookableGapAt(
+  min: number,
+  day: DayWindows | undefined,
+  visits: Array<[number, number]>,
+  lo: number,
+  hi: number,
+): { from: number; to: number } | null {
+  if (!day || min < lo || min >= hi) return null
+  const schedule = [...day.hours, ...day.extra]
+    .map((w) => [toMin(w.start), toMin(w.end)] as [number, number])
+    .filter(([s, e]) => !Number.isNaN(s) && !Number.isNaN(e))
+  const win = schedule.find(([s, e]) => min >= s && min < e)
+  if (!win) return null
+
+  const blocked: Array<[number, number]> = [
+    ...visits,
+    ...(day.breaks ?? []).map(
+      (w) => [toMin(w.start), toMin(w.end)] as [number, number],
+    ),
+    ...(day.blocked ?? []).map(
+      (w) => [toMin(w.start), toMin(w.end)] as [number, number],
+    ),
+  ].filter(([s, e]) => !Number.isNaN(s) && !Number.isNaN(e))
+
+  let from = Math.max(lo, win[0])
+  let to = Math.min(hi, win[1])
+  for (const [s, e] of blocked.sort((a, b) => a[0] - b[0])) {
+    if (min >= s && min < e) return null
+    if (e <= min && e > from) from = Math.max(from, e)
+    if (s > min && s < to) to = Math.min(to, s)
+  }
+  return from < to ? { from, to } : null
+}
+
 /** Same rules as the server (`calendarSlots.checkExtraWindow`). */
 export function checkWindow(
   win: TimeWindow,
