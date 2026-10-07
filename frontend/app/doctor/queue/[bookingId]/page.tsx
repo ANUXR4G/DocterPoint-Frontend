@@ -269,11 +269,8 @@ export default function VisitPage() {
       if (data.doctorRemarks !== undefined) {
         setRemarks(doctorRemarksForEdit(data.doctorRemarks))
       }
-      if (data.clinicalAssessment !== undefined) {
-        setClinicalAssessment(
-          (data.clinicalAssessment as ClinicalAssessment) ?? null,
-        )
-      }
+      // Do not overwrite clinicalAssessment on silent refresh — that wiped
+      // unsaved Add pain / Add allergy rows before the doctor hit Save.
     }
   }, [])
 
