@@ -284,10 +284,10 @@ export function CareChatPanel({
               accessibilityLabel="Attach photo"
               disabled={attaching || sending}
               onPress={() => void attachPhoto()}
-              style={[styles.attachBtn, attaching && styles.attachBusy]}
+              style={[styles.attachBtn, styles.attachBtnPrimary, attaching && styles.attachBusy]}
             >
-              <Text style={styles.attachBtnText}>
-                {attaching ? "…" : "Photo"}
+              <Text style={[styles.attachBtnText, styles.attachBtnTextPrimary]}>
+                {attaching ? "Uploading…" : "Attach photo"}
               </Text>
             </Pressable>
             <Pressable
@@ -297,7 +297,7 @@ export function CareChatPanel({
               onPress={() => void attachFile()}
               style={[styles.attachBtn, attaching && styles.attachBusy]}
             >
-              <Text style={styles.attachBtnText}>File / PDF</Text>
+              <Text style={styles.attachBtnText}>Attach PDF</Text>
             </Pressable>
           </View>
         ) : null}
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   },
   attachBtn: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.brandMist,
@@ -434,11 +434,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  attachBtnPrimary: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brand,
+  },
   attachBusy: { opacity: 0.55 },
   attachBtnText: {
     fontSize: 13,
     fontWeight: "700",
     color: colors.navy,
+  },
+  attachBtnTextPrimary: {
+    color: colors.white,
   },
   input: {
     minHeight: 44,

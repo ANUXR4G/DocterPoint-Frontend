@@ -24,7 +24,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow GlucoGuide to use your photos for your profile picture and ID registration autofill."
+          "photosPermission": "Allow GlucoGuide to use your photos for visit documents, your profile picture, and ID registration."
         }
       ],
       [
@@ -56,9 +56,14 @@
       },
       "bundleIdentifier": "com.anonymous.glucoguide-patient"
     },
+    "androidNavigationBar": {
+      "backgroundColor": "#00000000",
+      "barStyle": "dark-content"
+    },
     "android": {
       "package": "com.glucoguide.patient",
       "softwareKeyboardLayoutMode": "pan",
+      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",

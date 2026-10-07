@@ -241,9 +241,30 @@ export default function BookingDetailScreen() {
 
         <Panel style={styles.panel}>
           <SectionTitle>Documents</SectionTitle>
+          <Text style={styles.muted}>
+            {canAttachDocs
+              ? "Share lab reports or photos with your doctor for this visit."
+              : "Attachments are closed for canceled or no-show visits."}
+          </Text>
+          {canAttachDocs ? (
+            <View style={styles.attachRow}>
+              <PrimaryButton
+                label={attaching ? "Uploading…" : "Attach photo"}
+                onPress={() => void attachFile("photo")}
+                busy={attaching}
+              />
+              <PrimaryButton
+                label="Attach PDF / file"
+                onPress={() => void attachFile("file")}
+                busy={attaching}
+                tone="ink"
+              />
+            </View>
+          ) : null}
+          <ErrorText text={attachError} />
           {documents.length === 0 ? (
-            <Text style={styles.muted}>
-              No documents yet. Attach a lab report or photo for your doctor.
+            <Text style={[styles.muted, { marginTop: space.sm }]}>
+              No documents on this visit yet.
             </Text>
           ) : (
             documents.map((d, idx) => (
@@ -258,23 +279,6 @@ export default function BookingDetailScreen() {
               </Pressable>
             ))
           )}
-          {canAttachDocs ? (
-            <View style={styles.attachRow}>
-              <PrimaryButton
-                label={attaching ? "Uploading…" : "Add photo"}
-                onPress={() => void attachFile("photo")}
-                busy={attaching}
-                tone="ghost"
-              />
-              <PrimaryButton
-                label="Add file / PDF"
-                onPress={() => void attachFile("file")}
-                busy={attaching}
-                tone="ghost"
-              />
-            </View>
-          ) : null}
-          <ErrorText text={attachError} />
         </Panel>
 
         {selfUserId && display.provider?.id ? (
