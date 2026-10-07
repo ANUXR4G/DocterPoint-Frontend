@@ -2000,8 +2000,18 @@ export const BookingService = {
       const provider = providerMap[b.providerId] ?? null;
       const dateOfBirth = linked?.patient?.dateOfBirth ?? null;
 
+      const linkedName = String(linked?.name || "").trim();
+      const storedName = String(b.patientName || "").trim();
+      // Prefer a real person name over a blank / digit-only booking label.
+      const displayName =
+        (storedName && !/^\d{8,15}$/.test(storedName) ? storedName : "") ||
+        linkedName ||
+        storedName ||
+        null;
+
       return {
         ...b,
+        patientName: displayName,
         provider: provider
           ? { id: provider.id, name: provider.name, email: provider.email }
           : null,
@@ -2023,7 +2033,7 @@ export const BookingService = {
             }
           : {
               id: null,
-              name: b.patientName,
+              name: displayName,
               email: null,
               phone: b.patientPhone,
               gender: null,

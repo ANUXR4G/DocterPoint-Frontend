@@ -27,7 +27,13 @@ import {
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
 import { withDrTitle } from "@/lib/doctorName";
-import { nextActions, whenLabel, ymd, type BookingRow } from "@/lib/types";
+import {
+  bookingPatientLabel,
+  nextActions,
+  whenLabel,
+  ymd,
+  type BookingRow,
+} from "@/lib/types";
 import { formatPracticeTime } from "@/lib/practiceTime";
 import { colors, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
@@ -208,7 +214,7 @@ export default function DashboardScreen() {
         ) : null}
 
         {preview.map((b) => {
-          const name = b.patientName || b.patient?.name || b.patientPhone;
+          const name = bookingPatientLabel(b);
           const busy = busyId === b.id;
           return (
             <SurfaceCard

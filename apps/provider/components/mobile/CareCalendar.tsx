@@ -18,7 +18,11 @@ import {
   ymd,
 } from "@/lib/calendarDates";
 import { formatPracticeTime } from "@/lib/practiceTime";
-import { whenLabel, type BookingRow } from "@/lib/types";
+import {
+  bookingPatientLabel,
+  whenLabel,
+  type BookingRow,
+} from "@/lib/types";
 import { colors, radii, shadows, space } from "@/lib/theme";
 
 type Props = {
@@ -56,7 +60,7 @@ function timeLabel(b: BookingRow): string {
 }
 
 function patientLabel(b: BookingRow): string {
-  return b.patientName || b.patient?.name || b.patientPhone || "Patient";
+  return bookingPatientLabel(b);
 }
 
 function statusTone(status: string) {

@@ -25,6 +25,7 @@ import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { updateBookingStatus } from "@/lib/procto";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import {
+  bookingPatientLabel,
   consultationTypeLabel,
   nextActions,
   whenLabel,
@@ -228,7 +229,7 @@ export default function AppointmentsScreen() {
             ) : (
               filtered.map((b, index) => {
                 const name =
-                  b.patientName || b.patient?.name || b.patientPhone || "Patient";
+                  bookingPatientLabel(b);
                 return (
                   <AnimatedView
                     key={b.id}

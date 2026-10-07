@@ -27,6 +27,7 @@ import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
 import { withDrTitle } from "@/lib/doctorName";
 import {
+  bookingPatientLabel,
   nextActions,
   whenLabel,
   type BookingRow,
@@ -219,19 +220,12 @@ export default function QueueScreen() {
                   ) : (
                     <View style={[styles.avatar, styles.avatarFallback]}>
                       <Text style={styles.avatarInitial}>
-                        {(
-                          b.patientName ||
-                          b.patient?.name ||
-                          b.patientPhone ||
-                          "?"
-                        )
-                          .charAt(0)
-                          .toUpperCase()}
+                        {bookingPatientLabel(b).charAt(0).toUpperCase()}
                       </Text>
                     </View>
                   )}
                   <Text style={styles.name}>
-                    {b.patientName || b.patient?.name || b.patientPhone}
+                    {bookingPatientLabel(b)}
                   </Text>
                 </View>
                 <StatusBadge status={b.status} />

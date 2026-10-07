@@ -20,7 +20,7 @@ import {
 import { PremiumAtmosphere, PremiumCard } from "@/components/mobile/PremiumChrome";
 import { selfProviderScope, usePractice } from "@/lib/practiceContext";
 import { fetchPracticeBookings } from "@/lib/procto";
-import { whenLabel, type BookingRow } from "@/lib/types";
+import { bookingPatientLabel, whenLabel, type BookingRow } from "@/lib/types";
 import {
   addMonths,
   formatDayTitle,
@@ -251,9 +251,7 @@ export default function CalendarScreen() {
               onPress={() => router.push(`/(app)/visit/${b.id}`)}
             >
               <View style={styles.row}>
-                <Text style={styles.name}>
-                  {b.patientName || b.patientPhone}
-                </Text>
+                <Text style={styles.name}>{bookingPatientLabel(b)}</Text>
                 <StatusBadge status={b.status} />
               </View>
               <Text style={styles.meta}>

@@ -182,6 +182,18 @@ export const BOOKING_STATUSES = [
 
 export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/** Prefer person name; never lead with a bare phone when a linked name exists. */
+export function bookingPatientLabel(b: BookingRow): string {
+  const stored = String(b.patientName || "").trim();
+  const linked = String(b.patient?.name || "").trim();
+  const looksLikePhone = (s: string) => /^\+?\d[\d\s-]{7,}$/.test(s);
+  if (stored && !looksLikePhone(stored)) return stored;
+  if (linked && !looksLikePhone(linked)) return linked;
+  if (stored) return stored;
+  if (linked) return linked;
+  return String(b.patientPhone || "").trim() || "Patient";
+}
+
 export function whenLabel(b: BookingRow) {
   if (b.mode === "TOKEN_BASED") {
     return `Token #${b.tokenNumber ?? "?"} · ${b.sessionDate?.slice(0, 10) ?? ""}`;
