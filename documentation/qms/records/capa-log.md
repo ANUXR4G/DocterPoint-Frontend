@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20261007-02
+- **Date opened:** 2026-10-07
+- **Severity:** 2
+- **Process:** P-NOTIFY
+- **Description:** Appointment chat modal messages (clinic → patient) did not reliably arrive on WhatsApp; doctor had no delivery feedback in the UI.
+- **Evidence:** Direct messages from Dr. Priya Nair → Anurag / Satheesh in chat with no WhatsApp receipt; Satheesh stored as `1507801104` (non-Indian 10-digit) was being sent as `911507801104`. Production Railway watches `main` while subtree pushes landed on `master`, so fan-out fixes never deployed.
+- **Containment:** Pushed backend/frontend subtree tips to `main`; verified `POST /chats/direct` returns `whatsapp.status: "sent"` (≈7s Meta round-trip).
+- **Root cause:** (1) Care-chat WA fan-out was fire-and-forget with no status on the chat response. (2) `formatE164` forced `91` onto any 10-digit number. (3) Deploy branch mismatch (`master` vs `main`).
+- **Corrective action:** Await fan-out and return status; CareChat / AppointmentChatModal show sent/failed; strip trunk `00` and only invent `91` for Indian mobiles (6–9); Cursor deploy rule → push subtree to `main`.
+- **Owner / due:** Engineering / 2026-10-07
+- **Verification:** Prod `whatsapp: { status: "sent" }` for Priya → Anurag; formatE164 unit tests pass.
+- **Status:** Verified
+- **Docs updated:** capa-log; decide-dont-ask.mdc (deploy to `main`)
+
 ### NC-20261007-01
 - **Date opened:** 2026-10-07
 - **Severity:** 2
