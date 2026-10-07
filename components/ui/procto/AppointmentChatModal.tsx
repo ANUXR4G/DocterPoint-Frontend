@@ -73,7 +73,8 @@ export default function AppointmentChatModal({
               <span className="truncate">Chat · {displayName}</span>
             </h2>
             <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-              Patient WhatsApp replies also appear here.
+              Your messages are also sent to the patient&apos;s WhatsApp when their
+              number is on file. Replies from WhatsApp appear here.
               {bookingId
                 ? " Documents you attach are sent on WhatsApp and saved to this appointment."
                 : ""}
