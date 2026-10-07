@@ -499,7 +499,11 @@ export default function VisitScreen() {
           ) : null}
         </View>
 
-        <Text style={styles.section}>Clinical assessment</Text>
+        <Text style={styles.section}>Vitals · Pain · Allergies</Text>
+        <Text style={styles.lockedHint}>
+          Capture vitals with color bands, pain rows, and allergies. Tap Save
+          clinical below (or Save visit notes at the bottom).
+        </Text>
         <ClinicalAssessmentPanel
           mastersRaw={
             membership?.practice.clinicalMasters ??
@@ -509,6 +513,14 @@ export default function VisitScreen() {
           readOnly={completed}
           onChange={setClinicalAssessment}
         />
+        {!completed ? (
+          <PrimaryButton
+            label={busy ? "Saving…" : "Save clinical"}
+            onPress={() => void saveVisit()}
+            busy={busy}
+            disabled={busy}
+          />
+        ) : null}
 
         <Text style={styles.section}>Remarks</Text>
         <Text style={styles.lockedHint}>

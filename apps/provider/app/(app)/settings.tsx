@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ClinicalMastersPanel } from "@/components/ClinicalMastersPanel";
 import {
   Chip,
   ErrorText,
@@ -223,6 +224,18 @@ export default function SettingsScreen() {
           busy={busy}
           disabled={busy}
         />
+
+        <Text style={styles.section}>Clinical masters</Text>
+        <Text style={styles.hint}>
+          Vitals bands, allergy catalog, and pain scales used on every visit.
+        </Text>
+        {practice?.id ? (
+          <ClinicalMastersPanel
+            practiceId={practice.id}
+            clinicalMasters={practice.clinicalMasters}
+            onSaved={() => void refresh()}
+          />
+        ) : null}
 
         <View style={styles.linksCard}>
           <Text style={styles.linksTitle}>Also in the app</Text>

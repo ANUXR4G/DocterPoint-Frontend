@@ -1,0 +1,15 @@
+# Keep doctor EAS uploads small (monorepo-aware)
+**/node_modules/**
+**/.expo/**
+**/dist/**
+**/out/**
+**/*.tar.gz
+**/build.tar.gz
+../mobile/**
+../../frontend/**
+../../backend/node_modules/**
+../../documentation/**
+**/.git/**
+*.apk
+*.aab
+*.ipa
