@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -7,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { Chip, PrimaryButton } from "@/components/ui";
+import PainAssessmentToolModal from "@/components/PainAssessmentToolModal";
 import {
   ALLERGY_SEVERITIES,
   computeBmi,
@@ -16,6 +18,11 @@ import {
   type ClinicalAssessment,
   type VitalBand,
 } from "@/lib/clinicalMasters";
+import {
+  painToolTabForScale,
+  shouldOpenPainAssessmentTool,
+  type PainToolTab,
+} from "@/lib/painAssessmentTool";
 import { colors, radii, space } from "@/lib/theme";
 
 const BAND_BG: Record<VitalBand, string> = {
@@ -96,6 +103,10 @@ export function ClinicalAssessmentPanel({
   const [local, setLocal] = useState<ClinicalAssessment>(
     () => normalizeClinicalAssessment(value) ?? emptyAssessment(),
   );
+  const [painTool, setPainTool] = useState<{
+    idx: number;
+    tab: PainToolTab;
+  } | null>(null);
 
   useEffect(() => {
     setLocal(normalizeClinicalAssessment(value) ?? emptyAssessment());
@@ -268,6 +279,8 @@ export function ClinicalAssessmentPanel({
                           const pain = [...(local.pain ?? [])];
                           pain[idx] = { ...row, scale: s };
                           commit({ ...local, pain });
+                          const tab = painToolTabForScale(s);
+                          if (tab) setPainTool({ idx, tab });
                         }
                   }
                 />
@@ -283,21 +296,45 @@ export function ClinicalAssessmentPanel({
               ["frequency", "Frequency"],
               ["radiation", "Radiation"],
             ] as const
-          ).map(([field, label]) => (
-            <TextInput
-              key={field}
-              editable={!readOnly}
-              value={String(row[field] ?? "")}
-              placeholder={label}
-              placeholderTextColor={colors.inkFaint}
-              onChangeText={(t) => {
-                const pain = [...(local.pain ?? [])];
-                pain[idx] = { ...row, [field]: t };
-                commit({ ...local, pain });
-              }}
-              style={styles.input}
-            />
-          ))}
+          ).map(([field, label]) =>
+            field === "score" &&
+            shouldOpenPainAssessmentTool(row.scale || "") &&
+            !readOnly ? (
+              <Pressable
+                key={field}
+                onPress={() => {
+                  const tab =
+                    painToolTabForScale(row.scale || "") ?? "wong-baker";
+                  setPainTool({ idx, tab });
+                }}
+                style={[styles.input, styles.scoreToolBtn]}
+              >
+                <Text
+                  style={
+                    row.score
+                      ? styles.scoreToolValue
+                      : styles.scoreToolPlaceholder
+                  }
+                >
+                  {row.score || "Select with tool…"}
+                </Text>
+              </Pressable>
+            ) : (
+              <TextInput
+                key={field}
+                editable={!readOnly}
+                value={String(row[field] ?? "")}
+                placeholder={label}
+                placeholderTextColor={colors.inkFaint}
+                onChangeText={(t) => {
+                  const pain = [...(local.pain ?? [])];
+                  pain[idx] = { ...row, [field]: t };
+                  commit({ ...local, pain });
+                }}
+                style={styles.input}
+              />
+            ),
+          )}
           {!readOnly ? (
             <Chip
               label="Remove pain row"
@@ -465,6 +502,37 @@ export function ClinicalAssessmentPanel({
           }
         />
       ) : null}
+
+      <PainAssessmentToolModal
+        open={painTool != null}
+        initialTab={painTool?.tab ?? "wong-baker"}
+        initialScore={
+          painTool != null ? local.pain?.[painTool.idx]?.score || "" : ""
+        }
+        onClose={() => setPainTool(null)}
+        onSave={(sel) => {
+          if (painTool == null) return;
+          const pain = [...(local.pain ?? [])];
+          const row = pain[painTool.idx];
+          if (!row) {
+            setPainTool(null);
+            return;
+          }
+          const scale =
+            painToolTabForScale(row.scale || "") === sel.tab
+              ? row.scale
+              : masters.painScales.find(
+                  (s) => painToolTabForScale(s) === sel.tab,
+                ) ?? sel.scale;
+          pain[painTool.idx] = {
+            ...row,
+            scale,
+            score: sel.score,
+          };
+          commit({ ...local, pain });
+          setPainTool(null);
+        }}
+      />
     </View>
   );
 }
@@ -530,6 +598,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.ink,
     backgroundColor: colors.white,
+  },
+  scoreToolBtn: {
+    justifyContent: "center",
+    borderColor: "#99F6E4",
+  },
+  scoreToolValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.ink,
+  },
+  scoreToolPlaceholder: {
+    fontSize: 14,
+    color: colors.inkFaint,
   },
   meta: { fontSize: 12, color: colors.inkFaint, fontWeight: "600" },
   allergyHead: {

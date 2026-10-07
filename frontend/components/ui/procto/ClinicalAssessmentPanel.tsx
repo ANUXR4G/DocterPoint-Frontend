@@ -10,6 +10,12 @@ import {
   type ClinicalMasters,
   type VitalBand,
 } from "@/lib/clinicalMasters"
+import {
+  painToolTabForScale,
+  shouldOpenPainAssessmentTool,
+  type PainToolTab,
+} from "@/lib/painAssessmentTool"
+import PainAssessmentToolModal from "@/components/ui/procto/PainAssessmentToolModal"
 
 /** Full-field fill + border (do not mix with a white base bg — Tailwind order fights). */
 const BAND_COLORS: Record<VitalBand, string> = {
@@ -107,6 +113,10 @@ export default function ClinicalAssessmentPanel({
   const [local, setLocal] = useState<ClinicalAssessment>(
     () => value ?? emptyAssessment(),
   )
+  const [painTool, setPainTool] = useState<{
+    idx: number
+    tab: PainToolTab
+  } | null>(null)
 
   // Sync only when saved content actually changes — silent reloads / new object
   // references must not wipe rows the doctor just Added.
@@ -308,9 +318,14 @@ export default function ClinicalAssessmentPanel({
                       disabled={readOnly}
                       value={row.scale || ""}
                       onChange={(e) => {
+                        const nextScale = e.target.value
                         const pain = [...(local.pain ?? [])]
-                        pain[idx] = { ...row, scale: e.target.value }
+                        pain[idx] = { ...row, scale: nextScale }
                         commit({ ...local, pain })
+                        const tab = painToolTabForScale(nextScale)
+                        if (tab && !readOnly) {
+                          setPainTool({ idx, tab })
+                        }
                       }}
                       className={FIELD_INPUT}
                     >
@@ -333,17 +348,35 @@ export default function ClinicalAssessmentPanel({
                     ] as const
                   ).map((field) => (
                     <td key={field} className="py-1 pr-2">
-                      <input
-                        disabled={readOnly}
-                        value={row[field] || ""}
-                        placeholder={`Enter ${field}`}
-                        onChange={(e) => {
-                          const pain = [...(local.pain ?? [])]
-                          pain[idx] = { ...row, [field]: e.target.value }
-                          commit({ ...local, pain })
-                        }}
-                        className={FIELD_INPUT}
-                      />
+                      {field === "score" &&
+                      shouldOpenPainAssessmentTool(row.scale || "") &&
+                      !readOnly ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tab =
+                              painToolTabForScale(row.scale || "") ??
+                              "wong-baker"
+                            setPainTool({ idx, tab })
+                          }}
+                          className={`${FIELD_INPUT} cursor-pointer text-left hover:border-teal-400`}
+                          title="Open Pain Assessment Tool"
+                        >
+                          {row.score || "Select with tool…"}
+                        </button>
+                      ) : (
+                        <input
+                          disabled={readOnly}
+                          value={row[field] || ""}
+                          placeholder={`Enter ${field}`}
+                          onChange={(e) => {
+                            const pain = [...(local.pain ?? [])]
+                            pain[idx] = { ...row, [field]: e.target.value }
+                            commit({ ...local, pain })
+                          }}
+                          className={FIELD_INPUT}
+                        />
+                      )}
                     </td>
                   ))}
                   <td className="py-1">
@@ -382,6 +415,40 @@ export default function ClinicalAssessmentPanel({
             Add pain assessment
           </button>
         ) : null}
+
+        <PainAssessmentToolModal
+          open={painTool != null}
+          initialTab={painTool?.tab ?? "wong-baker"}
+          initialScore={
+            painTool != null
+              ? local.pain?.[painTool.idx]?.score || ""
+              : ""
+          }
+          onClose={() => setPainTool(null)}
+          onSave={(sel) => {
+            if (painTool == null) return
+            const pain = [...(local.pain ?? [])]
+            const row = pain[painTool.idx]
+            if (!row) {
+              setPainTool(null)
+              return
+            }
+            // Keep the clinic scale label if it already maps to this tool tab.
+            const scale =
+              painToolTabForScale(row.scale || "") === sel.tab
+                ? row.scale
+                : masters.painScales.find(
+                    (s) => painToolTabForScale(s) === sel.tab,
+                  ) ?? sel.scale
+            pain[painTool.idx] = {
+              ...row,
+              scale,
+              score: sel.score,
+            }
+            commit({ ...local, pain })
+            setPainTool(null)
+          }}
+        />
       </div>
 
       <hr className="border-neutral-200 dark:border-neutral-700" />
