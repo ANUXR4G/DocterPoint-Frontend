@@ -38,6 +38,7 @@ import {
   normalizePendingVerification,
   normalizeUpcomingChanges,
 } from "@/components/ui/procto/ScheduleChangeControls";
+import ClinicalMastersPanel from "@/components/ui/procto/ClinicalMastersPanel";
 
 type Tab = PracticeTab;
 
@@ -47,6 +48,7 @@ type PracticeMember = {
     name: string;
     slug: string;
     scheduleNoticeHours?: number | null;
+    clinicalMasters?: unknown;
     locations: { id: string; name: string; city: string }[];
     members: {
       userId: string;
@@ -206,7 +208,8 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
     tabParam === "schedule" ||
     tabParam === "overrides" ||
     tabParam === "doctors" ||
-    tabParam === "inbox"
+    tabParam === "inbox" ||
+    tabParam === "clinical"
       ? tabParam === "schedule" || tabParam === "overrides"
         ? "setup"
         : (tabParam as Tab)
@@ -222,7 +225,8 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
       tabParam === "calendar" ||
       tabParam === "setup" ||
       tabParam === "doctors" ||
-      tabParam === "inbox"
+      tabParam === "inbox" ||
+      tabParam === "clinical"
     ) {
       setTab(tabParam);
       if (tabParam === "setup") setSetupPane(paneParam === "blocks" ? "blocks" : "hours");
@@ -549,6 +553,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
             "setup",
             ...(isClinicAdmin ? (["doctors"] as Tab[]) : []),
             "inbox",
+            "clinical",
           ] as Tab[]
         ).map((t) => (
           <button
@@ -725,6 +730,17 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
         <InboxPanel
           practiceId={practice.id}
           onChanged={() => setMessage("Conversation updated.")}
+        />
+      )}
+
+      {tab === "clinical" && practice && (
+        <ClinicalMastersPanel
+          practiceId={practice.id}
+          clinicalMasters={practice.clinicalMasters}
+          onSaved={async () => {
+            setMessage("Clinical masters saved.");
+            await reloadMemberships();
+          }}
         />
       )}
     </div>

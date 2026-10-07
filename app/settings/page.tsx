@@ -170,7 +170,7 @@ function SettingsPageInner() {
           <div className="mb-4">
             <h2 className="dashboard-section-title text-lg">Practice</h2>
             <p className="dashboard-section-sub">
-              Schedule, hours, doctors, and WhatsApp inbox.
+              Schedule, hours, doctors, WhatsApp inbox, and clinical masters.
             </p>
           </div>
           <PracticeDashboardProvider>

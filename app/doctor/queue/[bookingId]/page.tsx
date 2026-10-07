@@ -39,6 +39,8 @@ import {
 import { patchBookingFields } from "@/lib/liveBooking"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
+import ClinicalAssessmentPanel from "@/components/ui/procto/ClinicalAssessmentPanel"
+import type { ClinicalAssessment } from "@/lib/clinicalMasters"
 
 type Medicine = { name: string; amount?: string; times?: string[] }
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
@@ -57,6 +59,7 @@ type VisitBooking = {
   doctorRemarks?: string | null
   medicines?: Medicine[] | null
   documents?: VisitDoc[] | null
+  clinicalAssessment?: ClinicalAssessment | null
   slotStart?: string | null
   tokenNumber?: number | null
   sessionDate?: string | null
@@ -71,6 +74,7 @@ type VisitBooking = {
     name: string
     slug: string
     specialty?: string | null
+    clinicalMasters?: unknown
   }
   location?: { name: string; address: string; city: string }
   provider?: { id: string; name: string | null; email?: string | null } | null
@@ -239,6 +243,8 @@ export default function VisitPage() {
   const [remarks, setRemarks] = useState("")
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [documents, setDocuments] = useState<VisitDoc[]>([])
+  const [clinicalAssessment, setClinicalAssessment] =
+    useState<ClinicalAssessment | null>(null)
   const [docTab, setDocTab] = useState<"appointment" | "general">("appointment")
   const [generalDocs, setGeneralDocs] = useState<VisitDoc[]>([])
   const [generalLinked, setGeneralLinked] = useState<boolean | null>(null)
@@ -253,12 +259,20 @@ export default function VisitPage() {
       setRemarks(doctorRemarksForEdit(data.doctorRemarks))
       setMedicines(Array.isArray(data.medicines) ? data.medicines : [])
       setDocuments(Array.isArray(data.documents) ? data.documents : [])
+      setClinicalAssessment(
+        (data.clinicalAssessment as ClinicalAssessment) ?? null,
+      )
       setLoading(false)
     } else {
       if (Array.isArray(data.medicines)) setMedicines(data.medicines)
       if (Array.isArray(data.documents)) setDocuments(data.documents)
       if (data.doctorRemarks !== undefined) {
         setRemarks(doctorRemarksForEdit(data.doctorRemarks))
+      }
+      if (data.clinicalAssessment !== undefined) {
+        setClinicalAssessment(
+          (data.clinicalAssessment as ClinicalAssessment) ?? null,
+        )
       }
     }
   }, [])
@@ -383,6 +397,7 @@ export default function VisitPage() {
       doctorRemarks: remarks,
       medicines: nextMedicines,
       documents: docsToSave,
+      clinicalAssessment: clinicalAssessment ?? null,
       ...(opts?.status ? { status: opts.status } : {}),
     })
     if (res.status !== "successful") {
@@ -482,6 +497,7 @@ export default function VisitPage() {
         doctorRemarks: remarks,
         medicines,
         documents: nextDocs,
+        clinicalAssessment: clinicalAssessment ?? null,
       })
       if (res.status !== "successful") {
         setError(res.message || "Document uploaded but could not save to visit.")
@@ -508,6 +524,7 @@ export default function VisitPage() {
       doctorRemarks: remarks,
       medicines,
       documents,
+      clinicalAssessment: clinicalAssessment ?? null,
       ...(nextStatus ? { status: nextStatus } : {}),
     })
     setSaving(false)
@@ -517,6 +534,11 @@ export default function VisitPage() {
     }
     const saved = res.data as VisitBooking
     setBooking(saved)
+    if (saved.clinicalAssessment !== undefined) {
+      setClinicalAssessment(
+        (saved.clinicalAssessment as ClinicalAssessment) ?? null,
+      )
+    }
     patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
     if (nextStatus === "COMPLETED") {
       setMessage("Visit completed.")
@@ -716,6 +738,13 @@ export default function VisitPage() {
           </p>
         </section>
       ) : null}
+
+      <ClinicalAssessmentPanel
+        mastersRaw={booking.practice?.clinicalMasters}
+        value={clinicalAssessment}
+        readOnly={isCompleted}
+        onChange={setClinicalAssessment}
+      />
 
       {/* Remarks */}
       <section className="dashboard-panel !p-5">
