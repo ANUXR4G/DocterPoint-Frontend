@@ -1,0 +1,19 @@
+# Monorepo — doctor/patient EAS only needs the Expo app + shared workspace deps.
+frontend/
+backend/
+documentation/
+scripts/
+nginx/
+dump.rdb
+docker-compose.yml
+compose.yaml
+*.md
+apps/mobile/
+# Keep only apps/provider for doctor builds — patient app is a separate EAS project.
+**/node_modules/
+**/.expo/
+**/dist/
+**/out/
+**/*.tar.gz
+**/*.apk
+**/.git/
