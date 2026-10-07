@@ -623,7 +623,7 @@ export default function VisitPage() {
                         <Fragment key={`${part}-${i}`}>
                           {i > 0 ? (
                             <span className="opacity-40" aria-hidden>
-                              ·
+                              |
                             </span>
                           ) : null}
                           <span
