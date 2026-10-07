@@ -47,9 +47,12 @@ export const ALLERGY_SEVERITIES = [
 export type AllergySeverity = (typeof ALLERGY_SEVERITIES)[number];
 
 export const DEFAULT_PAIN_SCALES = [
+  "Linear Pain Scale",
+  "Activity Tolerance Scale",
+  "Wong-Baker Facial Expression Scale",
+  "FLACC",
   "Numeric (0–10)",
   "Wong-Baker Faces",
-  "FLACC",
   "Verbal descriptor",
 ];
 
