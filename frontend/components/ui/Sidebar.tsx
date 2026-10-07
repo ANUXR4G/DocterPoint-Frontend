@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import Link from "next/link"
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -16,7 +15,6 @@ import { cookies } from "@/utils/cookies"
 import { navRoleFromContext, dashboardBrandLabel } from "@/lib/providerPortal"
 import { useAdminSupportUnread } from "@/hooks/useAdminSupportUnread"
 import { usePracticeOpenNotifications } from "@/hooks/usePracticeOpenNotifications"
-import { proctoService } from "@/lib/services/procto"
 
 type Props = {
   role?: string | null
@@ -99,29 +97,6 @@ export default function Sidebar({ role, logout }: Props) {
   const { openCount: notificationOpen } = usePracticeOpenNotifications(
     navRole === "doctor" || navRole === "clinic",
   )
-  const [practiceName, setPracticeName] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (navRole !== "doctor" && navRole !== "clinic") {
-      setPracticeName(null)
-      return
-    }
-    let cancelled = false
-    void proctoService.getMyPractices().then((res) => {
-      if (cancelled) return
-      if (res.status !== "successful" || !Array.isArray(res.data) || !res.data[0]) {
-        setPracticeName(null)
-        return
-      }
-      const name = String(
-        (res.data[0] as { practice?: { name?: string } })?.practice?.name || "",
-      ).trim()
-      setPracticeName(name || null)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [navRole])
 
   function navBadgeCount(name: string) {
     if (name === "Support" && supportUnread > 0) return supportUnread
@@ -138,10 +113,10 @@ export default function Sidebar({ role, logout }: Props) {
         </div>
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold tracking-[-0.3px] text-slate-900 dark:text-white">
-            {dashboardBrandLabel(navRole)}
+            GlucoGuide
           </h3>
           <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-400">
-            {practiceName || "GlucoGuide"}
+            {dashboardBrandLabel(navRole)}
           </p>
         </div>
       </div>
