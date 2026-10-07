@@ -48,12 +48,25 @@ export const LINEAR_OPTIONS: PainToolOption[] = [
   { id: "10", label: "10", score: "10" },
 ]
 
+/** Activity tolerance chips matching the Pain Assessment Tool screenshot. */
 export const ACTIVITY_OPTIONS: PainToolOption[] = [
-  { id: "none", label: "No limitation", score: "No limitation" },
-  { id: "mild", label: "Mild limitation", score: "Mild limitation" },
-  { id: "moderate", label: "Moderate limitation", score: "Moderate limitation" },
-  { id: "severe", label: "Severe limitation", score: "Severe limitation" },
-  { id: "unable", label: "Unable to perform", score: "Unable to perform" },
+  { id: "ignored", label: "Can be ignored", score: "Can be ignored" },
+  {
+    id: "tasks",
+    label: "Interferes with tasks",
+    score: "Interferes with tasks",
+  },
+  {
+    id: "concentration",
+    label: "Interferes with concentration",
+    score: "Interferes with concentration",
+  },
+  {
+    id: "basic-needs",
+    label: "Interferes with basic needs",
+    score: "Interferes with basic needs",
+  },
+  { id: "bedrest", label: "Bedrest required", score: "Bedrest required" },
 ]
 
 /** Five faces matching the Pain Assessment Tool screenshot (Mild → Worst Pain). */

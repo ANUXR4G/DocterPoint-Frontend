@@ -376,27 +376,18 @@ export default function PainAssessmentToolModal({
               onChange={(num) => setSelectedId(String(num))}
             />
           ) : (
-            <div className="mx-auto grid max-w-2xl gap-3 sm:grid-cols-2">
-              {options.map((opt, i) => {
+            <div className="mx-auto flex max-w-3xl flex-wrap justify-center gap-3">
+              {options.map((opt) => {
                 const active = selectedId === opt.id
-                const tones = [
-                  "border-emerald-300 bg-emerald-50",
-                  "border-sky-300 bg-sky-50",
-                  "border-amber-300 bg-amber-50",
-                  "border-orange-300 bg-orange-50",
-                  "border-rose-300 bg-rose-50",
-                ]
                 return (
                   <button
                     key={opt.id}
                     type="button"
                     onClick={() => setSelectedId(opt.id)}
-                    className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold text-neutral-800 transition dark:text-neutral-100 ${
-                      tones[i] ?? "border-neutral-200 bg-white"
-                    } ${
+                    className={`rounded-full border px-5 py-2.5 text-sm font-medium transition ${
                       active
-                        ? "ring-2 ring-teal-500"
-                        : "hover:brightness-95 dark:bg-opacity-20"
+                        ? "border-teal-500 bg-teal-50 text-teal-800 ring-2 ring-teal-400/40 dark:bg-teal-950/40 dark:text-teal-100"
+                        : "border-transparent bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
                     }`}
                   >
                     {opt.label}
