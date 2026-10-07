@@ -43,6 +43,12 @@ type Props = {
    * (socket filter; API also scopes by booking window).
    */
   threadSince?: string | null
+  /**
+   * Visit pages collapse by default (pass false to force open, e.g. support inbox).
+   * Defaults to true when bookingId is set.
+   */
+  collapsible?: boolean
+  defaultOpen?: boolean
   onDocumentShared?: () => void
 }
 
@@ -217,8 +223,14 @@ export default function CareChatPanel({
   className = "",
   bookingId,
   threadSince,
+  collapsible,
+  defaultOpen,
   onDocumentShared,
 }: Props) {
+  const isCollapsible = collapsible ?? Boolean(bookingId)
+  const [open, setOpen] = useState(() =>
+    isCollapsible ? Boolean(defaultOpen) : true,
+  )
   const [messages, setMessages] = useState<CareMessage[]>([])
   const [pending, setPending] = useState<PendingMessage[]>([])
   const [draft, setDraft] = useState("")
@@ -234,9 +246,9 @@ export default function CareChatPanel({
   const loadSeq = useRef(0)
   const polling = useRef(false)
 
-  const socketURL = selfUserId
-    ? buildWsUrl(`/api/v1/ws/chats/${selfUserId}`)
-    : null
+  const active = !isCollapsible || open
+  const socketURL =
+    active && selfUserId ? buildWsUrl(`/api/v1/ws/chats/${selfUserId}`) : null
   const { values, isConnected } = useSocket<TSocketMessage>(socketURL, 3000)
 
   const load = useCallback(
@@ -292,11 +304,13 @@ export default function CareChatPanel({
     setNotice(null)
     setSyncError("")
     lastScrollKey.current = ""
-    void load()
-  }, [load])
+    if (active) void load()
+    else setLoading(false)
+  }, [load, active])
 
   // WhatsApp inbound may land while the socket is idle — poll quietly.
   useEffect(() => {
+    if (!active) return
     const id = window.setInterval(() => {
       if (document.hidden || polling.current) return
       polling.current = true
@@ -305,7 +319,7 @@ export default function CareChatPanel({
       })
     }, POLL_MS)
     return () => window.clearInterval(id)
-  }, [load])
+  }, [load, active])
 
   useEffect(() => {
     if (!values) return
@@ -463,22 +477,67 @@ export default function CareChatPanel({
     ? "rounded-2xl border border-slate-200 bg-white dark:border-neutral-700 dark:bg-neutral-900"
     : "bg-transparent"
 
+  if (isCollapsible && !open) {
+    return (
+      <section className={`${shellClass} ${className}`}>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-neutral-800/60"
+        >
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-slate-900 dark:text-white">
+              Chat with {peerName}
+            </span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Hidden · tap to open this visit&apos;s messages
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">
+            Show
+          </span>
+        </button>
+      </section>
+    )
+  }
+
   return (
     <section
       className={`flex min-h-[22rem] flex-col overflow-hidden ${shellClass} ${className}`}
     >
       {showHeader ? (
-        <header className="border-b border-slate-200 px-4 py-3 dark:border-neutral-700">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-            Chat with {peerName}
-          </h3>
-          <p className="mt-0.5 text-xs text-slate-500">
-            {subtitle ||
-              (isConnected
-                ? "Live · WhatsApp replies from the patient appear here too"
-                : "Two-way with WhatsApp: clinic texts and patient replies sync here")}
-          </p>
+        <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-neutral-700">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+              Chat with {peerName}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {subtitle ||
+                (isConnected
+                  ? "Live · WhatsApp replies from the patient appear here too"
+                  : "Two-way with WhatsApp: clinic texts and patient replies sync here")}
+            </p>
+          </div>
+          {isCollapsible ? (
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Hide
+            </button>
+          ) : null}
         </header>
+      ) : isCollapsible ? (
+        <div className="flex justify-end border-b border-slate-200 px-3 py-2 dark:border-neutral-700">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Hide
+          </button>
+        </div>
       ) : null}
 
       {syncError && !loadError ? (

@@ -123,7 +123,7 @@ export default function VisitScreen() {
   const [medTimes, setMedTimes] = useState<string[]>([]);
   const [customHours, setCustomHours] = useState("");
   const [selfId, setSelfId] = useState<string | null>(null);
-  const [sideTab, setSideTab] = useState<"chat" | "documents">("chat");
+  const [sideTab, setSideTab] = useState<"chat" | "documents">("documents");
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!bookingId) return;

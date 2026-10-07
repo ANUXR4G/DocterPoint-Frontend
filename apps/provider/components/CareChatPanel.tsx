@@ -3,6 +3,7 @@ import {
   AppState,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -28,6 +29,9 @@ type Props = {
   /** Scope the thread to this visit (hides earlier appointments). */
   bookingId?: string | null;
   threadSince?: string | null;
+  /** Visit chat collapses by default when bookingId is set. */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 };
 
 function inVisitWindow(createdAt: string, since?: string | null): boolean {
@@ -46,7 +50,14 @@ export function CareChatPanel({
   subtitle,
   bookingId,
   threadSince,
+  collapsible,
+  defaultOpen,
 }: Props) {
+  const isCollapsible = collapsible ?? Boolean(bookingId);
+  const [open, setOpen] = useState(() =>
+    isCollapsible ? Boolean(defaultOpen) : true,
+  );
+  const active = !isCollapsible || open;
   const [messages, setMessages] = useState<CareChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -76,27 +87,30 @@ export function CareChatPanel({
   );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (active) void load();
+    else setLoading(false);
+  }, [load, active]);
 
   // WhatsApp inbound often lands while the Expo WS is idle — poll like web.
   useEffect(() => {
+    if (!active) return;
     const id = setInterval(() => {
       void load({ soft: true });
     }, 4000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, active]);
 
   useEffect(() => {
+    if (!active) return;
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") void load({ soft: true });
     });
     return () => sub.remove();
-  }, [load]);
+  }, [load, active]);
 
   useLiveSocket({
     path: selfUserId ? `/api/v1/ws/chats/${selfUserId}` : null,
-    enabled: Boolean(selfUserId && peerUserId),
+    enabled: Boolean(active && selfUserId && peerUserId),
     onEvent: (event) => {
       const msg = normalizeMsg(event as Record<string, unknown>);
       if (msg.type !== "direct" || !msg.id || !msg.content) return;
@@ -134,17 +148,49 @@ export function CareChatPanel({
     setDraft("");
   }
 
+  if (isCollapsible && !open) {
+    return (
+      <View style={styles.wrap}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Show chat with ${peerName}`}
+          onPress={() => setOpen(true)}
+          style={styles.collapsed}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.title}>Care chat · {peerName}</Text>
+            <Text style={styles.sub}>Hidden · tap to open</Text>
+          </View>
+          <Text style={styles.showBtn}>Show</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.wrap}
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Care chat · {peerName}</Text>
-        <Text style={styles.sub}>
-          {subtitle ||
-            "Patient WhatsApp replies appear here. Your texts also go to WhatsApp when the clinic line is live."}
-        </Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.title}>Care chat · {peerName}</Text>
+          <Text style={styles.sub}>
+            {subtitle ||
+              "Patient WhatsApp replies appear here. Your texts also go to WhatsApp when the clinic line is live."}
+          </Text>
+        </View>
+        {isCollapsible ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Hide chat"
+            onPress={() => setOpen(false)}
+            hitSlop={8}
+            style={styles.hideBtn}
+          >
+            <Text style={styles.hideBtnText}>Hide</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.listContent}>
@@ -214,10 +260,42 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
+  },
+  collapsed: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+  },
+  showBtn: {
+    backgroundColor: colors.brand,
+    color: colors.white,
+    overflow: "hidden",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  hideBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  hideBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.inkSoft,
   },
   title: { fontSize: 15, fontWeight: "700", color: colors.ink },
   sub: {
