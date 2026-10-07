@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { DayWindows, TimeWindow } from "@/lib/services/procto"
 import { practiceMinutesOfDay } from "@/lib/practiceTime"
 import {
+  bookableGapAt,
   drName,
   freeGapAt,
   hm12,
@@ -78,6 +79,7 @@ export default function CalendarDayGrid({
   canCreate,
   selection,
   onQuickCreate,
+  onBookSlot,
   onRemoveExtra,
   freshIds,
   renderBooking,
@@ -92,6 +94,8 @@ export default function CalendarDayGrid({
   canCreate: (providerId: string) => boolean
   selection: Selection
   onQuickCreate: (req: QuickSlotRequest) => void
+  /** Left-click / drag empty gap → desk book. Right-click → onQuickCreate. */
+  onBookSlot?: (req: QuickSlotRequest) => void
   onRemoveExtra: (
     providerId: string,
     extra: TimeWindow & { id: string },
@@ -201,24 +205,55 @@ export default function CalendarDayGrid({
     return !isPast && canCreate(providerId) && !!w && w.mode !== "TOKEN_BASED"
   }
 
+  /** Empty gaps that can take a desk booking (no MANAGE_SLOTS required). */
+  function bookable(providerId: string) {
+    const w = windows[providerId]
+    return !isPast && !!w && !w.dayOff && w.mode !== "TOKEN_BASED"
+  }
+
   function minAt(el: HTMLElement, clientY: number) {
     const r = el.getBoundingClientRect()
     return gridStart + (clientY - r.top) / PX_PER_MIN
   }
 
-  function gapFor(providerId: string, min: number) {
+  function visitRanges(providerId: string): Array<[number, number]> {
+    const w = windows[providerId]
+    const interval = w?.slotIntervalMin ?? 15
+    return (byProvider.get(providerId) ?? []).map((b) => {
+      const s = practiceMinutesOfDay(b.start)
+      const dur = b.end
+        ? (b.end.getTime() - b.start.getTime()) / 60_000
+        : interval
+      return [s, s + Math.max(5, dur)] as [number, number]
+    })
+  }
+
+  /** Gaps outside the schedule — for adding / extending slots. */
+  function extendGapFor(providerId: string, min: number) {
     const { lo, hi } = bounds()
     return freeGapAt(min, occupiedWindows(windows[providerId]), lo, hi)
   }
 
-  function openFor(
+  /** Empty time inside hours/extra — for desk booking a patient. */
+  function bookGapFor(providerId: string, min: number) {
+    const { lo, hi } = bounds()
+    return bookableGapAt(
+      min,
+      windows[providerId],
+      visitRanges(providerId),
+      lo,
+      hi,
+    )
+  }
+
+  function slotRequest(
     el: HTMLElement,
     providerId: string,
     start: number,
     end: number,
-  ) {
+  ): QuickSlotRequest {
     const r = el.getBoundingClientRect()
-    onQuickCreate({
+    return {
       providerId,
       date: dateIso,
       start,
@@ -229,7 +264,27 @@ export default function CalendarDayGrid({
         width: r.width,
         height: (end - start) * PX_PER_MIN,
       },
-    })
+    }
+  }
+
+  function openExtend(
+    el: HTMLElement,
+    providerId: string,
+    start: number,
+    end: number,
+  ) {
+    onQuickCreate(slotRequest(el, providerId, start, end))
+  }
+
+  function openBook(
+    el: HTMLElement,
+    providerId: string,
+    start: number,
+    end: number,
+  ) {
+    const req = slotRequest(el, providerId, start, end)
+    if (onBookSlot) onBookSlot(req)
+    else onQuickCreate(req)
   }
 
   function endDrag() {
@@ -242,11 +297,12 @@ export default function CalendarDayGrid({
     e: React.PointerEvent<HTMLDivElement>,
     providerId: string,
   ) {
-    if (e.button !== 0 || !creatable(providerId)) return
+    // Left-click books inside schedule gaps only (extend is right-click).
+    if (e.button !== 0 || !bookable(providerId) || !onBookSlot) return
     if ((e.target as HTMLElement).closest("[data-cal-item]")) return
     const w = windows[providerId]!
     const min = minAt(e.currentTarget, e.clientY)
-    const gap = gapFor(providerId, min)
+    const gap = bookGapFor(providerId, min)
     if (!gap) return
     const snap = snapMinutes(w.slotIntervalMin)
     const anchor = Math.max(gap.from, Math.floor(min / snap) * snap)
@@ -298,13 +354,14 @@ export default function CalendarDayGrid({
     }
     if (
       e.pointerType !== "mouse" ||
-      !creatable(providerId) ||
+      !bookable(providerId) ||
+      !onBookSlot ||
       (e.target as HTMLElement).closest("[data-cal-item]")
     ) {
       if (hover) setHover(null)
       return
     }
-    const gap = gapFor(providerId, min)
+    const gap = bookGapFor(providerId, min)
     if (!gap) {
       if (hover) setHover(null)
       return
@@ -332,16 +389,32 @@ export default function CalendarDayGrid({
     const el = e.currentTarget
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
     endDrag()
-    if (drag.moved && drag.sel) {
-      openFor(el, providerId, drag.sel.start, drag.sel.end)
-    } else {
-      openFor(
-        el,
-        providerId,
-        drag.anchor,
-        Math.min(drag.gap.to, drag.anchor + drag.interval),
-      )
-    }
+    const start =
+      drag.moved && drag.sel ? drag.sel.start : drag.anchor
+    const end =
+      drag.moved && drag.sel
+        ? drag.sel.end
+        : Math.min(drag.gap.to, drag.anchor + drag.interval)
+    // Left-click / drag → book patient; extend schedule is right-click / + Slot.
+    if (onBookSlot) openBook(el, providerId, start, end)
+  }
+
+  function onContextMenu(
+    e: React.MouseEvent<HTMLDivElement>,
+    providerId: string,
+  ) {
+    if (!creatable(providerId)) return
+    if ((e.target as HTMLElement).closest("[data-cal-item]")) return
+    e.preventDefault()
+    const el = e.currentTarget
+    const min = minAt(el, e.clientY)
+    const gap = extendGapFor(providerId, min)
+    if (!gap) return
+    const w = windows[providerId]!
+    const snap = snapMinutes(w.slotIntervalMin)
+    const start = Math.max(gap.from, Math.floor(min / snap) * snap)
+    const end = Math.min(gap.to, start + w.slotIntervalMin)
+    openExtend(el, providerId, start, end)
   }
 
   const hours = Array.from(
@@ -424,6 +497,7 @@ export default function CalendarDayGrid({
             {columns.map((c) => {
               const w = windows[c.id]
               const can = creatable(c.id)
+              const canBook = bookable(c.id)
               const colBookings = layoutLanes(
                 (byProvider.get(c.id) ?? []).map((b) => {
                   const s = practiceMinutesOfDay(b.start)
@@ -445,7 +519,7 @@ export default function CalendarDayGrid({
                 <div
                   key={c.id}
                   className={`relative min-w-[220px] flex-1 select-none border-l border-neutral-200 dark:border-neutral-700 ${
-                    can ? "cursor-crosshair" : ""
+                    canBook && onBookSlot ? "cursor-pointer" : can ? "cursor-crosshair" : ""
                   }`}
                   style={{
                     height,
@@ -458,6 +532,7 @@ export default function CalendarDayGrid({
                   onPointerUp={(e) => onPointerUp(e, c.id)}
                   onPointerCancel={endDrag}
                   onPointerLeave={() => setHover(null)}
+                  onContextMenu={(e) => onContextMenu(e, c.id)}
                 >
                   {hours.map((h) => (
                     <div
@@ -631,7 +706,7 @@ export default function CalendarDayGrid({
                         ),
                       }}
                     >
-                      + Slot {hm12(ghost.start)}
+                      Book {hm12(ghost.start)}
                     </div>
                   ) : null}
 

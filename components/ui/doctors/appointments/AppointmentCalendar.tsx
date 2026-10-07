@@ -37,6 +37,10 @@ import { drName, windowLabel } from "@/lib/quickSlots"
 import CalendarDayGrid, {
   type GridBooking,
 } from "@/components/ui/procto/CalendarDayGrid"
+import ClinicBookAppointmentModal, {
+  type ClinicBookPrefill,
+} from "@/components/ui/procto/ClinicBookAppointmentModal"
+import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
 import QuickSlotPopover, {
   type QuickSlotRequest,
 } from "@/components/ui/procto/QuickSlotPopover"
@@ -45,6 +49,7 @@ import {
   usePracticeDashboard,
 } from "@/contexts/PracticeDashboardContext"
 import {
+  isTerminalVisitStatus,
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
@@ -167,6 +172,25 @@ function BookingDetails({
   booking: CalBooking
   onClose: () => void
 }) {
+  const { patchBooking } = usePracticeDashboard()
+  const [statusBusy, setStatusBusy] = useState(false)
+
+  async function onStatus(status: string) {
+    if (isTerminalVisitStatus(booking.status)) return
+    const previous = booking.status
+    setStatusBusy(true)
+    patchBooking(booking.id, { status })
+    const res = await proctoService.updateBookingStatus(booking.id, status)
+    setStatusBusy(false)
+    if (res.status !== "successful") {
+      patchBooking(booking.id, { status: previous })
+      return
+    }
+    const arrivedAt = (res.data as { arrivedAt?: string | null } | undefined)
+      ?.arrivedAt
+    if (arrivedAt !== undefined) patchBooking(booking.id, { arrivedAt })
+  }
+
   return (
     <div className="w-80 rounded-2xl border border-neutral-200 bg-white p-4 text-left shadow-2xl dark:border-neutral-600 dark:bg-neutral-900 sm:w-96">
       <div className="flex items-start justify-between gap-3">
@@ -225,17 +249,18 @@ function BookingDetails({
             {(booking.mode || "").replace(/_/g, " ") || "—"}
           </dd>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="opacity-60">Status</dt>
-          <dd>
-            <span
-              className={`inline-block rounded-md px-2 py-1 text-xs font-bold ${statusClass(booking.status)}`}
-            >
-              {booking.status.replace(/_/g, " ")}
-            </span>
-          </dd>
-        </div>
       </dl>
+      <div className="mt-3 border-t border-neutral-100 pt-3 dark:border-neutral-700">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide opacity-60">
+          Visit status
+        </p>
+        <BookingStatusControls
+          status={booking.status}
+          busy={statusBusy}
+          compact
+          onChange={(status) => void onStatus(status)}
+        />
+      </div>
       <Link
         href={`/doctor/queue/${booking.id}`}
         className="mt-3 block border-t border-neutral-100 pt-3 text-xs font-bold text-[var(--theme-primary)] hover:underline dark:border-neutral-700"
@@ -263,7 +288,7 @@ function BookingCard({
     if (!el) return
     const r = el.getBoundingClientRect()
     const panelW = 384
-    const panelH = 300
+    const panelH = 420
     let left = r.left
     let top = r.bottom + 8
     if (left + panelW > window.innerWidth - 12) {
@@ -385,6 +410,7 @@ export default function AppointmentCalendar() {
     membershipRole,
     actorUserId,
     lastCalendarEvent,
+    refresh: refreshDashboard,
   } = usePracticeDashboard()
   const isFrontDesk = isClinicAdmin || membershipRole === "RECEPTIONIST"
   const [error, setError] = useState("")
@@ -407,6 +433,8 @@ export default function AppointmentCalendar() {
     Record<string, DayWindows | undefined>
   >({})
   const [quick, setQuick] = useState<QuickSlotRequest | null>(null)
+  const [bookOpen, setBookOpen] = useState(false)
+  const [bookPrefill, setBookPrefill] = useState<ClinicBookPrefill | null>(null)
   const [notice, setNotice] = useState<{
     text: string
     tone: "ok" | "error"
@@ -868,6 +896,14 @@ export default function AppointmentCalendar() {
                 : null
             }
             onQuickCreate={setQuick}
+            onBookSlot={(req) => {
+              setBookPrefill({
+                providerId: req.providerId,
+                date: req.date,
+                startMinutes: req.start,
+              })
+              setBookOpen(true)
+            }}
             onRemoveExtra={(id, extra, scope) =>
               void removeExtra(id, extra, scope)
             }
@@ -901,6 +937,21 @@ export default function AppointmentCalendar() {
           />
         ) : null}
       </div>
+
+      <ClinicBookAppointmentModal
+        open={bookOpen}
+        prefill={bookPrefill}
+        onClose={() => {
+          setBookOpen(false)
+          setBookPrefill(null)
+        }}
+        onBooked={() => {
+          setBookOpen(false)
+          setBookPrefill(null)
+          void refreshDashboard({ silent: true })
+          setNotice({ text: "Appointment booked.", tone: "ok" })
+        }}
+      />
 
       {quick ? (
         <QuickSlotPopover
@@ -957,6 +1008,7 @@ function DayView({
   canCreate,
   selection,
   onQuickCreate,
+  onBookSlot,
   onRemoveExtra,
   freshIds,
 }: {
@@ -967,6 +1019,7 @@ function DayView({
   canCreate: (providerId: string) => boolean
   selection: { providerId: string; start: number; end: number } | null
   onQuickCreate: (req: QuickSlotRequest) => void
+  onBookSlot?: (req: QuickSlotRequest) => void
   onRemoveExtra: (
     providerId: string,
     extra: TimeWindow & { id: string },
@@ -1009,6 +1062,7 @@ function DayView({
       canCreate={canCreate}
       selection={selection}
       onQuickCreate={onQuickCreate}
+      onBookSlot={onBookSlot}
       onRemoveExtra={onRemoveExtra}
       freshIds={freshIds}
       renderBooking={(id) => {

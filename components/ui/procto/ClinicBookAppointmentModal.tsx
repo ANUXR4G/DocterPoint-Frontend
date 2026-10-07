@@ -4,16 +4,28 @@ import { useEffect, useMemo, useState } from "react"
 import PopupModal from "@/components/modals/Modal"
 import { proctoService, type DeskPatient } from "@/lib/services/procto"
 import DeskPatientPicker from "@/components/ui/procto/DeskPatientPicker"
-import { formatPracticeTime, practiceTodayIso } from "@/lib/practiceTime"
+import {
+  formatPracticeTime,
+  practiceMinutesOfDay,
+  practiceTodayIso,
+} from "@/lib/practiceTime"
 import {
   usePracticeDashboard,
   type PracticeMembership,
 } from "@/contexts/PracticeDashboardContext"
 
+export type ClinicBookPrefill = {
+  providerId?: string
+  date?: string
+  /** Minutes from midnight in practice timezone (calendar click). */
+  startMinutes?: number
+}
+
 type Props = {
   open: boolean
   onClose: () => void
   onBooked: () => void
+  prefill?: ClinicBookPrefill | null
 }
 
 type Availability = {
@@ -81,6 +93,7 @@ export default function ClinicBookAppointmentModal({
   open,
   onClose,
   onBooked,
+  prefill = null,
 }: Props) {
   const { memberships, practiceId, practiceName } = usePracticeDashboard()
   const membership = memberships[0]
@@ -111,9 +124,15 @@ export default function ClinicBookAppointmentModal({
     setSelectedSlot(null)
     setDisease("")
     setPatient(null)
-    if (!providerId && doctors[0]) setProviderId(doctors[0].id)
-    if (!locationId && locations[0]) setLocationId(locations[0].id)
-  }, [open, doctors, locations, providerId, locationId])
+    const prefDoc =
+      prefill?.providerId &&
+      doctors.some((d) => d.id === prefill.providerId)
+        ? prefill.providerId
+        : doctors[0]?.id || ""
+    setProviderId(prefDoc)
+    setLocationId(locations[0]?.id || "")
+    setDate(prefill?.date || practiceTodayIso())
+  }, [open, doctors, locations, prefill])
 
   useEffect(() => {
     if (!open || !practiceId || !providerId || !locationId || !date) {
@@ -166,6 +185,15 @@ export default function ClinicBookAppointmentModal({
     [availability],
   )
   const tokenSession = availability?.tokenSessions?.[0]
+
+  useEffect(() => {
+    if (!open || mode !== "TIME_BASED") return
+    if (prefill?.startMinutes == null || !openSlots.length) return
+    const hit = openSlots.find(
+      (s) => practiceMinutesOfDay(s.start) === prefill.startMinutes,
+    )
+    if (hit) setSelectedSlot(hit.start)
+  }, [open, mode, openSlots, prefill?.startMinutes])
 
   async function submit() {
     if (!practiceId || !providerId || !locationId) {
