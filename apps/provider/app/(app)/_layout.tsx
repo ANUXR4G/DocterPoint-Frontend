@@ -236,6 +236,10 @@ export default function AppLayout() {
                 options={{ href: null, title: "Visit" }}
               />
               <Tabs.Screen
+                name="patient/[key]"
+                options={{ href: null, title: "Patient" }}
+              />
+              <Tabs.Screen
                 name="schedule"
                 options={{ href: null, title: "Hours & blocks" }}
               />

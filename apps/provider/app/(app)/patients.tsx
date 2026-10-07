@@ -21,6 +21,7 @@ import {
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { resolveMediaUrl } from "@/lib/media";
+import { patientRosterKey } from "@/lib/patientRoster";
 import { usePractice } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { contentBottomPad } from "@/lib/dockLayout";
@@ -37,7 +38,6 @@ export default function PatientsScreen() {
   } = usePracticeLive();
   const [q, setQ] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
   const error = liveError || "";
 
   const filtered = useMemo(() => {
@@ -102,13 +102,22 @@ export default function PatientsScreen() {
           <EmptyState text="No patients match this search." />
         ) : (
           filtered.map((p) => {
-            const key = `${p.phone}|${(p.name || "").trim().toLowerCase()}`;
-            const open = expanded === key;
-            const visits = p.recentBookings ?? p.recent ?? [];
+            const key = patientRosterKey(p);
             return (
-              <SurfaceCard key={key}>
+              <SurfaceCard
+                key={key}
+                onPress={() =>
+                  router.push(
+                    `/(app)/patient/${encodeURIComponent(key)}` as never,
+                  )
+                }
+              >
                 <Pressable
-                  onPress={() => setExpanded(open ? null : key)}
+                  onPress={() =>
+                    router.push(
+                      `/(app)/patient/${encodeURIComponent(key)}` as never,
+                    )
+                  }
                   style={styles.row}
                 >
                   {resolveMediaUrl(p.imgSrc) ? (
@@ -143,30 +152,8 @@ export default function PatientsScreen() {
                       </View>
                     ) : null}
                   </View>
+                  <Text style={styles.chevron}>›</Text>
                 </Pressable>
-                {open ? (
-                  <View style={styles.recent}>
-                    {visits.length === 0 ? (
-                      <Text style={styles.visitLabel}>No recent visits.</Text>
-                    ) : (
-                      visits.slice(0, 8).map((b) => (
-                        <Pressable
-                          key={b.id}
-                          onPress={() => router.push(`/(app)/visit/${b.id}`)}
-                          style={styles.visitRow}
-                        >
-                          <Text style={styles.visitLabel}>
-                            {(b.sessionDate || b.slotStart || "")
-                              .toString()
-                              .slice(0, 10)}{" "}
-                            · {String(b.status || "").replace(/_/g, " ")}
-                          </Text>
-                          <Text style={styles.openLink}>Open</Text>
-                        </Pressable>
-                      ))
-                    )}
-                  </View>
-                ) : null}
               </SurfaceCard>
             );
           })
@@ -207,22 +194,10 @@ const styles = StyleSheet.create({
   avatarInitial: { fontSize: 16, fontWeight: "700", color: colors.brand },
   name: { fontSize: 16, fontWeight: "600", color: colors.ink },
   meta: { marginTop: 4, fontSize: 13, color: colors.inkSoft },
-  recent: {
-    marginTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-    paddingTop: space.md,
-    gap: 8,
+  chevron: {
+    fontSize: 28,
+    fontWeight: "300",
+    color: colors.inkFaint,
+    marginLeft: 4,
   },
-  visitRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: colors.sky50,
-    borderRadius: radii.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  visitLabel: { fontSize: 13, color: colors.inkSoft, flex: 1 },
-  openLink: { fontSize: 13, fontWeight: "600", color: colors.brand },
 });
