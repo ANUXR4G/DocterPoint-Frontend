@@ -12,6 +12,10 @@ import {
   type WhatsAppSendResult,
 } from "./procto/whatsapp.client.js";
 import { OPT_OUT_FOOTER, CARE_REPLY_HINT } from "./procto/whatsapp.metaTemplates.js";
+import {
+  isMetaDisplayNameBlocked,
+  isMetaOutsideWindowError,
+} from "./procto/whatsapp.metaErrors.js";
 
 /** How long session footers stay suppressed after first show (WhatsApp CS window). */
 const SESSION_HINTS_TTL_MS = 24 * 60 * 60 * 1000;
@@ -71,17 +75,11 @@ function truncate(text: string, max = PREVIEW_MAX): string {
 }
 
 function isOutsideWindowError(err?: string): boolean {
-  const e = (err || "").toLowerCase();
-  return (
-    /131047/.test(err || "") ||
-    /outside.*allowed.*window/.test(e) ||
-    /re-engagement/.test(e) ||
-    /24.?hour/.test(e)
-  );
+  return isMetaOutsideWindowError(err);
 }
 
 function isDisplayNameBlocked(err?: string): boolean {
-  return /131037/.test(err || "") || /display name/i.test(err || "");
+  return isMetaDisplayNameBlocked(err);
 }
 
 async function resolveStaffToPatientContext(

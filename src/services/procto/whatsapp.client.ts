@@ -6,13 +6,36 @@ import {
   getMetaTemplateByKey,
   payloadToMetaParams,
 } from "./whatsapp.metaTemplates.js";
+import {
+  parseMetaGraphError,
+  type MetaGraphErrorBody,
+} from "./whatsapp.metaErrors.js";
 
 export interface WhatsAppSendResult {
   ok: boolean;
   messageId?: string;
   simulated?: boolean;
+  /** Patient/clinic-safe message (mapped Meta codes when known). */
   error?: string;
+  /** Raw Meta / transport message for logs. */
+  errorDetail?: string;
+  errorCode?: number;
   usedTemplate?: boolean;
+}
+
+function failFromMeta(
+  err: MetaGraphErrorBody | undefined,
+  statusText: string,
+  extra?: Partial<WhatsAppSendResult>,
+): WhatsAppSendResult {
+  const parsed = parseMetaGraphError(err, statusText);
+  return {
+    ok: false,
+    error: parsed.userMessage,
+    errorDetail: parsed.message,
+    errorCode: parsed.code,
+    ...extra,
+  };
 }
 
 function formatE164(phone: string): string {
@@ -56,11 +79,11 @@ export async function sendWhatsAppText(
 
     const data = (await res.json()) as {
       messages?: { id: string }[];
-      error?: { message: string };
+      error?: MetaGraphErrorBody;
     };
 
     if (!res.ok) {
-      return { ok: false, error: data.error?.message ?? res.statusText };
+      return failFromMeta(data.error, res.statusText);
     }
 
     return { ok: true, messageId: data.messages?.[0]?.id };
@@ -117,15 +140,11 @@ export async function sendWhatsAppTemplate(
 
     const data = (await res.json()) as {
       messages?: { id: string }[];
-      error?: { message: string };
+      error?: MetaGraphErrorBody;
     };
 
     if (!res.ok) {
-      return {
-        ok: false,
-        error: data.error?.message ?? res.statusText,
-        usedTemplate: true,
-      };
+      return failFromMeta(data.error, res.statusText, { usedTemplate: true });
     }
 
     return {
@@ -213,11 +232,11 @@ export async function sendWhatsAppInteractiveList(
 
     const data = (await res.json()) as {
       messages?: { id: string }[];
-      error?: { message: string };
+      error?: MetaGraphErrorBody;
     };
 
     if (!res.ok) {
-      return { ok: false, error: data.error?.message ?? res.statusText };
+      return failFromMeta(data.error, res.statusText);
     }
 
     return { ok: true, messageId: data.messages?.[0]?.id };
@@ -290,11 +309,11 @@ export async function sendWhatsAppInteractiveButtons(
 
     const data = (await res.json()) as {
       messages?: { id: string }[];
-      error?: { message: string };
+      error?: MetaGraphErrorBody;
     };
 
     if (!res.ok) {
-      return { ok: false, error: data.error?.message ?? res.statusText };
+      return failFromMeta(data.error, res.statusText);
     }
 
     return { ok: true, messageId: data.messages?.[0]?.id };
@@ -351,13 +370,10 @@ export async function sendWhatsAppDocument(
     );
     const uploadData = (await uploadRes.json()) as {
       id?: string;
-      error?: { message: string };
+      error?: MetaGraphErrorBody;
     };
     if (!uploadRes.ok || !uploadData.id) {
-      return {
-        ok: false,
-        error: uploadData.error?.message ?? uploadRes.statusText,
-      };
+      return failFromMeta(uploadData.error, uploadRes.statusText);
     }
 
     const url = `https://graph.facebook.com/${settings.whatsappApiVersion}/${phoneId}/messages`;
@@ -382,10 +398,10 @@ export async function sendWhatsAppDocument(
     });
     const data = (await res.json()) as {
       messages?: { id: string }[];
-      error?: { message: string };
+      error?: MetaGraphErrorBody;
     };
     if (!res.ok) {
-      return { ok: false, error: data.error?.message ?? res.statusText };
+      return failFromMeta(data.error, res.statusText);
     }
     return { ok: true, messageId: data.messages?.[0]?.id };
   } catch (err) {

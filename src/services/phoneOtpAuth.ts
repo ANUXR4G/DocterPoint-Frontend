@@ -12,6 +12,10 @@ import { allocatePatientMrn } from "../core/patientMrn.js";
 import { getRedis } from "../db/redis.js";
 import { pickPrimaryPatientUser } from "./patient.js";
 import { sendWhatsAppText } from "./procto/whatsapp.client.js";
+import {
+  OTP_DISPLAY_NAME_PENDING_MESSAGE,
+  parseMetaGraphError,
+} from "./procto/whatsapp.metaErrors.js";
 
 const OTP_TTL_SEC = 5 * 60;
 /** Production resend gate; QA_EXPOSE_OTP shortens for Playwright / local E2E. */
@@ -146,6 +150,7 @@ async function deliverOtp(phone: string, code: string): Promise<{
   ok: boolean;
   simulated?: boolean;
   error?: string;
+  errorCode?: number;
   usedTemplate?: boolean;
 }> {
   const phoneNumberId =
@@ -199,8 +204,21 @@ async function deliverOtp(phone: string, code: string): Promise<{
       if (res.ok) {
         return { ok: true, usedTemplate: true };
       }
+      const mapped = parseMetaGraphError(data.error, res.statusText);
+      // Same line will fail for free-form text — surface OTP copy immediately.
+      if (mapped.code === 131037) {
+        console.warn(
+          `[otp] AUTH template blocked by display-name approval (#131037): ${mapped.message}`,
+        );
+        return {
+          ok: false,
+          error: OTP_DISPLAY_NAME_PENDING_MESSAGE,
+          errorCode: 131037,
+          usedTemplate: true,
+        };
+      }
       console.warn(
-        `[otp] AUTH template failed (${data.error?.message}); falling back to text`,
+        `[otp] AUTH template failed (${mapped.message}); falling back to text`,
       );
     } catch (err) {
       console.warn(
@@ -211,6 +229,12 @@ async function deliverOtp(phone: string, code: string): Promise<{
   }
 
   const text = await sendWhatsAppText(to, body, phoneNumberId || undefined);
+  if (!text.ok && text.errorCode === 131037) {
+    return {
+      ...text,
+      error: OTP_DISPLAY_NAME_PENDING_MESSAGE,
+    };
+  }
   return text;
 }
 
