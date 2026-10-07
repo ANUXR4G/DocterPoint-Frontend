@@ -21,9 +21,12 @@ import {
 const SESSION_HINTS_TTL_MS = 24 * 60 * 60 * 1000;
 const PREVIEW_MAX = 280;
 
-/** Keep full WhatsApp MSISDN (country + national); bare 10-digit stays legacy India. */
+/** Keep full WhatsApp MSISDN (country + national); strip trunk `00` prefixes. */
 function normalizePhone(from: string): string {
-  const digits = from.replace(/\D/g, "");
+  let digits = from.replace(/\D/g, "");
+  while (digits.startsWith("00") && digits.length > 11) {
+    digits = digits.slice(2);
+  }
   if (digits.length >= 11 && digits.length <= 15) return digits;
   if (digits.length === 10) return digits;
   return digits.slice(-15);
@@ -43,28 +46,41 @@ async function resolveWhatsAppMsisdn(
     .filter((d) => d.length >= 10);
 
   const last10s = [...new Set(normalized.map((d) => d.slice(-10)))];
+  let bestConv = "";
   for (const last10 of last10s) {
     if (last10.length !== 10) continue;
-    const conv = await prisma.whatsAppConversation.findFirst({
+    const convs = await prisma.whatsAppConversation.findMany({
       where: {
         practiceId,
         OR: [{ patientPhone: last10 }, { patientPhone: { endsWith: last10 } }],
       },
       orderBy: { updatedAt: "desc" },
+      take: 5,
       select: { patientPhone: true },
     });
-    const fromConv = conv?.patientPhone
-      ? normalizePhone(conv.patientPhone)
-      : "";
-    // Authoritative Meta destination (e.g. 9715… / 9198…).
-    if (fromConv.length >= 11 && fromConv.length <= 15) return fromConv;
+    for (const conv of convs) {
+      const fromConv = conv.patientPhone
+        ? normalizePhone(conv.patientPhone)
+        : "";
+      // Prefer full international MSISDN from webhook (e.g. 9715… / 9198…).
+      if (
+        fromConv.length >= 11 &&
+        fromConv.length <= 15 &&
+        fromConv.length > bestConv.length
+      ) {
+        bestConv = fromConv;
+      }
+    }
   }
+  if (bestConv) return bestConv;
 
   // Prefer any full international candidate (booking phone usually correct).
-  const intl = normalized.find((d) => d.length >= 11 && d.length <= 15);
+  const intl = [...normalized]
+    .filter((d) => d.length >= 11 && d.length <= 15)
+    .sort((a, b) => b.length - a.length)[0];
   if (intl) return intl;
 
-  // Legacy bare 10-digit India — formatE164 will prepend 91 on send.
+  // Bare 10-digit — formatE164 adds 91 only when it looks Indian.
   return normalized[0] || "";
 }
 
@@ -362,18 +378,33 @@ function logResult(
   }
 }
 
+export type CareDocumentWhatsAppStatus =
+  | "sent"
+  | "template"
+  | "simulated"
+  | "opted_out"
+  | "no_phone"
+  | "no_line"
+  | "skipped"
+  | "failed";
+
+export type CareMessageWhatsAppResult = {
+  status: CareDocumentWhatsAppStatus;
+  error?: string;
+};
+
 /**
  * Best-effort WhatsApp delivery for clinic → patient care chat.
- * Never throws to the chat caller.
+ * Never throws to the chat caller — returns a status the UI can show.
  */
 export async function fanOutCareMessageToWhatsApp(
   senderId: string,
   receiverId: string,
   content: string,
-): Promise<void> {
+): Promise<CareMessageWhatsAppResult> {
   try {
     const ctx = await resolveStaffToPatientContext(senderId, receiverId);
-    if (!ctx) return;
+    if (!ctx) return { status: "skipped" };
 
     // Park the bot immediately (before Meta latency) so the patient's next
     // free-text reply lands in care chat, not a leftover awaiting_* wizard.
@@ -398,7 +429,7 @@ export async function fanOutCareMessageToWhatsApp(
       console.log(
         `[care-chat-wa] skip opt-out patient …${ctx.patientPhone.slice(-4)} practice ${ctx.practiceId}`,
       );
-      return;
+      return { status: "opted_out" };
     }
 
     const line = await practicePhoneNumberId(ctx.practiceId);
@@ -406,7 +437,11 @@ export async function fanOutCareMessageToWhatsApp(
       console.warn(
         `[care-chat-wa] skip: no Meta phone id for practice ${ctx.practiceId} and no env fallback`,
       );
-      return;
+      return { status: "no_line" };
+    }
+
+    if (ctx.patientPhone.replace(/\D/g, "").length < 10) {
+      return { status: "no_phone" };
     }
 
     console.log("[care-chat-wa] sending", {
@@ -445,7 +480,8 @@ export async function fanOutCareMessageToWhatsApp(
     );
 
     let lastSession: WhatsAppSendResult | null = null;
-    let delivered = false;
+    let delivered: CareDocumentWhatsAppStatus | null = null;
+    let lastError: string | undefined;
     for (const phoneNumberId of candidates) {
       const session = await sendWhatsAppText(
         ctx.patientPhone,
@@ -459,19 +495,22 @@ export async function fanOutCareMessageToWhatsApp(
       });
       lastSession = session;
       if (session.ok || session.simulated) {
-        delivered = true;
+        delivered = session.simulated ? "simulated" : "sent";
         break;
       }
+      lastError = session.error;
       // US / unverified display names (#131037) → try next line (usually env India).
-      if (!isDisplayNameBlocked(session.error) && !isOutsideWindowError(session.error)) {
+      if (
+        !isDisplayNameBlocked(session.error) &&
+        !isOutsideWindowError(session.error)
+      ) {
         // Other hard failures still attempt template on this line below.
         break;
       }
     }
 
     if (!delivered) {
-      const templateLine =
-        candidates.find((id) => id !== lastSession?.error) || candidates[0];
+      const templateLine = candidates[0];
       const templated = await sendWhatsAppTemplate(
         ctx.patientPhone,
         "CLINIC_CARE_MESSAGE",
@@ -483,9 +522,10 @@ export async function fanOutCareMessageToWhatsApp(
         templateLine || line.phoneNumberId,
       );
       logResult("CLINIC_CARE_MESSAGE template", templated, extraBase);
-      delivered = Boolean(templated.ok || templated.simulated);
-
-      if (!templated.ok && !templated.simulated) {
+      if (templated.ok || templated.simulated) {
+        delivered = templated.simulated ? "simulated" : "template";
+      } else {
+        lastError = templated.error || lastError;
         if (isOutsideWindowError(lastSession?.error)) {
           console.warn(
             "[care-chat-wa] patient outside 24h window and care-message template not usable — " +
@@ -521,23 +561,16 @@ export async function fanOutCareMessageToWhatsApp(
             err instanceof Error ? err.message : err,
           ),
         );
+      return { status: delivered };
     }
+
+    return { status: "failed", error: lastError };
   } catch (err) {
-    console.warn(
-      "[care-chat-wa] fan-out failed:",
-      err instanceof Error ? err.message : err,
-    );
+    const error = err instanceof Error ? err.message : String(err);
+    console.warn("[care-chat-wa] fan-out failed:", error);
+    return { status: "failed", error };
   }
 }
-
-export type CareDocumentWhatsAppStatus =
-  | "sent"
-  | "template"
-  | "simulated"
-  | "opted_out"
-  | "no_phone"
-  | "no_line"
-  | "failed";
 
 const DOC_MAX_BYTES = 10 * 1024 * 1024;
 const DOC_FETCH_TIMEOUT_MS = 20_000;

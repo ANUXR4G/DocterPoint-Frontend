@@ -216,18 +216,23 @@ export class ChatService {
     await socketManager.sendPrivateMsg(receiverRoom, newDirectMsg);
     await socketManager.sendPrivateMsg(senderRoom, newDirectMsg);
 
-    // Clinic → patient: also mirror to WhatsApp (best-effort; never blocks chat).
+    // Clinic → patient: mirror to WhatsApp and surface delivery on the chat UI.
+    let whatsapp: { status: string; error?: string } | undefined;
     if (opts?.whatsappFanOut !== false) {
-      void import("./chat.whatsappFanout.js")
-        .then(({ fanOutCareMessageToWhatsApp }) =>
-          fanOutCareMessageToWhatsApp(senderId, receiverId, trimmed),
-        )
-        .catch((err) =>
-          console.warn(
-            "[care-chat-wa] fan-out import/send error:",
-            err instanceof Error ? err.message : err,
-          ),
+      try {
+        const { fanOutCareMessageToWhatsApp } = await import(
+          "./chat.whatsappFanout.js"
         );
+        whatsapp = await fanOutCareMessageToWhatsApp(
+          senderId,
+          receiverId,
+          trimmed,
+        );
+      } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        console.warn("[care-chat-wa] fan-out import/send error:", error);
+        whatsapp = { status: "failed", error };
+      }
     }
 
     // Staff → patient: surface on practice Notifications tab (message to patient).
@@ -374,7 +379,7 @@ export class ChatService {
       }
     })();
 
-    return newDirectMsg;
+    return whatsapp ? { ...newDirectMsg, whatsapp } : newDirectMsg;
   }
 
   static async getUserHelpMessages(page = 1, limit = 10, userId: string) {
