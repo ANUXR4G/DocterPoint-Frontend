@@ -1,8 +1,8 @@
 "use client"
 
 import { useAppContext } from "@/hooks/useAppContext"
-import { Icon } from "@/components"
 import UserProfileControls from "@/components/menu/UserProfileControls"
+import DashboardIdentity from "@/components/ui/DashboardIdentity"
 import { ModeToggle } from "@/components/ui/mode-toggle"
 import { motion, useMotionValueEvent, useScroll } from "framer-motion"
 import React, { useState } from "react"
@@ -53,21 +53,7 @@ export default function Header({
           onClick={toggleMenu}
         />
 
-        <div className="hidden min-w-0 flex-1 md:block md:max-w-xl">
-          <label className="relative block">
-            <span className="sr-only">Search</span>
-            <Icon
-              name="search"
-              className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50"
-              pathClassName="stroke-slate-400"
-            />
-            <input
-              type="search"
-              placeholder="Search appointments, doctors, or clinics…"
-              className="gg-bare-input h-10 w-full rounded-full bg-transparent pl-11 pr-4 text-sm font-medium outline-none placeholder:font-medium dark:placeholder:text-slate-500"
-            />
-          </label>
-        </div>
+        <DashboardIdentity />
 
         <div className="center ml-auto min-w-0 shrink-0 gap-x-1.5 md:justify-end">
           <ModeToggle className="border-transparent bg-transparent shadow-none dark:border-transparent dark:bg-transparent" />

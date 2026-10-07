@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 
-import { useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 
 import { fadingAnimation, slideInAnimation } from "@/lib/animations"
@@ -20,6 +20,7 @@ import { cookies } from "@/utils/cookies"
 import { navRoleFromContext, dashboardBrandLabel } from "@/lib/providerPortal"
 import { useAdminSupportUnread } from "@/hooks/useAdminSupportUnread"
 import { usePracticeOpenNotifications } from "@/hooks/usePracticeOpenNotifications"
+import { proctoService } from "@/lib/services/procto"
 
 type Props = {
   role: string | null
@@ -71,6 +72,30 @@ export default function Menu({ role, logout }: Props) {
   const navRole =
     navRoleFromContext(role, pathname ?? null, cookies.getCookie("gg_portal")) ??
     role
+  const [practiceName, setPracticeName] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (navRole !== "doctor" && navRole !== "clinic") {
+      setPracticeName(null)
+      return
+    }
+    let cancelled = false
+    void proctoService.getMyPractices().then((res) => {
+      if (cancelled) return
+      if (res.status !== "successful" || !Array.isArray(res.data) || !res.data[0]) {
+        setPracticeName(null)
+        return
+      }
+      const name = String(
+        (res.data[0] as { practice?: { name?: string } })?.practice?.name || "",
+      ).trim()
+      setPracticeName(name || null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [navRole])
+
   const navActiveFn =
     navRole === "admin"
       ? (path: string, dest?: string | null) => isAdminNavActive(path, dest)
@@ -128,11 +153,11 @@ export default function Menu({ role, logout }: Props) {
           <div className="flex size-9 items-center justify-center rounded-2xl bg-blue-600 text-white dark:bg-blue-500">
             <Icon className="h-5 w-5" name="gluco-guide" />
           </div>
-          <div>
-            <h3 className="text-[15px] font-semibold tracking-[-0.3px] text-slate-900 dark:text-white">
-              GlucoGuide
+          <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-semibold tracking-[-0.3px] text-slate-900 dark:text-white">
+              {practiceName || "GlucoGuide"}
             </h3>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-500">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-500">
               {dashboardBrandLabel(navRole)}
             </p>
           </div>
