@@ -11,19 +11,20 @@ import {
   type VitalBand,
 } from "@/lib/clinicalMasters"
 
+/** Full-field fill + border (do not mix with a white base bg — Tailwind order fights). */
 const BAND_COLORS: Record<VitalBand, string> = {
   critical_low:
-    "bg-sky-100 border-sky-300 text-sky-950 dark:bg-sky-950/60 dark:border-sky-600 dark:text-sky-100",
-  low: "bg-indigo-100 border-indigo-300 text-indigo-950 dark:bg-indigo-950/60 dark:border-indigo-600 dark:text-indigo-100",
+    "border-2 border-sky-400 bg-sky-100 text-sky-950 placeholder:text-sky-700/50 dark:border-sky-500 dark:bg-sky-950/70 dark:text-sky-100 dark:placeholder:text-sky-300/40",
+  low: "border-2 border-indigo-400 bg-indigo-100 text-indigo-950 placeholder:text-indigo-700/50 dark:border-indigo-500 dark:bg-indigo-950/70 dark:text-indigo-100 dark:placeholder:text-indigo-300/40",
   normal:
-    "bg-emerald-100 border-emerald-300 text-emerald-950 dark:bg-emerald-950/50 dark:border-emerald-600 dark:text-emerald-100",
-  high: "bg-rose-100 border-rose-300 text-rose-950 dark:bg-rose-950/50 dark:border-rose-600 dark:text-rose-100",
+    "border-2 border-emerald-400 bg-emerald-100 text-emerald-950 placeholder:text-emerald-700/50 dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-100 dark:placeholder:text-emerald-300/40",
+  high: "border-2 border-rose-400 bg-rose-100 text-rose-950 placeholder:text-rose-700/50 dark:border-rose-500 dark:bg-rose-950/60 dark:text-rose-100 dark:placeholder:text-rose-300/40",
   critical_high:
-    "bg-red-200 border-red-400 text-red-950 dark:bg-red-950/60 dark:border-red-500 dark:text-red-100",
+    "border-2 border-red-500 bg-red-200 text-red-950 placeholder:text-red-700/50 dark:border-red-400 dark:bg-red-950/70 dark:text-red-100 dark:placeholder:text-red-300/40",
 }
 
-const VITAL_INPUT_BASE =
-  "bg-white text-neutral-900 placeholder:text-neutral-400 dark:bg-neutral-900 dark:text-white dark:placeholder:text-neutral-500"
+const FIELD_INPUT =
+  "w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 dark:border-neutral-600 dark:bg-neutral-900 dark:text-white dark:placeholder:text-neutral-500"
 
 const BAND_LEGEND = [
   {
@@ -264,11 +265,11 @@ export default function ClinicalAssessmentPanel({
                   value={rawVal ?? ""}
                   placeholder="Enter value"
                   onChange={(e) => setVital(m.key, e.target.value)}
-                  className={`mt-1 w-full rounded-md border px-2 py-1.5 text-sm ${VITAL_INPUT_BASE} ${
+                  className={`mt-1 w-full rounded-md px-2 py-1.5 text-sm disabled:opacity-70 ${
                     band
                       ? BAND_COLORS[band]
-                      : "border-neutral-300 dark:border-neutral-600"
-                  } disabled:opacity-70`}
+                      : "border border-neutral-300 bg-white text-neutral-900 placeholder:text-neutral-400 dark:border-neutral-600 dark:bg-neutral-900 dark:text-white dark:placeholder:text-neutral-500"
+                  }`}
                 />
               </label>
             )
@@ -311,7 +312,7 @@ export default function ClinicalAssessmentPanel({
                         pain[idx] = { ...row, scale: e.target.value }
                         commit({ ...local, pain })
                       }}
-                      className="w-full rounded border border-neutral-300 px-2 py-1 dark:border-neutral-600"
+                      className={FIELD_INPUT}
                     >
                       <option value="">Select…</option>
                       {masters.painScales.map((s) => (
@@ -341,7 +342,7 @@ export default function ClinicalAssessmentPanel({
                           pain[idx] = { ...row, [field]: e.target.value }
                           commit({ ...local, pain })
                         }}
-                        className="w-full rounded border border-neutral-300 px-2 py-1 dark:border-neutral-600"
+                        className={FIELD_INPUT}
                       />
                     </td>
                   ))}
@@ -440,7 +441,7 @@ export default function ClinicalAssessmentPanel({
                             noKnownAllergies: false,
                           })
                         }}
-                        className="w-full rounded border border-neutral-300 px-2 py-1 dark:border-neutral-600"
+                        className={FIELD_INPUT}
                       >
                         <option value="">Select…</option>
                         {categories.map((c) => (
@@ -469,7 +470,7 @@ export default function ClinicalAssessmentPanel({
                               e.target.value === "No known allergy",
                           })
                         }}
-                        className="w-full rounded border border-neutral-300 px-2 py-1 dark:border-neutral-600"
+                        className={FIELD_INPUT}
                       >
                         <option value="">Select allergy…</option>
                         {names.map((n) => (
@@ -488,7 +489,7 @@ export default function ClinicalAssessmentPanel({
                           allergies[idx] = { ...row, severity: e.target.value }
                           commit({ ...local, allergies })
                         }}
-                        className="w-full rounded border border-neutral-300 px-2 py-1 dark:border-neutral-600"
+                        className={FIELD_INPUT}
                       >
                         <option value="">Select…</option>
                         {ALLERGY_SEVERITIES.map((s) => (
@@ -507,7 +508,7 @@ export default function ClinicalAssessmentPanel({
                           allergies[idx] = { ...row, active: e.target.value }
                           commit({ ...local, allergies })
                         }}
-                        className="w-full rounded border border-neutral-300 px-2 py-1 dark:border-neutral-600"
+                        className={FIELD_INPUT}
                       >
                         <option value="">Select…</option>
                         <option value="Yes">Yes</option>
@@ -526,7 +527,7 @@ export default function ClinicalAssessmentPanel({
                           }
                           commit({ ...local, allergies })
                         }}
-                        className="w-full rounded border border-neutral-300 px-2 py-1 dark:border-neutral-600"
+                        className={FIELD_INPUT}
                       />
                     </td>
                     <td className="py-1">
