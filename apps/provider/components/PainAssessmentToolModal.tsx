@@ -262,26 +262,25 @@ export default function PainAssessmentToolModal({
               />
             ) : (
               <View style={styles.activityWrap}>
-                {options.map((opt, i) => {
+                {options.map((opt) => {
                   const active = selectedId === opt.id;
-                  const bgs = [
-                    "#ECFDF5",
-                    "#EFF6FF",
-                    "#FFFBEB",
-                    "#FFF7ED",
-                    "#FFF1F2",
-                  ];
                   return (
                     <Pressable
                       key={opt.id}
                       onPress={() => setSelectedId(opt.id)}
                       style={[
-                        styles.activityCard,
-                        { backgroundColor: bgs[i] ?? "#fff" },
-                        active && styles.faceCardActive,
+                        styles.activityPill,
+                        active && styles.activityPillActive,
                       ]}
                     >
-                      <Text style={styles.activityLabel}>{opt.label}</Text>
+                      <Text
+                        style={[
+                          styles.activityLabel,
+                          active && styles.activityLabelActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -447,18 +446,31 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   activityWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
     gap: space.sm,
   },
-  activityCard: {
-    padding: space.md,
-    borderRadius: radii.md,
+  activityPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radii.pill,
+    backgroundColor: colors.sky100,
     borderWidth: 1,
-    borderColor: colors.lineStrong,
+    borderColor: "transparent",
+  },
+  activityPillActive: {
+    backgroundColor: colors.brandLight,
+    borderColor: TEAL,
   },
   activityLabel: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.ink,
+  },
+  activityLabelActive: {
+    fontWeight: "700",
+    color: TEAL,
   },
   footer: {
     flexDirection: "row",
