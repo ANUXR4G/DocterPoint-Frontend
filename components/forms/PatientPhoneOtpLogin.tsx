@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { cookies } from "@/utils/cookies"
 import { userService, type AuthResult } from "@/lib/services/user"
+import { friendlyWhatsAppError } from "@/lib/whatsappErrors"
 import { Button, IconInput } from "@/components"
 
 export default function PatientPhoneOtpLogin() {
@@ -59,14 +60,18 @@ export default function PatientPhoneOtpLogin() {
     try {
       const res = await userService.requestPhoneOtp(phone.trim())
       if (res.status !== "successful") {
-        setError(res.message || "Could not send OTP")
+        setError(friendlyWhatsAppError(res.message))
         return
       }
       setHint(`Code sent on WhatsApp from +91 ${res.from || "9990052082"}`)
       if (res.debugOtp) setDebugOtp(res.debugOtp)
       setStep("otp")
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not send OTP")
+      setError(
+        friendlyWhatsAppError(
+          e instanceof Error ? e.message : "Could not send OTP",
+        ),
+      )
     } finally {
       setBusy(false)
     }
