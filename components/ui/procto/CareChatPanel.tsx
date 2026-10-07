@@ -9,6 +9,7 @@ import { buildWsUrl } from "@/lib/wsOrigin"
 import { firey } from "@/utils"
 import type { TSocketMessage } from "@/types"
 import { shouldHideFromCareChat } from "@/lib/careChatFilter"
+import { formatPracticeDateTime } from "@/lib/practiceTime"
 import {
   BOOKING_DOCUMENT_ACCEPT,
   uploadBookingDocument,
@@ -37,6 +38,11 @@ type Props = {
   className?: string
   /** Clinic side: enables "attach" — file is saved on this appointment and sent on WhatsApp. */
   bookingId?: string
+  /**
+   * When set with bookingId, hide peer messages from earlier visits
+   * (socket filter; API also scopes by booking window).
+   */
+  threadSince?: string | null
   onDocumentShared?: () => void
 }
 
@@ -191,6 +197,17 @@ type PendingMessage = {
 
 const POLL_MS = 4000
 
+function inVisitWindow(
+  createdAt: string,
+  since?: string | null,
+): boolean {
+  if (!since) return true
+  const t = Date.parse(createdAt)
+  const s = Date.parse(since)
+  if (Number.isNaN(t) || Number.isNaN(s)) return true
+  return t >= s
+}
+
 export default function CareChatPanel({
   selfUserId,
   peerUserId,
@@ -199,6 +216,7 @@ export default function CareChatPanel({
   showHeader = true,
   className = "",
   bookingId,
+  threadSince,
   onDocumentShared,
 }: Props) {
   const [messages, setMessages] = useState<CareMessage[]>([])
@@ -230,11 +248,13 @@ export default function CareChatPanel({
         setLoadError("")
       }
       try {
+        const params = new URLSearchParams({ page: "1", limit: "50" })
+        if (bookingId) params.set("bookingId", bookingId)
         const res = await chatService.getUserDirectChats(
           "",
           selfUserId,
           peerUserId,
-          "page=1&limit=50",
+          params.toString(),
         )
         if (seq !== loadSeq.current) return
         const list = Array.isArray(res.messages)
@@ -257,7 +277,7 @@ export default function CareChatPanel({
         if (!opts?.quiet && seq === loadSeq.current) setLoading(false)
       }
     },
-    [selfUserId, peerUserId],
+    [selfUserId, peerUserId, bookingId],
   )
 
   useEffect(() => {
@@ -294,14 +314,16 @@ export default function CareChatPanel({
       (msg.senderId === peerUserId && msg.receiverId === selfUserId) ||
       (msg.senderId === selfUserId && msg.receiverId === peerUserId)
     if (!inThread || msg.type !== "direct") return
+    if (!inVisitWindow(msg.createdAt, threadSince || undefined)) return
     setMessages((prev) => addOnce(prev, msg))
-  }, [values, peerUserId, selfUserId])
+  }, [values, peerUserId, selfUserId, threadSince])
 
   // Staff / patient own texts always show; the filter only drops WhatsApp bot
   // menu noise coming from the other side.
   const visible = messages.filter(
     (m) =>
       m.content.trim() &&
+      inVisitWindow(m.createdAt, threadSince || undefined) &&
       (m.senderId === selfUserId || !shouldHideFromCareChat(m.content)),
   )
 
@@ -511,14 +533,7 @@ export default function CareChatPanel({
                       mine ? "text-blue-100" : "text-slate-400"
                     }`}
                   >
-                    {new Date(m.createdAt).toLocaleString("en-US", {
-                      timeZone: "Asia/Kolkata",
-                      hour: "numeric",
-                      minute: "2-digit",
-                      hour12: true,
-                      day: "numeric",
-                      month: "short",
-                    })}
+                    {formatPracticeDateTime(m.createdAt)}
                   </p>
                 </div>
               </div>
@@ -534,6 +549,8 @@ export default function CareChatPanel({
             >
               <p className="whitespace-pre-wrap break-words">{p.content}</p>
               <p className="mt-1 text-[10px] text-blue-100">
+                {formatPracticeDateTime(p.createdAt)}
+                {" · "}
                 {p.status === "uploading"
                   ? "Uploading…"
                   : p.status === "sending"

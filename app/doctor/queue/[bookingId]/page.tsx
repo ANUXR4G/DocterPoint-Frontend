@@ -1025,6 +1025,7 @@ export default function VisitPage() {
           peerName={patientName}
           subtitle="Patient WhatsApp replies also appear here. Attached documents are sent on WhatsApp and saved to this visit."
           bookingId={bookingId}
+          threadSince={booking?.createdAt ?? booking?.created_at ?? null}
           onDocumentShared={() => void load({ silent: true })}
         />
       ) : (
