@@ -320,6 +320,7 @@ router.patch(
           doctorRemarks: req.body.doctorRemarks,
           medicines: req.body.medicines,
           documents: req.body.documents,
+          clinicalAssessment: req.body.clinicalAssessment,
           status: req.body.status as BookingStatus | undefined,
         },
         req.sessionUser!.id,
