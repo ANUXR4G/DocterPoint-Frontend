@@ -69,16 +69,24 @@ export default function ClinicalAssessmentPanel({
     () => mergeClinicalMasters(mastersRaw),
     [mastersRaw],
   )
-  const [local, setLocal] = useState<ClinicalAssessment>(() => value ?? {
+  const emptyAssessment = (): ClinicalAssessment => ({
     vitals: { breakfast: null, values: {} },
     pain: [emptyPain()],
     allergies: [emptyAllergy()],
     noKnownAllergies: false,
   })
 
+  const [local, setLocal] = useState<ClinicalAssessment>(
+    () => value ?? emptyAssessment(),
+  )
+
+  // Sync only when saved content actually changes — silent reloads / new object
+  // references must not wipe rows the doctor just Added.
+  const valueKey = useMemo(() => JSON.stringify(value ?? null), [value])
   useEffect(() => {
     if (value) setLocal(value)
-  }, [value])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content
+  }, [valueKey])
 
   function commit(next: ClinicalAssessment) {
     setLocal(next)
@@ -162,7 +170,7 @@ export default function ClinicalAssessmentPanel({
   }, [masters.allergies])
 
   return (
-    <section className="dashboard-panel !space-y-6 !p-5">
+    <section className="dashboard-panel !h-auto !space-y-6 !overflow-visible !p-5">
       {/* VITALS */}
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">

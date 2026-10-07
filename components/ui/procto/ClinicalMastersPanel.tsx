@@ -43,6 +43,12 @@ export default function ClinicalMastersPanel({
     () => mergeClinicalMasters(clinicalMasters ?? DEFAULT_CLINICAL_MASTERS),
     [clinicalMasters],
   )
+  // Stable content key — practice dashboard soft-refresh replaces the prop
+  // object reference without changing JSON, which used to wipe in-progress Add.
+  const mastersKey = useMemo(
+    () => JSON.stringify(clinicalMasters ?? null),
+    [clinicalMasters],
+  )
   const [vitals, setVitals] = useState<VitalMaster[]>(seeded.vitals)
   const [allergies, setAllergies] = useState<AllergyMaster[]>(seeded.allergies)
   const [painScales, setPainScales] = useState<string[]>(seeded.painScales)
@@ -55,7 +61,8 @@ export default function ClinicalMastersPanel({
     setVitals(next.vitals)
     setAllergies(next.allergies)
     setPainScales(next.painScales)
-  }, [clinicalMasters])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only when content changes
+  }, [mastersKey])
 
   async function save() {
     setBusy(true)
