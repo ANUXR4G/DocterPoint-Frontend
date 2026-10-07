@@ -347,7 +347,7 @@ export default function ClinicalAssessmentPanel({
                 pain: [emptyPain(), ...(local.pain ?? [])],
               })
             }
-            className="mt-2 text-sm font-semibold text-teal-700 hover:underline dark:text-teal-300"
+            className="mt-2 rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
           >
             Add pain assessment
           </button>
@@ -536,7 +536,7 @@ export default function ClinicalAssessmentPanel({
                 allergies: [emptyAllergy(), ...(local.allergies ?? [])],
               })
             }
-            className="mt-2 text-sm font-semibold text-teal-700 hover:underline dark:text-teal-300"
+            className="mt-2 rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
           >
             Add allergy
           </button>

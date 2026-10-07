@@ -221,7 +221,7 @@ export default function ClinicalMastersPanel({
                 ...prev,
               ])
             }
-            className="text-sm font-semibold text-teal-700 hover:underline dark:text-teal-300"
+            className="rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
           >
             Add allergy
           </button>
@@ -330,7 +330,7 @@ export default function ClinicalMastersPanel({
           <button
             type="button"
             onClick={() => setPainScales((prev) => ["", ...prev])}
-            className="text-sm font-semibold text-teal-700 hover:underline dark:text-teal-300"
+            className="rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500"
           >
             Add scale
           </button>
