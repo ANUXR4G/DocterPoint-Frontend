@@ -12,7 +12,7 @@ export default function LoginHubPage() {
           Welcome back
         </h1>
         <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-600 dark:text-slate-400">
-          Patient, clinic, doctor, and admin portals are separate — pick the one that
+          Patient, clinic, and doctor portals are separate — pick the one that
           matches how you use GlucoGuide.
         </p>
 
@@ -70,25 +70,6 @@ export default function LoginHubPage() {
               Demo:{" "}
               <span className="font-medium text-slate-800 dark:text-slate-200">
                 dr.demo@glucoguide.com
-              </span>{" "}
-              / Demo@12345
-            </p>
-          </Link>
-
-          <Link
-            href="/login/admin"
-            className="block rounded-2xl border border-sky-100 bg-white p-6 shadow-md shadow-blue-600/5 transition hover:border-blue-200 hover:shadow-lg dark:border-white/10 dark:bg-slate-900/80"
-          >
-            <p className="text-lg font-semibold text-slate-900 dark:text-white">
-              Admin login
-            </p>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Platform control — patients, clinics, doctors, payments, and approvals.
-            </p>
-            <p className="mt-3 border-t border-sky-100 pt-3 text-xs text-slate-500 dark:border-white/10">
-              Demo:{" "}
-              <span className="font-medium text-slate-800 dark:text-slate-200">
-                admin@glucoguide.com
               </span>{" "}
               / Demo@12345
             </p>
