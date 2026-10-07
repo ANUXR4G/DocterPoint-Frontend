@@ -7,6 +7,8 @@ export type ProctoBooking = {
   status: string;
   mode: string;
   channel?: string;
+  createdAt?: string | null;
+  created_at?: string | null;
   slotStart?: string | null;
   slot_start?: string | null;
   sessionDate?: string | null;

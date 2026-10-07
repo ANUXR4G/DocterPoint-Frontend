@@ -21,10 +21,15 @@ import {
   type AssistantChatMessage,
   type AssistantConversationSummary,
 } from "@/lib/assistant";
+import { contentBottomPad } from "@/lib/dockLayout";
+import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { colors, space } from "@/lib/theme";
-import { dockClearance } from "@/lib/dockLayout";
 
-type UiMessage = AssistantChatMessage & { id: string; animate?: boolean };
+type UiMessage = AssistantChatMessage & {
+  id: string;
+  animate?: boolean;
+  createdAt?: string;
+};
 
 const WELCOME = "Hi — how can I help?";
 
@@ -34,7 +39,14 @@ type Props = {
 };
 
 function welcomeMessages(): UiMessage[] {
-  return [{ id: "welcome", role: "assistant", content: WELCOME }];
+  return [
+    {
+      id: "welcome",
+      role: "assistant",
+      content: WELCOME,
+      createdAt: new Date().toISOString(),
+    },
+  ];
 }
 
 function MicButton({
@@ -69,17 +81,7 @@ function MicButton({
 }
 
 function formatWhen(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
+  return formatPracticeDateTime(iso, "");
 }
 
 export function MiraChat({ compact = false, style }: Props) {
@@ -190,6 +192,7 @@ export function MiraChat({ compact = false, style }: Props) {
               id: m.id,
               role: m.role,
               content: m.content,
+              createdAt: m.createdAt,
             }))
           : welcomeMessages();
       setMessages(loaded);
@@ -216,10 +219,12 @@ export function MiraChat({ compact = false, style }: Props) {
     baseInputRef.current = "";
     stopVoice();
 
+    const now = new Date().toISOString();
     const userMsg: UiMessage = {
       id: `u-${Date.now()}`,
       role: "user",
       content: text,
+      createdAt: now,
     };
     setMessages((prev) => [...prev, userMsg]);
     setBusy(true);
@@ -246,6 +251,7 @@ export function MiraChat({ compact = false, style }: Props) {
           role: "assistant",
           content: detail,
           animate: true,
+          createdAt: new Date().toISOString(),
         },
       ]);
       return;
@@ -265,11 +271,12 @@ export function MiraChat({ compact = false, style }: Props) {
         role: "assistant",
         content: res.data!.reply,
         animate: true,
+        createdAt: new Date().toISOString(),
       },
     ]);
   }, [busy, input, messages, stopVoice]);
 
-  const composerBottomPad = compact ? space.xs : dockClearance;
+  const composerBottomPad = compact ? space.xs : contentBottomPad(0);
 
   return (
     <View style={[styles.flex, style]}>
@@ -451,6 +458,18 @@ export function MiraChat({ compact = false, style }: Props) {
                       {item.content}
                     </Text>
                   )}
+                  {item.createdAt ? (
+                    <Text
+                      style={[
+                        styles.stamp,
+                        item.role === "user"
+                          ? styles.stampUser
+                          : styles.stampBot,
+                      ]}
+                    >
+                      {formatPracticeDateTime(item.createdAt)}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             )}
@@ -672,6 +691,18 @@ const styles = StyleSheet.create({
   },
   userText: {
     color: colors.white,
+  },
+  stamp: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  stampUser: {
+    color: "rgba(255,255,255,0.72)",
+    textAlign: "right",
+  },
+  stampBot: {
+    color: colors.inkFaint,
   },
   typing: {
     paddingVertical: 12,

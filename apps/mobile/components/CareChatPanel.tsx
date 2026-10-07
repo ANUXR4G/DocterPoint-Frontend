@@ -15,6 +15,7 @@ import {
   sendCareMessage,
   type CareChatMessage,
 } from "@/lib/chat";
+import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { colors, radii, space } from "@/lib/theme";
 
 type Props = {
@@ -22,7 +23,18 @@ type Props = {
   peerUserId: string;
   peerName: string;
   subtitle?: string;
+  /** Scope the thread to this visit (hides earlier appointments). */
+  bookingId?: string | null;
+  threadSince?: string | null;
 };
+
+function inVisitWindow(createdAt: string, since?: string | null): boolean {
+  if (!since) return true;
+  const t = Date.parse(createdAt);
+  const s = Date.parse(since);
+  if (Number.isNaN(t) || Number.isNaN(s)) return true;
+  return t >= s;
+}
 
 /** Message panel safe inside parent ScrollViews (no nested VirtualizedList). */
 export function CareChatPanel({
@@ -30,6 +42,8 @@ export function CareChatPanel({
   peerUserId,
   peerName,
   subtitle,
+  bookingId,
+  threadSince,
 }: Props) {
   const [messages, setMessages] = useState<CareChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -42,15 +56,17 @@ export function CareChatPanel({
       if (!selfUserId || !peerUserId) return;
       if (!opts?.soft) setLoading(true);
       setError("");
-      const res = await getCareMessages(selfUserId, peerUserId);
+      const res = await getCareMessages(selfUserId, peerUserId, { bookingId });
       if (!opts?.soft) setLoading(false);
       if (res.error) {
         if (!opts?.soft) setError(res.error);
         return;
       }
-      setMessages(res.messages);
+      setMessages(
+        res.messages.filter((m) => inVisitWindow(m.createdAt, threadSince)),
+      );
     },
-    [selfUserId, peerUserId],
+    [selfUserId, peerUserId, bookingId, threadSince],
   );
 
   useEffect(() => {
@@ -68,6 +84,7 @@ export function CareChatPanel({
         msg.receiverId === peerUserId ||
         msg.senderId === selfUserId;
       if (!involvesPeer) return;
+      if (!inVisitWindow(msg.createdAt, threadSince)) return;
       setMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev;
         return [...prev, msg];
@@ -130,6 +147,14 @@ export function CareChatPanel({
                   ]}
                 >
                   {item.content}
+                </Text>
+                <Text
+                  style={[
+                    styles.stamp,
+                    mine ? styles.stampMine : styles.stampPeer,
+                  ]}
+                >
+                  {formatPracticeDateTime(item.createdAt)}
                 </Text>
               </View>
             );
@@ -212,6 +237,18 @@ const styles = StyleSheet.create({
   },
   bubbleTextMine: {
     color: colors.white,
+  },
+  stamp: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  stampMine: {
+    color: "rgba(255,255,255,0.72)",
+    textAlign: "right",
+  },
+  stampPeer: {
+    color: colors.inkFaint,
   },
   composer: {
     padding: space.md,

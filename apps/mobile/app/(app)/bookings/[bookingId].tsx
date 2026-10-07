@@ -228,6 +228,8 @@ export default function BookingDetailScreen() {
                 : "Doctor"
             }
             subtitle="Doctor messages also arrive on WhatsApp. Do not use this for emergencies."
+            bookingId={display.id}
+            threadSince={display.createdAt ?? display.created_at ?? null}
           />
         ) : null}
 

@@ -632,6 +632,8 @@ export default function VisitScreen() {
               selfUserId={selfId}
               peerUserId={peerId}
               peerName={patientName}
+              bookingId={booking.id}
+              threadSince={booking.createdAt ?? booking.created_at ?? null}
             />
           ) : (
             <Text style={styles.hint}>

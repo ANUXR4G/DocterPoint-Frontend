@@ -15,6 +15,7 @@ import { chatService } from "@/lib/services/chat"
 import { TMessage, TSocketMessage } from "@/types"
 
 import { CityScene, Icon, Modal } from "@/components"
+import { formatPracticeDateTime } from "@/lib/practiceTime"
 
 type Props = {
   isOpen: boolean
@@ -221,7 +222,18 @@ export default function DoctorChatModal({
                       : receivedMsgClass
                   }`}
                 >
-                  {msg.content}
+                  <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                  {msg.createdAt ? (
+                    <p
+                      className={`mt-1 text-[10px] ${
+                        msg.senderId === userInfo?.id
+                          ? "text-blue-100/90"
+                          : "text-neutral-500 dark:text-neutral-400"
+                      }`}
+                    >
+                      {formatPracticeDateTime(msg.createdAt)}
+                    </p>
+                  ) : null}
                 </motion.div>
               ))
             ) : (

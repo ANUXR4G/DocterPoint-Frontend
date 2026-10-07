@@ -606,6 +606,8 @@ export default function PatientVisitPage() {
               peerUserId={peerId}
               peerName={withDrTitle(doctor?.name) || "Doctor"}
               subtitle="Message your doctor about this visit. Clinic replies also go to WhatsApp. Do not share emergencies here — call the clinic."
+              bookingId={booking.id}
+              threadSince={booking.createdAt ?? booking.created_at ?? null}
             />
           </div>
         )

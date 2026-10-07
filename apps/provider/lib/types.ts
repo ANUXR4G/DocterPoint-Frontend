@@ -82,6 +82,8 @@ export type BookingRow = {
   status: string;
   mode: string;
   channel?: string;
+  createdAt?: string | null;
+  created_at?: string | null;
   patientPhone: string;
   patientName?: string | null;
   patientId?: string | null;

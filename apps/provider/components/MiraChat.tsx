@@ -18,9 +18,14 @@ import {
   assistantStatus,
   type AssistantChatMessage,
 } from "@/lib/assistant";
+import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { colors, radii, space } from "@/lib/theme";
 
-type UiMessage = AssistantChatMessage & { id: string; animate?: boolean };
+type UiMessage = AssistantChatMessage & {
+  id: string;
+  animate?: boolean;
+  createdAt?: string;
+};
 
 const WELCOME = "Hi — how can I help?";
 
@@ -65,7 +70,12 @@ export function MiraChat({ compact = false, style }: Props) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<UiMessage[]>([
-    { id: "welcome", role: "assistant", content: WELCOME },
+    {
+      id: "welcome",
+      role: "assistant",
+      content: WELCOME,
+      createdAt: new Date().toISOString(),
+    },
   ]);
   const listRef = useRef<FlatList<UiMessage>>(null);
   const inputRef = useRef<TextInput>(null);
@@ -113,10 +123,12 @@ export function MiraChat({ compact = false, style }: Props) {
     baseInputRef.current = "";
     stopVoice();
 
+    const now = new Date().toISOString();
     const userMsg: UiMessage = {
       id: `u-${Date.now()}`,
       role: "user",
       content: text,
+      createdAt: now,
     };
     setMessages((prev) => [...prev, userMsg]);
     setBusy(true);
@@ -136,6 +148,7 @@ export function MiraChat({ compact = false, style }: Props) {
           role: "assistant",
           content: "Sorry, that didn’t go through. Try again in a sec.",
           animate: true,
+          createdAt: new Date().toISOString(),
         },
       ]);
       return;
@@ -148,6 +161,7 @@ export function MiraChat({ compact = false, style }: Props) {
         role: "assistant",
         content: res.data!.reply,
         animate: true,
+        createdAt: new Date().toISOString(),
       },
     ]);
   }, [busy, input, messages, stopVoice]);
@@ -203,6 +217,16 @@ export function MiraChat({ compact = false, style }: Props) {
                   {item.content}
                 </Text>
               )}
+              {item.createdAt ? (
+                <Text
+                  style={[
+                    styles.stamp,
+                    item.role === "user" ? styles.stampUser : styles.stampBot,
+                  ]}
+                >
+                  {formatPracticeDateTime(item.createdAt)}
+                </Text>
+              ) : null}
             </View>
           </View>
         )}
@@ -337,6 +361,18 @@ const styles = StyleSheet.create({
   },
   userText: {
     color: colors.white,
+  },
+  stamp: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  stampUser: {
+    color: "rgba(255,255,255,0.75)",
+    textAlign: "right",
+  },
+  stampBot: {
+    color: colors.inkFaint,
   },
   typing: {
     paddingVertical: 12,

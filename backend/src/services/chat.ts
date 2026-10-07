@@ -403,11 +403,97 @@ export class ChatService {
     };
   }
 
+  /**
+   * Visit pages pass bookingId so chat shows only messages for that appointment
+   * window (from booking creation until the next booking for the same patient),
+   * not the entire patient↔doctor history from earlier visits.
+   */
+  static async resolveBookingChatWindow(
+    bookingIdRaw: string,
+    actorUserId: string,
+  ): Promise<{ since: Date; until: Date | null }> {
+    const bookingId = String(bookingIdRaw || "").trim();
+    if (!isUuid(bookingId)) {
+      throw new AppError(400, "Invalid booking id.");
+    }
+
+    const booking = await prisma.practiceBooking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        createdAt: true,
+        patientId: true,
+        providerId: true,
+        practiceId: true,
+        patientPhone: true,
+      },
+    });
+    if (!booking) throw new AppError(404, "Booking not found.");
+
+    const isPatient = booking.patientId === actorUserId;
+    const isProvider = booking.providerId === actorUserId;
+    let isStaff = false;
+    if (!isPatient && !isProvider) {
+      const membership = await prisma.practiceMember.findFirst({
+        where: {
+          userId: actorUserId,
+          practiceId: booking.practiceId,
+          isActive: true,
+          role: {
+            in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"],
+          },
+        },
+        select: { id: true },
+      });
+      isStaff = Boolean(membership);
+    }
+    if (!isPatient && !isProvider && !isStaff) {
+      throw new AppError(403, "Not allowed to open this visit chat.");
+    }
+
+    const nextWhere: {
+      practiceId: string;
+      createdAt: { gt: Date };
+      id: { not: string };
+      OR?: Array<Record<string, unknown>>;
+      patientId?: string;
+    } = {
+      practiceId: booking.practiceId,
+      createdAt: { gt: booking.createdAt },
+      id: { not: booking.id },
+    };
+
+    if (booking.patientId) {
+      nextWhere.patientId = booking.patientId;
+    } else {
+      const digits = String(booking.patientPhone || "").replace(/\D/g, "");
+      const last10 = digits.length >= 10 ? digits.slice(-10) : "";
+      if (last10) {
+        nextWhere.OR = [
+          { patientPhone: { endsWith: last10 } },
+          ...(digits.length >= 11 ? [{ patientPhone: digits }] : []),
+        ];
+      } else {
+        // No patient identity to scope a "next" visit — open-ended until now.
+        return { since: booking.createdAt, until: null };
+      }
+    }
+
+    const next = await prisma.practiceBooking.findFirst({
+      where: nextWhere,
+      orderBy: { createdAt: "asc" },
+      select: { createdAt: true },
+    });
+
+    return { since: booking.createdAt, until: next?.createdAt ?? null };
+  }
+
   static async getUserDirectMessages(
     page = 1,
     limit = 10,
     userId: string,
     receiverId: string,
+    opts?: { bookingId?: string | null },
   ) {
     page = Math.max(1, page);
     const offset = (page - 1) * limit;
@@ -416,13 +502,28 @@ export class ChatService {
 
     await assertCareChatAllowed(senderUuid, receiverUuid);
 
-    const where = {
+    const where: {
+      type: string;
+      OR: Array<{ senderId: string; receiverId: string }>;
+      createdAt?: { gte?: Date; lt?: Date };
+    } = {
       type: "direct",
       OR: [
         { senderId: senderUuid, receiverId: receiverUuid },
         { senderId: receiverUuid, receiverId: senderUuid },
       ],
     };
+
+    if (opts?.bookingId) {
+      const window = await ChatService.resolveBookingChatWindow(
+        opts.bookingId,
+        senderUuid,
+      );
+      where.createdAt = {
+        gte: window.since,
+        ...(window.until ? { lt: window.until } : {}),
+      };
+    }
 
     const [messages, total] = await Promise.all([
       prisma.message.findMany({

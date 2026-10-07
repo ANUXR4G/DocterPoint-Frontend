@@ -50,9 +50,15 @@ export async function listCareThreads() {
   };
 }
 
-export async function getCareMessages(selfUserId: string, peerUserId: string) {
+export async function getCareMessages(
+  selfUserId: string,
+  peerUserId: string,
+  opts?: { bookingId?: string | null },
+) {
+  const params = new URLSearchParams({ page: "1", limit: "50" });
+  if (opts?.bookingId) params.set("bookingId", opts.bookingId);
   const res = await api<{ messages?: Record<string, unknown>[]; total?: number }>(
-    `/chats/${selfUserId}/${peerUserId}?page=1&limit=50`,
+    `/chats/${selfUserId}/${peerUserId}?${params.toString()}`,
   );
   if (res.status !== "successful") {
     return {

@@ -15,15 +15,27 @@ import {
   type AssistantConversationSummary,
 } from "@/lib/services/assistant"
 import { isMiraBotPath } from "@/lib/miraBotVisibility"
+import { formatPracticeDateTime } from "@/lib/practiceTime"
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition"
 import MicButton from "@/components/inputs/MicButton"
 
-type UiMessage = AssistantChatMessage & { id: string; animate?: boolean }
+type UiMessage = AssistantChatMessage & {
+  id: string
+  animate?: boolean
+  createdAt?: string
+}
 
 const WELCOME = "Hi — how can I help?"
 
 function welcomeMessages(): UiMessage[] {
-  return [{ id: "welcome", role: "assistant", content: WELCOME }]
+  return [
+    {
+      id: "welcome",
+      role: "assistant",
+      content: WELCOME,
+      createdAt: new Date().toISOString(),
+    },
+  ]
 }
 
 function BotGlyph({ className = "" }: { className?: string }) {
@@ -249,6 +261,7 @@ export default function GlucoBot() {
             id: m.id,
             role: m.role,
             content: m.content,
+            createdAt: m.createdAt,
           }))
         : welcomeMessages(),
     )
@@ -272,10 +285,12 @@ export default function GlucoBot() {
     setInput("")
     baseInputRef.current = ""
     stopVoice()
+    const now = new Date().toISOString()
     const userMsg: UiMessage = {
       id: `u-${Date.now()}`,
       role: "user",
       content: text,
+      createdAt: now,
     }
     setMessages((prev) => [...prev, userMsg])
     setBusy(true)
@@ -301,6 +316,7 @@ export default function GlucoBot() {
             res.message?.trim() ||
             "Sorry, that didn’t go through. Try again in a sec.",
           animate: true,
+          createdAt: new Date().toISOString(),
         },
       ])
       return
@@ -319,6 +335,7 @@ export default function GlucoBot() {
         role: "assistant",
         content: res.data!.reply,
         animate: true,
+        createdAt: new Date().toISOString(),
       },
     ])
   }
@@ -487,6 +504,17 @@ export default function GlucoBot() {
                       ) : (
                         m.content
                       )}
+                      {m.createdAt ? (
+                        <p
+                          className={`mt-1 text-[10px] ${
+                            m.role === "user"
+                              ? "text-white/70"
+                              : "text-neutral-400 dark:text-neutral-500"
+                          }`}
+                        >
+                          {formatPracticeDateTime(m.createdAt)}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 ))}

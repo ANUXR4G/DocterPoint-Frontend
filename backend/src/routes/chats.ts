@@ -96,11 +96,15 @@ router.get(
       if (req.sessionUser!.id !== userId) {
         throw new AppError(403, "Forbidden");
       }
+      const bookingId = String(
+        req.query.bookingId ?? req.query.booking_id ?? "",
+      ).trim();
       const result = await ChatService.getUserDirectMessages(
         Number(req.query.page ?? 1),
         Math.min(Number(req.query.limit ?? 50), 100),
         userId,
         receiverId,
+        bookingId ? { bookingId } : undefined,
       );
       return res.json(result);
     } catch (error) {
