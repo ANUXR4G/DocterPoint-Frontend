@@ -1408,6 +1408,62 @@ export const BookingService = {
    * Care chat "attach": save the file on the appointment, post it in the
    * clinic ↔ patient chat, and deliver it on the patient's WhatsApp.
    */
+  /**
+   * Re-send clinic log / visit summary (remarks + Rx) to the patient WhatsApp.
+   * Used from the appointments list Rx menu after a visit is COMPLETED.
+   */
+  async sendClinicLogWhatsApp(bookingId: string, actorUserId: string) {
+    const booking = await prisma.practiceBooking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        practiceId: true,
+        providerId: true,
+        status: true,
+        patientPhone: true,
+        patientId: true,
+      },
+    });
+    if (!booking) ResponseHandler.notFoundError("booking not found.");
+    const existing = booking!;
+
+    const member = await prisma.practiceMember.findUnique({
+      where: {
+        practiceId_userId: {
+          practiceId: existing.practiceId,
+          userId: actorUserId,
+        },
+      },
+    });
+    if (!member?.isActive) ResponseHandler.noPermission("not authorized.");
+    const role = member!.role;
+    const frontDesk =
+      role === "PRACTICE_OWNER" ||
+      role === "PRACTICE_ADMIN" ||
+      role === "RECEPTIONIST";
+    if (!frontDesk && existing.providerId !== actorUserId) {
+      throw new AppError(
+        403,
+        "You can only send clinic logs for visits assigned to you.",
+      );
+    }
+    if (existing.status !== BookingStatus.COMPLETED) {
+      throw new AppError(
+        400,
+        "Clinic log WhatsApp is available after the appointment is finished.",
+      );
+    }
+    if (!String(existing.patientPhone || "").trim()) {
+      throw new AppError(400, "This visit has no patient phone number.");
+    }
+
+    const queued = await NotificationService.enqueueVisitSummary(bookingId);
+    if (!queued) {
+      throw new AppError(500, "Could not queue the WhatsApp clinic log.");
+    }
+    return { notificationId: queued.id, templateKey: "VISIT_SUMMARY" };
+  },
+
   async shareDocumentWithPatient(
     bookingId: string,
     input: { name?: string; url?: string; caption?: string },
