@@ -34,6 +34,72 @@ type Props = {
 };
 
 const TEAL = "#0D9488";
+const SLIDER_BLUE = "#3B82F6";
+const SLIDER_TRACK = "#BFDBFE";
+
+function LinearPainSlider({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (n: number) => void;
+}) {
+  const [trackW, setTrackW] = useState(0);
+  const n = value;
+  const pct = n == null ? 0 : ((n - 1) / 9) * 100;
+
+  function valueFromX(x: number) {
+    if (trackW <= 0) return 1;
+    const ratio = Math.min(1, Math.max(0, x / trackW));
+    return Math.min(10, Math.max(1, Math.round(ratio * 9) + 1));
+  }
+
+  return (
+    <View style={styles.linearSlider}>
+      <View
+        style={styles.linearTrackHit}
+        onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={(e) => onChange(valueFromX(e.nativeEvent.locationX))}
+        onResponderMove={(e) => onChange(valueFromX(e.nativeEvent.locationX))}
+      >
+        <View style={styles.linearTrackBg} />
+        <View style={[styles.linearTrackFill, { width: `${pct}%` }]} />
+        {n != null && trackW > 0 ? (
+          <View
+            style={[
+              styles.linearThumb,
+              { left: (pct / 100) * trackW - 10 },
+            ]}
+          />
+        ) : null}
+      </View>
+      <View style={styles.linearNums}>
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => {
+          const active = n === num;
+          return (
+            <Pressable
+              key={num}
+              onPress={() => onChange(num)}
+              style={styles.linearNumBtn}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.linearNumText,
+                  active && styles.linearNumTextActive,
+                ]}
+              >
+                {num}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 function WongBakerFace({
   optionId,
@@ -186,27 +252,14 @@ export default function PainAssessmentToolModal({
                 })}
               </View>
             ) : tab === "linear" ? (
-              <View style={styles.linearWrap}>
-                {options.map((opt) => {
-                  const active = selectedId === opt.id;
-                  const n = Number(opt.score);
-                  const bg =
-                    n <= 3 ? "#22C55E" : n <= 6 ? "#F59E0B" : "#EF4444";
-                  return (
-                    <Pressable
-                      key={opt.id}
-                      onPress={() => setSelectedId(opt.id)}
-                      style={[
-                        styles.linearChip,
-                        { backgroundColor: bg },
-                        active && styles.selectedRing,
-                      ]}
-                    >
-                      <Text style={styles.linearText}>{opt.score}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <LinearPainSlider
+                value={
+                  selectedId && /^\d+$/.test(selectedId)
+                    ? Number(selectedId)
+                    : null
+                }
+                onChange={(num) => setSelectedId(String(num))}
+              />
             ) : (
               <View style={styles.activityWrap}>
                 {options.map((opt, i) => {
@@ -345,27 +398,53 @@ const styles = StyleSheet.create({
     color: colors.ink,
     textAlign: "center",
   },
-  linearWrap: {
+  linearSlider: {
+    paddingHorizontal: 4,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  linearTrackHit: {
+    height: 28,
+    justifyContent: "center",
+  },
+  linearTrackBg: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: SLIDER_TRACK,
+  },
+  linearTrackFill: {
+    position: "absolute",
+    left: 0,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: SLIDER_BLUE,
+  },
+  linearThumb: {
+    position: "absolute",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: SLIDER_BLUE,
+    top: 4,
+  },
+  linearNums: {
+    marginTop: 12,
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 8,
+    justifyContent: "space-between",
   },
-  linearChip: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+  linearNumBtn: {
+    width: 28,
     alignItems: "center",
-    justifyContent: "center",
   },
-  linearText: {
-    color: "#fff",
+  linearNumText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.inkFaint,
+  },
+  linearNumTextActive: {
+    fontSize: 16,
     fontWeight: "700",
-    fontSize: 14,
-  },
-  selectedRing: {
-    borderWidth: 2,
-    borderColor: TEAL,
+    color: colors.ink,
   },
   activityWrap: {
     gap: space.sm,

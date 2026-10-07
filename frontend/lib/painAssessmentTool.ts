@@ -34,18 +34,18 @@ export const PAIN_TOOL_TABS: Array<{
   },
 ]
 
+/** Linear scale 1–10 (matches Pain Assessment Tool slider UI). */
 export const LINEAR_OPTIONS: PainToolOption[] = [
-  { id: "0", label: "0 — No pain", score: "0" },
   { id: "1", label: "1", score: "1" },
   { id: "2", label: "2", score: "2" },
   { id: "3", label: "3", score: "3" },
   { id: "4", label: "4", score: "4" },
-  { id: "5", label: "5 — Moderate", score: "5" },
+  { id: "5", label: "5", score: "5" },
   { id: "6", label: "6", score: "6" },
   { id: "7", label: "7", score: "7" },
   { id: "8", label: "8", score: "8" },
   { id: "9", label: "9", score: "9" },
-  { id: "10", label: "10 — Worst", score: "10" },
+  { id: "10", label: "10", score: "10" },
 ]
 
 export const ACTIVITY_OPTIONS: PainToolOption[] = [

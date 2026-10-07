@@ -33,6 +33,88 @@ type Props = {
 }
 
 const ACCENT = "#0D9488"
+const SLIDER_BLUE = "#3B82F6"
+const SLIDER_TRACK = "#BFDBFE"
+
+/** Horizontal 1–10 linear pain slider (screenshot-matched). */
+function LinearPainSlider({
+  value,
+  onChange,
+}: {
+  value: number | null
+  onChange: (n: number) => void
+}) {
+  const n = value ?? null
+  const pct = n == null ? 0 : ((n - 1) / 9) * 100
+
+  return (
+    <div className="mx-auto w-full max-w-2xl px-2 pt-4 pb-2">
+      <div className="relative px-1">
+        {/* Track */}
+        <div className="relative h-5">
+          <div
+            className="absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full"
+            style={{ backgroundColor: SLIDER_TRACK }}
+          />
+          <div
+            className="absolute left-0 top-1/2 h-[6px] -translate-y-1/2 rounded-full"
+            style={{
+              width: n == null ? 0 : `${pct}%`,
+              backgroundColor: SLIDER_BLUE,
+            }}
+          />
+          {/* Invisible range for drag */}
+          <input
+            type="range"
+            min={1}
+            max={10}
+            step={1}
+            value={n ?? 1}
+            aria-label="Linear pain scale 1 to 10"
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="absolute inset-0 z-10 w-full cursor-pointer appearance-none bg-transparent
+              [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5
+              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full
+              [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-transparent
+              [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5
+              [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0
+              [&::-moz-range-thumb]:bg-transparent"
+          />
+          {/* Visible thumb */}
+          {n != null ? (
+            <div
+              className="pointer-events-none absolute top-1/2 z-20 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm"
+              style={{
+                left: `${pct}%`,
+                backgroundColor: SLIDER_BLUE,
+              }}
+            />
+          ) : null}
+        </div>
+        {/* Number labels */}
+        <div className="mt-3 flex justify-between">
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => {
+            const active = n === num
+            return (
+              <button
+                key={num}
+                type="button"
+                onClick={() => onChange(num)}
+                className={`w-7 text-center transition-all ${
+                  active
+                    ? "text-base font-bold text-neutral-700 dark:text-neutral-100"
+                    : "text-sm font-medium text-neutral-400 hover:text-neutral-600 dark:text-neutral-500"
+                }`}
+              >
+                {num}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** Expressive Wong-Baker-style face icons (Mild → Worst). */
 function WongBakerFace({
@@ -285,38 +367,14 @@ export default function PainAssessmentToolModal({
               })}
             </div>
           ) : tab === "linear" ? (
-            <div className="mx-auto max-w-xl">
-              <p className="mb-4 text-center text-sm text-neutral-500">
-                Select pain intensity from 0 (no pain) to 10 (worst imaginable).
-              </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {options.map((opt) => {
-                  const active = selectedId === opt.id
-                  const n = Number(opt.score)
-                  const tone =
-                    n <= 3
-                      ? "bg-emerald-500"
-                      : n <= 6
-                        ? "bg-amber-500"
-                        : "bg-rose-500"
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setSelectedId(opt.id)}
-                      title={opt.label}
-                      className={`flex size-11 items-center justify-center rounded-lg text-sm font-bold text-white shadow-sm transition ${tone} ${
-                        active
-                          ? "ring-2 ring-teal-500 ring-offset-2"
-                          : "opacity-90 hover:opacity-100"
-                      }`}
-                    >
-                      {opt.score}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            <LinearPainSlider
+              value={
+                selectedId && /^\d+$/.test(selectedId)
+                  ? Number(selectedId)
+                  : null
+              }
+              onChange={(num) => setSelectedId(String(num))}
+            />
           ) : (
             <div className="mx-auto grid max-w-2xl gap-3 sm:grid-cols-2">
               {options.map((opt, i) => {
