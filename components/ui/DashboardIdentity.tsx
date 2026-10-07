@@ -22,30 +22,14 @@ type Membership = {
   } | null
 }
 
-function portalRoleLabel(navRole: string | null | undefined): string {
-  switch (navRole) {
-    case "user":
-      return "Patient"
-    case "doctor":
-      return "Doctor"
-    case "clinic":
-      return "Clinic"
-    case "admin":
-      return "Admin"
-    default:
-      return "User"
-  }
-}
-
 function personName(data: unknown): string {
   if (!data || typeof data !== "object") return ""
   const o = data as Record<string, unknown>
-  const name = String(o.name ?? o.fullName ?? "").trim()
-  return name
+  return String(o.name ?? o.fullName ?? "").trim()
 }
 
 /**
- * Top-left dashboard identity: clinic / doctor practice name + signed-in user and role.
+ * Top-left: Patient / Clinic / Doctor Dashboard, then user · role · clinic name.
  */
 export default function DashboardIdentity() {
   const jwtRole = useRole()
@@ -69,7 +53,11 @@ export default function DashboardIdentity() {
     let cancelled = false
     void proctoService.getMyPractices().then((res) => {
       if (cancelled) return
-      if (res.status !== "successful" || !Array.isArray(res.data) || !res.data.length) {
+      if (
+        res.status !== "successful" ||
+        !Array.isArray(res.data) ||
+        !res.data.length
+      ) {
         setPracticeName(null)
         setMembershipRole(null)
         return
@@ -91,23 +79,30 @@ export default function DashboardIdentity() {
 
   const roleLabel =
     (membershipRole && CLINIC_ROLE_LABEL[membershipRole]) ||
-    portalRoleLabel(navRole)
+    (navRole === "user"
+      ? "Patient"
+      : navRole === "doctor"
+        ? "Doctor"
+        : navRole === "clinic"
+          ? "Clinic"
+          : navRole === "admin"
+            ? "Admin"
+            : "User")
 
-  const orgTitle =
-    practiceName ||
-    (navRole === "doctor" || navRole === "clinic"
-      ? dashboardBrandLabel(navRole)
-      : dashboardBrandLabel(navRole))
+  const subtitle = [displayUser || null, roleLabel, practiceName]
+    .filter(Boolean)
+    .join(" · ")
 
   return (
     <div className="min-w-0 flex-1 md:max-w-md">
       <p className="truncate text-sm font-bold leading-tight text-slate-900 dark:text-white">
-        {orgTitle}
+        {dashboardBrandLabel(navRole)}
       </p>
-      <p className="truncate text-[11px] font-medium leading-tight text-slate-500 dark:text-slate-400">
-        {[displayUser || null, roleLabel].filter(Boolean).join(" · ") ||
-          roleLabel}
-      </p>
+      {subtitle ? (
+        <p className="truncate text-[11px] font-medium leading-tight text-slate-500 dark:text-slate-400">
+          {subtitle}
+        </p>
+      ) : null}
     </div>
   )
 }

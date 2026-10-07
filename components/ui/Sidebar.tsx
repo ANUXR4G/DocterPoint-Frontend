@@ -138,10 +138,10 @@ export default function Sidebar({ role, logout }: Props) {
         </div>
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold tracking-[-0.3px] text-slate-900 dark:text-white">
-            {practiceName || "GlucoGuide"}
+            {dashboardBrandLabel(navRole)}
           </h3>
           <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-400">
-            {dashboardBrandLabel(navRole)}
+            {practiceName || "GlucoGuide"}
           </p>
         </div>
       </div>
