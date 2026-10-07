@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MiraChat } from "@/components/MiraChat";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { colors, space } from "@/lib/theme";
 
 const HIDDEN_ON = [
@@ -100,7 +100,7 @@ export function GlucoBotFab() {
           style={[
             styles.fab,
             {
-              bottom: dockClearance + 8,
+              bottom: contentBottomPad(insets.bottom) + 8,
               right: Math.max(insets.right, 22),
             },
           ]}

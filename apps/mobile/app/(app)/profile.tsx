@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import {
@@ -27,6 +28,7 @@ import {
 import { api, clearSession } from "@/lib/api";
 import { pickProfilePhoto, uploadPhoto } from "@/lib/cloudinary";
 import { setCachedPatientName, setCachedPatientPhoto } from "@/lib/dataCache";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { resolveMediaUrl } from "@/lib/media";
 import { colors, space } from "@/lib/theme";
 import type { PatientProfile } from "@/lib/types";
@@ -53,6 +55,7 @@ function normalizeDob(raw: string): string {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -173,7 +176,13 @@ export default function ProfileScreen() {
   return (
     <Screen>
       <PremiumAtmosphere />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: contentBottomPad(insets.bottom) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <PageTitle
           eyebrow="Account"
           title="Profile"
@@ -310,7 +319,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.xl, paddingBottom: 130 },
+  content: { padding: space.xl },
   menu: {
     marginTop: space.lg,
     borderWidth: StyleSheet.hairlineWidth,

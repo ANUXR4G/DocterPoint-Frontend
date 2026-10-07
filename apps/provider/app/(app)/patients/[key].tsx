@@ -54,7 +54,7 @@ export default function PatientDetailScreen() {
         <PrimaryButton
           label="← Patients"
           tone="ghost"
-          onPress={() => router.back()}
+          onPress={() => router.replace("/(app)/patients" as never)}
         />
 
         {!patient ? (

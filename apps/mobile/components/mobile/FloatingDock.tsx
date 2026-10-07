@@ -8,8 +8,9 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import { BlurView } from "expo-blur";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgIcon, type SvgIconName } from "@/components/icons/SvgIcon";
-import { dockLayout } from "@/lib/dockLayout";
+import { dockLayout, dockLift } from "@/lib/dockLayout";
 import { colors } from "@/lib/theme";
 
 type TabRoute = {
@@ -115,6 +116,7 @@ export function FloatingDock({
   descriptors,
   navigation,
 }: FloatingDockProps) {
+  const insets = useSafeAreaInsets();
   const current = state.routes[state.index];
   if (current && HIDE_ON.has(current.name)) return null;
 
@@ -128,7 +130,10 @@ export function FloatingDock({
   );
 
   return (
-    <View pointerEvents="box-none" style={styles.wrap}>
+    <View
+      pointerEvents="box-none"
+      style={[styles.wrap, { bottom: dockLift(insets.bottom) }]}
+    >
       <View style={styles.dockShell}>
         <View style={styles.dockClip}>
           <BlurView
@@ -193,7 +198,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: dockLayout.bottom,
     paddingHorizontal: dockLayout.horizontal,
   },
   dockShell: {

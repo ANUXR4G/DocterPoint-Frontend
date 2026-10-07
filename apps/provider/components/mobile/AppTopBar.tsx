@@ -7,6 +7,9 @@ const TITLE_BY_PATH: { match: string; title: string }[] = [
   { match: "/dashboard", title: "Dashboard" },
   { match: "/queue", title: "Queue" },
   { match: "/appointments", title: "Appointments" },
+  // Detail before list so /patients/:key is not titled only "Patients".
+  { match: "/visit/", title: "Visit" },
+  { match: "/patients/", title: "Patient" },
   { match: "/patients", title: "Patients" },
   { match: "/calendar", title: "Calendar" },
   { match: "/analytics", title: "Analytics" },
@@ -21,7 +24,6 @@ const TITLE_BY_PATH: { match: string; title: string }[] = [
   { match: "/settings", title: "Settings" },
   { match: "/doctors", title: "Doctors" },
   { match: "/audit", title: "Audit log" },
-  { match: "/visit/", title: "Visit" },
 ];
 
 function titleForPath(pathname: string): string {

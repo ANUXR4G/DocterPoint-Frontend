@@ -18,7 +18,7 @@ import {
   setCachedPractices,
 } from "@/lib/dataCache";
 import { resolveMediaUrl } from "@/lib/media";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { usePatientLive } from "@/lib/PatientLiveContext";
 import { PRACTICE_TIMEZONE } from "@/lib/practiceTime";
 import { colors, radii, shadows, space } from "@/lib/theme";
@@ -118,7 +118,13 @@ export default function HomeScreen() {
   return (
     <Screen style={styles.screen}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + space.md }]}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + space.md,
+            paddingBottom: contentBottomPad(insets.bottom),
+          },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -207,7 +213,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: space.xl,
-    paddingBottom: dockClearance + space.xl,
   },
   header: {
     flexDirection: "row",

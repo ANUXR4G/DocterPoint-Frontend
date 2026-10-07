@@ -1,6 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClinicCard } from "@/components/mobile/ClinicCards";
 import { ScreenHeader } from "@/components/mobile/ScreenHeader";
 import { SearchBar } from "@/components/mobile/SearchBar";
@@ -17,13 +18,14 @@ import {
   getCachedPractices,
   setCachedPractices,
 } from "@/lib/dataCache";
-import { dockClearance } from "@/lib/dockLayout";
+import { contentBottomPad } from "@/lib/dockLayout";
 import { colors, space } from "@/lib/theme";
 import type { PracticeListItem } from "@/lib/types";
 
 const SPECIALTY_QUERIES = new Set<string>(SPECIALTIES.map((s) => s.query));
 
 export default function DoctorsScreen() {
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ q?: string }>();
   const initial = params.q ?? "";
   const [text, setText] = useState(SPECIALTY_QUERIES.has(initial) ? "" : initial);
@@ -89,7 +91,10 @@ export default function DoctorsScreen() {
       <FlatList
         data={practices}
         keyExtractor={(d) => d.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: contentBottomPad(insets.bottom) },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -150,7 +155,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: space.xl,
     paddingTop: space.xs,
-    paddingBottom: dockClearance + space.xl,
   },
   header: {
     marginBottom: space.lg,

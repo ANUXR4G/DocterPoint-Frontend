@@ -108,14 +108,14 @@ export default function PatientsScreen() {
                 key={key}
                 onPress={() =>
                   router.push(
-                    `/(app)/patient/${encodeURIComponent(key)}` as never,
+                    `/(app)/patients/${encodeURIComponent(key)}` as never,
                   )
                 }
               >
                 <Pressable
                   onPress={() =>
                     router.push(
-                      `/(app)/patient/${encodeURIComponent(key)}` as never,
+                      `/(app)/patients/${encodeURIComponent(key)}` as never,
                     )
                   }
                   style={styles.row}
