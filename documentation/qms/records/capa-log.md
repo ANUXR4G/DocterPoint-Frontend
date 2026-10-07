@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20261007-01
+- **Date opened:** 2026-10-07
+- **Severity:** 2
+- **Process:** P-NOTIFY
+- **Description:** Doctor portal WhatsApp not reaching patients (walk-in / emergency add). Clinic Notifications also showed FAILED (#100) for “new booking” alerts.
+- **Evidence:** Bookings `15fcdcab-…` / `08346af1-…` (EMERGENCY_WALK_IN, PROVIDER_APP) had **no** patient `BOOKING_CONFIRMATION` rows — only clinic `CLINIC_NEW_BOOKING`. Practice phone `9990052082` equals the WhatsApp bot line → Meta `(#100) Invalid parameter` when clinic alerts targeted that number. Manual Graph named-template send to `971507801104` accepted; re-queued patient confirm for Rathul → `SENT` / `usedTemplate: true`.
+- **Containment:** Manually sent patient booking-confirm template for today’s walk-in (Rathul / 971507801104).
+- **Root cause:** (1) `createWalkIn` always set `skipPatientTemplate: true`. (2) Clinic notify phone resolved to the practice WA bot MSISDN, which Meta cannot message.
+- **Corrective action:** Walk-ins enqueue patient confirmation; clinic inbox forced `inAppOnly` when notify phone is the practice/platform WA bot (`isClinicWhatsAppBotPhone`).
+- **Owner / due:** Engineering / 2026-10-07
+- **Verification:** Patient confirm SENT for Rathul; tsc on backend.
+- **Status:** Verified
+- **Docs updated:** capa-log.md
+
 ### NC-20260930-03
 - **Date opened:** 2026-09-30
 - **Severity:** 2
