@@ -1551,6 +1551,8 @@ export const BookingService = {
                   dateOfBirth: true,
                   contactNumber: true,
                   emergencyNumber: true,
+                  profession: true,
+                  relationship: true,
                 },
               },
             },
@@ -1578,6 +1580,8 @@ export const BookingService = {
               dateOfBirth: true,
               contactNumber: true,
               emergencyNumber: true,
+              profession: true,
+              relationship: true,
             },
           },
         },
@@ -1614,6 +1618,8 @@ export const BookingService = {
             contactNumber: linked.patient?.contactNumber ?? null,
             emergencyNumber: linked.patient?.emergencyNumber ?? null,
             mrn: linked.patient?.mrn ?? null,
+            profession: linked.patient?.profession ?? null,
+            relationship: linked.patient?.relationship ?? null,
           }
         : {
             id: null,
@@ -1628,6 +1634,8 @@ export const BookingService = {
             contactNumber: booking.patientPhone,
             emergencyNumber: null,
             mrn: null,
+            profession: null,
+            relationship: null,
           },
     };
   },

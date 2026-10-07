@@ -81,6 +81,8 @@ type VisitBooking = {
     contactNumber: string | null
     emergencyNumber?: string | null
     mrn?: string | null
+    relationship?: string | null
+    profession?: string | null
   } | null
 }
 
@@ -111,10 +113,6 @@ function everyHoursLabel(hours: number) {
 
 function isDayPart(t: string) {
   return (TIMES as readonly string[]).includes(t)
-}
-
-function dash(v: string | null | undefined) {
-  return v?.trim() ? v : "—"
 }
 
 /** Optional patient fields: empty when we never collected the value. */
@@ -546,6 +544,11 @@ export default function VisitPage() {
   const phone = formatPhoneDisplay(
     p?.contactNumber || p?.phone || booking.patientPhone,
   )
+  const emergencyPhone = formatPhoneDisplay(p?.emergencyNumber)
+  const ageLabel = ageFromDob(p?.dateOfBirth, p?.age)
+  const dobLabel = blank(p?.dateOfBirth)
+    ? formatPracticeDate(p!.dateOfBirth!) || blank(p?.dateOfBirth)
+    : ""
   const slotLabel =
     booking.tokenNumber != null
       ? `Token #${booking.tokenNumber}`
@@ -560,8 +563,28 @@ export default function VisitPage() {
   const isCompleted = String(booking.status || "").toUpperCase() === "COMPLETED"
   const chiefComplaint = chiefComplaintOf(booking)
   const arrival = formatArrival(booking)
+  const arrivalDisplay =
+    arrival ||
+    (["SCHEDULED", "REQUESTED", "ACCEPTED"].includes(
+      String(booking.status || "").toUpperCase(),
+    )
+      ? "not yet"
+      : "—")
   const selfId = getSessionUserId()
   const peerId = booking.patient?.id
+  const patientFacts: Array<{ label: string; value: string }> = [
+    { label: "MRN", value: blank(p?.mrn) },
+    { label: "Phone", value: phone === "—" ? "" : phone },
+    { label: "Age", value: ageLabel },
+    { label: "Gender", value: blank(p?.gender) },
+    { label: "Date of birth", value: dobLabel },
+    { label: "Email", value: blank(p?.email) },
+    { label: "Emergency", value: emergencyPhone === "—" ? "" : emergencyPhone },
+    { label: "Relationship", value: blank(p?.relationship) },
+    { label: "Profession", value: blank(p?.profession) },
+    { label: "Address", value: blank(p?.address) },
+    { label: "Arrival", value: arrivalDisplay === "—" ? "" : arrivalDisplay },
+  ].filter((f) => f.value.trim())
 
   return (
     <div
@@ -588,30 +611,6 @@ export default function VisitPage() {
                   <h1 className="mt-0.5 break-words text-xl font-bold leading-tight tracking-tight text-neutral-900 sm:text-2xl dark:text-white">
                     {patientName}
                   </h1>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-medium text-neutral-700 dark:text-slate-300">
-                    <span>{phone}</span>
-                    <span className="opacity-40" aria-hidden>
-                      ·
-                    </span>
-                    <span>
-                      Age {ageFromDob(p?.dateOfBirth, p?.age)}
-                      {dash(p?.gender) !== "—" ? ` · ${dash(p?.gender)}` : ""}
-                    </span>
-                    <span className="opacity-40" aria-hidden>
-                      ·
-                    </span>
-                    <span>
-                      Arrival{" "}
-                      <span className="font-semibold tabular-nums text-neutral-900 dark:text-white">
-                        {arrival ||
-                          (["SCHEDULED", "REQUESTED", "ACCEPTED"].includes(
-                            String(booking.status || "").toUpperCase(),
-                          )
-                            ? "not yet"
-                            : "—")}
-                      </span>
-                    </span>
-                  </p>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1.5">
@@ -633,6 +632,20 @@ export default function VisitPage() {
                 />
               </div>
             </div>
+            {patientFacts.length > 0 ? (
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[color-mix(in_srgb,var(--theme-primary)_22%,transparent)] pt-2.5 text-sm sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {patientFacts.map((f) => (
+                  <div key={f.label} className="min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500 dark:text-slate-400">
+                      {f.label}
+                    </dt>
+                    <dd className="mt-0.5 break-words font-medium leading-snug text-neutral-900 dark:text-white">
+                      {f.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
           </div>
         </section>
 
@@ -649,13 +662,6 @@ export default function VisitPage() {
 
       <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
         <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
-          <Fact label="MRN" value={blank(p?.mrn)} />
-          <Fact label="Date of birth" value={blank(p?.dateOfBirth)} />
-          <Fact label="Age" value={ageFromDob(p?.dateOfBirth, p?.age)} />
-          <Fact label="Gender" value={blank(p?.gender)} />
-          <Fact label="Phone" value={phone} />
-          <Fact label="Email" value={blank(p?.email)} />
-          <Fact label="Address" value={blank(p?.address)} />
           <Fact label="Doctor" value={blank(booking.provider?.name)} />
           <Fact
             label="Location"
