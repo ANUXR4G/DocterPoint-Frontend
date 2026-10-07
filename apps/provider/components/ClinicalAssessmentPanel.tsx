@@ -26,6 +26,14 @@ const BAND_BG: Record<VitalBand, string> = {
   critical_high: "#FECACA",
 };
 
+const BAND_BORDER: Record<VitalBand, string> = {
+  critical_low: "#38BDF8",
+  low: "#818CF8",
+  normal: "#34D399",
+  high: "#FB7185",
+  critical_high: "#EF4444",
+};
+
 const BAND_LEGEND: Array<{ key: VitalBand; label: string; bg: string }> = [
   { key: "critical_low", label: "Crit. low", bg: BAND_BG.critical_low },
   { key: "low", label: "Low", bg: BAND_BG.low },
@@ -227,7 +235,13 @@ export function ClinicalAssessmentPanel({
                 onChangeText={(t) => setVital(m.key, t)}
                 style={[
                   styles.vitalInput,
-                  band ? { backgroundColor: BAND_BG[band] } : null,
+                  band
+                    ? {
+                        backgroundColor: BAND_BG[band],
+                        borderColor: BAND_BORDER[band],
+                        borderWidth: 2,
+                      }
+                    : null,
                   (readOnly || m.derived) && styles.readonly,
                 ]}
               />
@@ -496,7 +510,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: colors.ink,
-    backgroundColor: colors.paperRaised,
+    backgroundColor: colors.white,
   },
   card: {
     borderWidth: 1,
@@ -507,6 +521,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paperRaised,
   },
   input: {
+    marginTop: 2,
     borderWidth: 1,
     borderColor: colors.lineStrong,
     borderRadius: radii.md,
@@ -514,7 +529,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 14,
     color: colors.ink,
-    backgroundColor: colors.paperRaised,
+    backgroundColor: colors.white,
   },
   meta: { fontSize: 12, color: colors.inkFaint, fontWeight: "600" },
   allergyHead: {
