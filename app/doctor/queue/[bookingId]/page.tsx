@@ -1,6 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { Icon, ThinkingLoader } from "@/components"
@@ -572,19 +578,19 @@ export default function VisitPage() {
       : "—")
   const selfId = getSessionUserId()
   const peerId = booking.patient?.id
-  const patientFacts: Array<{ label: string; value: string }> = [
-    { label: "MRN", value: blank(p?.mrn) },
-    { label: "Phone", value: phone === "—" ? "" : phone },
-    { label: "Age", value: ageLabel },
-    { label: "Gender", value: blank(p?.gender) },
-    { label: "Date of birth", value: dobLabel },
-    { label: "Email", value: blank(p?.email) },
-    { label: "Emergency", value: emergencyPhone === "—" ? "" : emergencyPhone },
-    { label: "Relationship", value: blank(p?.relationship) },
-    { label: "Profession", value: blank(p?.profession) },
-    { label: "Address", value: blank(p?.address) },
-    { label: "Arrival", value: arrivalDisplay === "—" ? "" : arrivalDisplay },
-  ].filter((f) => f.value.trim())
+  const patientMeta = [
+    blank(p?.mrn) ? `MRN ${blank(p?.mrn)}` : "",
+    phone !== "—" ? phone : "",
+    ageLabel ? `Age ${ageLabel}` : "",
+    blank(p?.gender),
+    dobLabel ? `DOB ${dobLabel}` : "",
+    blank(p?.email),
+    emergencyPhone !== "—" ? `Emergency ${emergencyPhone}` : "",
+    blank(p?.relationship),
+    blank(p?.profession),
+    blank(p?.address),
+    `Arrival ${arrivalDisplay}`,
+  ].filter(Boolean)
 
   return (
     <div
@@ -611,6 +617,28 @@ export default function VisitPage() {
                   <h1 className="mt-0.5 break-words text-xl font-bold leading-tight tracking-tight text-neutral-900 sm:text-2xl dark:text-white">
                     {patientName}
                   </h1>
+                  {patientMeta.length > 0 ? (
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-medium text-neutral-700 dark:text-slate-300">
+                      {patientMeta.map((part, i) => (
+                        <Fragment key={`${part}-${i}`}>
+                          {i > 0 ? (
+                            <span className="opacity-40" aria-hidden>
+                              ·
+                            </span>
+                          ) : null}
+                          <span
+                            className={
+                              part.startsWith("Arrival ")
+                                ? "font-semibold tabular-nums text-neutral-900 dark:text-white"
+                                : undefined
+                            }
+                          >
+                            {part}
+                          </span>
+                        </Fragment>
+                      ))}
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1.5">
@@ -632,20 +660,6 @@ export default function VisitPage() {
                 />
               </div>
             </div>
-            {patientFacts.length > 0 ? (
-              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[color-mix(in_srgb,var(--theme-primary)_22%,transparent)] pt-2.5 text-sm sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {patientFacts.map((f) => (
-                  <div key={f.label} className="min-w-0">
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500 dark:text-slate-400">
-                      {f.label}
-                    </dt>
-                    <dd className="mt-0.5 break-words font-medium leading-snug text-neutral-900 dark:text-white">
-                      {f.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            ) : null}
           </div>
         </section>
 
