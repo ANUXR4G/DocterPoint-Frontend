@@ -520,6 +520,16 @@ export const proctoService = {
       body: JSON.stringify(doc),
     }),
 
+  /** Patient attaches a file to their own visit and posts it in care chat. */
+  attachPatientDocument: (
+    bookingId: string,
+    doc: { name: string; url: string; caption?: string },
+  ) =>
+    proctoFetch(`/procto/bookings/${bookingId}/patient-document`, {
+      method: "POST",
+      body: JSON.stringify(doc),
+    }),
+
   listPracticeBookings: (
     practiceId: string,
     opts?:

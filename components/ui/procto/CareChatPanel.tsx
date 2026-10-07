@@ -49,6 +49,8 @@ type Props = {
    */
   collapsible?: boolean
   defaultOpen?: boolean
+  /** Who is attaching: clinic staff (WhatsApp fan-out) or the patient. */
+  attachAs?: "clinic" | "patient"
   onDocumentShared?: () => void
 }
 
@@ -225,6 +227,7 @@ export default function CareChatPanel({
   threadSince,
   collapsible,
   defaultOpen,
+  attachAs = "clinic",
   onDocumentShared,
 }: Props) {
   const isCollapsible = collapsible ?? Boolean(bookingId)
@@ -374,11 +377,18 @@ export default function CareChatPanel({
         patchPending(item.tempId, { doc: { ...doc, uploaded } })
       }
       patchPending(item.tempId, { status: "sending", error: undefined })
-      const res = await proctoService.shareBookingDocument(bookingId, {
-        name: uploaded.name,
-        url: uploaded.url,
-        caption: doc.caption,
-      })
+      const res =
+        attachAs === "patient"
+          ? await proctoService.attachPatientDocument(bookingId, {
+              name: uploaded.name,
+              url: uploaded.url,
+              caption: doc.caption,
+            })
+          : await proctoService.shareBookingDocument(bookingId, {
+              name: uploaded.name,
+              url: uploaded.url,
+              caption: doc.caption,
+            })
       if (res.status !== "successful" || !res.data) {
         throw new Error(res.message || "Could not share the document.")
       }
@@ -391,7 +401,14 @@ export default function CareChatPanel({
         setMessages((prev) => addOnce(prev, msg))
       }
       setPending((prev) => prev.filter((p) => p.tempId !== item.tempId))
-      setNotice(whatsappNotice(data.whatsapp?.status, data.whatsapp?.error))
+      setNotice(
+        attachAs === "patient"
+          ? {
+              text: "Attached to this visit and sent in chat for your doctor.",
+              tone: "ok",
+            }
+          : whatsappNotice(data.whatsapp?.status, data.whatsapp?.error),
+      )
       onDocumentShared?.()
     } catch (e) {
       patchPending(item.tempId, {
@@ -614,7 +631,9 @@ export default function CareChatPanel({
                   ? "Uploading…"
                   : p.status === "sending"
                     ? p.doc
-                      ? "Sending to WhatsApp…"
+                      ? attachAs === "patient"
+                        ? "Attaching to visit…"
+                        : "Sending to WhatsApp…"
                       : "Sending…"
                     : "Not sent"}
               </p>
@@ -673,7 +692,11 @@ export default function CareChatPanel({
               <button
                 type="button"
                 onClick={() => fileInput.current?.click()}
-                title="Send a document — saved to this appointment and sent on the patient's WhatsApp. Any typed text goes with it as a caption."
+                title={
+                  attachAs === "patient"
+                    ? "Attach a report or photo — saved on this visit and sent to your doctor in chat."
+                    : "Send a document — saved to this appointment and sent on the patient's WhatsApp. Any typed text goes with it as a caption."
+                }
                 aria-label="Attach document"
                 className="flex size-11 shrink-0 items-center justify-center self-end rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
               >
