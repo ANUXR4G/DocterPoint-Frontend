@@ -325,7 +325,7 @@ export default function DoctorQueue({
   return (
     <div
       className={
-        compact ? "space-y-3" : "flex h-full min-h-0 flex-col gap-3"
+        compact ? "min-w-0 space-y-3" : "flex h-full min-h-0 min-w-0 flex-col gap-3"
       }
     >
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
@@ -375,8 +375,8 @@ export default function DoctorQueue({
       <div
         className={
           compact
-            ? "max-h-[min(52vh,480px)] overflow-auto rounded-2xl border border-slate-200 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)]"
-            : "min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)]"
+            ? "max-h-[min(52vh,480px)] min-w-0 overflow-auto rounded-2xl border border-slate-200 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)]"
+            : "min-h-0 min-w-0 flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)]"
         }
       >
         <ul className="divide-y divide-neutral-200 md:hidden dark:divide-neutral-700">
@@ -475,7 +475,7 @@ export default function DoctorQueue({
         </ul>
 
         <div className="hidden md:block">
-          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-sm">
             <thead className="sticky top-0 z-20 bg-neutral-100 text-xs uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
               <tr>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
@@ -504,7 +504,7 @@ export default function DoctorQueue({
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">
                   Payment
                 </th>
-                <th className="sticky right-0 z-30 whitespace-nowrap border-l border-neutral-200 bg-neutral-100 px-3 py-3 font-semibold dark:border-neutral-700 dark:bg-neutral-800">
+                <th className="sticky right-0 top-0 z-40 w-[1%] whitespace-nowrap border-l border-neutral-200 bg-neutral-100 px-3 py-3 font-semibold shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.28)] dark:border-neutral-700 dark:bg-neutral-800">
                   Actions
                 </th>
               </tr>
@@ -587,13 +587,12 @@ export default function DoctorQueue({
                         onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
                       />
                     </td>
-                    <td className="sticky right-0 z-10 whitespace-nowrap border-l border-neutral-200 bg-white px-3 py-3 align-middle dark:border-neutral-700 dark:bg-neutral-900">
-                      <div className="inline-flex flex-nowrap items-center gap-1.5">
+                    <td className="sticky right-0 z-20 w-[1%] border-l border-neutral-200 bg-white px-3 py-3 align-middle shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.22)] dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="flex w-[13.5rem] max-w-[13.5rem] flex-wrap items-center gap-1.5">
                         <BookingStatusControls
                           status={b.status || "SCHEDULED"}
                           busy={busyId === b.id}
                           compact
-                          nowrap
                           showSelect={allowStatusControl}
                           ariaLabel={`Update status for ${name}`}
                           onChange={(status) => void onStatus(b.id, status)}

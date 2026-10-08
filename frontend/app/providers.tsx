@@ -17,6 +17,7 @@ import {
 } from "@/lib/textSize"
 import { DashboardBgProvider } from "@/hooks/useDashboardBg"
 import { AppearanceSync } from "@/components/theme/AppearanceSync"
+import { Toaster } from "@/components/ui/sonner"
 
 /** Defer assistant + speech stack off every public/auth route's critical path. */
 const GlucoBot = dynamic(() => import("@/components/assistant/GlucoBot"), {
@@ -202,6 +203,7 @@ function Providers({ children }: { children: React.ReactNode }) {
         <DashboardBgProvider>
           <AppearanceSync />
           {children}
+          <Toaster />
           <GlucoBot />
         </DashboardBgProvider>
       </AppContext.Provider>

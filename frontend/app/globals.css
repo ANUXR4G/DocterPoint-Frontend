@@ -1877,3 +1877,23 @@ html.dark .form-input-shell input:not([type="checkbox"]):not([type="radio"]) {
 html.dark .form-input-shell label {
   color: #a8a29e;
 }
+
+/* Saved / printed prescription: the visit document only. */
+@media print {
+  body:has(.clinic-log-doc) * {
+    visibility: hidden;
+  }
+  body:has(.clinic-log-doc) .clinic-log-doc,
+  body:has(.clinic-log-doc) .clinic-log-doc * {
+    visibility: visible;
+  }
+  body:has(.clinic-log-doc) .clinic-log-doc {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    background: white;
+    color: #171717;
+  }
+}

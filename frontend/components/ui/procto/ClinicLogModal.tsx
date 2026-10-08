@@ -64,21 +64,14 @@ export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
         className="relative my-6 w-full max-w-4xl rounded-xl bg-white shadow-2xl dark:bg-neutral-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur print:hidden dark:border-neutral-700 dark:bg-neutral-900/95">
           <h2
             id="clinic-log-title"
             className="text-sm font-bold text-neutral-900 dark:text-white"
           >
             Clinic Log and details
           </h2>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-200"
-            >
-              Print
-            </button>
+          <div className="flex items-center gap-2 print:hidden">
             <button
               type="button"
               aria-label="Close"
