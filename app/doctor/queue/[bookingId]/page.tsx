@@ -32,6 +32,7 @@ import {
 } from "@/lib/bookingDisplay"
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
+import PrescriptionActionsMenu from "@/components/ui/procto/PrescriptionActionsMenu"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
@@ -681,7 +682,7 @@ export default function VisitPage() {
       className={`dashboard-page-wide !mt-0 space-y-4 ${isCompleted ? "pb-8" : "pb-28"}`}
     >
       {/* Customer identity first — sticky at top of scroll */}
-      <div className="sticky top-0 z-20 -mx-4 bg-[color-mix(in_srgb,var(--solune-canvas)_94%,transparent)] px-4 pb-1.5 pt-0 backdrop-blur-md xs:-mx-5 xs:px-5 md:-mx-6 md:px-6 dark:bg-[color-mix(in_srgb,#0f172a_94%,transparent)]">
+      <div className="sticky top-0 z-20 bg-[color-mix(in_srgb,var(--solune-canvas)_94%,transparent)] pb-1.5 pt-0 backdrop-blur-md dark:bg-[color-mix(in_srgb,#0f172a_94%,transparent)]">
         <section
           className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none"
           aria-label={`Patient ${patientName}`}
@@ -748,42 +749,23 @@ export default function VisitPage() {
         </section>
 
         {isCompleted ? (
-          <p className="mt-2 text-sm text-green-700 dark:text-green-300">
-            Visit completed. Details are under{" "}
-            <Link href={practiceTabHref("patients")} className="underline">
-              Patients
-            </Link>
-            .
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <PrescriptionActionsMenu
+              bookingId={booking.id}
+              enabled
+              layout="buttons"
+            />
+          </div>
         ) : null}
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
-        <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
-          <Fact label="Doctor" value={blank(booking.provider?.name)} />
-          <Fact
-            label="Location"
-            value={
-              booking.location
-                ? [booking.location.name, booking.location.city]
-                    .filter(Boolean)
-                    .join(", ") || ""
-                : ""
-            }
-          />
-          <Fact
-            label="Mode"
-            value={booking.mode?.replace(/_/g, " ") || ""}
-          />
-          <Fact
-            label="Channel"
-            value={booking.channel?.replace(/_/g, " ") || ""}
-          />
-          {booking.tokenNumber != null ? (
+      {booking.tokenNumber != null ? (
+        <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
+          <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
             <Fact label="Token" value={`#${booking.tokenNumber}`} />
-          ) : null}
-        </dl>
-      </section>
+          </dl>
+        </section>
+      ) : null}
 
       {chiefComplaint ? (
         <section className="dashboard-panel !p-5">
@@ -1117,7 +1099,7 @@ export default function VisitPage() {
       {/* Sticky actions — in page flow, not a portal that fights layouts */}
       {!isCompleted ? (
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-neutral-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md md:left-[72px] xl:left-60 dark:border-[var(--solune-border-strong)] dark:bg-[color-mix(in_srgb,var(--solune-surface)_92%,transparent)]">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <p className="hidden text-sm text-neutral-600 sm:block dark:text-slate-300">
               <span className="font-medium text-neutral-900 dark:text-white">
                 {patientName}

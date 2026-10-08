@@ -69,7 +69,7 @@ function AuthPortalHeader({
         {subtitle(
           isRegister
             ? "Create the clinic owner account. Add doctors later from the clinic dashboard — independent doctor registrations cannot join."
-            : "Owners and admins only. Clinic-staff doctors sign in at Doctor Login.",
+            : "Clinic owners, admins, reception, and nursing staff. Doctors added by the clinic use Doctor Login.",
         )}
       </div>
     )

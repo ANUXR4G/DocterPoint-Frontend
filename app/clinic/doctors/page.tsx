@@ -15,6 +15,7 @@ import {
 } from "@/contexts/PracticeDashboardContext"
 import { useAnalytics } from "@/hooks/useAnalysis"
 import { matchesQueueStatusFilter } from "@/lib/bookingStatus"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
 
 type RosterDoctor = {
   id: string
@@ -53,9 +54,7 @@ export default function ClinicDoctorsPage() {
       .filter(
         (m) =>
           m.isActive !== false &&
-          (m.role === "DOCTOR" ||
-            m.role === "PRACTICE_OWNER" ||
-            m.role === "PRACTICE_ADMIN"),
+          isPracticingDoctor(m),
       )
       .map((m) => ({
         id: m.userId,

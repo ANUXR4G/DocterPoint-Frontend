@@ -629,19 +629,17 @@ html.dark body {
   }
 
   .dashboard-main {
-    @apply box-border;
+    @apply box-border flex flex-col;
   }
 
   .dashboard-shell {
     @apply box-border;
   }
 
-  .dashboard-page {
-    @apply mx-auto w-full max-w-6xl space-y-6 pb-8 sm:space-y-7;
-  }
-
+  /* Every signed-in dashboard fills the area beside the sidebar. */
+  .dashboard-page,
   .dashboard-page-wide {
-    @apply mx-auto w-full max-w-[1280px] space-y-6 pb-8 sm:space-y-7;
+    @apply box-border flex min-h-0 w-full max-w-none flex-1 flex-col space-y-6 overflow-y-auto;
   }
 
   /* Shared dashboard CTAs — same language on doctor / clinic / patient / admin */

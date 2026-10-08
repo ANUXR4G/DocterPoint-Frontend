@@ -38,6 +38,7 @@ export default function DoctorRegisterForm({
   const [licenseNo, setLicenseNo] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [phone, setPhone] = useState("")
   const [address, setAddress] = useState("")
   const [city, setCity] = useState("")
@@ -76,6 +77,10 @@ export default function DoctorRegisterForm({
     const fee = Number(consultationFee)
     if (!name.trim() || !licenseNo.trim() || !email.trim() || !password) {
       setError("Fill Dr Name, license number, email, and password.")
+      return
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
       return
     }
     const phoneDigits = phone.replace(/\D/g, "").slice(-10)
@@ -217,6 +222,18 @@ export default function DoctorRegisterForm({
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setPassword(e.target.value)
           }
+          autoComplete="new-password"
+        />
+        <IconInput
+          icon="key"
+          name="confirmPassword"
+          type="password"
+          label="Confirm password *"
+          value={confirmPassword}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setConfirmPassword(e.target.value)
+          }
+          autoComplete="new-password"
         />
         <IconInput
           icon="phone"

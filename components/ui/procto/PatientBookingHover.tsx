@@ -6,7 +6,6 @@ import Link from "next/link"
 import type { ProctoBooking } from "@/lib/services/procto"
 import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
-import { withDrTitle } from "@/lib/doctorName"
 
 function dash(v: string | null | undefined) {
   return v?.trim() ? v : "—"
@@ -124,20 +123,6 @@ export function BookingHoverDetailsPanel({
             <dd className="font-semibold">#{token}</dd>
           </div>
         ) : null}
-        <div className="flex justify-between gap-3">
-          <dt className="opacity-60">Doctor</dt>
-          <dd className="text-right font-semibold">
-            {withDrTitle(booking.provider?.name) || "—"}
-          </dd>
-        </div>
-        {booking.location ? (
-          <div className="flex justify-between gap-3">
-            <dt className="shrink-0 opacity-60">Location</dt>
-            <dd className="text-right font-semibold">
-              {booking.location.name}, {booking.location.city}
-            </dd>
-          </div>
-        ) : null}
         {booking.disease?.trim() &&
         !/^general\s+consultation$/i.test(booking.disease.trim()) ? (
           <div className="flex justify-between gap-3">
@@ -147,18 +132,6 @@ export function BookingHoverDetailsPanel({
             </dd>
           </div>
         ) : null}
-        <div className="flex justify-between gap-3">
-          <dt className="opacity-60">Mode</dt>
-          <dd className="font-semibold">
-            {(booking.mode || "").replace(/_/g, " ") || "—"}
-          </dd>
-        </div>
-        <div className="flex justify-between gap-3">
-          <dt className="opacity-60">Channel</dt>
-          <dd className="font-semibold">
-            {(booking.channel || "").replace(/_/g, " ") || "—"}
-          </dd>
-        </div>
         {docCount > 0 ? (
           <div className="flex justify-between gap-3">
             <dt className="opacity-60">Documents</dt>

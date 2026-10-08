@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ClipboardPlus, Eye, MessageCircle } from "lucide-react"
 import ClinicLogModal from "@/components/ui/procto/ClinicLogModal"
+import type { ClinicLogTab } from "@/components/ui/procto/ClinicLogDocument"
 import { proctoService } from "@/lib/services/procto"
 
 type Props = {
@@ -11,21 +12,25 @@ type Props = {
   enabled: boolean
   /** Match the short queue action buttons. */
   compact?: boolean
+  /** Icon menu on lists, or the three labeled buttons on the visit. */
+  layout?: "menu" | "buttons"
   className?: string
 }
 
 /**
  * Outer-column prescription control for COMPLETED visits:
- * icon → View clinic log | Send to customer (Via WhatsApp).
+ * icon → Preview Rx | Preview Prescription | Send to customer.
  */
 export default function PrescriptionActionsMenu({
   bookingId,
   enabled,
   compact = false,
+  layout = "menu",
   className = "",
 }: Props) {
   const [open, setOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
+  const [previewTab, setPreviewTab] = useState<ClinicLogTab>("visit")
   const [sending, setSending] = useState(false)
   const [notice, setNotice] = useState("")
   const rootRef = useRef<HTMLDivElement>(null)
@@ -41,6 +46,13 @@ export default function PrescriptionActionsMenu({
 
   if (!enabled) return null
 
+  function openPreview(tab: ClinicLogTab) {
+    setPreviewTab(tab)
+    setViewOpen(true)
+    setOpen(false)
+    setNotice("")
+  }
+
   async function sendWhatsApp() {
     setSending(true)
     setNotice("")
@@ -52,6 +64,50 @@ export default function PrescriptionActionsMenu({
       return
     }
     setNotice("Clinic log / prescription sent to patient WhatsApp.")
+  }
+
+  const preview = (
+    <ClinicLogModal
+      open={viewOpen}
+      bookingId={viewOpen ? bookingId : null}
+      initialTab={previewTab}
+      onClose={() => setViewOpen(false)}
+    />
+  )
+
+  if (layout === "buttons") {
+    return (
+      <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+        <button
+          type="button"
+          onClick={() => openPreview("visit")}
+          className="inline-flex h-9 items-center rounded-full border border-teal-600/30 bg-teal-600/10 px-3 text-sm font-semibold text-teal-800 hover:bg-teal-600/20 dark:text-teal-200"
+        >
+          Preview Rx
+        </button>
+        <button
+          type="button"
+          onClick={() => openPreview("prescription")}
+          className="inline-flex h-9 items-center rounded-full border border-sky-600/30 bg-sky-600/10 px-3 text-sm font-semibold text-sky-800 hover:bg-sky-600/20 dark:text-sky-200"
+        >
+          Preview Prescription
+        </button>
+        <button
+          type="button"
+          disabled={sending}
+          onClick={() => void sendWhatsApp()}
+          className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {sending ? "Sending…" : "Send to customer"}
+        </button>
+        {notice ? (
+          <p className="text-xs font-medium text-neutral-600 dark:text-neutral-300" role="status">
+            {notice}
+          </p>
+        ) : null}
+        {preview}
+      </div>
+    )
   }
 
   return (
@@ -82,13 +138,19 @@ export default function PrescriptionActionsMenu({
             type="button"
             role="menuitem"
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:text-neutral-100 dark:hover:bg-neutral-800"
-            onClick={() => {
-              setOpen(false)
-              setViewOpen(true)
-            }}
+            onClick={() => openPreview("visit")}
           >
             <Eye className="size-4 shrink-0 text-teal-600" aria-hidden />
-            View
+            Preview Rx
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:text-neutral-100 dark:hover:bg-neutral-800"
+            onClick={() => openPreview("prescription")}
+          >
+            <Eye className="size-4 shrink-0 text-sky-600" aria-hidden />
+            Preview Prescription
           </button>
           <button
             type="button"
@@ -121,11 +183,7 @@ export default function PrescriptionActionsMenu({
         </p>
       ) : null}
 
-      <ClinicLogModal
-        open={viewOpen}
-        bookingId={viewOpen ? bookingId : null}
-        onClose={() => setViewOpen(false)}
-      />
+      {preview}
     </div>
   )
 }

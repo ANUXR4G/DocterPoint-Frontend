@@ -37,9 +37,34 @@ export type PracticeMembership = {
       userId: string
       role: string
       isActive?: boolean
-      user?: { name?: string | null; email?: string | null }
+      /** Set when this owner also sees patients (Open schedule). */
+      doctorId?: string | null
+      access?: RoleAccess | null
+      user?: {
+        name?: string | null
+        email?: string | null
+        phone?: string | null
+        doctor?: {
+          licenseNo?: string | null
+          specialties?: Array<{ specialty: { id: string; name: string } }>
+        } | null
+      }
     }>
   }
+}
+
+export type RoleAccess = {
+  resourceType?: string
+  licenseExpiry?: string
+  licenseProvider?: string
+  restricted?: boolean
+  deviceIds?: string[]
+  departments?: Array<{
+    department: string
+    subDepartment: string
+    role: string
+    primary: boolean
+  }>
 }
 
 export type PracticePatientRow = {

@@ -6,7 +6,7 @@ import DoctorQueue from "@/components/ui/doctors/pages/DoctorQueue"
 
 export default function DoctorQueuePage() {
   return (
-    <div className="dashboard-page-wide flex h-[calc(100dvh-5.5rem)] min-w-0 flex-col">
+    <div className="dashboard-page-wide min-h-0 min-w-0">
       <DashboardPageHeader
         compact
         eyebrow="Doctor"

@@ -18,6 +18,7 @@ import {
   sortBookingsByWhen,
 } from "@/lib/bookingDisplay"
 import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import EmergencyWalkInModal from "@/components/ui/procto/EmergencyWalkInModal"
 import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
@@ -245,9 +246,7 @@ export default function DoctorAppointmentsList({
       if (
         m.userId &&
         m.isActive !== false &&
-        (m.role === "DOCTOR" ||
-          m.role === "PRACTICE_OWNER" ||
-          m.role === "PRACTICE_ADMIN")
+        isPracticingDoctor(m)
       ) {
         byId.set(
           m.userId,

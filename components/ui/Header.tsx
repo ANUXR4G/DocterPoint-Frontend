@@ -35,10 +35,10 @@ export default function Header({
     <motion.div
       variants={visibleAnimation}
       animate={embedded || !hidden ? "visible" : "hidden"}
-      className={`sticky top-0 z-40 flex w-full min-w-0 shrink-0 items-center px-3 ${
+      className={`sticky top-0 z-40 flex w-full min-w-0 shrink-0 items-center px-0 ${
         embedded
-          ? "bg-[color-mix(in_srgb,var(--solune-canvas)_88%,transparent)] pb-1 pt-1 backdrop-blur-md dark:bg-[color-mix(in_srgb,#0f172a_88%,transparent)] xs:px-4"
-          : "ml-auto pt-2 xs:px-4 md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)]"
+          ? "bg-[color-mix(in_srgb,var(--solune-canvas)_88%,transparent)] pb-1 pt-1 backdrop-blur-md dark:bg-[color-mix(in_srgb,#0f172a_88%,transparent)]"
+          : "ml-auto pt-2 md:w-[calc(100%-72px)] xl:w-[calc(100%-240px)]"
       }`}
     >
       <div className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-full border border-slate-200/80 bg-white/85 px-2 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-800/90 dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)] sm:px-3 ${

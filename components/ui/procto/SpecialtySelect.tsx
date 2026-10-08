@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { proctoService } from "@/lib/services/procto"
+import PasswordField from "@/components/inputs/PasswordField"
 
 export type SpecialtyOption = { id: string; name: string; slug: string }
 
@@ -19,6 +20,8 @@ export function SpecialtySelect({
   const [open, setOpen] = useState(false)
   const [error, setError] = useState("")
   const [adding, setAdding] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [draft, setDraft] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -47,9 +50,13 @@ export function SpecialtySelect({
     setError("")
   }
 
-  async function addNew() {
-    const name = query.trim()
+  async function addNew(nameInput?: string) {
+    const name = (nameInput ?? query).trim()
     if (!name || adding) return
+    if (name.length < 2) {
+      setError("Specialty name must be at least 2 characters.")
+      return
+    }
     setAdding(true)
     setError("")
     const res = await proctoService.createSpecialty(name)
@@ -66,6 +73,8 @@ export function SpecialtySelect({
     )
     if (!value.includes(row.id)) onChange([...value, row.id])
     setQuery("")
+    setDraft("")
+    setCreating(false)
   }
 
   return (
@@ -84,20 +93,67 @@ export function SpecialtySelect({
           ))}
         </div>
       ) : null}
-      <input
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value)
-          setOpen(true)
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => {
-          window.setTimeout(() => setOpen(false), 150)
-        }}
-        placeholder="Search specialties"
-        autoComplete="off"
-        className="w-full rounded-lg border px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-      />
+      <div className="flex gap-2">
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => {
+            window.setTimeout(() => setOpen(false), 150)
+          }}
+          placeholder="Search specialties"
+          autoComplete="off"
+          className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+        />
+        {canAdd ? (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setOpen(false)
+              setError("")
+              setDraft(query.trim())
+              setCreating(true)
+            }}
+            className="shrink-0 rounded-lg border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-500/10"
+          >
+            New specialty
+          </button>
+        ) : null}
+      </div>
+      {creating ? (
+        <div className="mt-2 flex gap-2">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Specialty name"
+            autoComplete="off"
+            className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          />
+          <button
+            type="button"
+            disabled={adding}
+            onClick={() => void addNew(draft)}
+            className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {adding ? "Creating…" : "Create"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCreating(false)
+              setDraft("")
+              setError("")
+            }}
+            className="shrink-0 rounded-lg border px-3 py-2 text-sm font-semibold dark:border-neutral-700"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
       {open ? (
         <ul className="absolute z-30 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
           {filtered.length ? (
@@ -123,7 +179,7 @@ export function SpecialtySelect({
                 type="button"
                 disabled={adding}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => void addNew()}
+                onClick={() => void addNew(query)}
                 className="block w-full px-3 py-2 text-left text-sm font-semibold text-blue-700 hover:bg-slate-50 dark:text-blue-300 dark:hover:bg-white/5"
               >
                 {adding ? "Adding…" : `Add “${query.trim()}”`}
@@ -142,9 +198,9 @@ export function SpecialtySelect({
 }
 
 const STAFF_ROLES = [
-  { value: "PRACTICE_ADMIN", label: "Clinic admin" },
   { value: "RECEPTIONIST", label: "Receptionist" },
   { value: "NURSE", label: "Nurse" },
+  { value: "PRACTICE_ADMIN", label: "Clinic admin" },
 ] as const
 
 export function AddClinicStaff({
@@ -159,6 +215,7 @@ export function AddClinicStaff({
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [phone, setPhone] = useState("")
   const [role, setRole] = useState<(typeof STAFF_ROLES)[number]["value"]>("RECEPTIONIST")
   const [busy, setBusy] = useState(false)
@@ -170,6 +227,10 @@ export function AddClinicStaff({
     setMessage("")
     if (!name.trim() || !email.trim() || password.trim().length < 6) {
       setError("Name, email, and a password of at least 6 characters are required.")
+      return
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
       return
     }
     setBusy(true)
@@ -186,10 +247,13 @@ export function AddClinicStaff({
       return
     }
     const label = STAFF_ROLES.find((r) => r.value === role)?.label ?? "Staff"
-    setMessage(`${name.trim()} added as ${label}. They sign in with Doctor Login.`)
+    setMessage(
+      `${name.trim()} added as ${label}. They sign in at Clinic Login with this email and password.`,
+    )
     setName("")
     setEmail("")
     setPassword("")
+    setConfirmPassword("")
     setPhone("")
     await onCreated?.()
   }
@@ -205,10 +269,10 @@ export function AddClinicStaff({
       }}
     >
       <div className="sm:col-span-2">
-        <h3 className="font-semibold">Add clinic staff</h3>
-        <p className="mt-1 text-xs opacity-60">
-          Clinic admin uses Clinic Login. Receptionist and nurse use Doctor Login.
-          They are not listed as bookable doctors.
+        <h3 className="font-semibold">Add nurse or receptionist</h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Same as a doctor login: name, email, and password. They sign in at
+          Clinic Login. They are not bookable doctors.
         </p>
       </div>
       {error ? (
@@ -227,7 +291,7 @@ export function AddClinicStaff({
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoComplete="off"
-          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
         />
       </label>
       <label className="block text-sm">
@@ -237,7 +301,7 @@ export function AddClinicStaff({
           onChange={(e) =>
             setRole(e.target.value as (typeof STAFF_ROLES)[number]["value"])
           }
-          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
         >
           {STAFF_ROLES.map((r) => (
             <option key={r.value} value={r.value}>
@@ -253,17 +317,24 @@ export function AddClinicStaff({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="off"
-          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
         />
       </label>
       <label className="block text-sm">
         <span className="text-xs opacity-70">Login password * (min 6)</span>
-        <input
-          type="password"
+        <PasswordField
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="new-password"
-          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          onChange={setPassword}
+          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
+        />
+      </label>
+      <label className="block text-sm">
+        <span className="text-xs opacity-70">Confirm password *</span>
+        <PasswordField
+          name="confirmPassword"
+          value={confirmPassword}
+          onChange={setConfirmPassword}
+          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
         />
       </label>
       <label className="block text-sm sm:col-span-2">
@@ -273,7 +344,7 @@ export function AddClinicStaff({
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           autoComplete="off"
-          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
         />
       </label>
       <button
@@ -281,7 +352,7 @@ export function AddClinicStaff({
         disabled={busy}
         className="w-full rounded-lg border border-blue-600 py-2.5 text-sm font-medium text-blue-700 disabled:opacity-50 sm:col-span-2 dark:text-blue-300"
       >
-        {busy ? "Saving…" : "Add staff"}
+        {busy ? "Saving…" : "Create login"}
       </button>
     </form>
   )

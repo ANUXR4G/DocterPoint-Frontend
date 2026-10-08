@@ -5,16 +5,19 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ThinkingLoader } from "@/components"
 import OnboardPracticeWizard from "@/components/ui/procto/OnboardPracticeWizard"
-import { AddClinicStaff, SpecialtySelect } from "@/components/ui/procto/SpecialtySelect"
+import { SpecialtySelect } from "@/components/ui/procto/SpecialtySelect"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import { proctoService } from "@/lib/services/procto"
 import { cookies } from "@/utils/cookies"
 import { providerDashboardFromContext } from "@/lib/providerPortal"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
+import PasswordField from "@/components/inputs/PasswordField"
 
 type Member = {
   userId: string
   role: string
   isActive?: boolean
+  doctorId?: string | null
   user: {
     id: string
     name: string | null
@@ -52,6 +55,7 @@ export default function DoctorsManagePage() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [phone, setPhone] = useState("")
   const [specialtyIds, setSpecialtyIds] = useState<string[]>([])
   const [licenseNo, setLicenseNo] = useState("")
@@ -101,9 +105,13 @@ export default function DoctorsManagePage() {
     membership?.role === "PRACTICE_ADMIN"
 
   const doctors =
-    practice?.members.filter(
-      (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
-    ) ?? []
+    practice?.members.filter((m) => isPracticingDoctor(m)) ?? []
+  const ownerNotDoctor = practice?.members.find(
+    (m) =>
+      m.role === "PRACTICE_OWNER" &&
+      m.isActive !== false &&
+      !m.doctorId,
+  )
 
   useEffect(() => {
     if (!practice?.id) {
@@ -170,6 +178,10 @@ export default function DoctorsManagePage() {
       setError("Password must be at least 6 characters.")
       return
     }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
     if (!specialtyIds.length) {
       setError("Select a specialty from the list.")
       return
@@ -194,6 +206,7 @@ export default function DoctorsManagePage() {
     setName("")
     setEmail("")
     setPassword("")
+    setConfirmPassword("")
     setPhone("")
     setSpecialtyIds([])
     setLicenseNo("")
@@ -221,7 +234,7 @@ export default function DoctorsManagePage() {
 
   if (loading) {
     return (
-      <div className="mx-auto flex h-[calc(100dvh-5.5rem)] max-w-5xl items-center justify-center">
+      <div className="flex h-full min-h-0 w-full items-center justify-center">
         <ThinkingLoader size={64} state="working" label="Loading doctors" />
       </div>
     )
@@ -229,7 +242,7 @@ export default function DoctorsManagePage() {
 
   if (!memberships.length) {
     return (
-      <div className="mx-auto flex h-[calc(100dvh-5.5rem)] max-w-3xl flex-col">
+      <div className="flex h-full min-h-0 w-full flex-col">
         <div className="mb-5 shrink-0">
           <p className="ml-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--theme-primary)]">
             Setup
@@ -247,7 +260,7 @@ export default function DoctorsManagePage() {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-5.5rem)] max-w-5xl flex-col">
+    <div className="flex h-full min-h-0 w-full flex-col">
       <div className="mb-5 flex shrink-0 flex-wrap items-end justify-between gap-3">
         <div>
           <p className="ml-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--theme-primary)]">
@@ -296,6 +309,27 @@ export default function DoctorsManagePage() {
               {doctors.length}
             </span>
           </div>
+
+          {ownerNotDoctor ? (
+            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm dark:border-amber-900 dark:bg-amber-950/40">
+              <p className="font-semibold">
+                {ownerNotDoctor.user.name || "Clinic owner"} is the clinic owner, not a doctor.
+              </p>
+              <p className="mt-1 text-xs opacity-70">
+                They are not on the booking list until you open a schedule.
+              </p>
+              {canManage ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void openOwnerSchedule(ownerNotDoctor.userId)}
+                  className="mt-2 rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  Open schedule
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             {doctors.map((m) => (
@@ -417,12 +451,17 @@ export default function DoctorsManagePage() {
                 onChange={(e) => setEmail(e.target.value)}
                 className={fieldClass}
               />
-              <input
+              <PasswordField
                 placeholder="Login password *"
-                type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
+                onChange={setPassword}
+                className={fieldClass}
+              />
+              <PasswordField
+                name="confirmPassword"
+                placeholder="Confirm password *"
+                value={confirmPassword}
+                onChange={setConfirmPassword}
                 className={fieldClass}
               />
               <input
@@ -454,13 +493,6 @@ export default function DoctorsManagePage() {
               </button>
             </div>
           )}
-          {practice ? (
-            <AddClinicStaff
-              practiceId={practice.id}
-              canManage={canManage}
-              onCreated={load}
-            />
-          ) : null}
         </section>
       </div>
     </div>

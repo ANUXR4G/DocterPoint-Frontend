@@ -130,6 +130,8 @@ export default function RoleAuthForm({
   const [mode, setMode] = useState<AuthMode>(resolvedInitialMode)
   const [authSuccess, setAuthSuccess] = useState(false)
   const [name, setName] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [confirmError, setConfirmError] = useState("")
   const [submitAttempted, setSubmitAttempted] = useState(false)
 
   function switchMode(next: AuthMode) {
@@ -346,6 +348,11 @@ export default function RoleAuthForm({
             onSubmit={(e) => {
               e.preventDefault()
               setSubmitAttempted(true)
+              if (mode === "register" && values.password !== confirmPassword) {
+                setConfirmError("Passwords do not match.")
+                return
+              }
+              setConfirmError("")
               handleSubmit()
             }}
           >
@@ -378,7 +385,23 @@ export default function RoleAuthForm({
               onChange={handleChange}
               onBlur={handleBlur}
               error={submitAttempted ? errors.password : undefined}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
+            {mode === "register" ? (
+              <IconInput
+                icon="key"
+                name="confirmPassword"
+                type="password"
+                label="Confirm password"
+                value={confirmPassword}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setConfirmPassword(e.target.value)
+                  setConfirmError("")
+                }}
+                error={confirmError || undefined}
+                autoComplete="new-password"
+              />
+            ) : null}
 
             {errorMessage && (
               <motion.div

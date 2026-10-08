@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { consultationTypeLabel } from "@/lib/bookingDisplay"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
 import {
   formatPracticeDateTime,
   formatPracticeTime,
@@ -285,11 +286,14 @@ function canMoveBooking(b: CalBooking) {
 function BookingCard({
   booking,
   compact = false,
+  fill = false,
   onCut,
   onActivate,
 }: {
   booking: CalBooking
   compact?: boolean
+  /** Stretch to a timed day-grid slot. Week and month chips stay content-sized. */
+  fill?: boolean
   onCut?: () => void
   onActivate?: () => void
 }) {
@@ -298,6 +302,8 @@ function BookingCard({
   const [menu, setMenu] = useState<{ top: number; left: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  /** Cut / the actions menu must not also open the booking details popup. */
+  const suppressOpen = useRef(false)
 
   function show() {
     const el = ref.current
@@ -362,11 +368,16 @@ function BookingCard({
   return (
     <div
       ref={ref}
-      className="relative h-full"
+      className={`relative ${fill ? "h-full" : ""}`}
       onContextMenu={(e) => {
         if (!onCut) return
         e.preventDefault()
         e.stopPropagation()
+        suppressOpen.current = true
+        window.setTimeout(() => {
+          suppressOpen.current = false
+        }, 0)
+        setOpen(false)
         setMenu({ top: e.clientY, left: e.clientX })
       }}
     >
@@ -376,6 +387,10 @@ function BookingCard({
         aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation()
+          if (suppressOpen.current) {
+            suppressOpen.current = false
+            return
+          }
           onActivate?.()
           if (open) setOpen(false)
           else show()
@@ -383,7 +398,7 @@ function BookingCard({
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") e.stopPropagation()
         }}
-        className={`block h-full w-full rounded-lg border text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${statusClass(booking.status)} ${
+        className={`block w-full rounded-lg border text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${fill ? "h-full" : ""} ${statusClass(booking.status)} ${
           compact ? "px-1.5 py-1" : "px-2.5 py-2"
         } ${open ? "ring-2 ring-[var(--theme-primary)] ring-offset-1 dark:ring-offset-neutral-900" : ""}`}
       >
@@ -422,8 +437,19 @@ function BookingCard({
           onClick={(e) => {
             e.stopPropagation()
             e.preventDefault()
+            suppressOpen.current = true
+            window.setTimeout(() => {
+              suppressOpen.current = false
+            }, 0)
+            setOpen(false)
             const r = e.currentTarget.getBoundingClientRect()
-            setMenu({ top: r.bottom + 4, left: Math.max(8, r.right - 180) })
+            const menuH = 48
+            const below = r.bottom + 4
+            const top =
+              below + menuH > window.innerHeight - 8
+                ? Math.max(8, r.top - menuH - 4)
+                : below
+            setMenu({ top, left: Math.max(8, r.right - 180) })
           }}
         >
           ⋮
@@ -441,10 +467,21 @@ function BookingCard({
                 type="button"
                 role="menuitem"
                 className="block w-full rounded-lg px-3 py-2 text-left font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                onClick={(e) => {
+                onMouseDown={(e) => {
+                  e.preventDefault()
                   e.stopPropagation()
-                  setMenu(null)
+                  suppressOpen.current = true
+                }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  suppressOpen.current = true
+                  window.setTimeout(() => {
+                    suppressOpen.current = false
+                  }, 0)
+                  setOpen(false)
                   onCut?.()
+                  setMenu(null)
                 }}
               >
                 Cut appointment
@@ -589,9 +626,7 @@ export default function AppointmentCalendar() {
       .filter(
         (m) =>
           m.isActive !== false &&
-          (m.role === "DOCTOR" ||
-            m.role === "PRACTICE_OWNER" ||
-            m.user?.doctor),
+          isPracticingDoctor(m),
       )
       .map((m) => ({
         id: m.userId || m.user.id,
@@ -1332,6 +1367,7 @@ function DayView({
           <BookingCard
             booking={b}
             compact
+            fill
             onActivate={() => onActivate(b.id)}
             onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
           />
@@ -1417,6 +1453,7 @@ function WeekView({
                   <BookingCard
                     key={b.id}
                     booking={b}
+                    compact
                     onActivate={() => onActivate(b.id)}
                     onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
                   />

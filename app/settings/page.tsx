@@ -210,6 +210,7 @@ type Membership = {
     scheduleNoticeHours?: number | null
     whatsappBusinessNumber?: string | null
     bgSrc?: string | null
+    stampSrc?: string | null
     locations: { id: string; name: string; address: string; city: string }[]
     members: Array<{
       userId: string
@@ -221,6 +222,7 @@ type Membership = {
         imgSrc?: string | null
         doctor?: {
           licenseNo: string | null
+          stampSrc?: string | null
           appointmentValidityDays: number
           description?: string | null
         } | null
@@ -377,6 +379,43 @@ function PhotoSettings({
                 membership.practice.id,
                 { bgSrc: url },
               )
+              if (res.status !== "successful") {
+                return { ok: false, message: res.message }
+              }
+              await refresh()
+              return { ok: true }
+            }}
+          />
+        ) : null}
+        {showLogo ? (
+          <ProfilePhotoField
+            label="Clinic stamp"
+            hint="Printed at the bottom of every prescription from this clinic."
+            src={membership.practice.stampSrc}
+            name={membership.practice.name}
+            shape="square"
+            onSave={async (url) => {
+              const res = await proctoService.updatePracticeProfile(
+                membership.practice.id,
+                { stampSrc: url },
+              )
+              if (res.status !== "successful") {
+                return { ok: false, message: res.message }
+              }
+              await refresh()
+              return { ok: true }
+            }}
+          />
+        ) : null}
+        {me?.doctor ? (
+          <ProfilePhotoField
+            label="Doctor stamp"
+            hint="Printed at the bottom of prescriptions for your visits."
+            src={me.doctor.stampSrc}
+            name={me.name}
+            shape="square"
+            onSave={async (url) => {
+              const res = await proctoService.updateMyStamp(url)
               if (res.status !== "successful") {
                 return { ok: false, message: res.message }
               }

@@ -39,6 +39,7 @@ export default function ClinicRegisterForm({
   const [telNo, setTelNo] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [plans, setPlans] = useState<ClinicPlan[]>([])
   const [selectedPlanId, setSelectedPlanId] = useState<string>("")
   const [plansLoading, setPlansLoading] = useState(true)
@@ -86,6 +87,10 @@ export default function ClinicRegisterForm({
       !password
     ) {
       setError("Fill Clinic Name, Address, Reg No, Tel, Email, and password.")
+      return
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
       return
     }
     if (!Number.isFinite(fee) || fee <= 0) {
@@ -253,6 +258,18 @@ export default function ClinicRegisterForm({
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             setPassword(e.target.value)
           }
+          autoComplete="new-password"
+        />
+        <IconInput
+          icon="key"
+          name="confirmPassword"
+          type="password"
+          label="Confirm password *"
+          value={confirmPassword}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setConfirmPassword(e.target.value)
+          }
+          autoComplete="new-password"
         />
       </div>
 

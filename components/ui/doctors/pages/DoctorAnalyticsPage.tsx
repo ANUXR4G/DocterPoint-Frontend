@@ -9,6 +9,7 @@ import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import { TypeAnalyticsParam } from "@/types"
 import { useAnalytics } from "@/hooks/useAnalysis"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
 import { AnalyticsPeriodFilter } from "@/components/charts/DoctorCharts"
 
 const DoctorAnalyticsChartPanel = dynamic(
@@ -79,9 +80,7 @@ export default function DoctorAnalyticsPage({
     for (const m of members) {
       if (
         m.isActive === false ||
-        (m.role !== "DOCTOR" &&
-          m.role !== "PRACTICE_OWNER" &&
-          m.role !== "PRACTICE_ADMIN")
+        !isPracticingDoctor(m)
       ) {
         continue
       }

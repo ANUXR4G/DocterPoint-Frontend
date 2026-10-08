@@ -149,17 +149,6 @@ function viaLabel(p: PracticePatientRow) {
   return p.bookingCount > 0 ? "Booked via" : "Phone"
 }
 
-function RegisteredBadge() {
-  return (
-    <span
-      className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
-      title="Registered — no appointment yet"
-    >
-      Registered
-    </span>
-  )
-}
-
 function genderTone(gender?: string | null) {
   const g = (gender || "").toLowerCase()
   if (g === "female") {
@@ -267,8 +256,8 @@ export default function DoctorPatientsList() {
   }
 
   return (
-    <>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-base font-bold text-neutral-900 dark:text-white">
           {practiceName} · {filtered.length} patient
           {filtered.length === 1 ? "" : "s"}
@@ -278,7 +267,7 @@ export default function DoctorPatientsList() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search name, phone, disease…"
-          className="form-input w-full rounded-xl border border-neutral-300 px-4 py-2.5 text-sm dark:border-neutral-600 sm:max-w-xs"
+          className="form-input w-full rounded-xl border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-600 sm:max-w-xs"
         />
       </div>
 
@@ -286,13 +275,13 @@ export default function DoctorPatientsList() {
         value={statusFilter}
         onChange={setStatusFilter}
         statuses={patients.map((p) => p.lastStatus)}
-        className="mb-4"
+        className="mb-2 shrink-0"
         ariaLabel="Filter patients by last visit status"
       />
 
       {filtered.length > 0 ? (
-        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
-          <ul className="divide-y divide-neutral-200 md:hidden dark:divide-neutral-700">
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
+          <ul className="min-h-0 flex-1 divide-y divide-neutral-200 overflow-y-auto md:hidden dark:divide-neutral-700">
             {filtered.map((p, index) => {
               const key = patientRowKey(p, index)
               const open = expanded === key
@@ -339,15 +328,6 @@ export default function DoctorPatientsList() {
                         patientName={p.name}
                         onOpen={() => setDocsPatient(p)}
                       />
-                      {p.lastStatus ? (
-                        <span
-                          className={`rounded px-2 py-0.5 text-xs font-semibold ${statusClass(p.lastStatus)}`}
-                        >
-                          {bookingStatusLabel(p.lastStatus)}
-                        </span>
-                      ) : (
-                        <RegisteredBadge />
-                      )}
                     </div>
                   </div>
                   <button
@@ -473,21 +453,20 @@ export default function DoctorPatientsList() {
             })}
           </ul>
 
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-              <thead className="bg-neutral-100 text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+          <div className="hidden min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto md:block">
+            <table className="w-full table-fixed border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-neutral-100 text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                 <tr>
-                  <th className="px-4 py-3">Member</th>
-                  <th className="whitespace-nowrap px-4 py-3">MRN</th>
-                  <th className="whitespace-nowrap px-4 py-3">Booked via</th>
-                  <th className="whitespace-nowrap px-4 py-3">Age</th>
-                  <th className="whitespace-nowrap px-4 py-3">Gender</th>
-                  <th className="whitespace-nowrap px-4 py-3">Visits</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-center">
+                  <th className="w-[18%] px-3 py-1.5">Member</th>
+                  <th className="w-[14%] px-3 py-1.5">MRN</th>
+                  <th className="w-[16%] px-3 py-1.5">Booked via</th>
+                  <th className="w-[6%] px-3 py-1.5">Age</th>
+                  <th className="w-[10%] px-3 py-1.5">Gender</th>
+                  <th className="w-[7%] px-3 py-1.5">Visits</th>
+                  <th className="w-[16%] px-3 py-1.5 text-center">
                     Attachments
                   </th>
-                  <th className="whitespace-nowrap px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Details</th>
+                  <th className="w-[13%] px-3 py-1.5 text-right">Details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
@@ -498,12 +477,12 @@ export default function DoctorPatientsList() {
                   return (
                     <Fragment key={key}>
                       <tr className="bg-white dark:bg-neutral-900/40">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
+                        <td className="overflow-hidden px-3 py-1">
+                          <div className="flex items-center gap-2">
                             <PatientAvatar
                               name={p.name}
                               imgSrc={p.imgSrc}
-                              size="md"
+                              size="sm"
                             />
                             <div className="min-w-0">
                               <p className="truncate font-semibold">
@@ -521,44 +500,33 @@ export default function DoctorPatientsList() {
                             </div>
                           </div>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums tracking-wide">
-                          {p.mrn?.trim() || "—"}
+                        <td className="overflow-hidden px-3 py-1 font-semibold tabular-nums tracking-wide">
+                          <div className="truncate">{p.mrn?.trim() || "—"}</div>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 font-medium">
-                          {via}
+                        <td className="overflow-hidden px-3 py-1 font-medium">
+                          <div className="truncate">{via}</div>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3">
+                        <td className="overflow-hidden px-3 py-1">
                           {ageFromDob(p.dateOfBirth, p.age)}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="overflow-hidden px-3 py-1">
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${genderTone(p.gender)}`}
                           >
                             {genderLabel(p.gender)}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3">
+                        <td className="overflow-hidden px-3 py-1">
                           {p.bookingCount}
                         </td>
-                        <td className="px-4 py-3 text-center align-middle">
+                        <td className="overflow-hidden px-3 py-1 text-center align-middle">
                           <AttachmentsIconButton
                             attachments={patientAttachments(p)}
                             patientName={p.name}
                             onOpen={() => setDocsPatient(p)}
                           />
                         </td>
-                        <td className="px-4 py-3">
-                          {p.lastStatus ? (
-                            <span
-                              className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${statusClass(p.lastStatus)}`}
-                            >
-                              {bookingStatusLabel(p.lastStatus)}
-                            </span>
-                          ) : (
-                            <RegisteredBadge />
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="overflow-hidden px-3 py-1 text-right">
                           <button
                             type="button"
                             onClick={() =>
@@ -572,7 +540,7 @@ export default function DoctorPatientsList() {
                       </tr>
                       {open ? (
                         <tr className="bg-neutral-50 dark:bg-neutral-950/40">
-                          <td colSpan={9} className="px-4 py-4">
+                          <td colSpan={8} className="px-4 py-4">
                             <div className="grid gap-3 text-xs sm:grid-cols-2">
                               <p>
                                 <span className="opacity-50">Member: </span>
@@ -706,6 +674,6 @@ export default function DoctorPatientsList() {
         documents={docsPatient ? patientAttachments(docsPatient) : []}
         onClose={() => setDocsPatient(null)}
       />
-    </>
+    </div>
   )
 }
