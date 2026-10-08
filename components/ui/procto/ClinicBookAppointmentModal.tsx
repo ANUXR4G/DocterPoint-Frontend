@@ -7,6 +7,7 @@ import DeskPatientPicker from "@/components/ui/procto/DeskPatientPicker"
 import {
   formatPracticeTime,
   practiceMinutesOfDay,
+  practiceSlotStartIso,
   practiceTodayIso,
 } from "@/lib/practiceTime"
 import {
@@ -19,6 +20,8 @@ export type ClinicBookPrefill = {
   date?: string
   /** Minutes from midnight in practice timezone (calendar click). */
   startMinutes?: number
+  /** End of a dragged or shift-clicked block. One slot when omitted. */
+  endMinutes?: number
 }
 
 type Props = {
@@ -195,6 +198,19 @@ export default function ClinicBookAppointmentModal({
     if (hit) setSelectedSlot(hit.start)
   }, [open, mode, openSlots, prefill?.startMinutes])
 
+  const blockMinutes = useMemo(() => {
+    if (
+      prefill?.startMinutes == null ||
+      prefill.endMinutes == null ||
+      prefill.endMinutes <= prefill.startMinutes ||
+      !selectedSlot
+    ) {
+      return 0
+    }
+    if (practiceMinutesOfDay(selectedSlot) !== prefill.startMinutes) return 0
+    return prefill.endMinutes - prefill.startMinutes
+  }, [prefill?.startMinutes, prefill?.endMinutes, selectedSlot])
+
   async function submit() {
     if (!practiceId || !providerId || !locationId) {
       setMessage("Select doctor and location.")
@@ -234,7 +250,11 @@ export default function ClinicBookAppointmentModal({
       patientPhone: patient.phone,
     }
     if (disease.trim()) body.disease = disease.trim()
-    if (mode === "TIME_BASED" && selectedSlot) body.slotStart = selectedSlot
+    if (mode === "TIME_BASED" && selectedSlot) {
+      body.slotStart = selectedSlot
+      const span = blockMinutes
+      if (span > 0) body.durationMinutes = span
+    }
     if (mode === "TOKEN_BASED") body.sessionDate = date
 
     const res = await proctoService.createBooking(body)
@@ -383,6 +403,17 @@ export default function ClinicBookAppointmentModal({
         ) : mode === "TIME_BASED" ? (
           <div>
             <p className="font-semibold">Time</p>
+            {blockMinutes > 0 && prefill?.startMinutes != null ? (
+              <p className="mt-1 text-xs font-semibold text-[var(--theme-primary)]">
+                {blockMinutes} min ·{" "}
+                {formatPracticeTime(practiceSlotStartIso(date, prefill.startMinutes))}
+                –
+                {formatPracticeTime(
+                  practiceSlotStartIso(date, prefill.startMinutes + blockMinutes),
+                )}
+                . One appointment holds every slot in this block.
+              </p>
+            ) : null}
             {openSlots.length === 0 ? (
               <p className="mt-1 text-neutral-500">
                 No open slots on this date.
@@ -392,6 +423,12 @@ export default function ClinicBookAppointmentModal({
                 {openSlots.map((s) => {
                   const label = formatPracticeTime(s.start)
                   const active = selectedSlot === s.start
+                  const mins = practiceMinutesOfDay(s.start)
+                  const inBlock =
+                    blockMinutes > 0 &&
+                    prefill?.startMinutes != null &&
+                    mins >= prefill.startMinutes &&
+                    mins < prefill.startMinutes + blockMinutes
                   return (
                     <button
                       key={s.start}
@@ -399,7 +436,9 @@ export default function ClinicBookAppointmentModal({
                       className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
                         active
                           ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-black"
-                          : "border-neutral-300 dark:border-neutral-600"
+                          : inBlock
+                            ? "border-[var(--theme-primary)] bg-[var(--theme-primary)]/10 text-[var(--theme-primary)]"
+                            : "border-neutral-300 dark:border-neutral-600"
                       }`}
                       onClick={() => setSelectedSlot(s.start)}
                     >

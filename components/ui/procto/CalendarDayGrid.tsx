@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import type { DayWindows, TimeWindow } from "@/lib/services/procto"
 import { practiceMinutesOfDay } from "@/lib/practiceTime"
 import {
@@ -80,6 +81,8 @@ export default function CalendarDayGrid({
   selection,
   onQuickCreate,
   onBookSlot,
+  onMoveBooking,
+  canDragBooking,
   onRemoveExtra,
   freshIds,
   renderBooking,
@@ -96,6 +99,15 @@ export default function CalendarDayGrid({
   onQuickCreate: (req: QuickSlotRequest) => void
   /** Left-click / drag empty gap → desk book. Right-click → onQuickCreate. */
   onBookSlot?: (req: QuickSlotRequest) => void
+  /** Drop an appointment card on another time or doctor column (same day). */
+  onMoveBooking?: (move: {
+    bookingId: string
+    providerId: string
+    start: number
+    date: string
+  }) => void
+  /** Upcoming timed visits only. Omitted → every card can be dragged when onMoveBooking is set. */
+  canDragBooking?: (bookingId: string) => boolean
   onRemoveExtra: (
     providerId: string,
     extra: TimeWindow & { id: string },
@@ -118,6 +130,21 @@ export default function CalendarDayGrid({
   const dragRef = useRef<Drag | null>(null)
   const [dragging, setDragging] = useState(false)
   const [dragSel, setDragSel] = useState<Selection>(null)
+  const lastPick = useRef<{ providerId: string; start: number; end: number } | null>(
+    null,
+  )
+  const [shiftSel, setShiftSel] = useState<Selection>(null)
+  const cardDrag = useRef<{
+    bookingId: string
+    providerId: string
+    startMin: number
+    pointerId: number
+    originX: number
+    originY: number
+    moved: boolean
+  } | null>(null)
+  const suppressClick = useRef(false)
+  const [cardGhost, setCardGhost] = useState<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     if (!isToday) return
@@ -389,14 +416,121 @@ export default function CalendarDayGrid({
     const el = e.currentTarget
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
     endDrag()
-    const start =
+    let start =
       drag.moved && drag.sel ? drag.sel.start : drag.anchor
-    const end =
+    let end =
       drag.moved && drag.sel
         ? drag.sel.end
         : Math.min(drag.gap.to, drag.anchor + drag.interval)
+    const prev = lastPick.current
+    if (e.shiftKey && !drag.moved) {
+      if (
+        prev?.providerId === providerId &&
+        prev.start >= drag.gap.from &&
+        prev.end <= drag.gap.to
+      ) {
+        start = Math.min(prev.start, start)
+        end = Math.max(prev.end, end)
+        lastPick.current = { providerId, start, end }
+        setShiftSel(null)
+        if (onBookSlot) openBook(el, providerId, start, end)
+        return
+      }
+      lastPick.current = { providerId, start, end }
+      setShiftSel({ providerId, start, end })
+      return
+    }
+    lastPick.current = { providerId, start, end }
+    setShiftSel(null)
     // Left-click / drag → book patient; extend schedule is right-click / + Slot.
     if (onBookSlot) openBook(el, providerId, start, end)
+  }
+
+  function columnAt(x: number, y: number) {
+    const hit = document
+      .elementsFromPoint(x, y)
+      .map((node) => (node as HTMLElement).closest?.("[data-cal-col]"))
+      .find(Boolean) as HTMLElement | undefined
+    if (!hit?.dataset.calCol) return null
+    return { providerId: hit.dataset.calCol, el: hit }
+  }
+
+  function snapDrop(providerId: string, el: HTMLElement, clientY: number) {
+    const w = windows[providerId]
+    if (!w || w.dayOff || w.mode === "TOKEN_BASED") return null
+    const min = minAt(el, clientY)
+    const schedule = [...w.hours, ...w.extra]
+      .map((win) => [toMin(win.start), toMin(win.end)] as [number, number])
+      .filter(([s, e]) => !Number.isNaN(s) && !Number.isNaN(e))
+    const win = schedule.find(([s, e]) => min >= s && min < e)
+    if (!win) return null
+    const snap = snapMinutes(w.slotIntervalMin)
+    const latest = win[1] - w.slotIntervalMin
+    if (latest < win[0]) return null
+    const start = Math.max(win[0], Math.min(Math.floor(min / snap) * snap, latest))
+    if (isPast) return null
+    if (isToday && start <= nowMin) return null
+    return start
+  }
+
+  function beginCardDrag(
+    e: React.PointerEvent<HTMLDivElement>,
+    booking: GridBooking,
+    startMin: number,
+  ) {
+    if (!onMoveBooking || e.button !== 0) return
+    if (canDragBooking && !canDragBooking(booking.id)) return
+    if ((e.target as HTMLElement).closest("[data-cal-menu]")) return
+    cardDrag.current = {
+      bookingId: booking.id,
+      providerId: booking.providerId,
+      startMin,
+      pointerId: e.pointerId,
+      originX: e.clientX,
+      originY: e.clientY,
+      moved: false,
+    }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // Pointer already released.
+    }
+  }
+
+  function moveCardDrag(e: React.PointerEvent<HTMLDivElement>, bookingId: string) {
+    const drag = cardDrag.current
+    if (!drag || drag.bookingId !== bookingId || drag.pointerId !== e.pointerId) return
+    if (
+      !drag.moved &&
+      Math.hypot(e.clientX - drag.originX, e.clientY - drag.originY) < 6
+    ) {
+      return
+    }
+    drag.moved = true
+    setCardGhost({ x: e.clientX, y: e.clientY })
+  }
+
+  function endCardDrag(e: React.PointerEvent<HTMLDivElement>, bookingId: string) {
+    const drag = cardDrag.current
+    if (!drag || drag.bookingId !== bookingId || drag.pointerId !== e.pointerId) return
+    cardDrag.current = null
+    setCardGhost(null)
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    if (!drag.moved || !onMoveBooking) return
+    suppressClick.current = true
+    const hit = columnAt(e.clientX, e.clientY)
+    if (!hit) return
+    const start = snapDrop(hit.providerId, hit.el, e.clientY)
+    if (start == null) return
+    if (hit.providerId === drag.providerId && start === drag.startMin) return
+    onMoveBooking({
+      bookingId,
+      providerId: hit.providerId,
+      start,
+      date: dateIso,
+    })
   }
 
   function onContextMenu(
@@ -510,14 +644,17 @@ export default function CalendarDayGrid({
               const sel =
                 dragSel?.providerId === c.id
                   ? dragSel
-                  : selection?.providerId === c.id
-                    ? selection
-                    : null
+                  : shiftSel?.providerId === c.id
+                    ? shiftSel
+                    : selection?.providerId === c.id
+                      ? selection
+                      : null
               const ghost =
                 !dragging && !sel && hover?.providerId === c.id ? hover : null
               return (
                 <div
                   key={c.id}
+                  data-cal-col={c.id}
                   className={`relative min-w-[220px] flex-1 select-none border-l border-neutral-200 dark:border-neutral-700 ${
                     canBook && onBookSlot ? "cursor-pointer" : can ? "cursor-crosshair" : ""
                   }`}
@@ -729,12 +866,25 @@ export default function CalendarDayGrid({
                     <div
                       key={b.id}
                       data-cal-item
-                      className="absolute z-10 px-0.5"
+                      className={`absolute z-10 px-0.5 ${
+                        onMoveBooking && (!canDragBooking || canDragBooking(b.id))
+                          ? "cursor-grab active:cursor-grabbing"
+                          : ""
+                      }`}
                       style={{
                         top: y(s),
                         height: Math.max(MIN_CARD_PX, (e - s) * PX_PER_MIN),
                         left: `${(lane / lanes) * 100}%`,
                         width: `${100 / lanes}%`,
+                      }}
+                      onPointerDown={(ev) => beginCardDrag(ev, b, s)}
+                      onPointerMove={(ev) => moveCardDrag(ev, b.id)}
+                      onPointerUp={(ev) => endCardDrag(ev, b.id)}
+                      onClickCapture={(ev) => {
+                        if (!suppressClick.current) return
+                        suppressClick.current = false
+                        ev.preventDefault()
+                        ev.stopPropagation()
                       }}
                     >
                       {renderBooking(b.id)}
@@ -747,6 +897,17 @@ export default function CalendarDayGrid({
         </div>
         {footer}
       </div>
+      {cardGhost
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-[80] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[var(--theme-primary)] bg-white px-2 py-1 text-xs font-bold text-[var(--theme-primary)] shadow-lg dark:bg-neutral-900"
+              style={{ left: cardGhost.x, top: cardGhost.y }}
+            >
+              Move appointment
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
