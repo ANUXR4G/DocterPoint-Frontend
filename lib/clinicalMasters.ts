@@ -402,3 +402,74 @@ export function normalizeClinicalAssessment(
     savedAt: o.savedAt ? String(o.savedAt) : null,
   };
 }
+
+const VITAL_LABELS: Array<[string, string]> = [
+  ["ht", "Ht"],
+  ["wt", "Wt"],
+  ["bmi", "BMI"],
+  ["temp", "Temp"],
+  ["pr", "PR"],
+  ["rr", "Resp"],
+  ["spo2", "SpO2"],
+  ["rbs", "RBS"],
+  ["hc", "HC"],
+];
+
+function numText(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "";
+  return String(v);
+}
+
+/** Short lines for the patient record: vitals, allergies, pain, prescription. */
+export function chartSummaryLines(
+  raw: unknown,
+  medicines?: unknown,
+): { vitals: string; allergies: string; pain: string; prescription: string } {
+  const chart = normalizeClinicalAssessment(raw);
+  const values = chart?.vitals?.values ?? {};
+  const vitalBits = VITAL_LABELS.map(([key, label]) => {
+    const text = numText(values[key]);
+    return text ? `${label} ${text}` : "";
+  }).filter(Boolean);
+  const sys = numText(values.bp_sys);
+  const dia = numText(values.bp_dia);
+  if (sys || dia) vitalBits.push(`BP ${sys && dia ? `${sys}/${dia}` : sys || dia}`);
+
+  let allergies = "Not recorded";
+  if (chart?.noKnownAllergies) allergies = "No known allergies";
+  else {
+    const names = (chart?.allergies ?? [])
+      .map((row) => row.name?.trim())
+      .filter(Boolean);
+    if (names.length) allergies = names.join(", ");
+  }
+
+  const painRows = (chart?.pain ?? []).filter(
+    (row) => row.scale?.trim() || row.score?.trim() || row.location?.trim(),
+  );
+  const pain = painRows.length
+    ? painRows
+        .map((row) =>
+          [row.scale, row.score, row.location].filter(Boolean).join(" · "),
+        )
+        .join("; ")
+    : "Not recorded";
+
+  const meds = Array.isArray(medicines)
+    ? medicines
+        .map((row) => {
+          if (!row || typeof row !== "object") return "";
+          const name = String((row as { name?: string }).name || "").trim();
+          const amount = String((row as { amount?: string }).amount || "").trim();
+          return [name, amount].filter(Boolean).join(" ");
+        })
+        .filter(Boolean)
+    : [];
+
+  return {
+    vitals: vitalBits.length ? vitalBits.join(" · ") : "Not recorded",
+    allergies,
+    pain,
+    prescription: meds.length ? meds.join(", ") : "None yet",
+  };
+}
