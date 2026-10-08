@@ -36,6 +36,7 @@ import {
   timeSlotsForProviderDay,
 } from "./slotEngine.js";
 import { arrivalPatch } from "./bookingArrival.js";
+import { assertVisitStatusMove } from "./bookingStatusFlow.js";
 import { loadSchedulesOn, localDayOfSessionDate } from "./scheduleVersions.js";
 import { NotificationService } from "./notification.service.js";
 import { broadcastProctoEvent, serializeBooking } from "./proctoSocket.js";
@@ -787,14 +788,20 @@ export const BookingService = {
       return existing;
     }
 
+    assertVisitStatusMove(existing.status, normalized, "status");
+
+    const closeReason =
+      (normalized === BookingStatus.CANCELED || normalized === BookingStatus.NO_SHOW) &&
+      opts?.cancelReason
+        ? opts.cancelReason.slice(0, 250)
+        : undefined;
+
     const updated = await prisma.practiceBooking.update({
       where: { id: bookingId },
       data: {
         status: normalized,
         ...arrivalPatch(existing.arrivedAt, normalized),
-        ...(normalized === BookingStatus.CANCELED && opts?.cancelReason
-          ? { cancelReason: opts.cancelReason.slice(0, 250) }
-          : {}),
+        ...(closeReason ? { cancelReason: closeReason } : {}),
       },
     });
 
@@ -1399,14 +1406,35 @@ export const BookingService = {
       data.documents !== undefined
         ? normalizeBookingDocuments(data.documents)
         : undefined;
-    const { normalizeClinicalAssessment } = await import(
+    const { normalizeClinicalAssessment, clinicalAssessmentBody } = await import(
       "../../lib/clinicalMasters.js"
     );
+    const previousAssessment =
+      data.clinicalAssessment !== undefined
+        ? normalizeClinicalAssessment(existing.clinicalAssessment)
+        : null;
+    const clinicalChanged =
+      data.clinicalAssessment !== undefined &&
+      clinicalAssessmentBody(data.clinicalAssessment) !==
+        clinicalAssessmentBody(existing.clinicalAssessment);
+    const savedAtIso = new Date().toISOString();
     const clinicalAssessment =
       data.clinicalAssessment !== undefined
-        ? normalizeClinicalAssessment(data.clinicalAssessment)
+        ? data.clinicalAssessment == null
+          ? null
+          : {
+              ...normalizeClinicalAssessment(data.clinicalAssessment),
+              savedAt: clinicalChanged
+                ? savedAtIso
+                : previousAssessment?.savedAt ||
+                  previousAssessment?.vitals?.recordedAt ||
+                  null,
+            }
         : undefined;
     const nextStatus = data.status ? parseBookingStatus(data.status) : undefined;
+    if (nextStatus && nextStatus !== existing.status) {
+      assertVisitStatusMove(existing.status, nextStatus, "visit");
+    }
 
     const prevMedsKey = JSON.stringify(existing.medicines ?? []);
     const nextMedsKey = JSON.stringify(medicines ?? existing.medicines ?? []);
@@ -1460,6 +1488,24 @@ export const BookingService = {
         location: { select: { name: true, address: true, city: true } },
       },
     });
+
+    if (clinicalChanged) {
+      const actor = await prisma.user.findUnique({
+        where: { id: actorUserId },
+        select: { name: true },
+      });
+      await prisma.clinicalAssessmentVersion.create({
+        data: {
+          bookingId,
+          actorUserId,
+          actorName: actor?.name ?? null,
+          snapshot: (clinicalAssessment ?? {
+            savedAt: savedAtIso,
+          }) as Prisma.InputJsonValue,
+          savedAt: new Date(savedAtIso),
+        },
+      });
+    }
 
     if (documentsAdded && Array.isArray(documents)) {
       const newest = documents[documents.length - 1] as
@@ -1518,7 +1564,16 @@ export const BookingService = {
       .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
       .catch(() => undefined);
 
-    return this.enrichBooking(updated);
+    const clinicalVersions = await prisma.clinicalAssessmentVersion.findMany({
+      where: { bookingId },
+      orderBy: { savedAt: "desc" },
+      take: 30,
+      select: { id: true, savedAt: true, actorName: true, snapshot: true },
+    });
+    return {
+      ...(await this.enrichBooking(updated)),
+      clinicalVersions,
+    };
   },
 
   /**
@@ -1941,7 +1996,51 @@ export const BookingService = {
       },
     });
     if (!booking) ResponseHandler.notFoundError("booking not found.");
-    return this.enrichBooking(booking!);
+    const row = booking!;
+    await this.ensureClinicalVersion(row);
+    const clinicalVersions = await prisma.clinicalAssessmentVersion.findMany({
+      where: { bookingId },
+      orderBy: { savedAt: "desc" },
+      take: 30,
+      select: { id: true, savedAt: true, actorName: true, snapshot: true },
+    });
+    return {
+      ...(await this.enrichBooking(row)),
+      clinicalVersions,
+    };
+  },
+
+  /** First open of a visit that already has vitals/pain/allergies gets one log row. */
+  async ensureClinicalVersion(booking: {
+    id: string;
+    clinicalAssessment: unknown;
+    updatedAt: Date;
+  }) {
+    const existing = await prisma.clinicalAssessmentVersion.count({
+      where: { bookingId: booking.id },
+    });
+    if (existing > 0) return;
+    const { normalizeClinicalAssessment, clinicalAssessmentHasContent } =
+      await import("../../lib/clinicalMasters.js");
+    if (!clinicalAssessmentHasContent(booking.clinicalAssessment)) return;
+    const normalized = normalizeClinicalAssessment(booking.clinicalAssessment);
+    const stamp =
+      normalized?.savedAt ||
+      normalized?.vitals?.recordedAt ||
+      booking.updatedAt.toISOString();
+    const savedAt = new Date(stamp);
+    await prisma.clinicalAssessmentVersion.create({
+      data: {
+        bookingId: booking.id,
+        snapshot: {
+          ...(normalized ?? {}),
+          savedAt: Number.isNaN(savedAt.getTime())
+            ? booking.updatedAt.toISOString()
+            : savedAt.toISOString(),
+        } as Prisma.InputJsonValue,
+        savedAt: Number.isNaN(savedAt.getTime()) ? booking.updatedAt : savedAt,
+      },
+    });
   },
 
   async enrichBooking<
