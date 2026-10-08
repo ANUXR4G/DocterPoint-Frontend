@@ -130,6 +130,17 @@ export const proctoService = {
       body: JSON.stringify(body),
     }),
 
+  /** Staff calendar: move a timed visit (doctor and/or time). Patients cannot call this. */
+  moveBooking: (id: string, body: {
+    providerId: string;
+    slotStart: string;
+    notifyPatient?: boolean;
+  }) =>
+    proctoFetch(`/procto/bookings/${id}/move`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   /** Emergency walk-in — no slot pick; starts now in the waiting list. */
   createWalkIn: (body: {
     practiceId: string;

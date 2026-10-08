@@ -24,6 +24,7 @@ import {
   formatPracticeDateTime,
   formatPracticeTime,
   practiceDateIso,
+  practiceSlotStartIso,
   practiceTodayIso,
 } from "@/lib/practiceTime"
 import {
@@ -33,7 +34,7 @@ import {
   type ProctoBooking,
   type TimeWindow,
 } from "@/lib/services/procto"
-import { drName, windowLabel } from "@/lib/quickSlots"
+import { drName, hm12, windowLabel } from "@/lib/quickSlots"
 import CalendarDayGrid, {
   type GridBooking,
 } from "@/components/ui/procto/CalendarDayGrid"
@@ -271,15 +272,29 @@ function BookingDetails({
   )
 }
 
+const MOVABLE = new Set(["SCHEDULED", "REQUESTED", "ACCEPTED"])
+
+function canMoveBooking(b: CalBooking) {
+  if (!MOVABLE.has(String(b.status || "").toUpperCase())) return false
+  const slot = b.slotStart ?? b.slot_start
+  if (!slot) return false
+  return new Date(slot).getTime() > Date.now() - 60_000
+}
+
 function BookingCard({
   booking,
   compact = false,
+  onCut,
+  onActivate,
 }: {
   booking: CalBooking
   compact?: boolean
+  onCut?: () => void
+  onActivate?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
+  const [menu, setMenu] = useState<{ top: number; left: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -328,21 +343,46 @@ function BookingCard({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest?.("[data-cal-menu]")) return
+      close()
+    }
+    document.addEventListener("mousedown", onDown)
+    window.addEventListener("scroll", close, true)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      window.removeEventListener("scroll", close, true)
+    }
+  }, [menu])
+
   return (
-    <div ref={ref} className="relative">
+    <div
+      ref={ref}
+      className="relative h-full"
+      onContextMenu={(e) => {
+        if (!onCut) return
+        e.preventDefault()
+        e.stopPropagation()
+        setMenu({ top: e.clientY, left: e.clientX })
+      }}
+    >
       <button
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation()
+          onActivate?.()
           if (open) setOpen(false)
           else show()
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") e.stopPropagation()
         }}
-        className={`block w-full rounded-lg border text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${statusClass(booking.status)} ${
+        className={`block h-full w-full rounded-lg border text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${statusClass(booking.status)} ${
           compact ? "px-1.5 py-1" : "px-2.5 py-2"
         } ${open ? "ring-2 ring-[var(--theme-primary)] ring-offset-1 dark:ring-offset-neutral-900" : ""}`}
       >
@@ -371,6 +411,47 @@ function BookingCard({
           </>
         )}
       </button>
+      {onCut ? (
+        <button
+          type="button"
+          data-cal-menu
+          aria-label="Appointment actions"
+          className="absolute right-0.5 top-0.5 z-10 rounded px-1 text-sm leading-none opacity-70 hover:bg-black/10 hover:opacity-100"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            const r = e.currentTarget.getBoundingClientRect()
+            setMenu({ top: r.bottom + 4, left: Math.max(8, r.right - 180) })
+          }}
+        >
+          ⋮
+        </button>
+      ) : null}
+      {menu
+        ? createPortal(
+            <div
+              data-cal-menu
+              role="menu"
+              className="fixed z-[9999] w-44 rounded-xl border border-neutral-200 bg-white p-1 text-sm shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+              style={{ top: menu.top, left: menu.left }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full rounded-lg px-3 py-2 text-left font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMenu(null)
+                  onCut?.()
+                }}
+              >
+                Cut appointment
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
       {open
         ? createPortal(
             <div
@@ -435,6 +516,16 @@ export default function AppointmentCalendar() {
   const [quick, setQuick] = useState<QuickSlotRequest | null>(null)
   const [bookOpen, setBookOpen] = useState(false)
   const [bookPrefill, setBookPrefill] = useState<ClinicBookPrefill | null>(null)
+  const [clipboard, setClipboard] = useState<CalBooking | null>(null)
+  const [focusedId, setFocusedId] = useState<string | null>(null)
+  const [moving, setMoving] = useState(false)
+  const [moveAsk, setMoveAsk] = useState<{
+    booking: CalBooking
+    providerId: string
+    date: string
+    startMinutes: number
+    notify: boolean
+  } | null>(null)
   const [notice, setNotice] = useState<{
     text: string
     tone: "ok" | "error"
@@ -678,6 +769,76 @@ export default function AppointmentCalendar() {
 
   const dayBookings = byDay.get(ymd(anchor)) ?? []
 
+  function cutBooking(b: CalBooking) {
+    if (!canMoveBooking(b)) return
+    setClipboard(b)
+    setFocusedId(b.id)
+    setMoveAsk(null)
+    setNotice({
+      text: `${patientLabel(b)} cut. Open a day, click a slot, then Paste.`,
+      tone: "ok",
+    })
+  }
+
+  function askMove(
+    booking: CalBooking,
+    providerId: string,
+    date: string,
+    startMinutes: number,
+  ) {
+    setMoveAsk({ booking, providerId, date, startMinutes, notify: true })
+  }
+
+  async function confirmMove() {
+    if (!moveAsk || moving) return
+    setMoving(true)
+    const res = await proctoService.moveBooking(moveAsk.booking.id, {
+      providerId: moveAsk.providerId,
+      slotStart: practiceSlotStartIso(moveAsk.date, moveAsk.startMinutes),
+      notifyPatient: moveAsk.notify,
+    })
+    setMoving(false)
+    if (res.status === "successful") {
+      const name = patientLabel(moveAsk.booking)
+      const told = moveAsk.notify
+      setClipboard((cur) => (cur?.id === moveAsk.booking.id ? null : cur))
+      setMoveAsk(null)
+      void refreshDashboard({ silent: true })
+      setNotice({
+        text: told
+          ? `${name} moved. WhatsApp update queued.`
+          : `${name} moved.`,
+        tone: "ok",
+      })
+      return
+    }
+    setNotice({
+      text: res.message || "That slot is not free for the full visit.",
+      tone: "error",
+    })
+  }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
+      const key = e.key.toLowerCase()
+      if (key === "x") {
+        const b = visibleBookings.find((row) => row.id === focusedId)
+        if (!b || !canMoveBooking(b)) return
+        e.preventDefault()
+        cutBooking(b)
+      }
+      if (key === "v" && clipboard && moveAsk?.booking.id === clipboard.id) {
+        e.preventDefault()
+        void confirmMove()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  })
+
   const title = useMemo(() => {
     if (view === "day") return format(anchor, "EEEE, d MMMM yyyy")
     if (view === "week") {
@@ -875,6 +1036,69 @@ export default function AppointmentCalendar() {
         </div>
       ) : null}
 
+      {clipboard ? (
+        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+          <span>
+            ✂️ {patientLabel(clipboard)} — Cut. Select a new date and slot, then
+            Paste.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setClipboard(null)
+              setMoveAsk((cur) =>
+                cur?.booking.id === clipboard.id ? null : cur,
+              )
+            }}
+            className="rounded-lg border border-current px-2.5 py-1 text-xs font-bold"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
+
+      {moveAsk ? (
+        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--theme-primary)]/40 bg-[var(--theme-primary)]/10 px-3 py-2 text-sm">
+          <span>
+            Move {patientLabel(moveAsk.booking)} to{" "}
+            {drName(
+              columns.find((c) => c.id === moveAsk.providerId)?.name ||
+                "that doctor",
+            )}{" "}
+            at {hm12(moveAsk.startMinutes)}?
+          </span>
+          <span className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold">
+              <input
+                type="checkbox"
+                checked={moveAsk.notify}
+                onChange={(e) =>
+                  setMoveAsk((cur) =>
+                    cur ? { ...cur, notify: e.target.checked } : cur,
+                  )
+                }
+              />
+              WhatsApp the patient
+            </label>
+            <button
+              type="button"
+              disabled={moving}
+              onClick={() => void confirmMove()}
+              className="rounded-lg bg-neutral-900 px-2.5 py-1 text-xs font-bold text-white disabled:opacity-50 dark:bg-white dark:text-black"
+            >
+              {clipboard?.id === moveAsk.booking.id ? "Paste" : "Confirm"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMoveAsk(null)}
+              className="rounded-lg border border-current px-2.5 py-1 text-xs font-bold"
+            >
+              Undo
+            </button>
+          </span>
+        </div>
+      ) : null}
+
       <div className="min-h-0 flex-1">
         {view === "day" ? (
           <DayView
@@ -897,13 +1121,25 @@ export default function AppointmentCalendar() {
             }
             onQuickCreate={setQuick}
             onBookSlot={(req) => {
+              if (clipboard && req.start != null) {
+                askMove(clipboard, req.providerId, req.date, req.start)
+                return
+              }
               setBookPrefill({
                 providerId: req.providerId,
                 date: req.date,
                 startMinutes: req.start,
+                endMinutes: req.end,
               })
               setBookOpen(true)
             }}
+            onMoveBooking={(move) => {
+              const b = dayBookings.find((row) => row.id === move.bookingId)
+              if (!b || !canMoveBooking(b)) return
+              askMove(b, move.providerId, move.date, move.start)
+            }}
+            onCut={cutBooking}
+            onActivate={setFocusedId}
             onRemoveExtra={(id, extra, scope) =>
               void removeExtra(id, extra, scope)
             }
@@ -922,6 +1158,8 @@ export default function AppointmentCalendar() {
             onAddSlot={
               creatableDoctors.length ? quickCreateFromHeader : undefined
             }
+            onCut={cutBooking}
+            onActivate={setFocusedId}
           />
         ) : null}
 
@@ -934,6 +1172,8 @@ export default function AppointmentCalendar() {
               setAnchor(d)
               setView("day")
             }}
+            onCut={cutBooking}
+            onActivate={setFocusedId}
           />
         ) : null}
       </div>
@@ -1009,6 +1249,9 @@ function DayView({
   selection,
   onQuickCreate,
   onBookSlot,
+  onMoveBooking,
+  onCut,
+  onActivate,
   onRemoveExtra,
   freshIds,
 }: {
@@ -1020,6 +1263,14 @@ function DayView({
   selection: { providerId: string; start: number; end: number } | null
   onQuickCreate: (req: QuickSlotRequest) => void
   onBookSlot?: (req: QuickSlotRequest) => void
+  onMoveBooking?: (move: {
+    bookingId: string
+    providerId: string
+    start: number
+    date: string
+  }) => void
+  onCut: (booking: CalBooking) => void
+  onActivate: (id: string) => void
   onRemoveExtra: (
     providerId: string,
     extra: TimeWindow & { id: string },
@@ -1063,11 +1314,24 @@ function DayView({
       selection={selection}
       onQuickCreate={onQuickCreate}
       onBookSlot={onBookSlot}
+      onMoveBooking={onMoveBooking}
+      canDragBooking={(id) => {
+        const row = byId.get(id)
+        return !!row && canMoveBooking(row)
+      }}
       onRemoveExtra={onRemoveExtra}
       freshIds={freshIds}
       renderBooking={(id) => {
         const b = byId.get(id)
-        return b ? <BookingCard booking={b} compact /> : null
+        if (!b) return null
+        return (
+          <BookingCard
+            booking={b}
+            compact
+            onActivate={() => onActivate(b.id)}
+            onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
+          />
+        )
       }}
       footer={
         tokens.length > 0 ? (
@@ -1092,11 +1356,15 @@ function WeekView({
   byDay,
   onSelectDay,
   onAddSlot,
+  onCut,
+  onActivate,
 }: {
   days: Date[]
   byDay: Map<string, CalBooking[]>
   onSelectDay: (d: Date) => void
   onAddSlot?: (d: Date, el: HTMLElement) => void
+  onCut: (booking: CalBooking) => void
+  onActivate: (id: string) => void
 }) {
   const today = startOfToday()
   return (
@@ -1142,7 +1410,12 @@ function WeekView({
               </div>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
                 {list.map((b) => (
-                  <BookingCard key={b.id} booking={b} />
+                  <BookingCard
+                    key={b.id}
+                    booking={b}
+                    onActivate={() => onActivate(b.id)}
+                    onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
+                  />
                 ))}
                 {!list.length ? (
                   <p className="px-1 py-6 text-center text-xs opacity-40">—</p>
@@ -1161,11 +1434,15 @@ function MonthView({
   days,
   byDay,
   onSelectDay,
+  onCut,
+  onActivate,
 }: {
   anchor: Date
   days: Date[]
   byDay: Map<string, CalBooking[]>
   onSelectDay: (d: Date) => void
+  onCut: (booking: CalBooking) => void
+  onActivate: (id: string) => void
 }) {
   const today = startOfToday()
   const headers = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -1223,7 +1500,12 @@ function MonthView({
                   <ul className="mt-1 min-h-0 flex-1 space-y-1 overflow-y-auto">
                     {list.slice(0, 4).map((b) => (
                       <li key={b.id}>
-                        <BookingCard booking={b} compact />
+                        <BookingCard
+                          booking={b}
+                          compact
+                          onActivate={() => onActivate(b.id)}
+                          onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
+                        />
                       </li>
                     ))}
                     {list.length > 4 ? (

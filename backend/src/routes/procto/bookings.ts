@@ -284,6 +284,25 @@ router.patch(
   },
 );
 
+router.post(
+  "/:id/move",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await BookingService.moveVisit(param(req.params.id), req.sessionUser!.id, {
+        providerId: req.body?.providerId ? String(req.body.providerId) : undefined,
+        slotStart: req.body?.slotStart ? String(req.body.slotStart) : undefined,
+        durationMinutes:
+          req.body?.durationMinutes != null ? Number(req.body.durationMinutes) : undefined,
+        notifyPatient: req.body?.notifyPatient !== false && req.body?.notifyPatient !== "false",
+      });
+      return ResponseHandler.fetchSuccessful(res, "appointment moved.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.patch(
   "/:id/status",
   requireAuth("booking:update"),

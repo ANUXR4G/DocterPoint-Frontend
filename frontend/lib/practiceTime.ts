@@ -131,6 +131,22 @@ export function practiceHour(input: Date | string): number {
   return zonedParts(d).hour
 }
 
+/**
+ * UTC ISO for a clinic wall-clock minute on a YYYY-MM-DD day.
+ * Offset is taken from noon UTC that day (Asia/Kolkata has no DST).
+ */
+export function practiceSlotStartIso(dateIso: string, minutes: number): string {
+  const [y, m, d] = dateIso.split("-").map(Number)
+  const hour = Math.floor(minutes / 60)
+  const minute = ((minutes % 60) + 60) % 60
+  const probe = new Date(Date.UTC(y, (m || 1) - 1, d || 1, 12, 0))
+  const local = zonedParts(probe)
+  const offsetMin = local.hour * 60 + local.minute - 12 * 60
+  return new Date(
+    Date.UTC(y, (m || 1) - 1, d || 1, hour, minute) - offsetMin * 60_000,
+  ).toISOString()
+}
+
 /** Minutes past midnight in clinic TZ. */
 export function practiceMinutesOfDay(input: Date | string): number {
   const d = input instanceof Date ? input : new Date(input)
