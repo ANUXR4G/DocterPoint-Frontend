@@ -39,6 +39,7 @@ import {
   normalizeUpcomingChanges,
 } from "@/components/ui/procto/ScheduleChangeControls";
 import ClinicalMastersPanel from "@/components/ui/procto/ClinicalMastersPanel";
+import { AddClinicStaff, SpecialtySelect } from "@/components/ui/procto/SpecialtySelect";
 
 type Tab = PracticeTab;
 
@@ -119,6 +120,7 @@ const MEMBER_ROLE_LABEL: Record<string, string> = {
   PRACTICE_ADMIN: "Clinic admin",
   DOCTOR: "Doctor",
   RECEPTIONIST: "Receptionist",
+  NURSE: "Nurse",
 };
 const CONVERSATION_STATUS_LABEL: Record<string, string> = {
   bot_active: "Bot replying",
@@ -933,7 +935,9 @@ function DoctorsPanel({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [specialty, setSpecialty] = useState("");
+  const [specialtyIds, setSpecialtyIds] = useState<string[]>([]);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [ownerSpecialtyIds, setOwnerSpecialtyIds] = useState<string[]>([]);
   const [licenseNo, setLicenseNo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -945,6 +949,37 @@ function DoctorsPanel({
   const doctors = members.filter(
     (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
   );
+  const staff = members.filter(
+    (m) =>
+      m.role === "PRACTICE_ADMIN" ||
+      m.role === "RECEPTIONIST" ||
+      m.role === "NURSE",
+  );
+
+  async function openSchedule(userId: string) {
+    setError("");
+    setMessage("");
+    setBusy(true);
+    const res = await proctoService.openPracticeSchedule(
+      practiceId,
+      userId,
+      ownerSpecialtyIds,
+    );
+    setBusy(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not open the schedule.");
+      return;
+    }
+    const already = Boolean((res.data as { alreadyOpen?: boolean } | undefined)?.alreadyOpen);
+    setMessage(
+      already
+        ? "Schedule is already open. Edit the week under Schedule."
+        : "Week opened (Mon–Fri 9:00 AM–5:00 PM). Edit it under Schedule.",
+    );
+    setOpeningId(null);
+    setOwnerSpecialtyIds([]);
+    await onChanged();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1000,13 +1035,17 @@ function DoctorsPanel({
       setError("Password must be at least 6 characters.");
       return;
     }
+    if (!specialtyIds.length) {
+      setError("Select a specialty from the list.");
+      return;
+    }
     setBusy(true);
     const res = await proctoService.addPracticeDoctor(practiceId, {
       name: name.trim(),
       email: email.trim(),
       password: password.trim(),
       phone: phone.trim() || undefined,
-      specialty: specialty.trim() || undefined,
+      specialtyIds,
       licenseNo: licenseNo.trim() || undefined,
     });
     setBusy(false);
@@ -1019,7 +1058,7 @@ function DoctorsPanel({
     setEmail("");
     setPassword("");
     setPhone("");
-    setSpecialty("");
+    setSpecialtyIds([]);
     setLicenseNo("");
     await onChanged();
   }
@@ -1085,6 +1124,53 @@ function DoctorsPanel({
                   </p>
                 ) : null}
               </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+              {canManage && m.role === "PRACTICE_OWNER" ? (
+                openingId === m.userId ? (
+                  <div className="w-56">
+                    <SpecialtySelect
+                      value={ownerSpecialtyIds}
+                      onChange={setOwnerSpecialtyIds}
+                      canAdd
+                    />
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void openSchedule(m.userId)}
+                      className="mt-2 w-full rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {busy ? "Opening…" : "Open week"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOpeningId(null)}
+                      className="mt-1 text-xs font-semibold opacity-70 hover:underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setError("");
+                        setOpeningId(m.userId);
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50"
+                    >
+                      Open schedule
+                    </button>
+                    <Link
+                      href={practiceTabHref("setup", { doctorId: m.userId })}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Edit hours
+                    </Link>
+                  </>
+                )
+              ) : null}
               {canManage && m.role === "DOCTOR" ? (
                 confirmId === m.userId ? (
                   <div className="flex shrink-0 flex-col items-end gap-1">
@@ -1118,12 +1204,29 @@ function DoctorsPanel({
                   </button>
                 )
               ) : null}
+              </div>
             </li>
           ))}
           {!doctors.length && (
             <p className="text-xs opacity-60">No doctors on this clinic yet.</p>
           )}
         </ul>
+        {staff.length ? (
+          <div className="mt-5">
+            <h3 className="mb-2 text-sm font-semibold">Clinic team</h3>
+            <ul className="space-y-2">
+              {staff.map((m) => (
+                <li key={m.userId} className="text-sm">
+                  <span className="font-medium">{m.user.name || "Unnamed"}</span>
+                  <span className="ml-2 text-xs opacity-60">
+                    {MEMBER_ROLE_LABEL[m.role] ?? m.role}
+                  </span>
+                  <p className="text-xs opacity-70">{m.user.email}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-xl border dark:border-neutral-700 p-4">
@@ -1166,7 +1269,6 @@ function DoctorsPanel({
                 { label: "Login email *", value: email, set: setEmail, type: "email", autoComplete: "off" },
                 { label: "Login password * (min 6)", value: password, set: setPassword, type: "password", autoComplete: "new-password" },
                 { label: "Phone", value: phone, set: setPhone, type: "tel", autoComplete: "off" },
-                { label: "Specialty", value: specialty, set: setSpecialty, autoComplete: "off" },
                 { label: "License no", value: licenseNo, set: setLicenseNo, autoComplete: "off" },
               ] as const
             ).map((f) => (
@@ -1181,6 +1283,16 @@ function DoctorsPanel({
                 />
               </label>
             ))}
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-xs opacity-70">Specialties *</span>
+              <div className="mt-1">
+                <SpecialtySelect
+                  value={specialtyIds}
+                  onChange={setSpecialtyIds}
+                  canAdd={canManage}
+                />
+              </div>
+            </label>
             <button
               type="submit"
               disabled={busy || !canAddDoctor}
@@ -1190,6 +1302,11 @@ function DoctorsPanel({
             </button>
           </form>
         )}
+        <AddClinicStaff
+          practiceId={practiceId}
+          canManage={canManage}
+          onCreated={onChanged}
+        />
       </section>
     </div>
   );

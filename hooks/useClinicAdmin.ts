@@ -31,7 +31,8 @@ export function useClinicAdmin() {
         ),
       )
       setIsReceptionOnly(
-        list.length > 0 && list.every((m) => m.role === "RECEPTIONIST"),
+        list.length > 0 &&
+          list.every((m) => m.role === "RECEPTIONIST" || m.role === "NURSE"),
       )
     } else {
       setHasPractice(false)

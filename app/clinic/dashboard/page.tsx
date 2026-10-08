@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { DoctorAnalytics } from "@/components"
 import DoctorQueue from "@/components/ui/doctors/pages/DoctorQueue"
+import { AddClinicStaff, SpecialtySelect } from "@/components/ui/procto/SpecialtySelect"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import {
   CLINIC_SUBSCRIPTION_HREF,
@@ -103,7 +104,7 @@ function ClinicOpsHub() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [phone, setPhone] = useState("")
-  const [specialty, setSpecialty] = useState("")
+  const [specialtyIds, setSpecialtyIds] = useState<string[]>([])
   const [licenseNo, setLicenseNo] = useState("")
 
   const practiceId = memberships[0]?.practice?.id ?? null
@@ -247,13 +248,17 @@ function ClinicOpsHub() {
       setFormError("Password must be at least 6 characters.")
       return
     }
+    if (!specialtyIds.length) {
+      setFormError("Select a specialty from the list.")
+      return
+    }
     setBusy(true)
     const res = await proctoService.addPracticeDoctor(practiceId, {
       name: name.trim(),
       email: email.trim(),
       password: password.trim(),
       phone: phone.trim() || undefined,
-      specialty: specialty.trim() || undefined,
+      specialtyIds,
       licenseNo: licenseNo.trim() || undefined,
     })
     setBusy(false)
@@ -266,7 +271,7 @@ function ClinicOpsHub() {
     setEmail("")
     setPassword("")
     setPhone("")
-    setSpecialty("")
+    setSpecialtyIds([])
     setLicenseNo("")
     await loadRoster()
   }
@@ -435,12 +440,13 @@ function ClinicOpsHub() {
                   onChange={(e) => setPhone(e.target.value)}
                   className={fieldClass}
                 />
-                <input
-                  placeholder="Specialty"
-                  value={specialty}
-                  onChange={(e) => setSpecialty(e.target.value)}
-                  className={fieldClass}
-                />
+                <div className="sm:col-span-2">
+                  <SpecialtySelect
+                    value={specialtyIds}
+                    onChange={setSpecialtyIds}
+                    canAdd
+                  />
+                </div>
                 <input
                   placeholder="License no"
                   value={licenseNo}
@@ -478,6 +484,9 @@ function ClinicOpsHub() {
                 </div>
               </div>
             )}
+            {practiceId ? (
+              <AddClinicStaff practiceId={practiceId} canManage={canManage} />
+            ) : null}
           </div>
         ) : null}
       </div>
