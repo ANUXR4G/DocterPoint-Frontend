@@ -434,7 +434,7 @@ export default function DoctorQueue({
                     {bookingStatusLabel(b.status)}
                   </span>
                 </div>
-                <div className="mt-3 inline-flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+                <div className="mt-1.5 inline-flex flex-nowrap items-center gap-1 overflow-x-auto">
                   <BookingStatusControls
                     status={b.status || "SCHEDULED"}
                     busy={busyId === b.id}
@@ -447,6 +447,7 @@ export default function DoctorQueue({
                   />
                   <PrescriptionActionsMenu
                     bookingId={b.id}
+                    compact
                     enabled={
                       String(b.status || "").toUpperCase() === "COMPLETED"
                     }
@@ -467,7 +468,7 @@ export default function DoctorQueue({
                   />
                   <Link
                     href={`/doctor/queue/${b.id}`}
-                    className="shrink-0 text-xs font-bold text-[var(--theme-primary)] hover:underline"
+                    className="inline-flex h-7 shrink-0 items-center px-1 text-[11px] font-bold leading-none text-[var(--theme-primary)] hover:underline"
                   >
                     Open
                   </Link>
@@ -531,50 +532,48 @@ export default function DoctorQueue({
                     key={b.id}
                     className="bg-white dark:bg-neutral-900/40"
                   >
-                    <td className="whitespace-nowrap px-3 py-3 align-middle text-xs">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle text-xs">
                       <p>{booked.date}</p>
                       <p className="opacity-60">{booked.time}</p>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-middle">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle">
                       <p className="font-medium">{appointmentDateLabel(b)}</p>
                       <p className="text-xs opacity-60">{slotLabel(b)}</p>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-middle text-xs font-semibold tabular-nums">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle text-xs font-semibold tabular-nums">
                       {formatArrival(b) || (
                         <span className="text-neutral-400">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3 align-middle">
-                      <div className="flex items-center gap-2.5">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle">
+                      <div className="flex items-center gap-2">
                         <PatientAvatar
                           name={name}
                           imgSrc={p?.imgSrc}
                           size="sm"
                         />
-                        <div>
-                          <p className="font-medium">{name}</p>
-                          {isEmergencyWalkIn(b) ? (
-                            <EmergencyWalkInBadge className="mt-0.5" />
-                          ) : null}
-                        </div>
+                        <p className="flex items-center gap-1.5 font-medium">
+                          <span>{name}</span>
+                          {isEmergencyWalkIn(b) ? <EmergencyWalkInBadge /> : null}
+                        </p>
                       </div>
                     </td>
-                    <td className="px-3 py-3 align-middle">
+                    <td className="px-3 py-1.5 align-middle">
                       <ChiefComplaintCell text={chiefComplaintOf(b)} />
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-middle font-semibold tabular-nums tracking-wide">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle font-semibold tabular-nums tracking-wide">
                       {p?.mrn?.trim() || "—"}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-middle">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle">
                       {phone}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-middle">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle">
                       {age}
                     </td>
-                    <td className="px-3 py-3 align-middle">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle">
                       {dash(b.provider?.name ?? undefined)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 align-middle">
+                    <td className="whitespace-nowrap px-3 py-1.5 align-middle">
                       <PaymentStatusButton
                         bookingId={b.id}
                         status={b.paymentStatus ?? b.payment_status}
@@ -590,19 +589,22 @@ export default function DoctorQueue({
                         onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
                       />
                     </td>
-                    <td className="sticky right-0 z-20 w-[1%] border-l border-neutral-200 bg-white px-3 py-3 align-middle shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.22)] dark:border-neutral-700 dark:bg-neutral-900">
-                      <div className="flex w-[13.5rem] max-w-[13.5rem] flex-wrap items-center gap-1.5">
+                    <td className="sticky right-0 z-20 w-[1%] whitespace-nowrap border-l border-neutral-200 bg-white px-2 py-1 align-middle shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.22)] dark:border-neutral-700 dark:bg-neutral-900">
+                      <div className="flex flex-nowrap items-center gap-1">
                         <BookingStatusControls
                           status={b.status || "SCHEDULED"}
                           busy={busyId === b.id}
                           compact
-                          showSelect={allowStatusControl}
+                          nowrap
+                          showSelect={false}
+                          showActionButtons={allowStatusControl}
                           ariaLabel={`Update status for ${name}`}
                           visitHref={`/doctor/queue/${b.id}`}
-                    onChange={(status, reason) => void onStatus(b.id, status, reason)}
+                          onChange={(status, reason) => void onStatus(b.id, status, reason)}
                         />
                         <PrescriptionActionsMenu
                           bookingId={b.id}
+                          compact
                           enabled={
                             String(b.status || "").toUpperCase() ===
                             "COMPLETED"
@@ -610,7 +612,7 @@ export default function DoctorQueue({
                         />
                         <Link
                           href={`/doctor/queue/${b.id}`}
-                          className="shrink-0 text-xs font-bold text-[var(--theme-primary)] hover:underline"
+                          className="inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[11px] font-bold leading-none text-[var(--theme-primary)] hover:underline"
                         >
                           Open
                         </Link>
