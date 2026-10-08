@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { StatusBadge } from "@/components/ui";
 import { chartSummaryLines } from "@/lib/clinicalMasters";
-import { whenLabel, type BookingRow } from "@/lib/types";
+import { bookingDoctorName, whenLabel, type BookingRow } from "@/lib/types";
 import { colors, space } from "@/lib/theme";
 
 /** Latest visit on the patient record: vitals, allergies, pain, prescription. */
@@ -17,7 +17,9 @@ export function VisitChartSummary({
     <View style={styles.wrap}>
       <View style={styles.head}>
         <Text style={styles.when} numberOfLines={2}>
-          {whenLabel(booking)}
+          {[whenLabel(booking), bookingDoctorName(booking)]
+            .filter(Boolean)
+            .join(" · ")}
         </Text>
         <StatusBadge status={booking.status} />
         <Pressable onPress={onOpen} hitSlop={8}>

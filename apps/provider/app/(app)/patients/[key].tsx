@@ -24,7 +24,7 @@ import { resolveMediaUrl } from "@/lib/media";
 import { findPatientInRoster } from "@/lib/patientRoster";
 import { usePractice } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
-import { whenLabel } from "@/lib/types";
+import { bookingDoctorName, whenLabel } from "@/lib/types";
 import { colors, space } from "@/lib/theme";
 
 export default function PatientDetailScreen() {
@@ -167,12 +167,13 @@ export default function PatientDetailScreen() {
                 >
                   <View style={styles.visitRow}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.visitWhen}>{whenLabel(b)}</Text>
+                      <Text style={styles.visitWhen}>
+                        {[whenLabel(b), bookingDoctorName(b)]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </Text>
                       {b.disease ? (
                         <Text style={styles.meta}>{b.disease}</Text>
-                      ) : null}
-                      {b.provider?.name ? (
-                        <Text style={styles.meta}>{b.provider.name}</Text>
                       ) : null}
                     </View>
                   </View>

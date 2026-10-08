@@ -98,6 +98,8 @@ export type BookingRow = {
   documents?: VisitDocument[] | null;
   clinicalAssessment?: unknown;
   provider?: { id?: string; name?: string | null } | null;
+  /** Flat name from the patient roster, when `provider` is not nested. */
+  providerName?: string | null;
   practice?: {
     id?: string;
     name?: string;
@@ -194,6 +196,15 @@ export function bookingPatientLabel(b: BookingRow): string {
   if (stored) return stored;
   if (linked) return linked;
   return String(b.patientPhone || "").trim() || "Patient";
+}
+
+export function bookingDoctorName(b: {
+  provider?: { name?: string | null } | null;
+  providerName?: string | null;
+}): string {
+  const raw = b.provider?.name?.trim() || b.providerName?.trim() || "";
+  const bare = raw.replace(/^(?:dr\.\s*|dr\s+)+/i, "");
+  return bare ? `Dr. ${bare}` : "";
 }
 
 export function whenLabel(b: BookingRow) {

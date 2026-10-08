@@ -85,6 +85,8 @@ export type PracticePatientRow = {
     createdAt?: string
     patientName?: string | null
     patientPhone?: string | null
+    providerName?: string | null
+    provider?: { id?: string; name?: string | null } | null
   }>
 }
 

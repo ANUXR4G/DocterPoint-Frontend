@@ -45,6 +45,7 @@ import { usePracticeLive } from "@/lib/PracticeLiveContext";
 import { patchBookingFields } from "@/lib/liveBooking";
 import {
   nextActions,
+  bookingDoctorName,
   whenLabel,
   type BookingRow,
   type VisitDocument,
@@ -569,7 +570,11 @@ export default function VisitScreen() {
               </View>
             )}
             <View style={{ flex: 1 }}>
-              <Text style={styles.bannerEyebrow}>{whenLabel(booking)}</Text>
+              <Text style={styles.bannerEyebrow}>
+                {[whenLabel(booking), bookingDoctorName(booking)]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
               <Text style={styles.bannerName}>{patientName}</Text>
               <Text style={styles.bannerSub}>
                 {formatPhoneDisplay(
