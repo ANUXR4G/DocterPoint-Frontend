@@ -24,6 +24,15 @@ import {
   type PainToolTab,
 } from "@/lib/painAssessmentTool";
 import { colors, radii, space } from "@/lib/theme";
+import { formatPracticeDateTime } from "@/lib/practiceTime";
+import {
+  PAIN_DURATION_PRESETS,
+  PAIN_DURATION_UNITS,
+  PAIN_FREQUENCIES,
+  PAIN_LOCATION_GROUPS,
+  PAIN_RADIATIONS,
+  PAIN_TYPES,
+} from "@/lib/painCatalog";
 
 const BAND_BG: Record<VitalBand, string> = {
   critical_low: "#E0F2FE",
@@ -107,10 +116,15 @@ export function ClinicalAssessmentPanel({
     idx: number;
     tab: PainToolTab;
   } | null>(null);
+  const valueKey = useMemo(() => JSON.stringify(value ?? null), [value]);
 
   useEffect(() => {
-    setLocal(normalizeClinicalAssessment(value) ?? emptyAssessment());
-  }, [value]);
+    const next = normalizeClinicalAssessment(value) ?? emptyAssessment();
+    setLocal((prev) =>
+      JSON.stringify(prev) === JSON.stringify(next) ? prev : next,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content
+  }, [valueKey]);
 
   function commit(next: ClinicalAssessment) {
     setLocal(next);
@@ -206,6 +220,14 @@ export function ClinicalAssessmentPanel({
   return (
     <View style={styles.wrap}>
       <Text style={styles.h2}>Vitals</Text>
+      {value?.savedAt || value?.vitals?.recordedAt ? (
+        <Text style={styles.meta}>
+          Saved{" "}
+          {formatPracticeDateTime(
+            value.savedAt || value.vitals?.recordedAt || "",
+          )}
+        </Text>
+      ) : null}
       <View style={styles.legendRow}>
         {BAND_LEGEND.map((b) => (
           <View key={b.key} style={[styles.legendChip, { backgroundColor: b.bg }]}>
@@ -287,54 +309,155 @@ export function ClinicalAssessmentPanel({
               ))}
             </View>
           </ScrollView>
+          {shouldOpenPainAssessmentTool(row.scale || "") && !readOnly ? (
+            <Pressable
+              onPress={() => {
+                const tab =
+                  painToolTabForScale(row.scale || "") ?? "wong-baker";
+                setPainTool({ idx, tab });
+              }}
+              style={[styles.input, styles.scoreToolBtn]}
+            >
+              <Text
+                style={
+                  row.score ? styles.scoreToolValue : styles.scoreToolPlaceholder
+                }
+              >
+                {row.score || "Select with tool…"}
+              </Text>
+            </Pressable>
+          ) : (
+            <TextInput
+              editable={!readOnly}
+              value={String(row.score ?? "")}
+              placeholder="Score"
+              placeholderTextColor={colors.inkFaint}
+              onChangeText={(t) => {
+                const pain = [...(local.pain ?? [])];
+                pain[idx] = { ...row, score: t };
+                commit({ ...local, pain });
+              }}
+              style={styles.input}
+            />
+          )}
+          <Text style={styles.label}>Location</Text>
+          {PAIN_LOCATION_GROUPS.map((g) => (
+            <View key={g.group}>
+              <Text style={styles.meta}>{g.group}</Text>
+              <View style={styles.row}>
+                {g.options.map((o) => (
+                  <Chip
+                    key={o}
+                    label={o}
+                    active={row.location === o}
+                    onPress={
+                      readOnly
+                        ? undefined
+                        : () => {
+                            const pain = [...(local.pain ?? [])];
+                            pain[idx] = { ...row, location: o };
+                            commit({ ...local, pain });
+                          }
+                    }
+                  />
+                ))}
+              </View>
+            </View>
+          ))}
           {(
             [
-              ["score", "Score"],
-              ["location", "Location"],
-              ["type", "Type"],
-              ["duration", "Duration"],
-              ["frequency", "Frequency"],
-              ["radiation", "Radiation"],
+              ["type", "Type", PAIN_TYPES],
+              ["frequency", "Frequency", PAIN_FREQUENCIES],
+              ["radiation", "Radiation", PAIN_RADIATIONS],
             ] as const
-          ).map(([field, label]) =>
-            field === "score" &&
-            shouldOpenPainAssessmentTool(row.scale || "") &&
-            !readOnly ? (
-              <Pressable
-                key={field}
-                onPress={() => {
-                  const tab =
-                    painToolTabForScale(row.scale || "") ?? "wong-baker";
-                  setPainTool({ idx, tab });
-                }}
-                style={[styles.input, styles.scoreToolBtn]}
-              >
-                <Text
-                  style={
-                    row.score
-                      ? styles.scoreToolValue
-                      : styles.scoreToolPlaceholder
-                  }
-                >
-                  {row.score || "Select with tool…"}
-                </Text>
-              </Pressable>
-            ) : (
-              <TextInput
-                key={field}
-                editable={!readOnly}
-                value={String(row[field] ?? "")}
-                placeholder={label}
-                placeholderTextColor={colors.inkFaint}
-                onChangeText={(t) => {
-                  const pain = [...(local.pain ?? [])];
-                  pain[idx] = { ...row, [field]: t };
-                  commit({ ...local, pain });
-                }}
-                style={styles.input}
+          ).map(([field, label, choices]) => (
+            <View key={field}>
+              <Text style={styles.label}>{label}</Text>
+              <View style={styles.row}>
+                {choices.map((c) => (
+                  <Chip
+                    key={c.label}
+                    label={c.label}
+                    active={row[field] === c.label}
+                    onPress={
+                      readOnly
+                        ? undefined
+                        : () => {
+                            const pain = [...(local.pain ?? [])];
+                            pain[idx] = { ...row, [field]: c.label };
+                            commit({ ...local, pain });
+                          }
+                    }
+                  />
+                ))}
+              </View>
+            </View>
+          ))}
+          <Text style={styles.label}>Duration</Text>
+          <View style={styles.row}>
+            {PAIN_DURATION_PRESETS.map((p) => (
+              <Chip
+                key={p}
+                label={p}
+                active={row.duration === p}
+                onPress={
+                  readOnly
+                    ? undefined
+                    : () => {
+                        const pain = [...(local.pain ?? [])];
+                        pain[idx] = { ...row, duration: p };
+                        commit({ ...local, pain });
+                      }
+                }
               />
-            ),
-          )}
+            ))}
+          </View>
+          <View style={styles.row}>
+            <TextInput
+              editable={!readOnly}
+              keyboardType="number-pad"
+              value={
+                /^(\d+)\s+(Hours|Days|Weeks|Months)$/.exec(row.duration || "")?.[1] ??
+                ""
+              }
+              placeholder="Number"
+              placeholderTextColor={colors.inkFaint}
+              onChangeText={(t) => {
+                const n = t.replace(/\D/g, "").slice(0, 3);
+                const unit =
+                  /^(\d+)\s+(Hours|Days|Weeks|Months)$/.exec(row.duration || "")?.[2] ??
+                  "Days";
+                const pain = [...(local.pain ?? [])];
+                pain[idx] = { ...row, duration: n ? `${n} ${unit}` : "" };
+                commit({ ...local, pain });
+              }}
+              style={[styles.input, { width: 88 }]}
+            />
+            {PAIN_DURATION_UNITS.map((u) => (
+              <Chip
+                key={u}
+                label={u}
+                active={
+                  /^(\d+)\s+(Hours|Days|Weeks|Months)$/.exec(row.duration || "")?.[2] ===
+                  u
+                }
+                onPress={
+                  readOnly
+                    ? undefined
+                    : () => {
+                        const n =
+                          /^(\d+)\s+(Hours|Days|Weeks|Months)$/.exec(
+                            row.duration || "",
+                          )?.[1] ?? "";
+                        if (!n) return;
+                        const pain = [...(local.pain ?? [])];
+                        pain[idx] = { ...row, duration: `${n} ${u}` };
+                        commit({ ...local, pain });
+                      }
+                }
+              />
+            ))}
+          </View>
           {!readOnly ? (
             <Chip
               label="Remove pain row"

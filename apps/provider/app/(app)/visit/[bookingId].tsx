@@ -1,12 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { CareChatPanel } from "@/components/CareChatPanel";
+import { RxButton } from "@/components/ClinicLogSheet";
 import { ClinicalAssessmentPanel } from "@/components/ClinicalAssessmentPanel";
 import {
   Chip,
@@ -31,7 +33,9 @@ import {
 import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { resolveMediaUrl } from "@/lib/media";
 import {
+  addGeneralDocument,
   fetchBooking,
+  fetchGeneralDocuments,
   updateBookingStatus,
   updateVisit,
 } from "@/lib/procto";
@@ -118,36 +122,76 @@ export default function VisitScreen() {
   const [documents, setDocuments] = useState<VisitDocument[]>([]);
   const [clinicalAssessment, setClinicalAssessment] =
     useState<ClinicalAssessment | null>(null);
+  const clinicalReady = useRef(false);
+  const clinicalDirty = useRef(false);
+  const clinicalRef = useRef<ClinicalAssessment | null>(null);
+  const documentsRef = useRef<VisitDocument[]>([]);
+  const uploadingRef = useRef(false);
+  const loadSeq = useRef(0);
+  const [chartReady, setChartReady] = useState(false);
   const [medName, setMedName] = useState("");
   const [medAmount, setMedAmount] = useState("");
   const [medTimes, setMedTimes] = useState<string[]>([]);
   const [customHours, setCustomHours] = useState("");
   const [selfId, setSelfId] = useState<string | null>(null);
-  const [sideTab, setSideTab] = useState<"chat" | "documents">("documents");
+  const [sideTab, setSideTab] = useState<"chat" | "documents" | "record">("documents");
+  const [generalDocs, setGeneralDocs] = useState<VisitDocument[]>([]);
+  const [generalLinked, setGeneralLinked] = useState<boolean | null>(null);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!bookingId) return;
-    const res = await fetchBooking(bookingId);
+    const seq = ++loadSeq.current;
+    const gaps = opts?.silent ? [0] : [0, 1000, 2500];
+    let res: Awaited<ReturnType<typeof fetchBooking>> | null = null;
+    for (let attempt = 0; attempt < gaps.length; attempt++) {
+      if (gaps[attempt]) {
+        await new Promise((r) => setTimeout(r, gaps[attempt]));
+      }
+      if (seq !== loadSeq.current) return;
+      res = await fetchBooking(bookingId);
+      if (seq !== loadSeq.current) return;
+      if (res.status === "successful" && res.data) break;
+      const msg = (res.message || "").toLowerCase();
+      if (/not found|forbidden|unauthorized/.test(msg)) break;
+    }
+    if (seq !== loadSeq.current || !res) return;
     if (res.status !== "successful" || !res.data) {
-      if (!opts?.silent) {
+      if (!opts?.silent && !clinicalReady.current) {
         setError(res.message || "Visit not found");
         setBooking(null);
+        setChartReady(false);
       }
       return;
     }
     const b = res.data as BookingRow;
+    if (seq !== loadSeq.current) return;
     setBooking(b);
-    if (!opts?.silent) {
-      setRemarks(doctorRemarksForEdit(b.doctorRemarks));
+    const replaceForm = !opts?.silent || !clinicalDirty.current;
+    if (replaceForm) {
+      if (!opts?.silent || !clinicalReady.current) {
+        setRemarks(doctorRemarksForEdit(b.doctorRemarks));
+      }
+      if (!uploadingRef.current) {
+        const docs = Array.isArray(b.documents) ? b.documents : [];
+        documentsRef.current = docs;
+        setDocuments(docs);
+      }
       setMedicines(Array.isArray(b.medicines) ? b.medicines : []);
-      setDocuments(Array.isArray(b.documents) ? b.documents : []);
-      setClinicalAssessment(normalizeClinicalAssessment(b.clinicalAssessment));
-    } else {
-      if (Array.isArray(b.medicines)) setMedicines(b.medicines);
-      if (Array.isArray(b.documents)) setDocuments(b.documents);
-      // Keep local clinical edits — silent refresh must not wipe typing.
+      const chart = normalizeClinicalAssessment(b.clinicalAssessment);
+      clinicalRef.current = chart;
+      setClinicalAssessment(chart);
+      if (!opts?.silent) clinicalDirty.current = false;
+      clinicalReady.current = true;
     }
+    setChartReady(true);
     setError("");
+  }, [bookingId]);
+
+  useEffect(() => {
+    clinicalReady.current = false;
+    clinicalDirty.current = false;
+    clinicalRef.current = null;
+    setChartReady(false);
   }, [bookingId]);
 
   useEffect(() => {
@@ -155,19 +199,33 @@ export default function VisitScreen() {
     void getSessionUserId().then(setSelfId);
   }, [load]);
 
+  useEffect(() => {
+    if (!bookingId || !chartReady) return;
+    let alive = true;
+    void fetchGeneralDocuments(bookingId).then((res) => {
+      if (!alive || res.status !== "successful" || !res.data) return;
+      setGeneralLinked(Boolean(res.data.patientLinked));
+      setGeneralDocs(Array.isArray(res.data.documents) ? res.data.documents : []);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [bookingId, chartReady]);
+
 
   const fromShared = sharedBookings.find((b) => b.id === bookingId) ?? null;
 
   useEffect(() => {
-    if (!fromShared) return;
-    setBooking((prev) => {
-      if (!prev) return fromShared;
-      return patchBookingFields(
-        prev,
-        fromShared as unknown as Record<string, unknown>,
-      );
-    });
-  }, [fromShared]);
+    if (!fromShared || !chartReady) return;
+    setBooking((prev) =>
+      prev
+        ? patchBookingFields(
+            prev,
+            fromShared as unknown as Record<string, unknown>,
+          )
+        : prev,
+    );
+  }, [fromShared, chartReady]);
 
   useEffect(() => {
     if (bookingTick === 0) return;
@@ -188,7 +246,7 @@ export default function VisitScreen() {
     if (!bookingId || booking?.status === "COMPLETED") return
     setBusy(true)
     setError("")
-    let docsToSave = documents
+    let docsToSave = documentsRef.current
     if (docsToSave.length === 0) {
       const resFresh = await fetchBooking(bookingId)
       const serverDocs = Array.isArray(resFresh.data?.documents)
@@ -196,6 +254,7 @@ export default function VisitScreen() {
         : []
       if (serverDocs.length > 0) {
         docsToSave = serverDocs
+        documentsRef.current = serverDocs
         setDocuments(serverDocs)
       }
     }
@@ -203,7 +262,9 @@ export default function VisitScreen() {
       doctorRemarks: remarks,
       medicines: next,
       documents: docsToSave,
-      clinicalAssessment: clinicalAssessment ?? null,
+      ...(clinicalReady.current
+        ? { clinicalAssessment: clinicalRef.current }
+        : {}),
     })
     setBusy(false)
     if (res.status !== "successful") {
@@ -272,11 +333,24 @@ export default function VisitScreen() {
     if (!bookingId) return;
     setBusy(true);
     setError("");
+    const draftName = medName.trim();
+    const nextMedicines = draftName
+      ? [
+          ...medicines,
+          {
+            name: draftName,
+            amount: medAmount.trim() || undefined,
+            times: medTimes.length ? [...medTimes] : undefined,
+          },
+        ]
+      : medicines;
     const res = await updateVisit(bookingId, {
       doctorRemarks: remarks,
-      medicines,
-      documents,
-      clinicalAssessment: clinicalAssessment ?? null,
+      medicines: nextMedicines,
+      documents: documentsRef.current,
+      ...(clinicalReady.current
+        ? { clinicalAssessment: clinicalRef.current }
+        : {}),
       ...(alsoStatus ? { status: alsoStatus } : {}),
     });
     setBusy(false);
@@ -287,14 +361,14 @@ export default function VisitScreen() {
     await load();
   }
 
-  async function setStatus(status: string) {
+  async function applyStatus(status: string, reason?: string) {
     if (!bookingId) return;
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") {
       setError("Completed appointments cannot change status.");
       return;
     }
     setBusy(true);
-    const res = await updateBookingStatus(bookingId, status);
+    const res = await updateBookingStatus(bookingId, status, reason);
     setBusy(false);
     if (res.status !== "successful") {
       setError(res.message || "Update failed");
@@ -303,37 +377,64 @@ export default function VisitScreen() {
     await load();
   }
 
-  async function attachFromLibrary() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setError("Photo library permission is required.");
+  function setStatus(status: string, reasons?: string[]) {
+    if (reasons?.length) {
+      Alert.alert(
+        status === "NO_SHOW" ? "Mark as no-show?" : "Cancel this visit?",
+        "Tap a reason.",
+        [
+          { text: "Keep", style: "cancel" },
+          ...reasons.map((reason) => ({
+            text: reason,
+            style: "destructive" as const,
+            onPress: () => void applyStatus(status, reason),
+          })),
+        ],
+      );
       return;
     }
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.85,
-    });
-    if (picked.canceled || !picked.assets?.[0]) return;
-    const asset = picked.assets[0];
-    await uploadAsset({
-      uri: asset.uri,
-      name: asset.fileName || `photo-${Date.now()}.jpg`,
-      mimeType: asset.mimeType || "image/jpeg",
-    });
+    void applyStatus(status);
+  }
+
+  async function attachFromLibrary() {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        setError("Photo library permission is required.");
+        return;
+      }
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.85,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      const asset = picked.assets[0];
+      await uploadAsset({
+        uri: asset.uri,
+        name: asset.fileName || `photo-${Date.now()}.jpg`,
+        mimeType: asset.mimeType || "image/jpeg",
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open photos.");
+    }
   }
 
   async function attachDocument() {
-    const picked = await DocumentPicker.getDocumentAsync({
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
-    if (picked.canceled || !picked.assets?.[0]) return;
-    const asset = picked.assets[0];
-    await uploadAsset({
-      uri: asset.uri,
-      name: asset.name || `document-${Date.now()}`,
-      mimeType: asset.mimeType,
-    });
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      const asset = picked.assets[0];
+      await uploadAsset({
+        uri: asset.uri,
+        name: asset.name || `document-${Date.now()}`,
+        mimeType: asset.mimeType,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open files.");
+    }
   }
 
   async function uploadAsset(file: {
@@ -341,20 +442,89 @@ export default function VisitScreen() {
     name: string;
     mimeType?: string | null;
   }) {
+    if (!bookingId) return;
+    if (!clinicalReady.current) {
+      setError("Wait for the visit to finish loading, then add the file again.");
+      return;
+    }
     setUploading(true);
+    uploadingRef.current = true;
+    loadSeq.current += 1;
     setError("");
     try {
       const uploaded = await uploadVisitFile(file);
-      setDocuments((prev) => [
-        ...prev,
+      let base = documentsRef.current;
+      if (base.length === 0) {
+        const fresh = await fetchBooking(bookingId);
+        const serverDocs = Array.isArray(fresh.data?.documents)
+          ? (fresh.data.documents as VisitDocument[])
+          : [];
+        if (serverDocs.length > 0) base = serverDocs;
+      }
+      const next = [
+        ...base,
         {
           name: file.name || uploaded.original_filename || "Document",
           url: uploaded.secure_url,
           uploadedAt: new Date().toISOString(),
         },
-      ]);
-    } catch {
-      setError("Could not upload document.");
+      ];
+      documentsRef.current = next;
+      const res = await updateVisit(bookingId, { documents: next });
+      if (res.status !== "successful") {
+        setError(res.message || "The file uploaded, but it was not saved on this visit.");
+        return;
+      }
+      setDocuments(next);
+      loadSeq.current += 1;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload document.");
+    } finally {
+      uploadingRef.current = false;
+      setUploading(false);
+    }
+  }
+
+  async function removeDocument(idx: number) {
+    if (!bookingId || completed) return;
+    loadSeq.current += 1;
+    const next = documentsRef.current.filter((_, i) => i !== idx);
+    const previous = documentsRef.current;
+    documentsRef.current = next;
+    setDocuments(next);
+    const res = await updateVisit(bookingId, { documents: next });
+    if (res.status !== "successful") {
+      documentsRef.current = previous;
+      setDocuments(previous);
+      setError(res.message || "Could not remove that file.");
+    }
+  }
+
+  async function uploadGeneral(file: {
+    uri: string;
+    name: string;
+    mimeType?: string | null;
+  }) {
+    if (!bookingId || generalLinked === false) return;
+    setUploading(true);
+    setError("");
+    try {
+      const uploaded = await uploadVisitFile(file);
+      const res = await addGeneralDocument(bookingId, {
+        name: file.name || uploaded.original_filename || "Document",
+        url: uploaded.secure_url,
+      });
+      if (res.status !== "successful") {
+        setError(res.message || "The file uploaded, but it was not saved on the patient record.");
+        return;
+      }
+      const fresh = await fetchGeneralDocuments(bookingId);
+      if (fresh.status === "successful" && fresh.data) {
+        setGeneralLinked(Boolean(fresh.data.patientLinked));
+        setGeneralDocs(Array.isArray(fresh.data.documents) ? fresh.data.documents : []);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload document.");
     } finally {
       setUploading(false);
     }
@@ -366,6 +536,13 @@ export default function VisitScreen() {
     return (
       <View style={styles.rootPad}>
         <ErrorText text={error || "Visit not found"} />
+        <PrimaryButton
+          label="Try again"
+          onPress={() => {
+            setError("");
+            void load();
+          }}
+        />
         <PrimaryButton label="Back" onPress={() => router.back()} tone="ghost" />
       </View>
     );
@@ -485,17 +662,25 @@ export default function VisitScreen() {
         </View>
 
         <View style={styles.actions}>
-          {nextActions(booking.status).map((s) => (
+          {nextActions(booking.status)
+            .filter((s) => !s.opensVisit)
+            .map((s) => (
             <Chip
               key={s.status}
               label={s.label}
-              onPress={busy ? undefined : () => void setStatus(s.status)}
+              onPress={
+                busy ? undefined : () => setStatus(s.status, s.reasons)
+              }
             />
           ))}
           {completed ? (
-            <Text style={styles.lockedHint}>
-              Finished — cannot cancel or reschedule.
-            </Text>
+            <>
+              <RxButton bookingId={booking.id} status={booking.status} />
+              <Text style={styles.lockedHint}>
+                Finished — cannot cancel or reschedule. Rx opens the clinic log
+                and can send it on WhatsApp.
+              </Text>
+            </>
           ) : null}
         </View>
 
@@ -504,15 +689,24 @@ export default function VisitScreen() {
           Capture vitals with color bands, pain rows, and allergies. Tap Save
           clinical below (or Save visit notes at the bottom).
         </Text>
-        <ClinicalAssessmentPanel
-          mastersRaw={
-            membership?.practice.clinicalMasters ??
-            booking.practice?.clinicalMasters
-          }
-          value={clinicalAssessment}
-          readOnly={completed}
-          onChange={setClinicalAssessment}
-        />
+        {chartReady ? (
+          <ClinicalAssessmentPanel
+            mastersRaw={
+              membership?.practice.clinicalMasters ??
+              booking.practice?.clinicalMasters
+            }
+            value={clinicalAssessment}
+            readOnly={completed}
+            onChange={(next) => {
+              clinicalDirty.current = true;
+              clinicalReady.current = true;
+              clinicalRef.current = next;
+              setClinicalAssessment(next);
+            }}
+          />
+        ) : (
+          <Text style={styles.hint}>Loading chart…</Text>
+        )}
         {!completed ? (
           <PrimaryButton
             label={busy ? "Saving…" : "Save clinical"}
@@ -624,9 +818,96 @@ export default function VisitScreen() {
             active={sideTab === "documents"}
             onPress={() => setSideTab("documents")}
           />
+          <Chip
+            label={`Patient record${generalDocs.length ? ` (${generalDocs.length})` : ""}`}
+            active={sideTab === "record"}
+            onPress={() => setSideTab("record")}
+          />
         </View>
 
-        {sideTab === "chat" ? (
+        {sideTab === "record" ? (
+          <View style={styles.card}>
+            {generalLinked === false ? (
+              <Text style={styles.hint}>
+                This visit isn&apos;t linked to a registered patient, so there is no patient record for general documents.
+              </Text>
+            ) : (
+              <>
+                <View style={{ gap: space.sm, marginBottom: space.md }}>
+                  <PrimaryButton
+                    label={uploading ? "Uploading…" : "Add photo to record"}
+                    onPress={() =>
+                      void (async () => {
+                        try {
+                          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                          if (!perm.granted) {
+                            setError("Photo library permission is required.");
+                            return;
+                          }
+                          const picked = await ImagePicker.launchImageLibraryAsync({
+                            mediaTypes: ["images"],
+                            quality: 0.8,
+                          });
+                          if (picked.canceled || !picked.assets?.[0]) return;
+                          const asset = picked.assets[0];
+                          await uploadGeneral({
+                            uri: asset.uri,
+                            name: asset.fileName || `photo-${Date.now()}.jpg`,
+                            mimeType: asset.mimeType,
+                          });
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Could not open photos.");
+                        }
+                      })()
+                    }
+                    busy={uploading}
+                  />
+                  <PrimaryButton
+                    label="Add file to record"
+                    onPress={() =>
+                      void (async () => {
+                        try {
+                          const picked = await DocumentPicker.getDocumentAsync({
+                            copyToCacheDirectory: true,
+                            multiple: false,
+                          });
+                          if (picked.canceled || !picked.assets?.[0]) return;
+                          const asset = picked.assets[0];
+                          await uploadGeneral({
+                            uri: asset.uri,
+                            name: asset.name || `document-${Date.now()}`,
+                            mimeType: asset.mimeType,
+                          });
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Could not open files.");
+                        }
+                      })()
+                    }
+                    busy={uploading}
+                    tone="ghost"
+                  />
+                </View>
+                {generalLinked === null ? (
+                  <Text style={styles.hint}>Loading patient record…</Text>
+                ) : generalDocs.length === 0 ? (
+                  <Text style={styles.hint}>No general documents yet.</Text>
+                ) : (
+                  generalDocs.map((d, idx) => (
+                    <Pressable
+                      key={`${d.url}-${idx}`}
+                      onPress={() => void Linking.openURL(d.url)}
+                      style={styles.docRow}
+                    >
+                      <Text style={styles.medName} numberOfLines={1}>
+                        {d.name || "View document"}
+                      </Text>
+                    </Pressable>
+                  ))
+                )}
+              </>
+            )}
+          </View>
+        ) : sideTab === "chat" ? (
           selfId && peerId ? (
             <CareChatPanel
               selfUserId={selfId}
@@ -677,11 +958,7 @@ export default function VisitScreen() {
                   {!completed ? (
                     <Chip
                       label="Remove"
-                      onPress={() =>
-                        setDocuments((prev) =>
-                          prev.filter((_, i) => i !== idx),
-                        )
-                      }
+                      onPress={() => void removeDocument(idx)}
                     />
                   ) : null}
                 </View>

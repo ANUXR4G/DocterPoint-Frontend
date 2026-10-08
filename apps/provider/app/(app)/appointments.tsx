@@ -22,7 +22,9 @@ import { contentBottomPad } from "@/lib/dockLayout";
 import { AnimatedView, PressableScale } from "@/lib/motion";
 import { isClinicAdminRole, usePractice } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
-import { updateBookingStatus } from "@/lib/procto";
+import { RxButton } from "@/components/ClinicLogSheet";
+import { WalkInSheet } from "@/components/WalkInSheet";
+import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import {
   bookingPatientLabel,
@@ -120,30 +122,9 @@ export default function AppointmentsScreen() {
   const isStaffOnly = !isClinicAdminRole(membership?.role);
   const [view, setView] = useState<ViewMode>("list");
   const [scope, setScope] = useState<Scope>("upcoming");
-  const [localError, setLocalError] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  async function setStatus(id: string, status: string) {
-    const current = rows.find((b) => b.id === id)?.status;
-    if (
-      ["COMPLETED", "CANCELED", "CANCELLED", "NO_SHOW"].includes(
-        String(current || "").toUpperCase(),
-      )
-    ) {
-      setLocalError("Completed appointments cannot change status.");
-      return;
-    }
-    setBusyId(id);
-    const res = await updateBookingStatus(id, status);
-    setBusyId(null);
-    if (res.status !== "successful") {
-      setLocalError(res.message || "Update failed");
-      return;
-    }
-    setLocalError("");
-    await refresh({ soft: true, force: true });
-  }
+  const [walkInOpen, setWalkInOpen] = useState(false);
+  const { busyId, error: actionError, setStatus } = useBookingStatusActions();
 
   const filtered = useMemo(() => {
     const list = rows.filter((b) => {
@@ -201,6 +182,7 @@ export default function AppointmentsScreen() {
         />
 
         <View style={styles.viewSwitch}>
+          <Chip label="Emergency walk-in" onPress={() => setWalkInOpen(true)} />
           <Chip
             label="List"
             active={view === "list"}
@@ -213,7 +195,7 @@ export default function AppointmentsScreen() {
           />
         </View>
 
-        <ErrorText text={localError || liveError || ""} />
+        <ErrorText text={actionError || liveError || ""} />
 
         {view === "calendar" ? (
           <CareCalendar
@@ -284,6 +266,7 @@ export default function AppointmentsScreen() {
                       <View style={styles.actions}>
                         <Text style={styles.viewHint}>Tap for visit →</Text>
                         <View style={styles.actionChips}>
+                          <RxButton bookingId={b.id} status={b.status} />
                           {nextActions(b.status).map((a) => (
                             <Chip
                               key={a.status}
@@ -292,7 +275,15 @@ export default function AppointmentsScreen() {
                               onPress={
                                 busyId === b.id
                                   ? undefined
-                                  : () => void setStatus(b.id, a.status)
+                                  : () => {
+                                      if (a.opensVisit) {
+                                        router.push(
+                                          `/(app)/visit/${b.id}` as Href,
+                                        );
+                                        return;
+                                      }
+                                      void setStatus(b.id, a.status, a.reasons);
+                                    }
                               }
                             />
                           ))}
@@ -306,6 +297,13 @@ export default function AppointmentsScreen() {
           </>
         )}
       </ScrollView>
+      <WalkInSheet
+        visible={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        onAdded={() => {
+          void refresh({ soft: true, force: true });
+        }}
+      />
     </View>
   );
 }

@@ -26,6 +26,7 @@ import {
   usePractice,
 } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
+import { RxButton } from "@/components/ClinicLogSheet";
 import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
 import { withDrTitle } from "@/lib/doctorName";
 import {
@@ -241,10 +242,21 @@ export default function DashboardScreen() {
                   <Chip
                     key={s.status}
                     label={busy ? "Saving…" : s.label}
-                    onPress={busy ? undefined : () => setStatus(b.id, s.status)}
+                    onPress={
+                      busy
+                        ? undefined
+                        : () => {
+                            if (s.opensVisit) {
+                              router.push(`/(app)/visit/${b.id}`);
+                              return;
+                            }
+                            setStatus(b.id, s.status, s.reasons);
+                          }
+                    }
                     disabled={busy}
                   />
                 ))}
+                <RxButton bookingId={b.id} status={b.status} />
                 <Chip
                   label="Open visit"
                   onPress={() => router.push(`/(app)/visit/${b.id}`)}

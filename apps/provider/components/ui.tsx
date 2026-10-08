@@ -295,7 +295,7 @@ export function StatusBadge({ status }: { status: string }) {
     s === "WAITING" || s === "CHECKED_IN"
       ? "In waiting"
       : s === "IN_PROGRESS"
-        ? "Appointment started"
+        ? "In consultation"
         : s === "COMPLETED"
           ? "Appointment finished"
           : s === "ACCEPTED" ||

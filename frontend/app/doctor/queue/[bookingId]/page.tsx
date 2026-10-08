@@ -62,6 +62,12 @@ type VisitBooking = {
   medicines?: Medicine[] | null
   documents?: VisitDoc[] | null
   clinicalAssessment?: ClinicalAssessment | null
+  clinicalVersions?: Array<{
+    id: string
+    savedAt: string
+    actorName?: string | null
+    snapshot: ClinicalAssessment
+  }>
   slotStart?: string | null
   tokenNumber?: number | null
   sessionDate?: string | null
@@ -235,9 +241,9 @@ export default function VisitPage() {
   )
 
   const [booking, setBooking] = useState<VisitBooking | null>(null)
-  const [loading, setLoading] = useState(true)
   const [detailLoaded, setDetailLoaded] = useState(false)
   const [error, setError] = useState("")
+  const [loadTick, setLoadTick] = useState(0)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -246,6 +252,20 @@ export default function VisitPage() {
   const [documents, setDocuments] = useState<VisitDoc[]>([])
   const [clinicalAssessment, setClinicalAssessment] =
     useState<ClinicalAssessment | null>(null)
+  const [clinicalVersions, setClinicalVersions] = useState<
+    Array<{
+      id: string
+      savedAt: string
+      actorName?: string | null
+      snapshot: ClinicalAssessment
+    }>
+  >([])
+  const clinicalReady = useRef(false)
+  const clinicalDirty = useRef(false)
+  const formDirty = useRef(false)
+  const clinicalRef = useRef<ClinicalAssessment | null>(null)
+  const documentsRef = useRef<VisitDoc[]>([])
+  const fetchGen = useRef(0)
   const [docTab, setDocTab] = useState<"appointment" | "general">("appointment")
   const [generalDocs, setGeneralDocs] = useState<VisitDoc[]>([])
   const [generalLinked, setGeneralLinked] = useState<boolean | null>(null)
@@ -256,85 +276,89 @@ export default function VisitPage() {
   const medicinesRef = useRef<Medicine[]>([])
   medicinesRef.current = medicines
 
-  const applyVisitData = useCallback((data: VisitBooking, opts?: { silent?: boolean }) => {
+  const applyVisitData = useCallback((data: VisitBooking, mode: "hydrate" | "refresh") => {
     setBooking(data)
-    if (!opts?.silent) {
-      setRemarks(doctorRemarksForEdit(data.doctorRemarks))
-      setMedicines(Array.isArray(data.medicines) ? data.medicines : [])
-      setDocuments(Array.isArray(data.documents) ? data.documents : [])
-      setClinicalAssessment(
-        (data.clinicalAssessment as ClinicalAssessment) ?? null,
-      )
-      setLoading(false)
-    } else {
-      if (Array.isArray(data.medicines)) setMedicines(data.medicines)
-      if (Array.isArray(data.documents)) setDocuments(data.documents)
-      if (data.doctorRemarks !== undefined) {
-        setRemarks(doctorRemarksForEdit(data.doctorRemarks))
-      }
-      // Do not overwrite clinicalAssessment on silent refresh — that wiped
-      // unsaved Add pain / Add allergy rows before the doctor hit Save.
+    if (Array.isArray(data.clinicalVersions)) {
+      setClinicalVersions(data.clinicalVersions)
     }
+    // Hydrate replaces the form with the stored visit. A later refresh keeps
+    // the chart, notes, and files the doctor has changed and not saved.
+    if (mode === "hydrate" || (!clinicalDirty.current && !formDirty.current)) {
+      setRemarks(doctorRemarksForEdit(data.doctorRemarks))
+      const meds = Array.isArray(data.medicines) ? data.medicines : []
+      const docs = Array.isArray(data.documents) ? data.documents : []
+      setMedicines(meds)
+      medicinesRef.current = meds
+      setDocuments(docs)
+      documentsRef.current = docs
+      const chart = (data.clinicalAssessment as ClinicalAssessment) ?? null
+      clinicalRef.current = chart
+      setClinicalAssessment(chart)
+      clinicalDirty.current = false
+      formDirty.current = false
+      clinicalReady.current = true
+    }
+    setDetailLoaded(true)
+    setError("")
   }, [])
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
+  const load = useCallback(async (mode: "hydrate" | "refresh" = "refresh") => {
     if (!bookingId) return null
-    if (!opts?.silent) {
-      setLoading(true)
-      setError("")
-    }
+    const gen = ++fetchGen.current
     const res = await proctoService.getBooking(bookingId)
-    if (res.status !== "successful" || !res.data) {
-      if (!opts?.silent) {
-        setError(res.message || "Visit not found.")
-        if (!fromShared) setLoading(false)
-      }
-      return null
-    }
+    if (gen !== fetchGen.current) return null
+    if (res.status !== "successful" || !res.data) return null
     const data = res.data as VisitBooking
-    applyVisitData(data, opts)
-    setDetailLoaded(true)
+    applyVisitData(data, mode)
     return data
-  }, [bookingId, fromShared, applyVisitData])
+  }, [bookingId, applyVisitData])
 
   useEffect(() => {
-    if (fromShared) {
-      setBooking((prev) =>
-        prev
-          ? patchBookingFields(prev, fromShared as Record<string, unknown>)
-          : fromShared,
-      )
-      if (Array.isArray(fromShared.documents)) {
-        setDocuments(fromShared.documents)
+    clinicalReady.current = false
+    clinicalDirty.current = false
+    formDirty.current = false
+    clinicalRef.current = null
+    setDetailLoaded(false)
+    setClinicalAssessment(null)
+    setError("")
+  }, [bookingId])
+
+  useEffect(() => {
+    if (!bookingId || !ready) return
+    const gen = ++fetchGen.current
+    let cancelled = false
+    void (async () => {
+      const gaps = [0, 1000, 2500]
+      let res: Awaited<ReturnType<typeof proctoService.getBooking>> | null = null
+      for (let attempt = 0; attempt < gaps.length; attempt++) {
+        if (gaps[attempt]) await new Promise((r) => setTimeout(r, gaps[attempt]))
+        if (cancelled || gen !== fetchGen.current) return
+        res = await proctoService.getBooking(bookingId)
+        if (cancelled || gen !== fetchGen.current) return
+        if (res.status === "successful" && res.data) {
+          applyVisitData(res.data as VisitBooking, "hydrate")
+          return
+        }
+        const msg = (res.message || "").toLowerCase()
+        const missing = /not found|forbidden|unauthorized/.test(msg)
+        if (missing) break
       }
-      if (Array.isArray(fromShared.medicines)) {
-        setMedicines(fromShared.medicines as Medicine[])
-      }
-      if (fromShared.doctorRemarks != null) {
-        setRemarks(doctorRemarksForEdit(fromShared.doctorRemarks))
-      }
-      if (ready) setLoading(false)
+      if (cancelled || gen !== fetchGen.current) return
+      setError(res?.message || "Visit not found.")
+    })()
+    return () => {
+      cancelled = true
     }
-  }, [fromShared, ready])
+  }, [bookingId, ready, applyVisitData, loadTick])
 
   useEffect(() => {
-    if (!bookingId) return
-    if (fromShared && ready) {
-      setLoading(false)
-      if (!detailLoaded) void load({ silent: true })
-      return
-    }
-    if (ready) void load()
-  }, [bookingId, fromShared, ready, detailLoaded, load])
-
-  useEffect(() => {
-    if (!fromShared) return
+    if (!fromShared || !detailLoaded) return
     setBooking((prev) =>
       prev
         ? patchBookingFields(prev, fromShared as Record<string, unknown>)
         : prev,
     )
-  }, [fromShared])
+  }, [fromShared, detailLoaded])
 
   const loadGeneralDocs = useCallback(async () => {
     if (!bookingId) return
@@ -383,12 +407,15 @@ export default function VisitPage() {
       return false
     // Ensure WhatsApp / server documents are loaded before any save so we
     // never POST documents:[] and wipe patient attachments.
-    let docsToSave = nextDocuments
-    if (!detailLoaded || docsToSave.length === 0) {
-      const fresh = await load({ silent: true })
-      const serverDocs = Array.isArray(fresh?.documents) ? fresh!.documents! : []
-      if (docsToSave.length === 0 && serverDocs.length > 0) {
+    let docsToSave = nextDocuments.length ? nextDocuments : documentsRef.current
+    if (docsToSave.length === 0) {
+      const fresh = await proctoService.getBooking(bookingId)
+      const serverDocs = Array.isArray(fresh.data?.documents)
+        ? (fresh.data.documents as VisitDoc[])
+        : []
+      if (serverDocs.length > 0) {
         docsToSave = serverDocs
+        documentsRef.current = serverDocs
         setDocuments(serverDocs)
       }
     }
@@ -396,16 +423,18 @@ export default function VisitPage() {
       doctorRemarks: remarks,
       medicines: nextMedicines,
       documents: docsToSave,
-      clinicalAssessment: clinicalAssessment ?? null,
+      ...(clinicalReady.current
+        ? { clinicalAssessment: clinicalRef.current }
+        : {}),
       ...(opts?.status ? { status: opts.status } : {}),
     })
     if (res.status !== "successful") {
       toast.error(res.message || "Could not save visit.")
-      await load({ silent: true })
+      await load("refresh")
       return false
     }
     const saved = res.data as VisitBooking
-    applyVisitData(saved, { silent: true })
+    applyVisitData(saved, "hydrate")
     patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
     if (opts?.successMessage) toast.success(opts.successMessage)
     return true
@@ -486,15 +515,16 @@ export default function VisitPage() {
     setUploading(true)
     try {
       const uploaded = await uploadBookingDocument(file)
-      const nextDocs = [...documents, uploaded]
+      const previousDocs = documentsRef.current
+      const nextDocs = [...previousDocs, uploaded]
+      documentsRef.current = nextDocs
       setDocuments(nextDocs)
       const res = await proctoService.updateBookingVisit(bookingId, {
-        doctorRemarks: remarks,
-        medicines,
         documents: nextDocs,
-        clinicalAssessment: clinicalAssessment ?? null,
       })
       if (res.status !== "successful") {
+        documentsRef.current = previousDocs
+        setDocuments(previousDocs)
         toast.error(res.message || "Document uploaded but could not save to visit.")
         return
       }
@@ -539,8 +569,10 @@ export default function VisitPage() {
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
       medicines: nextMedicines,
-      documents,
-      clinicalAssessment: clinicalAssessment ?? null,
+      documents: documentsRef.current,
+      ...(clinicalReady.current
+        ? { clinicalAssessment: clinicalRef.current }
+        : {}),
       ...(nextStatus ? { status: nextStatus } : {}),
     })
     setSaving(false)
@@ -549,12 +581,7 @@ export default function VisitPage() {
       return
     }
     const saved = res.data as VisitBooking
-    setBooking(saved)
-    if (saved.clinicalAssessment !== undefined) {
-      setClinicalAssessment(
-        (saved.clinicalAssessment as ClinicalAssessment) ?? null,
-      )
-    }
+    applyVisitData(saved, "hydrate")
     patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
     if (nextStatus === "COMPLETED") {
       toast.success("Visit completed.")
@@ -564,10 +591,29 @@ export default function VisitPage() {
     toast.success("Visit saved.")
   }
 
-  if (loading) {
+  if (!detailLoaded) {
     return (
       <div className="dashboard-page-wide py-10">
-        <p className="text-sm opacity-70">Loading visit…</p>
+        <p className={error ? "text-sm text-red-600" : "text-sm opacity-70"}>
+          {error || "Loading visit…"}
+        </p>
+        {error ? (
+          <div className="mt-4 flex items-center gap-4">
+            <button
+              type="button"
+              className="text-sm font-medium underline"
+              onClick={() => {
+                setError("")
+                setLoadTick((n) => n + 1)
+              }}
+            >
+              Try again
+            </button>
+            <Link href="/doctor/queue" className="text-sm underline">
+              ← Back to queue
+            </Link>
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -758,8 +804,14 @@ export default function VisitPage() {
       <ClinicalAssessmentPanel
         mastersRaw={booking.practice?.clinicalMasters}
         value={clinicalAssessment}
+        versions={clinicalVersions}
         readOnly={isCompleted}
-        onChange={setClinicalAssessment}
+        onChange={(next) => {
+          clinicalDirty.current = true
+          clinicalReady.current = true
+          clinicalRef.current = next
+          setClinicalAssessment(next)
+        }}
       />
 
       {/* Remarks */}
@@ -772,7 +824,10 @@ export default function VisitPage() {
         </p>
         <textarea
           value={remarks}
-          onChange={(e) => setRemarks(e.target.value)}
+          onChange={(e) => {
+            formDirty.current = true
+            setRemarks(e.target.value)
+          }}
           readOnly={isCompleted}
           disabled={isCompleted}
           rows={5}
@@ -1045,7 +1100,7 @@ export default function VisitPage() {
           subtitle="Patient WhatsApp replies also appear here. Attached documents are sent on WhatsApp and saved to this visit."
           bookingId={bookingId}
           threadSince={booking?.createdAt ?? booking?.created_at ?? null}
-          onDocumentShared={() => void load({ silent: true })}
+          onDocumentShared={() => void load("refresh")}
         />
       ) : (
         <section className="dashboard-panel !p-5">

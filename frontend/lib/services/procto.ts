@@ -488,10 +488,17 @@ export const proctoService = {
       `/procto/practices/${practiceId}/calendar?providerId=${providerId}&date=${date}`,
     ) as Promise<ProctoResult<CalendarDay>>,
 
-  updateBookingStatus: (bookingId: string, status: string) =>
+  updateBookingStatus: (
+    bookingId: string,
+    status: string,
+    cancelReason?: string,
+  ) =>
     proctoFetch(`/procto/bookings/${bookingId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({
+        status,
+        ...(cancelReason ? { cancelReason } : {}),
+      }),
     }),
 
   updateBookingVisit: (

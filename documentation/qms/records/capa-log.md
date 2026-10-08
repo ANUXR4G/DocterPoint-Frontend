@@ -26,6 +26,20 @@ Append new entries at the top. Do not delete closed records.
 
 ## Records
 
+### NC-20261008-01
+- **Date opened:** 2026-10-08
+- **Severity:** 2
+- **Process:** P-BOOK
+- **Description:** Reopening Rahul Kumar’s in-consultation visit painted an empty vitals, pain, and allergy chart even though the stored chart was intact. Provider Add photo / Add file did not stay on the visit.
+- **Evidence:** Booking `691a2607-7ad3-40ae-9312-a22bde83aaa3` still had Ht 165, Wt 85, pain location Head, allergies Peanuts and Penicillin; `updatedAt` had not moved. Screenshot showed empty placeholders. `documents` length 0.
+- **Containment:** Do not Save over that visit from the empty screen.
+- **Root cause:** The queue row has no clinical chart, and the page cleared the loading state before the visit GET returned, so the form mounted blank. The provider app kept a picked file only in local state, and the next refresh replaced it with the server list.
+- **Corrective action:** Keep “Loading visit…” until the visit payload is applied. Persist provider documents with `PATCH /visit` as soon as the upload succeeds, and do not send a null chart on that save.
+- **Owner / due:** Engineering / 2026-10-08
+- **Verification:** Reopened `/doctor/queue/691a2607-7ad3-40ae-9312-a22bde83aaa3`. Form showed Saved 10/8/2026, 7:01 PM, Ht 165, Wt 85, BMI 31.2, Linear Pain Scale, location Head, allergy text for peanuts. Save was not pressed.
+- **Status:** Verified
+- **Docs updated:** risk-register R40
+
 ### NC-20261007-02
 - **Date opened:** 2026-10-07
 - **Severity:** 2

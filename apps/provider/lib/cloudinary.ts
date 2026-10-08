@@ -9,6 +9,25 @@ export type CloudinaryUpload = {
   original_filename?: string;
 };
 
+function mimeFor(name: string, mime?: string | null) {
+  if (mime && mime !== "application/octet-stream") return mime;
+  if (/\.png$/i.test(name)) return "image/png";
+  if (/\.webp$/i.test(name)) return "image/webp";
+  if (/\.heic$/i.test(name)) return "image/heic";
+  if (/\.pdf$/i.test(name)) return "application/pdf";
+  if (/\.(jpe?g)$/i.test(name)) return "image/jpeg";
+  return mime || "application/octet-stream";
+}
+
+function cloudinaryMessage(body: string) {
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string } };
+    return parsed.error?.message || "";
+  } catch {
+    return "";
+  }
+}
+
 function publicId(name: string) {
   const base = name
     .replace(/\.[^.]+$/, "")
@@ -22,7 +41,7 @@ export async function uploadVisitFile(opts: {
   name: string;
   mimeType?: string | null;
 }): Promise<CloudinaryUpload> {
-  const mime = opts.mimeType || "application/octet-stream";
+  const mime = mimeFor(opts.name, opts.mimeType);
   const isImage = mime.startsWith("image/");
   const endpoint = isImage ? "image/upload" : "auto/upload";
 
@@ -40,7 +59,8 @@ export async function uploadVisitFile(opts: {
     { method: "POST", body: form },
   );
   if (!res.ok) {
-    throw new Error("Upload failed");
+    const detail = await res.text().catch(() => "");
+    throw new Error(cloudinaryMessage(detail) || "Upload failed");
   }
   return (await res.json()) as CloudinaryUpload;
 }

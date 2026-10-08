@@ -612,6 +612,7 @@ model PracticeBooking {
   review          PracticeReview?
   paymentRequests PaymentRequest[]
   scheduleAlerts  ScheduleChangeAlert[]
+  clinicalVersions ClinicalAssessmentVersion[]
 
   @@index([practiceId, providerId, status, slotStart])
   @@index([practiceId, providerId, sessionDate, status])
@@ -619,6 +620,21 @@ model PracticeBooking {
   @@index([patientId])
   @@index([paymentLinkId])
   @@map("practice_bookings")
+}
+
+/// One row each time vitals, pain, or allergies on a visit are saved. Never updated.
+model ClinicalAssessmentVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  bookingId   String   @map("booking_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  actorName   String?  @map("actor_name") @db.VarChar(160)
+  snapshot    Json
+  savedAt     DateTime @default(now()) @map("saved_at") @db.Timestamptz(6)
+
+  booking PracticeBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, savedAt(sort: Desc)])
+  @@map("clinical_assessment_versions")
 }
 
 /// Every Razorpay Payment Link sent to a patient: WhatsApp advance / fee prepay and staff custom requests.

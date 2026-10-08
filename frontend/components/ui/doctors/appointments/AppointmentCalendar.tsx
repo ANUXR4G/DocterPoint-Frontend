@@ -176,12 +176,12 @@ function BookingDetails({
   const { patchBooking } = usePracticeDashboard()
   const [statusBusy, setStatusBusy] = useState(false)
 
-  async function onStatus(status: string) {
+  async function onStatus(status: string, reason?: string) {
     if (isTerminalVisitStatus(booking.status)) return
     const previous = booking.status
     setStatusBusy(true)
     patchBooking(booking.id, { status })
-    const res = await proctoService.updateBookingStatus(booking.id, status)
+    const res = await proctoService.updateBookingStatus(booking.id, status, reason)
     setStatusBusy(false)
     if (res.status !== "successful") {
       patchBooking(booking.id, { status: previous })
@@ -259,7 +259,8 @@ function BookingDetails({
           status={booking.status}
           busy={statusBusy}
           compact
-          onChange={(status) => void onStatus(status)}
+          visitHref={`/doctor/queue/${booking.id}`}
+          onChange={(status, reason) => void onStatus(status, reason)}
         />
       </div>
       <Link

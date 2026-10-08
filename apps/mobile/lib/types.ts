@@ -24,7 +24,15 @@ export type ProctoBooking = {
     consultationFee?: number | null;
   };
   location?: { name?: string; city?: string; address?: string };
-  provider?: { id?: string; name?: string | null };
+  provider?: {
+    id?: string;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    licenseNo?: string | null;
+    description?: string | null;
+    experience?: number | null;
+  };
   providerName?: string | null;
   /** Times are labels such as "Morning" or "Every 4 hours". */
   medicines?: { name: string; amount?: string; times?: string[] }[] | null;
@@ -48,7 +56,17 @@ export type BookingDetail = ProctoBooking & {
   patientName?: string | null;
   consultationType?: string | null;
   doctorRemarks?: string | null;
+  clinicalAssessment?: unknown;
   documents?: { name: string; url: string; uploadedAt?: string }[] | null;
+  patient?: {
+    name?: string | null;
+    mrn?: string | null;
+    gender?: string | null;
+    age?: number | null;
+    dateOfBirth?: string | null;
+    phone?: string | null;
+    contactNumber?: string | null;
+  } | null;
   reviewEligibility?: {
     canReview: boolean;
     alreadyReviewed: boolean;

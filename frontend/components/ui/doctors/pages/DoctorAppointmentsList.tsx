@@ -279,7 +279,7 @@ export default function DoctorAppointmentsList({
       : (APPOINTMENT_RANGE_PRESETS.find((p) => p.key === rangePreset)?.label ??
         "").toLowerCase()
 
-  async function onStatus(id: string, status: string) {
+  async function onStatus(id: string, status: string, reason?: string) {
     const previous = rangeRows.find((b) => b.id === id)?.status
     if (isTerminalVisitStatus(previous || "")) {
       setActionError("Completed appointments cannot change status.")
@@ -293,7 +293,7 @@ export default function DoctorAppointmentsList({
     setActionError("")
     patchBooking(id, { status })
     patchRemote(status)
-    const res = await proctoService.updateBookingStatus(id, status)
+    const res = await proctoService.updateBookingStatus(id, status, reason)
     setBusyId(null)
     if (res.status !== "successful") {
       if (previous) {
@@ -535,7 +535,8 @@ export default function DoctorAppointmentsList({
                     compact
                     showActionButtons={false}
                     ariaLabel={`Update status for ${b.patientName || "patient"}`}
-                    onChange={(status) => void onStatus(b.id, status)}
+                    visitHref={`/doctor/queue/${b.id}`}
+                    onChange={(status, reason) => void onStatus(b.id, status, reason)}
                   />
                   <ChatIconButton
                     enabled={Boolean(bookingPeerUserId(b))}
@@ -626,7 +627,8 @@ export default function DoctorAppointmentsList({
                         compact
                         showActionButtons={false}
                         ariaLabel={`Update status for ${b.patientName || "patient"}`}
-                        onChange={(status) => void onStatus(b.id, status)}
+                        visitHref={`/doctor/queue/${b.id}`}
+                    onChange={(status, reason) => void onStatus(b.id, status, reason)}
                       />
                     </td>
                     <td className="px-4 py-3">

@@ -316,10 +316,14 @@ router.patch(
           "Finish the appointment from the visit page (it saves remarks and medicines with it).",
         );
       }
+      const cancelReason = req.body?.cancelReason
+        ? String(req.body.cancelReason).trim().slice(0, 250)
+        : undefined;
       const data = await BookingService.updateStatus(
         param(req.params.id),
         status,
         req.sessionUser!.id,
+        cancelReason ? { cancelReason } : undefined,
       );
       return ResponseHandler.fetchSuccessful(res, "booking updated.", data);
     } catch (error) {

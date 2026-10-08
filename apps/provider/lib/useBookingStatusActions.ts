@@ -24,9 +24,9 @@ export function useBookingStatusActions() {
   const [error, setError] = useState("");
 
   const apply = useCallback(
-    async (id: string, status: string) => {
+    async (id: string, status: string, reason?: string) => {
       setBusyId(id);
-      const res = await updateBookingStatus(id, status);
+      const res = await updateBookingStatus(id, status, reason);
       setBusyId(null);
       if (res.status !== "successful") {
         setError(res.message || "Update failed");
@@ -40,11 +40,23 @@ export function useBookingStatusActions() {
   );
 
   const setStatus = useCallback(
-    (id: string, status: string) => {
+    (id: string, status: string, reasons?: string[]) => {
       if (busyId) return;
       const current = bookings.find((b) => b.id === id)?.status;
       if (isFinishedStatus(current)) {
         setError("Completed appointments cannot change status.");
+        return;
+      }
+      if (reasons?.length) {
+        const confirm = CONFIRM[status];
+        Alert.alert(confirm?.title ?? "Close this visit?", "Tap a reason.", [
+          { text: "Keep", style: "cancel" },
+          ...reasons.map((reason) => ({
+            text: reason,
+            style: "destructive" as const,
+            onPress: () => void apply(id, status, reason),
+          })),
+        ]);
         return;
       }
       const confirm = CONFIRM[status];

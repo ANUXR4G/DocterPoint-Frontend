@@ -211,7 +211,16 @@ export function consultationTypeLabel(value: string | null | undefined): string 
   return value === "EMERGENCY_WALK_IN" ? "Emergency walk-in" : value;
 }
 
-export function nextActions(status: string): Array<{ status: string; label: string }> {
+export type StatusStep = {
+  status: string;
+  label: string;
+  /** Opens the visit. Finish is not a status PATCH. */
+  opensVisit?: boolean;
+  /** Tap a label. Nothing is typed. */
+  reasons?: string[];
+};
+
+export function nextActions(status: string): StatusStep[] {
   switch (String(status || "").toUpperCase()) {
     case "SCHEDULED":
     case "REQUESTED":
@@ -220,19 +229,30 @@ export function nextActions(status: string): Array<{ status: string; label: stri
     case "CONFIRMED":
       return [
         { status: "WAITING", label: "Arrived" },
-        { status: "NO_SHOW", label: "No-show" },
-        { status: "CANCELED", label: "Cancel" },
+        { status: "NO_SHOW", label: "No-show", reasons: ["Did not arrive"] },
+        {
+          status: "CANCELED",
+          label: "Cancel",
+          reasons: ["Patient canceled", "Clinic canceled"],
+        },
       ];
     case "WAITING":
     case "CHECKED_IN":
       return [
         { status: "IN_PROGRESS", label: "Start consultation" },
-        { status: "NO_SHOW", label: "No-show" },
-        { status: "CANCELED", label: "Cancel" },
+        {
+          status: "NO_SHOW",
+          label: "No-show",
+          reasons: ["Left before being seen"],
+        },
+        {
+          status: "CANCELED",
+          label: "Cancel",
+          reasons: ["Patient left", "Clinic canceled"],
+        },
       ];
     case "IN_PROGRESS":
-      // Finish only from the visit screen's own button (saves notes with it).
-      return [{ status: "NO_SHOW", label: "No-show" }];
+      return [{ status: "COMPLETED", label: "Finish", opensVisit: true }];
     case "COMPLETED":
     case "CANCELED":
     case "CANCELLED":

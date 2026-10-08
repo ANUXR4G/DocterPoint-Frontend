@@ -13,6 +13,9 @@ type Props = {
   value: DeskPatient | null
   onChange: (patient: DeskPatient | null) => void
   autoFocus?: boolean
+  /** When false, the parent modal draws the wait state. */
+  showLookupStatus?: boolean
+  onBusyChange?: (busy: { searching: boolean; loadingRecord: boolean }) => void
 }
 
 const GENDERS: Array<[DeskPatientRegistration["gender"], string]> = [
@@ -32,6 +35,37 @@ const labelClass = deskLabelClass
 function genderLabel(g: string | null) {
   if (!g) return null
   return g === "male" ? "Male" : g === "female" ? "Female" : "Other"
+}
+
+export function LookupStatus({
+  label,
+  detail,
+}: {
+  label: string
+  detail?: string
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3 dark:border-slate-700 dark:bg-slate-800/60"
+    >
+      <span
+        className="size-5 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-[var(--theme-primary)]"
+        aria-hidden
+      />
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">
+          {label}
+        </span>
+        {detail ? (
+          <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+            {detail}
+          </span>
+        ) : null}
+      </span>
+    </div>
+  )
 }
 
 function patientMeta(p: DeskPatient) {
@@ -54,6 +88,8 @@ export default function DeskPatientPicker({
   value,
   onChange,
   autoFocus,
+  showLookupStatus = true,
+  onBusyChange,
 }: Props) {
   const [mode, setMode] = useState<"search" | "register">("search")
   const [query, setQuery] = useState("")
@@ -77,6 +113,15 @@ export default function DeskPatientPicker({
   const [linkingId, setLinkingId] = useState("")
   const searchRef = useRef<HTMLInputElement>(null)
   const relationRef = useRef<HTMLSelectElement>(null)
+  const onBusyRef = useRef(onBusyChange)
+  onBusyRef.current = onBusyChange
+
+  useEffect(() => {
+    onBusyRef.current?.({
+      searching,
+      loadingRecord: saving || Boolean(linkingId),
+    })
+  }, [searching, saving, linkingId])
 
   useEffect(() => {
     const q = query.trim()
@@ -93,18 +138,27 @@ export default function DeskPatientPicker({
     let alive = true
     setSearching(true)
     const t = window.setTimeout(() => {
-      void proctoService.searchDeskPatients(practiceId, q).then((res) => {
-        if (!alive) return
-        setSearching(false)
-        setSearched(q)
-        if (res.status === "successful" && res.data) {
-          setResults(res.data.patients)
-          setSearchError("")
-        } else {
+      void proctoService
+        .searchDeskPatients(practiceId, q)
+        .then((res) => {
+          if (!alive) return
+          setSearching(false)
+          setSearched(q)
+          if (res.status === "successful" && res.data) {
+            setResults(res.data.patients)
+            setSearchError("")
+          } else {
+            setResults([])
+            setSearchError(res.message || "Could not search patients.")
+          }
+        })
+        .catch(() => {
+          if (!alive) return
+          setSearching(false)
+          setSearched(q)
           setResults([])
-          setSearchError(res.message || "Could not search patients.")
-        }
-      })
+          setSearchError("Could not search patients. Try again.")
+        })
     }, 300)
     return () => {
       alive = false
@@ -129,15 +183,21 @@ export default function DeskPatientPicker({
   async function pick(p: DeskPatient, onError: (msg: string) => void) {
     if (p.knownHere) return onChange(p)
     setLinkingId(p.patientId)
-    const res = await proctoService.linkDeskPatient(practiceId, p.patientId)
-    setLinkingId("")
-    if (res.status === "successful" && res.data) {
-      setMode("search")
-      setQuery("")
-      setConflicts([])
-      return onChange(res.data)
+    try {
+      const res = await proctoService.linkDeskPatient(practiceId, p.patientId)
+      if (res.status === "successful" && res.data) {
+        setMode("search")
+        setQuery("")
+        setConflicts([])
+        onChange(res.data)
+        return
+      }
+      onError(res.message || "Could not add the patient to your clinic.")
+    } catch {
+      onError("Could not load this patient's details. Try again.")
+    } finally {
+      setLinkingId("")
     }
-    onError(res.message || "Could not add the patient to your clinic.")
   }
 
   async function register() {
@@ -152,7 +212,9 @@ export default function DeskPatientPicker({
       return setRegisterError("Date of birth can't be in the future.")
     setSaving(true)
     setRegisterError("")
-    const res = await proctoService.registerDeskPatient(practiceId, {
+    let res: Awaited<ReturnType<typeof proctoService.registerDeskPatient>>
+    try {
+      res = await proctoService.registerDeskPatient(practiceId, {
       name: name.trim(),
       phone: digits,
       gender,
@@ -160,7 +222,12 @@ export default function DeskPatientPicker({
       ...(email.trim() ? { email: email.trim() } : {}),
       ...(relationship ? { relationship } : {}),
     })
-    setSaving(false)
+    } catch {
+      setRegisterError("Could not register the patient. Try again.")
+      return
+    } finally {
+      setSaving(false)
+    }
     if (res.status === "successful" && res.data) {
       onChange(res.data)
       setMode("search")
@@ -351,6 +418,12 @@ export default function DeskPatientPicker({
             />
           </label>
         </div>
+        {showLookupStatus && saving ? (
+          <LookupStatus
+            label="Saving the patient…"
+            detail="This can take a few seconds. Their MRN and details will appear when it’s done."
+          />
+        ) : null}
         {registerError ? (
           <p
             className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
@@ -444,9 +517,20 @@ export default function DeskPatientPicker({
           <span className="absolute right-3.5 top-1/2 size-4 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-[var(--theme-primary)]" />
         ) : null}
       </div>
+      {showLookupStatus && searching ? (
+        <LookupStatus
+          label="Looking up patient details…"
+          detail="This can take a few seconds. Matches will show here when they’re ready."
+        />
+      ) : showLookupStatus && linkingId ? (
+        <LookupStatus
+          label="Loading this patient’s details…"
+          detail="This can take a few seconds. Their record will show here when it’s ready."
+        />
+      ) : null}
       {searchError ? (
         <p className="text-xs text-red-700 dark:text-red-400">{searchError}</p>
-      ) : results.length ? (
+      ) : searching ? null : results.length ? (
         <ul
           className="max-h-60 divide-y divide-slate-100 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:divide-slate-800 dark:border-slate-700 dark:bg-slate-800/60"
           aria-label="Matching patients"

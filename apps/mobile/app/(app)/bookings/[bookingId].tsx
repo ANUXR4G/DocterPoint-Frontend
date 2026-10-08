@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { CareChatPanel } from "@/components/CareChatPanel";
+import { VisitRx } from "@/components/VisitRx";
 import { PracticeReviewForm } from "@/components/PracticeReviewForm";
 import {
   ErrorText,
@@ -28,8 +30,8 @@ import {
 import { attachPatientVisitDocument } from "@/lib/chat";
 import { withDrTitle } from "@/lib/doctorName";
 import { usePatientLive } from "@/lib/PatientLiveContext";
-import { patchBookingFields } from "@/lib/liveBooking";
 import { getSessionUserId } from "@/lib/sessionUser";
+import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { colors, radii, space } from "@/lib/theme";
 import {
   bookingWhen,
@@ -45,13 +47,15 @@ import {
 export default function BookingDetailScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const router = useRouter();
-  const { bookings: sharedBookings, liveConnected } = usePatientLive();
+  const { bookings: sharedBookings, liveConnected, refresh } = usePatientLive();
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selfUserId, setSelfUserId] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [attachError, setAttachError] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [flash, setFlash] = useState("");
 
   const fromShared = sharedBookings.find((b) => b.id === bookingId) ?? null;
 
@@ -62,10 +66,12 @@ export default function BookingDetailScreen() {
       setLoading(true);
       setError("");
     }
-    const [res, uid] = await Promise.all([
-      api<BookingDetail>(`/procto/bookings/${bookingId}`),
-      getSessionUserId(),
-    ]);
+    let res = await api<BookingDetail>(`/procto/bookings/${bookingId}`);
+    if (res.status !== "successful" || !res.data) {
+      await new Promise((r) => setTimeout(r, 800));
+      res = await api<BookingDetail>(`/procto/bookings/${bookingId}`);
+    }
+    const uid = await getSessionUserId();
     setSelfUserId(uid);
     if (!soft) setLoading(false);
     if (res.status !== "successful" || !res.data) {
@@ -82,11 +88,13 @@ export default function BookingDetailScreen() {
   useEffect(() => {
     if (!fromShared) return;
     setBooking((prev) => {
-      if (!prev) return fromShared as BookingDetail;
-      return patchBookingFields(
-        prev,
-        fromShared as unknown as Record<string, unknown>,
-      );
+      if (!prev) return prev;
+      return {
+        ...prev,
+        status: fromShared.status || prev.status,
+        slotStart: fromShared.slotStart || prev.slotStart,
+        slot_start: fromShared.slot_start || prev.slot_start,
+      };
     });
   }, [fromShared]);
 
@@ -95,7 +103,7 @@ export default function BookingDetailScreen() {
     void load({ soft: true });
   }, [liveConnected, load]);
 
-  const display = booking ?? (fromShared as BookingDetail | null);
+  const display = booking;
 
   if (loading && !display) return <Loading />;
 
@@ -104,12 +112,44 @@ export default function BookingDetailScreen() {
       <Screen>
         <View style={styles.content}>
           <ErrorText text={error || "Visit not found."} />
+          <PrimaryButton label="Try again" onPress={() => void load()} />
           <Pressable onPress={() => router.back()}>
             <Text style={styles.back}>← Back</Text>
           </Pressable>
         </View>
       </Screen>
     );
+  }
+
+  const canCancel = ["SCHEDULED", "REQUESTED", "ACCEPTED", "CONFIRMED"].includes(
+    String(display.status || "").toUpperCase(),
+  );
+
+  function cancelVisit() {
+    Alert.alert("Cancel this appointment?", "The clinic will be notified.", [
+      { text: "Keep", style: "cancel" },
+      {
+        text: "Cancel appointment",
+        style: "destructive",
+        onPress: () => {
+          setCancelBusy(true);
+          setFlash("");
+          void api(`/procto/bookings/${bookingId}/cancel`, {
+            method: "PATCH",
+            body: JSON.stringify({}),
+          }).then(async (res) => {
+            setCancelBusy(false);
+            if (res.status === "successful") {
+              setFlash("Appointment canceled.");
+              await refresh({ soft: true, force: true });
+              await load({ soft: true });
+              return;
+            }
+            setFlash(res.message || "Cancel failed.");
+          });
+        },
+      },
+    ]);
   }
 
   const displayStatus = effectiveBookingStatus(display);
@@ -181,11 +221,19 @@ export default function BookingDetailScreen() {
           </Text>
         </View>
 
-        {isCompleted ? (
+        {canCancel ? (
+          <PrimaryButton
+            label={cancelBusy ? "Canceling…" : "Cancel appointment"}
+            onPress={cancelVisit}
+            busy={cancelBusy}
+            tone="ink"
+          />
+        ) : isCompleted ? (
           <Text style={styles.lockedHint}>
             This visit is finished and cannot be canceled or rescheduled.
           </Text>
         ) : null}
+        {flash ? <Text style={styles.body}>{flash}</Text> : null}
 
         <Panel style={styles.panel}>
           <SectionTitle>Visit details</SectionTitle>
@@ -194,7 +242,9 @@ export default function BookingDetailScreen() {
             label="Location"
             value={
               display.location
-                ? `${display.location.name}, ${display.location.city}`
+                ? [display.location.address, display.location.name, display.location.city]
+                    .filter(Boolean)
+                    .join(", ")
                 : "—"
             }
           />
@@ -206,9 +256,48 @@ export default function BookingDetailScreen() {
               "—"
             }
           />
+          <Detail
+            label="Booked on"
+            value={
+              display.createdAt || display.created_at
+                ? formatPracticeDateTime(display.createdAt || display.created_at)
+                : "—"
+            }
+          />
         </Panel>
 
-        {showVisitSummary ? (
+        <Panel style={styles.panel}>
+          <SectionTitle>Your doctor</SectionTitle>
+          <Detail
+            label="Name"
+            value={withDrTitle(display.provider?.name) || "—"}
+          />
+          {display.practice?.specialty ? (
+            <Detail label="Specialty" value={display.practice.specialty} />
+          ) : null}
+          {display.provider?.experience != null ? (
+            <Detail
+              label="Experience"
+              value={`${display.provider.experience} years`}
+            />
+          ) : null}
+          {display.provider?.licenseNo ? (
+            <Detail label="License" value={display.provider.licenseNo} />
+          ) : null}
+          {display.provider?.phone ? (
+            <Detail label="Phone" value={display.provider.phone} />
+          ) : null}
+          {display.provider?.email ? (
+            <Detail label="Email" value={display.provider.email} />
+          ) : null}
+          {display.provider?.description?.trim() ? (
+            <Text style={styles.body}>{display.provider.description}</Text>
+          ) : null}
+        </Panel>
+
+        {isCompleted || showVisitSummary || display.clinicalAssessment ? (
+          <VisitRx booking={display} />
+        ) : (
           <>
             <Panel style={styles.panel}>
               <SectionTitle>Doctor remarks</SectionTitle>
@@ -237,7 +326,7 @@ export default function BookingDetailScreen() {
               )}
             </Panel>
           </>
-        ) : null}
+        )}
 
         <Panel style={styles.panel}>
           <SectionTitle>Documents</SectionTitle>

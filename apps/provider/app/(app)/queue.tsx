@@ -24,6 +24,8 @@ import {
   usePractice,
 } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
+import { RxButton } from "@/components/ClinicLogSheet";
+import { WalkInSheet } from "@/components/WalkInSheet";
 import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
 import { withDrTitle } from "@/lib/doctorName";
 import {
@@ -64,6 +66,7 @@ export default function QueueScreen() {
   const error = liveError || "";
   const { busyId, error: localError, setStatus } = useBookingStatusActions();
   const [refreshing, setRefreshing] = useState(false);
+  const [walkInOpen, setWalkInOpen] = useState(false);
   const [filter, setFilter] = useState<QueueStatusFilter>("all");
   const [providerFilter, setProviderFilter] = useState<string>("all");
 
@@ -190,6 +193,7 @@ export default function QueueScreen() {
         ) : null}
 
         <View style={styles.chips}>
+          <Chip label="Emergency walk-in" onPress={() => setWalkInOpen(true)} />
           {QUEUE_FILTER_KEYS.map((k) => (
             <Chip
               key={k}
@@ -244,11 +248,18 @@ export default function QueueScreen() {
                     onPress={
                       busyId === b.id
                         ? undefined
-                        : () => setStatus(b.id, s.status)
+                        : () => {
+                            if (s.opensVisit) {
+                              router.push(`/(app)/visit/${b.id}`);
+                              return;
+                            }
+                            setStatus(b.id, s.status, s.reasons);
+                          }
                     }
                     disabled={busyId === b.id}
                   />
                 ))}
+                <RxButton bookingId={b.id} status={b.status} />
                 <Chip
                   label="Open visit"
                   onPress={() => router.push(`/(app)/visit/${b.id}`)}
@@ -258,6 +269,13 @@ export default function QueueScreen() {
           ))
         )}
       </ScrollView>
+      <WalkInSheet
+        visible={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        onAdded={() => {
+          void refresh({ soft: true, force: true });
+        }}
+      />
     </View>
   );
 }

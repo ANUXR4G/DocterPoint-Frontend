@@ -340,6 +340,8 @@ export type ClinicalAssessment = {
     description?: string;
   }>;
   noKnownAllergies?: boolean;
+  /** When this vitals / pain / allergy snapshot was saved. */
+  savedAt?: string | null;
 };
 
 export function normalizeClinicalAssessment(
@@ -397,5 +399,6 @@ export function normalizeClinicalAssessment(
     pain,
     allergies,
     noKnownAllergies: Boolean(o.noKnownAllergies),
+    savedAt: o.savedAt ? String(o.savedAt) : null,
   };
 }

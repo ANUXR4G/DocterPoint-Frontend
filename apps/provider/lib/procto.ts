@@ -52,10 +52,99 @@ export async function fetchBooking(bookingId: string) {
   return api<BookingRow>(`/procto/bookings/${bookingId}`);
 }
 
-export async function updateBookingStatus(bookingId: string, status: string) {
+export type DeskPatient = {
+  patientId: string;
+  name: string;
+  mrn: string | null;
+  phone: string;
+  gender: string | null;
+  dateOfBirth: string | null;
+  age: number | null;
+  relationship: string | null;
+  knownHere: boolean;
+  lastVisitAt: string | null;
+  existingPatient?: boolean;
+};
+
+export async function searchDeskPatients(practiceId: string, q: string) {
+  return api<{ patients: DeskPatient[] }>(
+    `/procto/practices/${practiceId}/desk-patients?q=${encodeURIComponent(q)}`,
+  );
+}
+
+export async function registerDeskPatient(
+  practiceId: string,
+  body: {
+    name: string;
+    phone: string;
+    gender: "male" | "female" | "others";
+    dateOfBirth: string;
+    email?: string;
+    relationship?: string;
+  },
+) {
+  return api<DeskPatient>(`/procto/practices/${practiceId}/desk-patients`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function linkDeskPatient(practiceId: string, patientId: string) {
+  return api<DeskPatient>(
+    `/procto/practices/${practiceId}/desk-patients/${patientId}/link`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export async function fetchGeneralDocuments(bookingId: string) {
+  return api<{
+    patientLinked: boolean;
+    documents: Array<{ name: string; url: string; uploadedAt?: string }>;
+  }>(`/procto/bookings/${bookingId}/general-documents`);
+}
+
+export async function addGeneralDocument(
+  bookingId: string,
+  doc: { name: string; url: string },
+) {
+  return api(`/procto/bookings/${bookingId}/general-documents`, {
+    method: "POST",
+    body: JSON.stringify(doc),
+  });
+}
+
+/** Finished visit: clinic log and Rx summary on the patient's WhatsApp. */
+export async function sendClinicLogWhatsApp(bookingId: string) {
+  return api(`/procto/bookings/${bookingId}/send-clinic-log`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function createWalkIn(body: {
+  practiceId: string;
+  providerId: string;
+  patientId: string;
+  patientPhone: string;
+  disease?: string;
+}) {
+  return api<BookingRow>("/procto/bookings/walk-in", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateBookingStatus(
+  bookingId: string,
+  status: string,
+  cancelReason?: string,
+) {
   return api(`/procto/bookings/${bookingId}/status`, {
     method: "PATCH",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({
+      status,
+      ...(cancelReason ? { cancelReason } : {}),
+    }),
   });
 }
 

@@ -16,7 +16,7 @@ export function bookingStatusLabel(status: string): string {
     case "CHECKED_IN":
       return "In waiting"
     case "IN_PROGRESS":
-      return "Appointment started"
+      return "In consultation"
     case "COMPLETED":
       return "Appointment finished"
     case "NO_SHOW":
@@ -85,7 +85,7 @@ export function bookingStatusControlOptions(): Array<{
   return [
     { status: "ACCEPTED", label: "Accepted" },
     { status: "WAITING", label: "In waiting" },
-    { status: "IN_PROGRESS", label: "Appointment started" },
+    { status: "IN_PROGRESS", label: "In consultation" },
     { status: "COMPLETED", label: "Appointment finished" },
     { status: "NO_SHOW", label: "No-show" },
     { status: "CANCELED", label: "Canceled" },
@@ -110,14 +110,22 @@ export function bookingStatusControlValue(status: string): string {
   }
 }
 
+export type BookingStatusAction = {
+  status: string
+  label: string
+  /** Opens the visit so Finish saves remarks and medicines. Never a status PATCH. */
+  opensVisit?: boolean
+  /** Clickable close reasons. Staff tap a label; nothing is typed. */
+  reasons?: string[]
+}
+
 /**
  * Queue / Appointments list actions (auto-accepted on book — no manual Accept step):
- * Accepted → Arrived (Waiting) → Appointment started.
- * Finishing is only done on the visit page (saves remarks + medicines with it).
+ * Accepted → Arrived, No-show, or Cancel.
+ * In waiting → Start consultation, No-show (left before being seen), or Cancel.
+ * In consultation → Finish only (visit page). Cancel and No-show are disabled.
  */
-export function bookingNextActions(
-  status: string,
-): Array<{ status: string; label: string }> {
+export function bookingNextActions(status: string): BookingStatusAction[] {
   switch (String(status || "").toUpperCase()) {
     case "SCHEDULED":
     case "REQUESTED":
@@ -126,23 +134,36 @@ export function bookingNextActions(
     case "CONFIRMED":
       return [
         { status: "WAITING", label: "Arrived" },
-        { status: "NO_SHOW", label: "No-show" },
-        { status: "CANCELED", label: "Cancel" },
+        { status: "NO_SHOW", label: "No-show", reasons: ["Did not arrive"] },
+        {
+          status: "CANCELED",
+          label: "Cancel",
+          reasons: ["Patient canceled", "Clinic canceled"],
+        },
       ]
     case "WAITING":
     case "CHECKED_IN":
       return [
         { status: "IN_PROGRESS", label: "Start consultation" },
-        { status: "NO_SHOW", label: "No-show" },
-        { status: "CANCELED", label: "Cancel" },
+        {
+          status: "NO_SHOW",
+          label: "No-show",
+          reasons: ["Left before being seen"],
+        },
+        {
+          status: "CANCELED",
+          label: "Cancel",
+          reasons: ["Patient left", "Clinic canceled"],
+        },
       ]
     case "IN_PROGRESS":
-      return [{ status: "NO_SHOW", label: "No-show" }]
+      return [
+        { status: "COMPLETED", label: "Finish", opensVisit: true },
+      ]
     case "COMPLETED":
     case "CANCELED":
     case "CANCELLED":
     case "NO_SHOW":
-      // Finished visits are locked — no cancel / reopen / reschedule actions.
       return []
     default:
       return []

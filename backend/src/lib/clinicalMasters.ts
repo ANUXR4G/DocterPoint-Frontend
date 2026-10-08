@@ -336,6 +336,8 @@ export type ClinicalAssessment = {
     description?: string;
   }>;
   noKnownAllergies?: boolean;
+  /** When this vitals / pain / allergy snapshot was saved. */
+  savedAt?: string | null;
 };
 
 export function normalizeClinicalAssessment(
@@ -393,5 +395,33 @@ export function normalizeClinicalAssessment(
     pain,
     allergies,
     noKnownAllergies: Boolean(o.noKnownAllergies),
+    savedAt: o.savedAt ? String(o.savedAt) : null,
   };
+}
+
+/** Compare two assessments ignoring the save timestamp. */
+export function clinicalAssessmentBody(raw: unknown): string {
+  const n = normalizeClinicalAssessment(raw);
+  if (!n) return "";
+  const { savedAt: _savedAt, ...rest } = n;
+  return JSON.stringify(rest);
+}
+
+export function clinicalAssessmentHasContent(raw: unknown): boolean {
+  const n = normalizeClinicalAssessment(raw);
+  if (!n) return false;
+  const values = n.vitals?.values ?? {};
+  if (Object.values(values).some((v) => v != null)) return true;
+  if (n.vitals?.breakfast != null) return true;
+  if (
+    n.pain?.some((row) =>
+      [row.scale, row.score, row.location, row.type, row.duration, row.frequency, row.radiation].some(
+        (v) => String(v || "").trim(),
+      ),
+    )
+  ) {
+    return true;
+  }
+  if (n.allergies?.some((row) => String(row.name || "").trim())) return true;
+  return Boolean(n.noKnownAllergies);
 }
