@@ -58,7 +58,7 @@ export default function BookingStatusControls({
   const actions = bookingNextActions(status)
   const [pending, setPending] = useState<BookingStatusAction | null>(null)
   const btnPad = compact
-    ? "min-h-9 shrink-0 rounded-md px-2.5 py-1 text-xs"
+    ? "h-7 shrink-0 rounded-md px-2 py-0 text-[11px] leading-none"
     : "min-h-10 rounded-lg px-3 py-1.5 text-xs sm:min-h-11 sm:text-sm"
   const rowClass = nowrap
     ? "flex flex-nowrap items-center gap-1.5"

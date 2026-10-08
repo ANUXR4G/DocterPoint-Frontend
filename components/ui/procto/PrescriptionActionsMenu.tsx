@@ -9,6 +9,8 @@ type Props = {
   bookingId: string
   /** Only finished visits expose the clinic log / Rx menu. */
   enabled: boolean
+  /** Match the short queue action buttons. */
+  compact?: boolean
   className?: string
 }
 
@@ -19,6 +21,7 @@ type Props = {
 export default function PrescriptionActionsMenu({
   bookingId,
   enabled,
+  compact = false,
   className = "",
 }: Props) {
   const [open, setOpen] = useState(false)
@@ -63,7 +66,9 @@ export default function PrescriptionActionsMenu({
           setNotice("")
           setOpen((v) => !v)
         }}
-        className="inline-flex size-9 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-300"
+        className={`inline-flex items-center justify-center border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-300 ${
+          compact ? "size-7 rounded-md" : "size-9 rounded-xl"
+        }`}
       >
         <ClipboardPlus className="size-4" aria-hidden />
       </button>
