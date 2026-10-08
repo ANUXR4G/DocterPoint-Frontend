@@ -1628,6 +1628,7 @@ export const PracticeService = {
         doctorRemarks: true,
         medicines: true,
         documents: true,
+        clinicalAssessment: true,
         createdAt: true,
       },
     });
@@ -1850,6 +1851,7 @@ export const PracticeService = {
             doctorRemarks: b.doctorRemarks,
             medicines: b.medicines,
             documents: b.documents,
+            clinicalAssessment: b.clinicalAssessment,
             createdAt: b.createdAt,
           })),
           registeredAt: null as Date | null,
