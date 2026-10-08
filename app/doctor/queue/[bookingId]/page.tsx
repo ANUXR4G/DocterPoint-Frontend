@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import Link from "next/link"
@@ -41,6 +42,7 @@ import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import ClinicalAssessmentPanel from "@/components/ui/procto/ClinicalAssessmentPanel"
 import type { ClinicalAssessment } from "@/lib/clinicalMasters"
+import { toast } from "sonner"
 
 type Medicine = { name: string; amount?: string; times?: string[] }
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
@@ -236,7 +238,6 @@ export default function VisitPage() {
   const [loading, setLoading] = useState(true)
   const [detailLoaded, setDetailLoaded] = useState(false)
   const [error, setError] = useState("")
-  const [message, setMessage] = useState("")
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -252,6 +253,8 @@ export default function VisitPage() {
   const [medAmount, setMedAmount] = useState("1")
   const [medTimes, setMedTimes] = useState<string[]>(["morning"])
   const [customHours, setCustomHours] = useState("")
+  const medicinesRef = useRef<Medicine[]>([])
+  medicinesRef.current = medicines
 
   const applyVisitData = useCallback((data: VisitBooking, opts?: { silent?: boolean }) => {
     setBooking(data)
@@ -389,7 +392,6 @@ export default function VisitPage() {
         setDocuments(serverDocs)
       }
     }
-    setError("")
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
       medicines: nextMedicines,
@@ -398,14 +400,14 @@ export default function VisitPage() {
       ...(opts?.status ? { status: opts.status } : {}),
     })
     if (res.status !== "successful") {
-      setError(res.message || "Could not save visit.")
-      await load()
+      toast.error(res.message || "Could not save visit.")
+      await load({ silent: true })
       return false
     }
     const saved = res.data as VisitBooking
     applyVisitData(saved, { silent: true })
     patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
-    if (opts?.successMessage) setMessage(opts.successMessage)
+    if (opts?.successMessage) toast.success(opts.successMessage)
     return true
   }
 
@@ -414,7 +416,7 @@ export default function VisitPage() {
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
     const hours = Number(customHours)
     if (customHours && !(hours >= 1 && hours <= MAX_INTERVAL_HOURS)) {
-      setError(`Custom timing must be every 1 to ${MAX_INTERVAL_HOURS} hours.`)
+      toast.error(`Custom timing must be every 1 to ${MAX_INTERVAL_HOURS} hours.`)
       return
     }
     const next = [
@@ -425,12 +427,12 @@ export default function VisitPage() {
         times: [...medTimes],
       },
     ]
+    medicinesRef.current = next
     setMedicines(next)
     setMedName("")
     setMedAmount("1")
     setMedTimes(["morning"])
     setCustomHours("")
-    setMessage("")
     await persistVisit(next, documents, { successMessage: "Medicine saved." })
   }
 
@@ -441,8 +443,8 @@ export default function VisitPage() {
     )
       return
     const next = medicines.filter((_, i) => i !== idx)
+    medicinesRef.current = next
     setMedicines(next)
-    setMessage("")
     await persistVisit(next, documents, { successMessage: "Medicine removed." })
   }
 
@@ -451,8 +453,6 @@ export default function VisitPage() {
     e.target.value = ""
     if (!file || !bookingId) return
     setUploading(true)
-    setError("")
-    setMessage("")
     try {
       const uploaded = await uploadBookingDocument(file)
       const res = await proctoService.addGeneralDocument(bookingId, {
@@ -460,14 +460,14 @@ export default function VisitPage() {
         url: uploaded.url,
       })
       if (res.status !== "successful") {
-        setError(res.message || "Could not save to the patient record.")
+        toast.error(res.message || "Could not save to the patient record.")
         return
       }
       const data = res.data as { documents?: VisitDoc[] }
       setGeneralDocs(Array.isArray(data?.documents) ? data.documents : [])
-      setMessage("Saved to the patient's general documents.")
+      toast.success("Saved to the patient's general documents.")
     } catch (err) {
-      setError(
+      toast.error(
         err instanceof Error ? err.message : "Could not upload document.",
       )
     } finally {
@@ -480,12 +480,10 @@ export default function VisitPage() {
     e.target.value = ""
     if (!file || !bookingId) return
     if (documents.length >= MAX_BOOKING_DOCUMENTS) {
-      setError(`At most ${MAX_BOOKING_DOCUMENTS} documents per visit.`)
+      toast.error(`At most ${MAX_BOOKING_DOCUMENTS} documents per visit.`)
       return
     }
     setUploading(true)
-    setError("")
-    setMessage("")
     try {
       const uploaded = await uploadBookingDocument(file)
       const nextDocs = [...documents, uploaded]
@@ -497,13 +495,13 @@ export default function VisitPage() {
         clinicalAssessment: clinicalAssessment ?? null,
       })
       if (res.status !== "successful") {
-        setError(res.message || "Document uploaded but could not save to visit.")
+        toast.error(res.message || "Document uploaded but could not save to visit.")
         return
       }
       setBooking(res.data as VisitBooking)
-      setMessage("Document saved.")
+      toast.success("Document saved.")
     } catch (err) {
-      setError(
+      toast.error(
         err instanceof Error ? err.message : "Could not upload document.",
       )
     } finally {
@@ -511,22 +509,43 @@ export default function VisitPage() {
     }
   }
 
+  function medicinesToSave(): Medicine[] {
+    const name = medName.trim()
+    const current = medicinesRef.current
+    if (!name) return current
+    return [
+      ...current,
+      {
+        name,
+        amount: medAmount.trim() || "1",
+        times: [...medTimes],
+      },
+    ]
+  }
+
   async function save(nextStatus?: string) {
     if (!bookingId) return
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
+    const nextMedicines = medicinesToSave()
+    medicinesRef.current = nextMedicines
+    setMedicines(nextMedicines)
+    if (medName.trim()) {
+      setMedName("")
+      setMedAmount("1")
+      setMedTimes(["morning"])
+      setCustomHours("")
+    }
     setSaving(true)
-    setError("")
-    setMessage("")
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
-      medicines,
+      medicines: nextMedicines,
       documents,
       clinicalAssessment: clinicalAssessment ?? null,
       ...(nextStatus ? { status: nextStatus } : {}),
     })
     setSaving(false)
     if (res.status !== "successful") {
-      setError(res.message || "Could not save visit.")
+      toast.error(res.message || "Could not save visit.")
       return
     }
     const saved = res.data as VisitBooking
@@ -538,11 +557,11 @@ export default function VisitPage() {
     }
     patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
     if (nextStatus === "COMPLETED") {
-      setMessage("Visit completed.")
+      toast.success("Visit completed.")
       router.push(practiceTabHref("patients"))
       return
     }
-    setMessage("Visit saved.")
+    toast.success("Visit saved.")
   }
 
   if (loading) {
@@ -1039,13 +1058,6 @@ export default function VisitPage() {
           </p>
         </section>
       )}
-
-      {error ? (
-        <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
-      ) : null}
-      {message ? (
-        <p className="text-sm text-green-600 dark:text-green-400">{message}</p>
-      ) : null}
 
       {/* Sticky actions — in page flow, not a portal that fights layouts */}
       {!isCompleted ? (

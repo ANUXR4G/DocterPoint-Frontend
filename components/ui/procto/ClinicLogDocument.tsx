@@ -162,13 +162,6 @@ export default function ClinicLogDocument({
       ].includes(k) && values[k] != null,
   )
 
-  const bandHint = (() => {
-    const sample = values.pr ?? values.temp ?? values.bmi ?? null
-    if (sample == null) return null
-    // Soft summary when any vital exists — keep simple for the log header.
-    return "Recorded"
-  })()
-
   return (
     <article className="clinic-log-doc mx-auto max-w-4xl bg-white px-6 py-5 text-neutral-900">
       <h1 className="text-xl font-bold tracking-tight">Clinic Log and details</h1>
@@ -237,11 +230,6 @@ export default function ClinicLogDocument({
         <h2 className="text-sm font-bold uppercase tracking-wide">
           Vital Signs
         </h2>
-        {bandHint ? (
-          <p className="mt-0.5 text-xs text-neutral-500">
-            Result Interpretation: {bandHint}
-          </p>
-        ) : null}
         <div className="mt-2 overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-left text-xs">
             <thead>
@@ -291,15 +279,7 @@ export default function ClinicLogDocument({
       <section className="mt-4 text-sm">
         <h2 className="text-sm font-bold uppercase tracking-wide">Diagnosis</h2>
         {diagnosis ? (
-          <p className="mt-1">
-            {diagnosis}{" "}
-            <span className="ml-2 text-xs font-semibold text-neutral-500">
-              Principal
-            </span>{" "}
-            <span className="ml-1 inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-bold text-emerald-800">
-              Active
-            </span>
-          </p>
+          <p className="mt-1">{diagnosis}</p>
         ) : (
           <p className="mt-1 text-neutral-500">No diagnosis recorded.</p>
         )}
@@ -350,19 +330,13 @@ export default function ClinicLogDocument({
         </div>
       </section>
 
-      <footer className="mt-10 flex flex-wrap items-end justify-between gap-6 border-t border-neutral-200 pt-6">
-        <div className="flex items-center gap-4">
-          <div
-            className="flex size-24 shrink-0 flex-col items-center justify-center rounded-full border-2 border-sky-500 bg-sky-50 text-center text-[10px] font-bold leading-tight text-sky-800"
-            aria-hidden
-          >
-            <span className="px-2">{doctorName}</span>
-            {license ? <span className="mt-0.5 opacity-80">{license}</span> : null}
-          </div>
-          <p className="max-w-xs text-xs text-neutral-500">
-            Dr. stamp and details will show from the system where you can
-            upload the same in the doctor master.
-          </p>
+      <footer className="mt-10 border-t border-neutral-200 pt-6">
+        <div
+          className="flex size-24 flex-col items-center justify-center rounded-full border-2 border-sky-500 bg-sky-50 text-center text-[10px] font-bold leading-tight text-sky-800"
+          aria-hidden
+        >
+          <span className="px-2">{doctorName}</span>
+          {license ? <span className="mt-0.5 opacity-80">{license}</span> : null}
         </div>
       </footer>
     </article>

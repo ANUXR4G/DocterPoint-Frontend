@@ -10,9 +10,7 @@ import {
   formatBookingStatus,
 } from "@/lib/bookingStatusTone"
 import { formatBookingWhenDetailed } from "@/lib/bookingDisplay"
-import {
-  formatPracticeDateTime,
-} from "@/lib/practiceTime"
+import { formatPracticeDateTime } from "@/lib/practiceTime"
 import { usePatientDashboard } from "@/contexts/PatientDashboardContext"
 import { withDrTitle } from "@/lib/doctorName"
 
