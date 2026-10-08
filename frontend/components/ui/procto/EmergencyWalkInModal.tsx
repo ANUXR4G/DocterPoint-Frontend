@@ -10,14 +10,13 @@ import DeskPatientPicker, {
 } from "@/components/ui/procto/DeskPatientPicker"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import { dashboardPortalRoot } from "@/lib/portalRoot"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
 
 type Props = {
   open: boolean
   onClose: () => void
   onAdded: () => void
 }
-
-const DOCTOR_ROLES = new Set(["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"])
 
 function Step({ n, done }: { n: number; done?: boolean }) {
   return (
@@ -48,8 +47,7 @@ export default function EmergencyWalkInModal({
     const rows = (membership?.practice?.members ?? [])
       .filter(
         (row) =>
-          row.isActive !== false &&
-          DOCTOR_ROLES.has(row.role) &&
+          isPracticingDoctor(row) &&
           Boolean(row.userId) &&
           (!onlySelf || row.userId === myUserId),
       )

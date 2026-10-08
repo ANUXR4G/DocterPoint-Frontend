@@ -17,6 +17,7 @@ const LINKS = [
   { href: "/clinic/payments", label: "Payments" },
   { href: practiceTabHref("setup"), label: "Hours & blocks" },
   { href: practiceTabHref("doctors"), label: "Doctors" },
+  { href: "/clinic/access", label: "Role access" },
   { href: "/clinic/subscription", label: "Subscription" },
 ] as const
 

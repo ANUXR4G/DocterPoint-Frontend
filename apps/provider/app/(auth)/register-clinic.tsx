@@ -38,6 +38,7 @@ export default function ClinicRegisterScreen() {
   const [telNo, setTelNo] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [consultationFee, setConsultationFee] = useState("500");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [planId, setPlanId] = useState("");
@@ -68,6 +69,10 @@ export default function ClinicRegisterScreen() {
       !password
     ) {
       setError("Fill clinic name, address, reg no, phone, email, and password.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
     if (!Number.isFinite(fee) || fee <= 0) {
@@ -220,6 +225,12 @@ export default function ClinicRegisterScreen() {
           label="Password"
           value={password}
           onChangeText={setPassword}
+          secureTextEntry
+        />
+        <Field
+          label="Confirm password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
           secureTextEntry
         />
         <Field

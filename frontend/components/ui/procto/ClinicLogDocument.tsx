@@ -13,38 +13,29 @@ import {
   formatPracticeTime,
 } from "@/lib/practiceTime"
 import type { ProctoBooking } from "@/lib/services/procto"
-
-type Medicine = { name: string; amount?: string; times?: string[] }
+import { resolveUploadUrl } from "@/lib/uploads"
 
 function dash(v?: string | number | null) {
   if (v == null || v === "") return "—"
   return String(v)
 }
 
-function formatTimes(times?: string[]) {
-  if (!times?.length) return ""
-  return times
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((t) => t.charAt(0).toUpperCase() + t.slice(1))
-    .join(", ")
-}
-
-function dosageLine(m: Medicine) {
-  const parts = [formatTimes(m.times), m.amount?.trim()].filter(Boolean)
-  return parts.join(" · ") || "—"
-}
-
 function allergySummary(a: ClinicalAssessment | null): string {
   if (!a) return "No known allergy"
   if (a.noKnownAllergies) return "No known allergy"
-  const rows = (a.allergies ?? []).filter((r) => r.name?.trim())
+  const rows = (a.allergies ?? []).filter(
+    (r) => r.name?.trim() || r.category?.trim() || r.description?.trim(),
+  )
   if (!rows.length) return "No known allergy"
   return rows
     .map((r) => {
-      const bits = [r.name, r.severity, r.active === "Yes" ? "Active" : null].filter(
-        Boolean,
-      )
+      const bits = [
+        r.category,
+        r.name,
+        r.severity,
+        r.active === "Yes" ? "Active" : r.active === "No" ? "Inactive" : null,
+        r.description,
+      ].filter(Boolean)
       return bits.join(" — ")
     })
     .join("; ")
@@ -86,11 +77,15 @@ function bpCell(values: Record<string, number | null> | undefined): string {
   return String(sys ?? dia ?? "")
 }
 
-/** Printable / on-screen Clinic Log + Rx from a finished visit booking. */
+export type ClinicLogTab = "visit" | "clinical" | "prescription"
+
+/** On-screen Clinic Log + Rx from a finished visit. One section per tab. */
 export default function ClinicLogDocument({
   booking,
+  tab = "visit",
 }: {
   booking: ProctoBooking
+  tab?: ClinicLogTab
 }) {
   const assessment = normalizeClinicalAssessment(booking.clinicalAssessment)
   const values = assessment?.vitals?.values ?? {}
@@ -128,6 +123,8 @@ export default function ClinicLogDocument({
     ""
 
   const medicines = (booking.medicines ?? []).filter((m) => m?.name?.trim())
+  const clinicStamp = resolveUploadUrl(booking.practice?.stampSrc)
+  const doctorStamp = resolveUploadUrl(booking.provider?.stampSrc)
   const remarks = String(booking.doctorRemarks || "").trim()
   const recordedAt = assessment?.savedAt || assessment?.vitals?.recordedAt
     ? formatPracticeDateTime(
@@ -166,9 +163,9 @@ export default function ClinicLogDocument({
 
   return (
     <article className="clinic-log-doc mx-auto max-w-4xl bg-white px-6 py-5 text-neutral-900">
-      <h1 className="text-xl font-bold tracking-tight">Clinic Log and details</h1>
-
-      <div className="mt-4 rounded-lg border-2 border-sky-300 bg-sky-50/40 px-4 py-3 text-sm">
+      {tab === "visit" ? (
+      <>
+      <div className="rounded-lg border-2 border-sky-300 bg-sky-50/40 px-4 py-3 text-sm">
         <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
           <p>
             <span className="font-semibold">Patient&apos;s Name:</span>{" "}
@@ -228,7 +225,44 @@ export default function ClinicLogDocument({
         </p>
       </section>
 
+      <section className="mt-5 text-sm">
+        <h2 className="text-sm font-bold uppercase tracking-wide">Allergies</h2>
+        <p className="mt-1">{allergySummary(assessment)}</p>
+      </section>
+
+      <section className="mt-4 text-sm">
+        <h2 className="text-sm font-bold uppercase tracking-wide">Diagnosis</h2>
+        {diagnosis ? (
+          <p className="mt-1">{diagnosis}</p>
+        ) : (
+          <p className="mt-1 text-neutral-500">No diagnosis recorded.</p>
+        )}
+      </section>
+
       <section className="mt-5">
+        <h2 className="text-sm font-bold uppercase tracking-wide">
+          Clinical Remarks and Notes
+        </h2>
+        <div className="mt-2 min-h-[4.5rem] rounded-xl border border-neutral-300 px-4 py-3 text-sm whitespace-pre-wrap">
+          {remarks || "No clinical remarks recorded."}
+        </div>
+      </section>
+
+      <footer className="mt-10 border-t border-neutral-200 pt-6">
+        <div
+          className="flex size-24 flex-col items-center justify-center rounded-full border-2 border-sky-500 bg-sky-50 text-center text-[10px] font-bold leading-tight text-sky-800"
+          aria-hidden
+        >
+          <span className="px-2">{doctorName}</span>
+          {license ? <span className="mt-0.5 opacity-80">{license}</span> : null}
+        </div>
+      </footer>
+      </>
+      ) : null}
+
+      {tab === "clinical" ? (
+      <>
+      <section>
         <h2 className="text-sm font-bold uppercase tracking-wide">
           Vital Signs
         </h2>
@@ -277,70 +311,46 @@ export default function ClinicLogDocument({
         </h2>
         <p className="mt-1">{painSummary(assessment)}</p>
       </section>
+      </>
+      ) : null}
 
-      <section className="mt-4 text-sm">
-        <h2 className="text-sm font-bold uppercase tracking-wide">Diagnosis</h2>
-        {diagnosis ? (
-          <p className="mt-1">{diagnosis}</p>
-        ) : (
-          <p className="mt-1 text-neutral-500">No diagnosis recorded.</p>
-        )}
-      </section>
+      {tab === "prescription" ? (
+        <section>
+          <h2 className="text-sm font-bold uppercase tracking-wide">
+            Prescription
+          </h2>
+          {medicines.length === 0 ? (
+            <p className="mt-2 text-sm text-neutral-500">No medicines prescribed.</p>
+          ) : (
+            <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm font-semibold">
+              {medicines.map((m, i) => (
+                <li key={`${m.name}-${i}`}>{m.name}</li>
+              ))}
+            </ol>
+          )}
+        </section>
+      ) : null}
 
-      <section className="mt-5">
-        <h2 className="text-sm font-bold uppercase tracking-wide">
-          Clinical Remarks and Notes
-        </h2>
-        <div className="mt-2 min-h-[4.5rem] rounded-xl border border-neutral-300 px-4 py-3 text-sm whitespace-pre-wrap">
-          {remarks || "No clinical remarks recorded."}
-        </div>
-      </section>
-
-      <section className="mt-5">
-        <h2 className="text-sm font-bold uppercase tracking-wide">
-          Prescription (Rx)
-        </h2>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b-2 border-neutral-800">
-                <th className="py-2 pr-3 font-bold">Medicine Name</th>
-                <th className="py-2 pr-3 font-bold">Dosage</th>
-                <th className="py-2 font-bold">Duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              {medicines.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="py-3 text-neutral-500">
-                    No medicines prescribed.
-                  </td>
-                </tr>
-              ) : (
-                medicines.map((m, i) => (
-                  <tr key={`${m.name}-${i}`} className="border-b border-neutral-200">
-                    <td className="py-2.5 pr-3 align-top font-semibold uppercase">
-                      {m.name}
-                    </td>
-                    <td className="py-2.5 pr-3 align-top">{dosageLine(m)}</td>
-                    <td className="py-2.5 align-top text-neutral-500">—</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <footer className="mt-10 border-t border-neutral-200 pt-6">
-        <div
-          className="flex size-24 flex-col items-center justify-center rounded-full border-2 border-sky-500 bg-sky-50 text-center text-[10px] font-bold leading-tight text-sky-800"
-          aria-hidden
-        >
-          <span className="px-2">{doctorName}</span>
-          {license ? <span className="mt-0.5 opacity-80">{license}</span> : null}
-        </div>
-      </footer>
+      {clinicStamp || doctorStamp ? (
+        <footer className="mt-10 flex flex-wrap items-end justify-end gap-8 border-t border-neutral-200 pt-6">
+          {doctorStamp ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={doctorStamp}
+              alt="Doctor stamp"
+              className="h-24 w-auto max-w-[9rem] object-contain"
+            />
+          ) : null}
+          {clinicStamp ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={clinicStamp}
+              alt="Clinic stamp"
+              className="h-24 w-auto max-w-[9rem] object-contain"
+            />
+          ) : null}
+        </footer>
+      ) : null}
     </article>
   )
 }

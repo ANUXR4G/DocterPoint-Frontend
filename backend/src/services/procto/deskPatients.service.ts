@@ -103,12 +103,20 @@ async function knownScope(practiceId: string) {
   const ids = [...new Set([...booked.map((b) => b.patientId!), ...linked.map((l) => l.patientUserId)].filter(Boolean))];
   const prefix = practice?.mrnPrefix?.trim() || null;
   const phones = [...new Set(chats.map((c) => last10(c.patientPhone)).filter((d) => d.length === 10))];
+  const msisdn = new Map<string, string>();
+  for (const chat of chats) {
+    const digits = String(chat.patientPhone || "").replace(/\D/g, "");
+    const tail = digits.slice(-10);
+    if (tail.length !== 10 || digits.length < 11 || digits.length > 15) continue;
+    const prev = msisdn.get(tail) ?? "";
+    if (digits.length > prev.length) msisdn.set(tail, digits);
+  }
   const where: Prisma.UserWhereInput[] = [
     ...(ids.length ? [{ id: { in: ids } }] : []),
     ...(prefix ? [{ patient: { mrn: { startsWith: `${prefix}MR` } } }] : []),
     ...phones.flatMap((d) => [{ phone: { endsWith: d } }, { patient: { contactNumber: { endsWith: d } } }]),
   ];
-  return { ids: new Set(ids), prefix, phones: new Set(phones), where };
+  return { ids: new Set(ids), prefix, phones: new Set(phones), msisdn, where };
 }
 
 function toDeskPatient(
@@ -116,7 +124,11 @@ function toDeskPatient(
   scope: Awaited<ReturnType<typeof knownScope>>,
   lastVisit: Map<string, Date>,
 ): DeskPatient {
-  const phone = u.patient?.contactNumber || u.phone || "";
+  const stored = u.patient?.contactNumber || u.phone || "";
+  const tail = last10(stored);
+  const fromChat = tail.length === 10 ? scope.msisdn.get(tail) : undefined;
+  const phone =
+    fromChat && fromChat.length > stored.replace(/\D/g, "").length ? fromChat : stored;
   const mrn = u.patient?.mrn ?? null;
   const knownHere =
     scope.ids.has(u.id) ||

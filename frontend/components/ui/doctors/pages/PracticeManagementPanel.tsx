@@ -15,6 +15,8 @@ import {
   filterBookingsByDate,
   usePracticeDashboard,
 } from "@/contexts/PracticeDashboardContext";
+import { isPracticingDoctor } from "@/lib/rosterDoctor";
+import PasswordField from "@/components/inputs/PasswordField";
 
 import {
   DOCTOR_SUBSCRIPTION_HREF,
@@ -39,7 +41,7 @@ import {
   normalizeUpcomingChanges,
 } from "@/components/ui/procto/ScheduleChangeControls";
 import ClinicalMastersPanel from "@/components/ui/procto/ClinicalMastersPanel";
-import { AddClinicStaff, SpecialtySelect } from "@/components/ui/procto/SpecialtySelect";
+import { SpecialtySelect } from "@/components/ui/procto/SpecialtySelect";
 
 type Tab = PracticeTab;
 
@@ -54,6 +56,7 @@ type PracticeMember = {
     members: {
       userId: string;
       role: string;
+      isActive?: boolean;
       user: {
         id: string;
         name: string | null;
@@ -267,8 +270,7 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
     if (!practice) return [];
     return practice.members.filter(
       (m) =>
-        m.role === "DOCTOR" ||
-        (m.role === "PRACTICE_OWNER" && m.user.doctor),
+        isPracticingDoctor(m),
     );
   }, [practice]);
 
@@ -934,6 +936,7 @@ function DoctorsPanel({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [specialtyIds, setSpecialtyIds] = useState<string[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
@@ -947,13 +950,17 @@ function DoctorsPanel({
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const doctors = members.filter(
-    (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
+    (m) =>
+      m.role === "DOCTOR" ||
+      m.role === "PRACTICE_OWNER" ||
+      isPracticingDoctor(m),
   );
   const staff = members.filter(
     (m) =>
-      m.role === "PRACTICE_ADMIN" ||
-      m.role === "RECEPTIONIST" ||
-      m.role === "NURSE",
+      m.isActive !== false &&
+      (m.role === "PRACTICE_ADMIN" ||
+        m.role === "RECEPTIONIST" ||
+        m.role === "NURSE"),
   );
 
   async function openSchedule(userId: string) {
@@ -1035,6 +1042,10 @@ function DoctorsPanel({
       setError("Password must be at least 6 characters.");
       return;
     }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
     if (!specialtyIds.length) {
       setError("Select a specialty from the list.");
       return;
@@ -1057,9 +1068,28 @@ function DoctorsPanel({
     setName("");
     setEmail("");
     setPassword("");
+    setConfirmPassword("");
     setPhone("");
     setSpecialtyIds([]);
     setLicenseNo("");
+    await onChanged();
+  }
+
+  async function disableStaff(userId: string) {
+    setError("");
+    setMessage("");
+    setBusy(true);
+    const res = await proctoService.setPracticeMemberActive(
+      practiceId,
+      userId,
+      false,
+    );
+    setBusy(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not disable that login.");
+      return;
+    }
+    setMessage("Clinic staff login disabled. They can no longer sign in.");
     await onChanged();
   }
 
@@ -1216,12 +1246,27 @@ function DoctorsPanel({
             <h3 className="mb-2 text-sm font-semibold">Clinic team</h3>
             <ul className="space-y-2">
               {staff.map((m) => (
-                <li key={m.userId} className="text-sm">
-                  <span className="font-medium">{m.user.name || "Unnamed"}</span>
-                  <span className="ml-2 text-xs opacity-60">
-                    {MEMBER_ROLE_LABEL[m.role] ?? m.role}
-                  </span>
-                  <p className="text-xs opacity-70">{m.user.email}</p>
+                <li
+                  key={m.userId}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <div className="min-w-0">
+                    <span className="font-medium">{m.user.name || "Unnamed"}</span>
+                    <span className="ml-2 text-xs opacity-60">
+                      {MEMBER_ROLE_LABEL[m.role] ?? m.role}
+                    </span>
+                    <p className="text-xs opacity-70">{m.user.email}</p>
+                  </div>
+                  {canManage ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void disableStaff(m.userId)}
+                      className="shrink-0 rounded-lg border border-red-300 px-2.5 py-1 text-xs font-semibold text-red-700 disabled:opacity-50 dark:border-red-800 dark:text-red-300"
+                    >
+                      Disable
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -1271,7 +1316,30 @@ function DoctorsPanel({
                 { label: "Phone", value: phone, set: setPhone, type: "tel", autoComplete: "off" },
                 { label: "License no", value: licenseNo, set: setLicenseNo, autoComplete: "off" },
               ] as const
-            ).map((f) => (
+            ).map((f) =>
+              "type" in f && f.type === "password" ? (
+                <div key="passwords" className="contents">
+                  <label className="block text-sm">
+                    <span className="text-xs opacity-70">{f.label}</span>
+                    <PasswordField
+                      value={password}
+                      onChange={setPassword}
+                      autoComplete="new-password"
+                      className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="text-xs opacity-70">Confirm password *</span>
+                    <PasswordField
+                      name="confirmPassword"
+                      value={confirmPassword}
+                      onChange={setConfirmPassword}
+                      autoComplete="new-password"
+                      className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
+                    />
+                  </label>
+                </div>
+              ) : (
               <label key={f.label} className="block text-sm">
                 <span className="text-xs opacity-70">{f.label}</span>
                 <input
@@ -1282,7 +1350,8 @@ function DoctorsPanel({
                   className="mt-1 w-full rounded-lg border px-3 py-2 text-sm dark:bg-neutral-900 dark:border-neutral-700"
                 />
               </label>
-            ))}
+              ),
+            )}
             <label className="block text-sm sm:col-span-2">
               <span className="text-xs opacity-70">Specialties *</span>
               <div className="mt-1">
@@ -1302,11 +1371,6 @@ function DoctorsPanel({
             </button>
           </form>
         )}
-        <AddClinicStaff
-          practiceId={practiceId}
-          canManage={canManage}
-          onCreated={onChanged}
-        />
       </section>
     </div>
   );

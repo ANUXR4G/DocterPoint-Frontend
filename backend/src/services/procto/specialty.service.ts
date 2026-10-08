@@ -30,7 +30,10 @@ export async function listSpecialties(opts?: { hasDoctors?: boolean }) {
               practiceMembers: {
                 some: {
                   isActive: true,
-                  role: { in: ["DOCTOR", "PRACTICE_OWNER"] },
+                  OR: [
+                    { role: "DOCTOR" },
+                    { role: "PRACTICE_OWNER", doctorId: { not: null } },
+                  ],
                   practice: { isActive: true, isDirectoryListed: true },
                 },
               },

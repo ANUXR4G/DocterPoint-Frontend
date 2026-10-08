@@ -29,6 +29,8 @@ export default function Form() {
 
   const [authSuccess, setAuthSuccess] = useState<boolean>(false)
   const [submitAttempted, setSubmitAttempted] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [confirmError, setConfirmError] = useState("")
 
   const callbackURL = searchParams.get("callback")
   const googleStatus = searchParams.get("status")
@@ -166,6 +168,11 @@ export default function Form() {
         onSubmit={(e) => {
           e.preventDefault()
           setSubmitAttempted(true)
+          if (pathname === "signup" && values.password !== confirmPassword) {
+            setConfirmError("Passwords do not match.")
+            return
+          }
+          setConfirmError("")
           handleSubmit()
         }}
       >
@@ -187,7 +194,23 @@ export default function Form() {
           onChange={handleChange}
           onBlur={handleBlur}
           error={submitAttempted ? errors.password : undefined}
+          autoComplete={pathname === "login" ? "current-password" : "new-password"}
         />
+        {pathname === "signup" ? (
+          <IconInput
+            icon="key"
+            name="confirmPassword"
+            type="password"
+            label="Confirm password"
+            value={confirmPassword}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              setConfirmPassword(e.target.value)
+              setConfirmError("")
+            }}
+            error={confirmError || undefined}
+            autoComplete="new-password"
+          />
+        ) : null}
         {((loginData && loginData.status === "unsuccessful") ||
           (signupData && signupData.status === "unsuccessful") ||
           googleStatus) && (

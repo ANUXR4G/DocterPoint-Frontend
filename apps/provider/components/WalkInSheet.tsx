@@ -28,8 +28,22 @@ import {
 import { usePractice } from "@/lib/practiceContext";
 import { practiceDateIso } from "@/lib/practiceTime";
 import { colors, radii, space } from "@/lib/theme";
+import {
+  COUNTRY_DIALS,
+  DEFAULT_COUNTRY,
+  composeWhatsAppMsisdn,
+  type CountryDial,
+} from "@/lib/countries";
 
-const DOCTOR_ROLES = new Set(["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"]);
+function isBookableDoctor(row: {
+  role: string;
+  isActive?: boolean;
+  doctorId?: string | null;
+}) {
+  if (row.isActive === false) return false;
+  if (row.role === "DOCTOR") return true;
+  return row.role === "PRACTICE_OWNER" && Boolean(row.doctorId);
+}
 const GENDERS: Array<["male" | "female" | "others", string]> = [
   ["male", "Male"],
   ["female", "Female"],
@@ -75,8 +89,7 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
     return (membership?.practice.members ?? [])
       .filter(
         (row) =>
-          row.isActive !== false &&
-          DOCTOR_ROLES.has(row.role) &&
+          isBookableDoctor(row) &&
           Boolean(row.userId) &&
           (!onlySelf || row.userId === myUserId),
       )
@@ -98,6 +111,8 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
   const [mode, setMode] = useState<"search" | "register">("search");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState<CountryDial>(DEFAULT_COUNTRY);
+  const [countryOpen, setCountryOpen] = useState(false);
   const [gender, setGender] = useState<"" | "male" | "female" | "others">("");
   const [dob, setDob] = useState("");
   const [relationship, setRelationship] = useState("");
@@ -128,6 +143,8 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
     setMode("search");
     setName("");
     setPhone("");
+    setCountry(DEFAULT_COUNTRY);
+    setCountryOpen(false);
     setGender("");
     setDob("");
     setRelationship("");
@@ -228,9 +245,13 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
       setMessage("Enter the patient's full name.");
       return;
     }
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 10 || digits.length > 15) {
-      setMessage("Enter a valid mobile number (10 digits).");
+    const digits = composeWhatsAppMsisdn(country, phone);
+    if (!digits) {
+      setMessage(
+        country.dial === "91"
+          ? "Enter a 10-digit WhatsApp mobile. +91 is added for you."
+          : `Enter the WhatsApp mobile for +${country.dial}.`,
+      );
       return;
     }
     if (!gender) {
@@ -374,17 +395,52 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
                     placeholderTextColor={colors.inkFaint}
                     autoCapitalize="words"
                   />
-                  <TextInput
-                    style={styles.input}
-                    value={phone}
-                    onChangeText={(v) => {
-                      setPhone(v);
-                      setNeedsRelationship(false);
-                    }}
-                    placeholder="10-digit mobile"
-                    placeholderTextColor={colors.inkFaint}
-                    keyboardType="phone-pad"
-                  />
+                  <Text style={styles.hint}>
+                    Country code is saved with the number so WhatsApp can send
+                    and receive.
+                  </Text>
+                  <View style={styles.phoneRow}>
+                    <Pressable
+                      onPress={() => setCountryOpen((open) => !open)}
+                      style={styles.countryBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Country code +${country.dial}`}
+                    >
+                      <Text style={styles.countryCode}>+{country.dial}</Text>
+                      <Text style={styles.chevron}>▾</Text>
+                    </Pressable>
+                    <TextInput
+                      style={styles.phoneInput}
+                      value={phone}
+                      onChangeText={(v) => {
+                        setPhone(v);
+                        setNeedsRelationship(false);
+                      }}
+                      placeholder={
+                        country.dial === "91" ? "10-digit mobile" : "Mobile number"
+                      }
+                      placeholderTextColor={colors.inkFaint}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                  {countryOpen ? (
+                    <ScrollView style={styles.countryList} nestedScrollEnabled>
+                      {COUNTRY_DIALS.map((c) => (
+                        <Pressable
+                          key={c.iso}
+                          onPress={() => {
+                            setCountry(c);
+                            setCountryOpen(false);
+                          }}
+                          style={styles.countryItem}
+                        >
+                          <Text style={styles.countryItemText}>
+                            +{c.dial} {c.name}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  ) : null}
                   <View style={styles.chips}>
                     {GENDERS.map(([value, label]) => (
                       <Chip
@@ -528,6 +584,42 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginBottom: 8,
   },
+  phoneRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  countryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  countryCode: { fontWeight: "700", color: colors.ink },
+  chevron: { color: colors.inkSoft, fontSize: 12 },
+  phoneInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.ink,
+  },
+  countryList: {
+    maxHeight: 160,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  countryItem: { paddingHorizontal: 12, paddingVertical: 10 },
+  countryItemText: { color: colors.ink, fontSize: 14 },
   lookup: {
     flexDirection: "row",
     alignItems: "center",

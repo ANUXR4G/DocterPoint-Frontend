@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { DoctorAnalytics } from "@/components"
 import DoctorQueue from "@/components/ui/doctors/pages/DoctorQueue"
-import { AddClinicStaff, SpecialtySelect } from "@/components/ui/procto/SpecialtySelect"
+import { SpecialtySelect } from "@/components/ui/procto/SpecialtySelect"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import {
   CLINIC_SUBSCRIPTION_HREF,
@@ -14,6 +14,8 @@ import {
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import { matchesQueueStatusFilter } from "@/lib/bookingStatus"
 import { practiceTodayIso } from "@/lib/practiceTime"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
+import PasswordField from "@/components/inputs/PasswordField"
 import {
   filterBookingsByDate,
   usePracticeDashboard,
@@ -103,6 +105,7 @@ function ClinicOpsHub() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [phone, setPhone] = useState("")
   const [specialtyIds, setSpecialtyIds] = useState<string[]>([])
   const [licenseNo, setLicenseNo] = useState("")
@@ -137,7 +140,7 @@ function ClinicOpsHub() {
     const members = (practice.members ?? []).filter(
       (m) =>
         m.isActive !== false &&
-        ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"].includes(m.role),
+        isPracticingDoctor(m),
     )
     setDoctorCount(members.length)
     for (const m of members) {
@@ -248,6 +251,10 @@ function ClinicOpsHub() {
       setFormError("Password must be at least 6 characters.")
       return
     }
+    if (password !== confirmPassword) {
+      setFormError("Passwords do not match.")
+      return
+    }
     if (!specialtyIds.length) {
       setFormError("Select a specialty from the list.")
       return
@@ -270,6 +277,7 @@ function ClinicOpsHub() {
     setName("")
     setEmail("")
     setPassword("")
+    setConfirmPassword("")
     setPhone("")
     setSpecialtyIds([])
     setLicenseNo("")
@@ -305,7 +313,12 @@ function ClinicOpsHub() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {OPS_LINKS.map((l) => (
+        {OPS_LINKS.filter(
+          (l) =>
+            canManage ||
+            l.href === "/clinic/queue" ||
+            l.href === "/doctor/patients",
+        ).map((l) => (
           <Link
             key={l.href}
             href={l.href}
@@ -426,12 +439,17 @@ function ClinicOpsHub() {
                   onChange={(e) => setEmail(e.target.value)}
                   className={fieldClass}
                 />
-                <input
+                <PasswordField
                   placeholder="Login password *"
-                  type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
+                  onChange={setPassword}
+                  className={fieldClass}
+                />
+                <PasswordField
+                  name="confirmPassword"
+                  placeholder="Confirm password *"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
                   className={fieldClass}
                 />
                 <input
@@ -484,12 +502,10 @@ function ClinicOpsHub() {
                 </div>
               </div>
             )}
-            {practiceId ? (
-              <AddClinicStaff practiceId={practiceId} canManage={canManage} />
-            ) : null}
           </div>
         ) : null}
       </div>
+
     </div>
   )
 }

@@ -133,6 +133,11 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/clinic/doctors",
     },
     {
+      name: "Role access",
+      icon: "two-people",
+      dest: "/clinic/access",
+    },
+    {
       name: "Patients",
       icon: "two-people",
       dest: "/doctor/patients",

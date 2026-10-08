@@ -27,6 +27,7 @@ export type PracticeMembership = {
       role: string;
       userId: string;
       isActive?: boolean;
+      doctorId?: string | null;
       user: {
         id: string;
         name: string | null;
@@ -97,7 +98,7 @@ export type BookingRow = {
   medicines?: Array<{ name: string; amount?: string; times?: string[] }> | null;
   documents?: VisitDocument[] | null;
   clinicalAssessment?: unknown;
-  provider?: { id?: string; name?: string | null } | null;
+  provider?: { id?: string; name?: string | null; stampSrc?: string | null } | null;
   /** Flat name from the patient roster, when `provider` is not nested. */
   providerName?: string | null;
   practice?: {
@@ -105,6 +106,7 @@ export type BookingRow = {
     name?: string;
     specialty?: string | null;
     clinicalMasters?: unknown;
+    stampSrc?: string | null;
   } | null;
   location?: { name?: string; address?: string; city?: string } | null;
   patient?: {

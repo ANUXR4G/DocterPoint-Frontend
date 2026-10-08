@@ -45,10 +45,10 @@ GlucoGuide helps clinics accept appointments online and over WhatsApp from a sin
 |------|---------|------------|
 | **Patient** | `/login/patient` or mobile app | Find clinics, book, cancel/reschedule, profile, post-visit reviews |
 | **Doctor** | `/login/doctor` | Queue, calendar, appointments, analytics, subscription |
-| **Clinic owner** | `/login/clinic` (same account type as doctor) | Everything a doctor can do, plus clinic details, add doctors, WhatsApp setup |
+| **Clinic owner** | `/login/clinic` (same account type as doctor) | Clinic details, add doctors, WhatsApp setup, Role access. Not a bookable doctor until they open a schedule. |
 | **Platform admin** | `/login` → admin | Patients, doctors, clinics, bookings, WhatsApp numbers, approvals |
 
-**Practice membership:** A user can belong to a practice as **Owner**, **Admin**, **Doctor**, or **Receptionist**. Owners and admins can change subscription and add doctors.
+**Practice membership:** A user can belong to a practice as **Owner**, **Admin**, **Doctor**, **Nurse**, or **Receptionist**. Owners and admins create those logins from **Role access** (`/clinic/access`) and can change the subscription.
 
 ---
 

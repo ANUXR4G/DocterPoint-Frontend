@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import PopupModal from "@/components/modals/Modal"
 import { proctoService, type DeskPatient } from "@/lib/services/procto"
 import DeskPatientPicker from "@/components/ui/procto/DeskPatientPicker"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
 import {
   formatPracticeTime,
   practiceMinutesOfDay,
@@ -58,10 +59,7 @@ function doctorsFromMembership(m: PracticeMembership | undefined) {
     .filter(
       (row) =>
         row.isActive !== false &&
-        (row.role === "DOCTOR" ||
-          row.role === "PRACTICE_OWNER" ||
-          row.role === "PRACTICE_ADMIN") &&
-        Boolean(row.userId),
+        isPracticingDoctor(row) && Boolean(row.userId),
     )
     .map((row) => ({
       id: String(row.userId),

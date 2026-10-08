@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -9,6 +10,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradientStub } from "@/components/ui/GradientStub";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { AnimatedView, PressableScale } from "@/lib/motion";
@@ -78,16 +80,41 @@ export function Panel({
 
 export function Field({
   label,
+  secureTextEntry,
   ...props
 }: TextInputProps & { label: string }) {
+  const [show, setShow] = useState(false);
+  const isPassword = Boolean(secureTextEntry);
   return (
     <View style={{ marginBottom: space.lg }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        placeholderTextColor={colors.inkFaint}
-        style={[styles.input, props.editable === false && styles.inputDisabled]}
-        {...props}
-      />
+      <View>
+        <TextInput
+          placeholderTextColor={colors.inkFaint}
+          secureTextEntry={isPassword && !show}
+          style={[
+            styles.input,
+            props.editable === false && styles.inputDisabled,
+            isPassword && { paddingRight: 44 },
+          ]}
+          {...props}
+        />
+        {isPassword ? (
+          <Pressable
+            onPress={() => setShow((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={show ? "Hide password" : "Show password"}
+            hitSlop={8}
+            style={styles.eyeBtn}
+          >
+            <Ionicons
+              name={show ? "eye-off-outline" : "eye-outline"}
+              size={20}
+              color={colors.inkSoft}
+            />
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -406,6 +433,15 @@ const styles = StyleSheet.create({
   inputDisabled: {
     opacity: 0.7,
     backgroundColor: colors.sky50,
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 8,
+    top: 0,
+    bottom: 0,
+    width: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
   btn: {
     paddingVertical: 15,

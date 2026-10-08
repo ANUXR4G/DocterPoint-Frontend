@@ -37,7 +37,7 @@ function normalizePhone(from: string): string {
  * Prefer WhatsAppConversation.patientPhone (webhook MSISDN) over profile/booking
  * fields that may still be last-10 or wrongly prefixed with 91.
  */
-async function resolveWhatsAppMsisdn(
+export async function resolveWhatsAppMsisdn(
   practiceId: string,
   ...candidates: Array<string | null | undefined>
 ): Promise<string> {

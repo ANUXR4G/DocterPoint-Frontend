@@ -68,7 +68,9 @@ export function selfProviderScope(
 export function pickProviderId(m: PracticeMembership | null): string | null {
   if (!m) return null;
   const docs = m.practice.members.filter(
-    (x) => x.role === "DOCTOR" || x.role === "PRACTICE_OWNER",
+    (x) =>
+      x.role === "DOCTOR" ||
+      (x.role === "PRACTICE_OWNER" && Boolean(x.doctorId)),
   );
   const self = docs.find((d) => d.userId === m.userId);
   return self?.userId || docs[0]?.userId || m.userId;

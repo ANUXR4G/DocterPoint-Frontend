@@ -618,15 +618,6 @@ export default function VisitScreen() {
             {blank(p?.email) ? (
               <Text style={styles.rowLabel}>Email: {blank(p?.email)}</Text>
             ) : null}
-            {blank(p?.contactNumber || p?.phone || booking.patientPhone) ? (
-              <Text style={styles.rowLabel}>
-                Phone:{" "}
-                {formatPhoneDisplay(
-                  p?.contactNumber || p?.phone || booking.patientPhone,
-                  "",
-                )}
-              </Text>
-            ) : null}
             {blank(p?.address) ? (
               <Text style={styles.rowLabel}>Address: {blank(p?.address)}</Text>
             ) : null}

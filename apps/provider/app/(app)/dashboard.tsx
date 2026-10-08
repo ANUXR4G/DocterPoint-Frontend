@@ -78,7 +78,9 @@ export default function DashboardScreen() {
   const showDoctorOnRows =
     seesClinic &&
     (membership?.practice.members ?? []).filter(
-      (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
+      (m) =>
+        m.role === "DOCTOR" ||
+        (m.role === "PRACTICE_OWNER" && Boolean(m.doctorId)),
     ).length > 1;
 
   const counts = useMemo(

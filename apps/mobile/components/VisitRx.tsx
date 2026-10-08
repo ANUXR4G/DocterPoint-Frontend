@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Panel, SectionTitle } from "@/components/ui";
 import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { colors, space } from "@/lib/theme";
@@ -27,17 +28,11 @@ function asAssessment(raw: unknown): Assessment | null {
   return raw as Assessment;
 }
 
-function dosageLine(m: { amount?: string; times?: string[] }) {
-  const times = (m.times ?? [])
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((t) => t.charAt(0).toUpperCase() + t.slice(1))
-    .join(", ");
-  return [times, m.amount?.trim()].filter(Boolean).join(" · ") || "—";
-}
-
 /** Read-only clinic log the patient sees — same Rx the doctor sends. */
 export function VisitRx({ booking }: { booking: BookingDetail }) {
+  const [tab, setTab] = useState<"visit" | "clinical" | "prescription">(
+    "visit",
+  );
   const assessment = asAssessment(booking.clinicalAssessment);
   const values = assessment?.vitals?.values ?? {};
   const medicines = (booking.medicines ?? []).filter((m) => m?.name?.trim());
@@ -92,50 +87,92 @@ export function VisitRx({ booking }: { booking: BookingDetail }) {
   return (
     <Panel style={styles.panel}>
       <SectionTitle>Prescription (Rx)</SectionTitle>
-      {recorded ? <Text style={styles.muted}>Saved {recorded}</Text> : null}
-      {hasVitals ? (
-        <View style={styles.vitals}>
-          {vitals
-            .filter(([, v]) => v != null && v !== "")
-            .map(([label, value]) => (
-              <Text key={label} style={styles.vital}>
-                {label} {String(value)}
-              </Text>
-            ))}
-        </View>
+      <View style={styles.tabs}>
+        {(
+          [
+            ["visit", "Visit"],
+            ["clinical", "Clinical"],
+            ["prescription", "Prescription"],
+          ] as const
+        ).map(([id, label]) => (
+          <Pressable
+            key={id}
+            onPress={() => setTab(id)}
+            style={[styles.tab, tab === id && styles.tabOn]}
+          >
+            <Text style={[styles.tabLabel, tab === id && styles.tabLabelOn]}>
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      {tab === "visit" ? (
+        <>
+          {recorded ? <Text style={styles.muted}>Saved {recorded}</Text> : null}
+          <Text style={styles.block}>
+            <Text style={styles.label}>Allergies. </Text>
+            {allergyText || "No known allergy"}
+          </Text>
+          <Text style={styles.block}>
+            <Text style={styles.label}>Remarks. </Text>
+            {remarks || "No remarks from the doctor yet."}
+          </Text>
+        </>
       ) : null}
-      {allergyText ? (
-        <Text style={styles.block}>
-          <Text style={styles.label}>Allergies. </Text>
-          {allergyText}
-        </Text>
+      {tab === "clinical" ? (
+        <>
+          {hasVitals ? (
+            <View style={styles.vitals}>
+              {vitals
+                .filter(([, v]) => v != null && v !== "")
+                .map(([label, value]) => (
+                  <Text key={label} style={styles.vital}>
+                    {label} {String(value)}
+                  </Text>
+                ))}
+            </View>
+          ) : (
+            <Text style={styles.muted}>No vitals recorded.</Text>
+          )}
+          <Text style={styles.block}>
+            <Text style={styles.label}>Allergies. </Text>
+            {allergyText || "No known allergy"}
+          </Text>
+          <Text style={styles.block}>
+            <Text style={styles.label}>Pain. </Text>
+            {painText || "No pain complaints recorded."}
+          </Text>
+        </>
       ) : null}
-      {painText ? (
-        <Text style={styles.block}>
-          <Text style={styles.label}>Pain. </Text>
-          {painText}
-        </Text>
+      {tab === "prescription" ? (
+        medicines.length === 0 ? (
+          <Text style={styles.muted}>No medicines prescribed.</Text>
+        ) : (
+          medicines.map((m, i) => (
+            <Text key={`${m.name}-${i}`} style={styles.medName}>
+              {i + 1}. {m.name}
+            </Text>
+          ))
+        )
       ) : null}
-      <Text style={styles.block}>
-        <Text style={styles.label}>Remarks. </Text>
-        {remarks || "No remarks from the doctor yet."}
-      </Text>
-      {medicines.length === 0 ? (
-        <Text style={styles.muted}>No medicines prescribed.</Text>
-      ) : (
-        medicines.map((m, i) => (
-          <View key={`${m.name}-${i}`} style={styles.med}>
-            <Text style={styles.medName}>{m.name}</Text>
-            <Text style={styles.muted}>Dose: {dosageLine(m)}</Text>
-          </View>
-        ))
-      )}
     </Panel>
   );
 }
 
 const styles = StyleSheet.create({
   panel: { marginBottom: space.md },
+  tabs: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: space.sm,
+    padding: 4,
+    borderRadius: 999,
+    backgroundColor: "#F1F5F9",
+  },
+  tab: { flex: 1, borderRadius: 999, paddingVertical: 8, alignItems: "center" },
+  tabOn: { backgroundColor: "#fff" },
+  tabLabel: { fontSize: 13, fontWeight: "700", color: colors.inkSoft },
+  tabLabelOn: { color: colors.ink },
   muted: { marginTop: 4, fontSize: 13, color: colors.inkSoft },
   label: { fontWeight: "700", color: colors.ink },
   block: { marginTop: space.sm, fontSize: 14, lineHeight: 20, color: colors.ink },

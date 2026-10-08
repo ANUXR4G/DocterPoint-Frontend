@@ -13,8 +13,8 @@ export function formatPhoneDisplay(
   const digits = raw.replace(/\D/g, "")
   if (!digits) return raw
 
-  // India: bare 10-digit mobile
-  if (digits.length === 10) return `+91-${digits}`
+  // India: bare 10-digit mobile (6–9). Other 10-digit values are not Indian.
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return `+91-${digits}`
 
   // India: 91 + 10 digits
   if (digits.length === 12 && digits.startsWith("91")) {

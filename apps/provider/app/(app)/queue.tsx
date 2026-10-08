@@ -74,7 +74,9 @@ export default function QueueScreen() {
     if (!isClinicAdmin) return [];
     const members = membership?.practice.members ?? [];
     return members.filter(
-      (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
+      (m) =>
+        m.role === "DOCTOR" ||
+        (m.role === "PRACTICE_OWNER" && Boolean(m.doctorId)),
     );
   }, [membership, isClinicAdmin]);
 

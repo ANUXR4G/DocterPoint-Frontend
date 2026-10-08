@@ -28,14 +28,19 @@ export default function RegisterScreen() {
   const [licenseNo, setLicenseNo] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [consultationFee, setConsultationFee] = useState("500");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function register() {
-    setBusy(true);
     setError("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setBusy(true);
     const res = await api("/auth/register/doctor", {
       method: "POST",
       body: JSON.stringify({
@@ -133,6 +138,13 @@ export default function RegisterScreen() {
           placeholder="Password"
         />
         <Field
+          label="Confirm password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+          placeholder="Confirm password"
+        />
+        <Field
           label="Phone"
           value={phone}
           onChangeText={setPhone}
@@ -150,7 +162,13 @@ export default function RegisterScreen() {
           label="Create account"
           onPress={register}
           busy={busy}
-          disabled={!name.trim() || !licenseNo.trim() || !email.trim() || !password}
+          disabled={
+            !name.trim() ||
+            !licenseNo.trim() ||
+            !email.trim() ||
+            !password ||
+            password !== confirmPassword
+          }
         />
         <Pressable onPress={() => router.replace("/(auth)/login")}>
           <Text style={styles.link}>Already registered? Sign in</Text>

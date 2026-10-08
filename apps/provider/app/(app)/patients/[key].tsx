@@ -112,12 +112,6 @@ export default function PatientDetailScreen() {
                   label="Phone"
                   value={formatPhoneDisplay(patient.phone)}
                 />
-                <Fact
-                  label="Booked via"
-                  value={formatPhoneDisplay(
-                    patient.bookedViaPhone || patient.phone,
-                  )}
-                />
                 {patient.email?.trim() ? (
                   <Fact label="Email" value={patient.email.trim()} />
                 ) : null}

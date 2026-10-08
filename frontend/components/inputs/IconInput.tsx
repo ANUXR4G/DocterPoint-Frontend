@@ -1,4 +1,7 @@
-import React from "react"
+"use client"
+
+import React, { useState } from "react"
+import { Eye, EyeOff } from "lucide-react"
 import Icon from "../icons"
 import { IconNames } from "@/types"
 
@@ -39,6 +42,8 @@ const IconInput = React.memo(function IconInput({
   autoComplete,
   placeholder = " ",
 }: Props) {
+  const [showPassword, setShowPassword] = useState(false)
+  const isPassword = type === "password"
   const hasValue = String(value ?? "").length > 0
   const hasError = Boolean(error)
   // Floating label needs a blank placeholder; real hint text would overlap the label.
@@ -64,7 +69,7 @@ const IconInput = React.memo(function IconInput({
 
       <div className="relative h-full min-w-0 flex-1">
         <input
-          type={type ?? "text"}
+          type={isPassword && showPassword ? "text" : (type ?? "text")}
           id={name}
           name={name}
           className={`form-input peer box-border h-full w-full min-w-0 border-none bg-transparent text-base font-semibold outline-none placeholder:text-transparent dark:placeholder:text-transparent ${
@@ -101,6 +106,20 @@ const IconInput = React.memo(function IconInput({
           </label>
         ) : null}
       </div>
+      {isPassword ? (
+        <button
+          type="button"
+          className="ml-2 flex size-8 shrink-0 items-center justify-center text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-white"
+          aria-label={showPassword ? "Hide password" : "Show password"}
+          onClick={() => setShowPassword((v) => !v)}
+        >
+          {showPassword ? (
+            <EyeOff className="size-4" aria-hidden />
+          ) : (
+            <Eye className="size-4" aria-hidden />
+          )}
+        </button>
+      ) : null}
     </div>
   )
 })

@@ -146,6 +146,87 @@ function slugify(name: string): string {
 }
 
 /** Patient-level General Documents (WhatsApp Branch F → General Document). */
+/** Same MRN or same patient account is one roster row, even if a visit used a shorter name. */
+function mergeSamePatientRows<
+  T extends {
+    phone: string;
+    bookedViaPhone: string;
+    name: string | null;
+    patientId: string | null;
+    mrn: string | null;
+    bookingCount: number;
+    lastVisitAt: Date | null;
+    lastStatus: string | null;
+    providerNames: string[];
+    attachments: Array<{ name: string; url: string; uploadedAt: string }>;
+    recentBookings: Array<{
+      id: string;
+      slotStart?: Date | string | null;
+      sessionDate?: Date | string | null;
+      createdAt?: Date | string | null;
+    }>;
+  },
+>(rows: T[]): T[] {
+  const when = (row: T) => row.lastVisitAt?.getTime() ?? 0;
+  const visitWhen = (b: T["recentBookings"][number]) => {
+    const raw = b.slotStart || b.sessionDate || b.createdAt;
+    const t = raw ? new Date(raw).getTime() : 0;
+    return Number.isNaN(t) ? 0 : t;
+  };
+  const fullerName = (a: string | null, b: string | null) => {
+    const x = (a || "").trim();
+    const y = (b || "").trim();
+    if (!x) return y || null;
+    if (!y) return x || null;
+    return y.length > x.length ? y : x;
+  };
+
+  const merged = new Map<string, T>();
+  for (const row of rows) {
+    const key = row.mrn ? `mrn:${row.mrn}` : "";
+    if (!key) {
+      merged.set(`row:${merged.size}`, row);
+      continue;
+    }
+    const prev = merged.get(key);
+    if (!prev) {
+      merged.set(key, row);
+      continue;
+    }
+    const newer = when(row) >= when(prev) ? row : prev;
+    const older = newer === row ? prev : row;
+    const seen = new Set<string>();
+    const recentBookings = [...prev.recentBookings, ...row.recentBookings]
+      .filter((b) => {
+        if (seen.has(b.id)) return false;
+        seen.add(b.id);
+        return true;
+      })
+      .sort((a, b) => visitWhen(b) - visitWhen(a))
+      .slice(0, 8);
+    const attachments = [...prev.attachments];
+    for (const file of row.attachments) {
+      if (!attachments.some((a) => a.url === file.url)) attachments.push(file);
+    }
+    merged.set(key, {
+      ...older,
+      ...newer,
+      name: fullerName(prev.name, row.name),
+      patientId: prev.patientId || row.patientId,
+      mrn: prev.mrn || row.mrn,
+      phone: newer.phone,
+      bookedViaPhone: newer.bookedViaPhone,
+      bookingCount: prev.bookingCount + row.bookingCount,
+      lastVisitAt: newer.lastVisitAt,
+      lastStatus: newer.lastStatus,
+      providerNames: [...new Set([...prev.providerNames, ...row.providerNames])],
+      attachments,
+      recentBookings,
+    });
+  }
+  return [...merged.values()];
+}
+
 function readPatientGeneralDocuments(raw: unknown): Array<{
   name: string;
   url: string;
@@ -480,8 +561,9 @@ export const PracticeService = {
             {
               userId: data.ownerUserId,
               role: ownerRole,
-              // Clinic owners keep a doctorId so they can use Doctor Login too.
-              doctorId: data.ownerUserId,
+              // Solo doctors practice. A clinic owner is not a doctor until
+              // they open a schedule from the clinic dashboard.
+              doctorId: ownerRole === "DOCTOR" ? data.ownerUserId : null,
             },
             ...createdDoctorMembers.map((m) => ({
               userId: m.userId,
@@ -579,7 +661,10 @@ export const PracticeService = {
             members: {
               some: {
                 isActive: true,
-                role: { in: ["DOCTOR", "PRACTICE_OWNER"] },
+                OR: [
+                  { role: "DOCTOR" },
+                  { role: "PRACTICE_OWNER", doctorId: { not: null } },
+                ],
                 user: {
                   doctor: {
                     specialties: {
@@ -672,7 +757,13 @@ export const PracticeService = {
           },
         },
         members: {
-          where: { role: { in: ["DOCTOR", "PRACTICE_OWNER"] }, isActive: true },
+          where: {
+            isActive: true,
+            OR: [
+              { role: "DOCTOR" },
+              { role: "PRACTICE_OWNER", doctorId: { not: null } },
+            ],
+          },
           select: {
             userId: true,
             role: true,
@@ -1469,6 +1560,8 @@ export const PracticeService = {
           contactNumbers: member.user.phone ? [member.user.phone] : [],
         },
       });
+    }
+    if (member.doctorId !== member.user.id) {
       await prisma.practiceMember.update({
         where: { id: member.id },
         data: { doctorId: member.user.id },
@@ -1502,7 +1595,7 @@ export const PracticeService = {
     };
   },
 
-  /** New clinic login: admin, receptionist, or nurse. They are not bookable doctors. */
+  /** New clinic login: admin, receptionist, or nurse. Not a bookable doctor. */
   async createStaff(
     practiceId: string,
     data: {
@@ -1511,6 +1604,7 @@ export const PracticeService = {
       password?: string;
       phone?: string;
       role: PracticeMemberRole;
+      access?: Prisma.InputJsonValue;
     },
     actorUserId: string,
   ) {
@@ -1541,7 +1635,13 @@ export const PracticeService = {
       },
     });
     const member = await prisma.practiceMember.create({
-      data: { practiceId, userId: user.id, role, doctorId: null },
+      data: {
+        practiceId,
+        userId: user.id,
+        role,
+        doctorId: null,
+        ...(data.access ? { access: data.access } : {}),
+      },
     });
     clearMineCacheFor(user.id);
     clearMineCacheFor(actorUserId);
@@ -1549,6 +1649,137 @@ export const PracticeService = {
       member,
       user: { id: user.id, name: user.name, email: user.email, role },
     };
+  },
+
+  /** Edit name, phone, role, license, and the role-access form for one member. */
+  async updateRoleAccess(
+    practiceId: string,
+    memberUserId: string,
+    data: {
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+      role?: PracticeMemberRole;
+      licenseNo?: string;
+      specialtyIds?: string[];
+      access?: Prisma.InputJsonValue;
+    },
+    actorUserId: string,
+  ) {
+    await this.assertAdmin(practiceId, actorUserId);
+    const member = await prisma.practiceMember.findUnique({
+      where: { practiceId_userId: { practiceId, userId: memberUserId } },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            doctor: { select: { id: true } },
+          },
+        },
+      },
+    });
+    if (!member) ResponseHandler.notFoundError("member not found.");
+    const name = [data.firstName?.trim(), data.lastName?.trim()]
+      .filter(Boolean)
+      .join(" ");
+    await prisma.user.update({
+      where: { id: memberUserId },
+      data: {
+        ...(name ? { name } : {}),
+        ...(data.phone !== undefined ? { phone: data.phone.trim() || null } : {}),
+      },
+    });
+    const nextRole = data.role;
+    const promotingToDoctor =
+      nextRole === "DOCTOR" &&
+      member!.role !== "PRACTICE_OWNER" &&
+      member!.role !== "DOCTOR";
+    if (promotingToDoctor) {
+      const resolved = await resolveSpecialtyIds({
+        specialtyIds: data.specialtyIds,
+      });
+      if (!resolved.length) {
+        throw new AppError(400, "Select a specialty before making this person a doctor.");
+      }
+      if (!member!.user.doctor) {
+        const hospital = await AuthService.ensureIndependentHospital();
+        await prisma.doctor.create({
+          data: {
+            id: memberUserId,
+            description: "General Medicine — clinic staff doctor.",
+            hospitalId: hospital.id,
+            availableTimes: "Mon–Fri 09:00–17:00",
+            experience: 0,
+            emails: member!.user.email ? [member!.user.email] : [],
+            contactNumbers: member!.user.phone ? [member!.user.phone] : [],
+          },
+        });
+      }
+      await prisma.practiceMember.update({
+        where: { id: member!.id },
+        data: { role: "DOCTOR", doctorId: memberUserId },
+      });
+      await assignDoctorSpecialties(memberUserId, resolved);
+      const loc = await prisma.clinicLocation.findFirst({
+        where: { practiceId, isActive: true },
+        select: { id: true },
+      });
+      if (loc) {
+        await seedDefaultProviderSchedule({
+          practiceId,
+          locationId: loc.id,
+          providerId: memberUserId,
+        });
+      }
+      clearListPublicCache();
+    } else if (
+      nextRole &&
+      nextRole !== "PRACTICE_OWNER" &&
+      member!.role !== "PRACTICE_OWNER" &&
+      nextRole !== member!.role
+    ) {
+      if (
+        nextRole !== "PRACTICE_ADMIN" &&
+        nextRole !== "RECEPTIONIST" &&
+        nextRole !== "NURSE"
+      ) {
+        throw new AppError(400, "Choose a clinic role.");
+      }
+      await prisma.practiceMember.update({
+        where: { id: member!.id },
+        data: { role: nextRole, doctorId: null },
+      });
+    }
+    if (
+      !promotingToDoctor &&
+      data.specialtyIds &&
+      (member!.role === "DOCTOR" || member!.user.doctor)
+    ) {
+      const resolved = await resolveSpecialtyIds({
+        specialtyIds: data.specialtyIds,
+      });
+      if (resolved.length && (member!.user.doctor || member!.role === "DOCTOR")) {
+        await assignDoctorSpecialties(memberUserId, resolved);
+        clearListPublicCache();
+      }
+    }
+    if (data.licenseNo !== undefined && (member!.user.doctor || promotingToDoctor)) {
+      await prisma.doctor.update({
+        where: { id: memberUserId },
+        data: { licenseNo: data.licenseNo.trim() || null },
+      });
+    }
+    if (data.access !== undefined) {
+      await prisma.practiceMember.update({
+        where: { id: member!.id },
+        data: { access: data.access },
+      });
+    }
+    clearMineCacheFor(memberUserId);
+    clearMineCacheFor(actorUserId);
+    return { userId: memberUserId };
   },
 
   async setMemberActive(
@@ -1576,10 +1807,13 @@ export const PracticeService = {
       const { assertCanAddDoctor } = await import("./planEntitlements.js");
       await assertCanAddDoctor(practiceId);
     }
-    return prisma.practiceMember.update({
+    const updated = await prisma.practiceMember.update({
       where: { id: member!.id },
       data: { isActive },
     });
+    clearMineCacheFor(memberUserId);
+    clearMineCacheFor(actorUserId);
+    return updated;
   },
 
   /**
@@ -1646,13 +1880,16 @@ export const PracticeService = {
     };
 
     /**
-     * One roster row per member name on a booking number.
-     * Family shares the WhatsApp/clinic number; patientId may also collide —
-     * never key by patientId alone.
+     * One roster row per member on a booking number.
+     * Phone is the last 10 digits so 999…, 91…, and +91-… are the same person.
+     * Family members who share a number stay separate by name.
      */
     const rowKey = (b: (typeof bookings)[number]) => {
       const name = (b.patientName || "").trim().toLowerCase() || "_unknown";
-      return `phone:${b.patientPhone}|name:${name}`;
+      const digits = String(b.patientPhone || "").replace(/\D/g, "");
+      const phone =
+        digits.length >= 8 ? digits.slice(-10) : b.patientPhone || "";
+      return `phone:${phone}|name:${name}`;
     };
 
     const byPerson = new Map<string, PatientAgg>();
@@ -1770,7 +2007,8 @@ export const PracticeService = {
       const keys = [u.phone, u.patient?.contactNumber].filter(
         (x): x is string => Boolean(x),
       );
-      for (const k of keys) {
+      const digits = keys.map((k) => k.replace(/\D/g, "")).filter((d) => d.length >= 8);
+      for (const k of [...keys, ...digits.map((d) => d.slice(-10))]) {
         const list = patientsByPhone.get(k) ?? [];
         if (!list.some((x) => x.id === u.id)) list.push(u);
         patientsByPhone.set(k, list);
@@ -1783,12 +2021,19 @@ export const PracticeService = {
       return Boolean(x) && x === y;
     };
 
-    const bookedRows = [...byPerson.values()]
+    const bookedRows = mergeSamePatientRows(
+      [...byPerson.values()]
       .sort((a, b) => (b.lastVisitAt?.getTime() ?? 0) - (a.lastVisitAt?.getTime() ?? 0))
       .map((row) => {
         const bookingName = (row.name || "").trim() || null;
         const byId = row.patientId ? patientById[row.patientId] : undefined;
-        const phoneMatches = patientsByPhone.get(row.phone) ?? [];
+        const phoneDigits = String(row.phone || "").replace(/\D/g, "");
+        const phoneKey =
+          phoneDigits.length >= 8 ? phoneDigits.slice(-10) : "";
+        const phoneMatches =
+          patientsByPhone.get(row.phone) ??
+          (phoneKey ? patientsByPhone.get(phoneKey) : undefined) ??
+          [];
         const byName =
           bookingName
             ? phoneMatches.find((u) => namesMatch(u.name, bookingName))
@@ -1860,7 +2105,8 @@ export const PracticeService = {
           })),
           registeredAt: null as Date | null,
         };
-      });
+      }),
+    );
 
     // Clinic staff doctors only see patients booked with them; a solo doctor owns the roster.
     if (providerScope) {
@@ -3103,6 +3349,7 @@ export const PracticeService = {
       phone?: string;
       email?: string;
       bgSrc?: string | null;
+      stampSrc?: string | null;
       clinicalMasters?: unknown;
       location?: {
         id?: string;
@@ -3154,12 +3401,18 @@ export const PracticeService = {
     }
 
     let nextBgSrc: string | null | undefined;
-    if (data.bgSrc !== undefined) {
+    let nextStampSrc: string | null | undefined;
+    if (data.bgSrc !== undefined || data.stampSrc !== undefined) {
       const current = await prisma.practice.findUnique({
         where: { id: practiceId },
-        select: { bgSrc: true },
+        select: { bgSrc: true, stampSrc: true },
       });
-      nextBgSrc = normalizeProfileImageUrl(data.bgSrc, current?.bgSrc);
+      if (data.bgSrc !== undefined) {
+        nextBgSrc = normalizeProfileImageUrl(data.bgSrc, current?.bgSrc);
+      }
+      if (data.stampSrc !== undefined) {
+        nextStampSrc = normalizeProfileImageUrl(data.stampSrc, current?.stampSrc);
+      }
     }
 
     const liveLine = await prisma.whatsAppNumber.findFirst({
@@ -3244,6 +3497,7 @@ export const PracticeService = {
             ? { email: data.email.trim().toLowerCase() || null }
             : {}),
           ...(nextBgSrc !== undefined ? { bgSrc: nextBgSrc } : {}),
+          ...(nextStampSrc !== undefined ? { stampSrc: nextStampSrc } : {}),
           ...(data.clinicalMasters !== undefined
             ? {
                 clinicalMasters:
@@ -3366,6 +3620,7 @@ export const PracticeService = {
             clinicalMasters: true,
             isDirectoryListed: true,
             bgSrc: true,
+            stampSrc: true,
             isActive: true,
             createdAt: true,
             updatedAt: true,
@@ -3387,6 +3642,7 @@ export const PracticeService = {
                 userId: true,
                 doctorId: true,
                 isActive: true,
+                access: true,
                 user: {
                   select: {
                     id: true,
@@ -3397,8 +3653,14 @@ export const PracticeService = {
                     doctor: {
                       select: {
                         licenseNo: true,
+                        stampSrc: true,
                         appointmentValidityDays: true,
                         description: true,
+                        specialties: {
+                          select: {
+                            specialty: { select: { id: true, name: true, slug: true } },
+                          },
+                        },
                       },
                     },
                   },

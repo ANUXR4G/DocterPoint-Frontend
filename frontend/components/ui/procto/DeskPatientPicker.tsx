@@ -1,12 +1,19 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
   proctoService,
   type DeskPatient,
   type DeskPatientRegistration,
 } from "@/lib/services/procto"
 import { practiceTodayIso } from "@/lib/practiceTime"
+import { formatPhoneDisplay } from "@/lib/formatPhone"
+import {
+  COUNTRY_DIALS,
+  DEFAULT_COUNTRY,
+  composeWhatsAppMsisdn,
+  type CountryDial,
+} from "@/lib/phoneCountries"
 
 type Props = {
   practiceId: string
@@ -68,11 +75,73 @@ export function LookupStatus({
   )
 }
 
+function phoneSearchQuery(country: CountryDial, raw: string): string {
+  const q = raw.trim()
+  if (!/^[+\d\s()-]+$/.test(q)) return q
+  return composeWhatsAppMsisdn(country, q) ?? q.replace(/\D/g, "")
+}
+
+function CountryDialPicker({
+  country,
+  onChange,
+  children,
+}: {
+  country: CountryDial
+  onChange: (next: CountryDial) => void
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          aria-label="Country code"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-[var(--theme-primary)] dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100"
+        >
+          +{country.dial}
+          <span aria-hidden className="text-[10px] text-slate-400">
+            {open ? "▴" : "▾"}
+          </span>
+        </button>
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
+      {open ? (
+        <ul className="mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          {COUNTRY_DIALS.map((c) => (
+            <li key={c.iso}>
+              <button
+                type="button"
+                className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                  c.iso === country.iso
+                    ? "font-semibold text-[var(--theme-primary)]"
+                    : "text-slate-800 dark:text-slate-100"
+                }`}
+                onClick={() => {
+                  onChange(c)
+                  setOpen(false)
+                }}
+              >
+                <span>{c.name}</span>
+                <span className="shrink-0 font-semibold text-slate-500">
+                  +{c.dial}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
 function patientMeta(p: DeskPatient) {
   return [
     p.age != null ? `${p.age} y` : null,
     genderLabel(p.gender),
-    p.phone,
+    formatPhoneDisplay(p.phone, ""),
     p.relationship,
   ]
     .filter(Boolean)
@@ -100,6 +169,7 @@ export default function DeskPatientPicker({
 
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
+  const [country, setCountry] = useState<CountryDial>(DEFAULT_COUNTRY)
   const [gender, setGender] = useState<DeskPatientRegistration["gender"] | "">(
     "",
   )
@@ -137,9 +207,10 @@ export default function DeskPatientPicker({
     }
     let alive = true
     setSearching(true)
+    const searchQ = phoneSearchQuery(country, q)
     const t = window.setTimeout(() => {
       void proctoService
-        .searchDeskPatients(practiceId, q)
+        .searchDeskPatients(practiceId, searchQ)
         .then((res) => {
           if (!alive) return
           setSearching(false)
@@ -164,13 +235,20 @@ export default function DeskPatientPicker({
       alive = false
       window.clearTimeout(t)
     }
-  }, [query, practiceId])
+  }, [query, practiceId, country])
 
   function startRegister() {
     const q = query.trim()
     const digits = q.replace(/\D/g, "")
     if (/^[+\d\s()-]+$/.test(q) && digits.length >= 10) {
-      setPhone(digits.slice(-10))
+      const full = composeWhatsAppMsisdn(country, digits)
+      setPhone(
+        full && full.startsWith(country.dial)
+          ? full.slice(country.dial.length)
+          : digits.length > 10
+            ? digits.slice(-10)
+            : digits,
+      )
     } else if (q && !/\d/.test(q)) {
       setName(q)
     }
@@ -203,9 +281,13 @@ export default function DeskPatientPicker({
   async function register() {
     if (name.trim().replace(/[^\p{L}]/gu, "").length < 2)
       return setRegisterError("Enter the patient's full name.")
-    const digits = phone.replace(/\D/g, "")
-    if (digits.length < 10 || digits.length > 15)
-      return setRegisterError("Enter a valid mobile number (10 digits).")
+    const digits = composeWhatsAppMsisdn(country, phone)
+    if (!digits)
+      return setRegisterError(
+        country.dial === "91"
+          ? "Enter a 10-digit WhatsApp mobile. The +91 country code is added for you."
+          : `Enter the WhatsApp mobile for +${country.dial}, without the country code.`,
+      )
     if (!gender) return setRegisterError("Pick the patient's gender.")
     if (!dob) return setRegisterError("Enter the date of birth.")
     if (dob > practiceTodayIso())
@@ -331,19 +413,36 @@ export default function DeskPatientPicker({
             />
           </label>
           <label className="block">
-            <span className={labelClass}>Mobile *</span>
-            <input
-              className={fieldClass}
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value)
-                setNeedsRelationship(false)
-                setConflicts([])
-              }}
-              placeholder="10-digit mobile"
-              inputMode="tel"
-              autoComplete="off"
-            />
+            <span className={labelClass}>WhatsApp mobile *</span>
+            <div className="mt-1.5">
+              <CountryDialPicker
+                country={country}
+                onChange={(next) => {
+                  setCountry(next)
+                  setNeedsRelationship(false)
+                  setConflicts([])
+                }}
+              >
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[var(--theme-primary)] dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100 dark:placeholder:text-slate-500"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value)
+                    setNeedsRelationship(false)
+                    setConflicts([])
+                  }}
+                  placeholder={
+                    country.dial === "91" ? "10-digit mobile" : "Mobile number"
+                  }
+                  inputMode="tel"
+                  autoComplete="off"
+                />
+              </CountryDialPicker>
+            </div>
+            <span className="mt-1 block text-[11px] text-slate-500 dark:text-slate-400">
+              Saved as +{country.dial} so WhatsApp can send and receive on this
+              number.
+            </span>
           </label>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -490,33 +589,23 @@ export default function DeskPatientPicker({
   const q = query.trim()
   return (
     <div className="space-y-2.5">
-      <div className="relative">
-        <svg
-          viewBox="0 0 24 24"
-          className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-3.5-3.5" />
-        </svg>
-        <input
-          ref={searchRef}
-          className={`${fieldClass} !mt-0 pl-10`}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by mobile, name or MRN"
-          autoComplete="off"
-          autoFocus={autoFocus}
-          aria-label="Search patient"
-        />
-        {searching ? (
-          <span className="absolute right-3.5 top-1/2 size-4 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-[var(--theme-primary)]" />
-        ) : null}
-      </div>
+      <CountryDialPicker country={country} onChange={setCountry}>
+        <div className="relative">
+          <input
+            ref={searchRef}
+            className={`${fieldClass} !mt-0`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Mobile, name or MRN"
+            autoComplete="off"
+            autoFocus={autoFocus}
+            aria-label="Search patient"
+          />
+          {searching ? (
+            <span className="absolute right-3.5 top-1/2 size-4 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-[var(--theme-primary)]" />
+          ) : null}
+        </div>
+      </CountryDialPicker>
       {showLookupStatus && searching ? (
         <LookupStatus
           label="Looking up patient details…"

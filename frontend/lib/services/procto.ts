@@ -327,6 +327,13 @@ export const proctoService = {
     return res;
   },
 
+  /** Signed-in doctor's seal. `null` removes it. */
+  updateMyStamp: (stampSrc: string | null) =>
+    proctoFetch("/auth/me/stamp", {
+      method: "PUT",
+      body: JSON.stringify({ stampSrc }),
+    }) as Promise<ProctoResult<{ stampSrc: string | null }>>,
+
   updatePracticeProfile: (practiceId: string, body: Record<string, unknown>) =>
     proctoFetch(`/procto/practices/${practiceId}/profile`, {
       method: "PATCH",
@@ -653,6 +660,16 @@ export const proctoService = {
       },
     ),
 
+  updateRoleAccess: (
+    practiceId: string,
+    userId: string,
+    body: Record<string, unknown>,
+  ) =>
+    proctoFetch(`/procto/practices/${practiceId}/members/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
   setPracticeMemberActive: (
     practiceId: string,
     userId: string,
@@ -859,7 +876,12 @@ export type ProctoBooking = {
   paid_at?: string | null;
   createdAt?: string | null;
   created_at?: string | null;
-  practice?: { name: string; slug: string; specialty?: string | null };
+  practice?: {
+    name: string;
+    slug: string;
+    specialty?: string | null;
+    stampSrc?: string | null;
+  };
   location?: { name: string; address: string; city: string };
   provider?: {
     id: string;
@@ -867,6 +889,7 @@ export type ProctoBooking = {
     email?: string | null;
     phone?: string | null;
     licenseNo?: string | null;
+    stampSrc?: string | null;
     description?: string | null;
     experience?: number | null;
     contactNumbers?: unknown;
@@ -1293,10 +1316,15 @@ export type PaymentsListResponse = {
 export function getPracticeProviders(
   members: { role: string; user: { id: string; name: string | null } }[],
 ) {
-  const doctors = members.filter((m) => m.role === "DOCTOR").map((m) => m.user);
-  if (doctors.length) return doctors;
-  const owner = members.find((m) => m.role === "PRACTICE_OWNER")?.user;
-  return owner ? [owner] : [];
+  const doctors = members
+    .filter(
+      (m) =>
+        m.role === "DOCTOR" ||
+        (m.role === "PRACTICE_OWNER" &&
+          Boolean((m as { doctorId?: string | null }).doctorId)),
+    )
+    .map((m) => m.user);
+  return doctors;
 }
 
 export function getPracticeProvider(

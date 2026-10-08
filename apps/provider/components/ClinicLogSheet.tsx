@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -37,15 +38,6 @@ function dash(v?: string | number | null) {
   return String(v);
 }
 
-function dosageLine(m: { amount?: string; times?: string[] }) {
-  const times = (m.times ?? [])
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((t) => t.charAt(0).toUpperCase() + t.slice(1))
-    .join(", ");
-  return [times, m.amount?.trim()].filter(Boolean).join(" · ") || "—";
-}
-
 function Line({ label, value }: { label: string; value: string }) {
   return (
     <Text style={styles.line}>
@@ -58,10 +50,12 @@ function Line({ label, value }: { label: string; value: string }) {
 export function ClinicLogSheet({
   visible,
   bookingId,
+  initialTab = "visit",
   onClose,
 }: {
   visible: boolean;
   bookingId: string | null;
+  initialTab?: "visit" | "clinical" | "prescription";
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -70,6 +64,7 @@ export function ClinicLogSheet({
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState("");
+  const [tab, setTab] = useState<"visit" | "clinical" | "prescription">("visit");
 
   useEffect(() => {
     if (!visible || !bookingId) return;
@@ -78,6 +73,7 @@ export function ClinicLogSheet({
     setError("");
     setNotice("");
     setBooking(null);
+    setTab(initialTab);
     void fetchBooking(bookingId).then((res) => {
       if (!alive) return;
       setLoading(false);
@@ -90,7 +86,7 @@ export function ClinicLogSheet({
     return () => {
       alive = false;
     };
-  }, [visible, bookingId]);
+  }, [visible, bookingId, initialTab]);
 
   async function send() {
     if (!bookingId || sending) return;
@@ -191,6 +187,25 @@ export function ClinicLogSheet({
             <Text style={styles.close}>Close</Text>
           </Pressable>
         </View>
+        <View style={styles.tabs}>
+          {(
+            [
+              ["visit", "Visit"],
+              ["clinical", "Clinical"],
+              ["prescription", "Prescription"],
+            ] as const
+          ).map(([id, label]) => (
+            <Pressable
+              key={id}
+              onPress={() => setTab(id)}
+              style={[styles.tab, tab === id && styles.tabOn]}
+            >
+              <Text style={[styles.tabLabel, tab === id && styles.tabLabelOn]}>
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.brand} />
@@ -202,6 +217,8 @@ export function ClinicLogSheet({
           </View>
         ) : booking ? (
           <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 32 }}>
+            {tab === "visit" ? (
+            <>
             <View style={styles.card}>
               <Line label="Patient's Name" value={patientName} />
               <Line label="Mobile No" value={dash(phone)} />
@@ -233,7 +250,17 @@ export function ClinicLogSheet({
             <Text style={styles.body}>
               {chief ? `Primary reason: ${chief}` : "No chief complaint recorded."}
             </Text>
+            <Text style={styles.h}>Allergies</Text>
+            <Text style={styles.body}>{allergyText}</Text>
+            <Text style={styles.h}>Diagnosis</Text>
+            <Text style={styles.body}>{diagnosis || "No diagnosis recorded."}</Text>
+            <Text style={styles.h}>Clinical remarks</Text>
+            <Text style={styles.body}>{remarks || "No clinical remarks recorded."}</Text>
+            </>
+            ) : null}
 
+            {tab === "clinical" ? (
+            <>
             <Text style={styles.h}>Vital signs</Text>
             <Text style={styles.muted}>{recordedAt}</Text>
             <View style={styles.vitals}>
@@ -248,22 +275,43 @@ export function ClinicLogSheet({
             <Text style={styles.body}>{allergyText}</Text>
             <Text style={styles.h}>Pain complaints</Text>
             <Text style={styles.body}>{painText}</Text>
-            <Text style={styles.h}>Diagnosis</Text>
-            <Text style={styles.body}>{diagnosis || "No diagnosis recorded."}</Text>
-            <Text style={styles.h}>Clinical remarks</Text>
-            <Text style={styles.body}>{remarks || "No clinical remarks recorded."}</Text>
+            </>
+            ) : null}
 
-            <Text style={styles.h}>Prescription (Rx)</Text>
+            {tab === "prescription" ? (
+            <>
+            <Text style={styles.h}>Prescription</Text>
             {medicines.length === 0 ? (
               <Text style={styles.muted}>No medicines prescribed.</Text>
             ) : (
               medicines.map((m, i) => (
-                <View key={`${m.name}-${i}`} style={styles.med}>
-                  <Text style={styles.medName}>{m.name.toUpperCase()}</Text>
-                  <Text style={styles.muted}>{dosageLine(m)}</Text>
-                </View>
+                <Text key={`${m.name}-${i}`} style={styles.medName}>
+                  {i + 1}. {m.name}
+                </Text>
               ))
             )}
+            </>
+            ) : null}
+            {booking.provider?.stampSrc || booking.practice?.stampSrc ? (
+              <View style={styles.stamps}>
+                {booking.provider?.stampSrc ? (
+                  <Image
+                    source={{ uri: booking.provider.stampSrc }}
+                    style={styles.stamp}
+                    resizeMode="contain"
+                    accessibilityLabel="Doctor stamp"
+                  />
+                ) : null}
+                {booking.practice?.stampSrc ? (
+                  <Image
+                    source={{ uri: booking.practice.stampSrc }}
+                    style={styles.stamp}
+                    resizeMode="contain"
+                    accessibilityLabel="Clinic stamp"
+                  />
+                ) : null}
+              </View>
+            ) : null}
             <ErrorText text={notice.startsWith("Could") ? notice : ""} />
             {notice && !notice.startsWith("Could") ? (
               <Text style={styles.ok}>{notice}</Text>
@@ -285,6 +333,7 @@ export function ClinicLogSheet({
 /** Finished visits only — same Rx menu as the web appointments column. */
 export function RxButton({ bookingId, status }: { bookingId: string; status?: string | null }) {
   const [open, setOpen] = useState(false);
+  const [startTab, setStartTab] = useState<"visit" | "prescription">("visit");
   if (String(status || "").toUpperCase() !== "COMPLETED") return null;
 
   function sendNow() {
@@ -304,8 +353,21 @@ export function RxButton({ bookingId, status }: { bookingId: string; status?: st
         label="Rx"
         onPress={() =>
           Alert.alert("Prescription / clinic log", undefined, [
-            { text: "View", onPress: () => setOpen(true) },
-            { text: "Send to customer (Via WhatsApp)", onPress: sendNow },
+            {
+              text: "Preview Rx",
+              onPress: () => {
+                setStartTab("visit");
+                setOpen(true);
+              },
+            },
+            {
+              text: "Preview Prescription",
+              onPress: () => {
+                setStartTab("prescription");
+                setOpen(true);
+              },
+            },
+            { text: "Send to customer", onPress: sendNow },
             { text: "Keep", style: "cancel" },
           ])
         }
@@ -313,6 +375,7 @@ export function RxButton({ bookingId, status }: { bookingId: string; status?: st
       <ClinicLogSheet
         visible={open}
         bookingId={open ? bookingId : null}
+        initialTab={startTab}
         onClose={() => setOpen(false)}
       />
     </>
@@ -330,6 +393,19 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, fontWeight: "700", color: colors.ink },
   close: { color: colors.brand, fontWeight: "700" },
+  tabs: {
+    flexDirection: "row",
+    gap: 6,
+    marginHorizontal: space.lg,
+    marginBottom: space.sm,
+    padding: 4,
+    borderRadius: 999,
+    backgroundColor: colors.paperRaised,
+  },
+  tab: { flex: 1, borderRadius: 999, paddingVertical: 8, alignItems: "center" },
+  tabOn: { backgroundColor: colors.paper },
+  tabLabel: { fontSize: 13, fontWeight: "700", color: colors.inkSoft },
+  tabLabelOn: { color: colors.ink },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   card: {
     backgroundColor: "#F0F9FF",
@@ -365,5 +441,16 @@ const styles = StyleSheet.create({
   },
   med: { marginTop: 8 },
   medName: { fontWeight: "700", color: colors.ink },
+  stamps: {
+    marginTop: space.lg,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "flex-end",
+    gap: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    paddingTop: space.md,
+  },
+  stamp: { width: 120, height: 96 },
   ok: { marginTop: space.sm, color: colors.ok, fontWeight: "600" },
 });
