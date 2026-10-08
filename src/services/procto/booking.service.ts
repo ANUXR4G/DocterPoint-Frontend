@@ -216,6 +216,7 @@ type DeskPatientRef = {
 
 /** Registered patient picked at the desk; the typed mobile must match their record. */
 async function loadDeskPatient(
+  practiceId: string,
   rawPatientId: string | undefined,
   rawPhone: string | undefined,
   what: "walk-in" | "booking",
@@ -238,9 +239,17 @@ async function loadDeskPatient(
   if (!patient || typed.length < 10 || !onRecord.some((p) => p.slice(-10) === typed)) {
     throw new AppError(400, "That patient record doesn't match. Search for the patient again.");
   }
+  const { resolveWhatsAppMsisdn } = await import("../chat.whatsappFanout.js");
+  const resolved = await resolveWhatsAppMsisdn(
+    practiceId,
+    patient.patient?.contactNumber,
+    patient.phone,
+    rawPhone,
+  );
+  const stored = onRecord.find((p) => p.length >= 10) ?? typed;
   return {
     patientId,
-    patientPhone: onRecord.find((p) => p.length >= 10) ?? typed,
+    patientPhone: resolved.length >= 11 ? resolved : stored,
     patientName: patient.name?.trim().slice(0, 120) || "Patient",
     mrn: patient.patient?.mrn ?? null,
   };
@@ -614,7 +623,8 @@ export const BookingService = {
    * Clinic-side emergency walk-in: patient is at the desk now. No slot / token
    * pick, no schedule or capacity check (must never be refused for lack of a
    * free slot). Starts "now", goes straight to WAITING, tagged
-   * `consultationType = EMERGENCY_WALK_IN`. No patient WhatsApp confirmation.
+   * `consultationType = EMERGENCY_WALK_IN`. Patient WhatsApp confirmation uses
+   * the full MSISDN (country code included).
    * Always tied to a registered patient (MRN): pick one from the desk search or register first.
    */
   async createWalkIn(
@@ -630,6 +640,7 @@ export const BookingService = {
     actorUserId: string,
   ) {
     const { patientId, patientPhone, patientName, mrn } = await loadDeskPatient(
+      data.practiceId,
       data.patientId,
       data.patientPhone,
       "walk-in",
@@ -728,7 +739,12 @@ export const BookingService = {
    * patient must be a registered record (MRN) picked from the desk search, never a typed name.
    */
   async createDeskBooking(data: CreateBookingInput, actorUserId: string) {
-    const patient = await loadDeskPatient(data.patientId, data.patientPhone, "booking");
+    const patient = await loadDeskPatient(
+      data.practiceId,
+      data.patientId,
+      data.patientPhone,
+      "booking",
+    );
     await assertDeskActor(data.practiceId, data.providerId, actorUserId, "book appointments");
     return BookingService.createBooking({
       ...data,
@@ -1990,6 +2006,7 @@ export const BookingService = {
             specialty: true,
             consultationFee: true,
             clinicalMasters: true,
+            stampSrc: true,
           },
         },
         location: { select: { name: true, address: true, city: true } },
@@ -2062,6 +2079,7 @@ export const BookingService = {
           doctor: {
             select: {
               licenseNo: true,
+              stampSrc: true,
               description: true,
               experience: true,
               contactNumbers: true,
@@ -2134,6 +2152,7 @@ export const BookingService = {
             email: provider.email,
             phone: provider.phone,
             licenseNo: provider.doctor?.licenseNo ?? null,
+            stampSrc: provider.doctor?.stampSrc ?? null,
             description: provider.doctor?.description ?? null,
             experience: provider.doctor?.experience ?? null,
             contactNumbers: provider.doctor?.contactNumbers ?? [],

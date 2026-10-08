@@ -621,6 +621,20 @@ router.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const isActive = req.body?.isActive;
+      const isRoleAccess =
+        req.body?.firstName != null ||
+        req.body?.role != null ||
+        req.body?.access != null ||
+        req.body?.specialtyIds != null;
+      if (isRoleAccess) {
+        const data = await PracticeService.updateRoleAccess(
+          param(req.params.practiceId),
+          param(req.params.userId),
+          req.body,
+          req.sessionUser!.id,
+        );
+        return ResponseHandler.fetchSuccessful(res, "Role access updated.", data);
+      }
       if (typeof isActive !== "boolean") {
         return ResponseHandler.unsuccessful(res, 400, "isActive boolean is required.");
       }

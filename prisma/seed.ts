@@ -157,7 +157,7 @@ async function main() {
           {
             userId: clinicOwner.id,
             role: "PRACTICE_OWNER",
-            doctorId: clinicOwner.id,
+            doctorId: null,
           },
           {
             userId: staffDoctor.id,

@@ -136,6 +136,45 @@ router.put(
   },
 );
 
+/** Doctor seal shown at the bottom of that doctor's prescription. */
+router.put(
+  "/me/stamp",
+  requireAuth(),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { prisma } = await import("../db/prisma.js");
+      const { normalizeProfileImageUrl } = await import("../core/profileImage.js");
+      const { AppError, ResponseHandler } = await import("../core/response.js");
+      const session = req.sessionUser!;
+      const doctor = await prisma.doctor.findUnique({
+        where: { id: session.id },
+        select: { stampSrc: true },
+      });
+      if (!doctor) {
+        throw new AppError(
+          400,
+          "A doctor profile is required before a doctor stamp can be saved.",
+        );
+      }
+      const stampSrc = normalizeProfileImageUrl(
+        req.body?.stampSrc ?? req.body?.stamp_src ?? null,
+        doctor.stampSrc,
+      );
+      await prisma.doctor.update({
+        where: { id: session.id },
+        data: { stampSrc },
+      });
+      const { clearProfilePhotoCaches } = await import(
+        "../services/procto/practice.service.js"
+      );
+      clearProfilePhotoCaches(session.id);
+      return ResponseHandler.fetchSuccessful(res, "Stamp updated", { stampSrc });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get(
   "/token/refresh",
   requireAuth(),

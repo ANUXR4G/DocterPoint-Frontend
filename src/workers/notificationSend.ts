@@ -25,7 +25,7 @@ export async function processNotificationEvent(notificationId: string): Promise<
   const payload = (event.payload ?? {}) as Record<string, unknown>;
   const recipientRole = String(payload.recipientRole ?? "patient");
   const toRaw = String(payload.to ?? "").trim();
-  const to =
+  let to =
     toRaw ||
     (recipientRole === "clinic" ? "" : String(event.booking.patientPhone || ""));
   const templateKey = String(
@@ -55,6 +55,17 @@ export async function processNotificationEvent(notificationId: string): Promise<
   }
 
   if (recipientRole !== "clinic") {
+    const { resolveWhatsAppMsisdn } = await import(
+      "../services/chat.whatsappFanout.js"
+    );
+    const resolved = await resolveWhatsAppMsisdn(
+      event.practiceId,
+      to,
+      event.booking?.patientPhone,
+    );
+    if (resolved) {
+      to = resolved;
+    }
     const conv = await prisma.whatsAppConversation.findFirst({
       where: {
         practiceId: event.practiceId,
@@ -133,7 +144,7 @@ export async function processNotificationEvent(notificationId: string): Promise<
   if (!result.ok && !result.simulated) {
     await prisma.notificationEvent.update({
       where: { id: event.id },
-      data: { status: "FAILED", payload: { ...payload, error: result.error } },
+      data: { status: "FAILED", payload: { ...payload, to, error: result.error } },
     });
     throw new Error(result.error ?? "WhatsApp send failed");
   }
@@ -145,6 +156,7 @@ export async function processNotificationEvent(notificationId: string): Promise<
       sentAt: new Date(),
       payload: {
         ...payload,
+        to,
         usedTemplate: result.usedTemplate ?? false,
         simulated: result.simulated ?? false,
       },

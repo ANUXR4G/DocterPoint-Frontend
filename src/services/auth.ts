@@ -82,7 +82,7 @@ export class AuthService {
         : "self_attempted";
 
     let user;
-    if (role === "doctor") {
+    if (role === "doctor" && createdBy !== "clinic_owner_signup") {
       const hospital = await AuthService.ensureIndependentHospital();
       user = await prisma.user.create({
         data: {
@@ -95,9 +95,7 @@ export class AuthService {
           doctor: {
             create: {
               description:
-                createdBy === "clinic_owner_signup"
-                  ? "Clinic owner — practice and trial are set up at registration; add doctors from the clinic dashboard."
-                  : "Newly registered doctor — complete your practice profile.",
+                "Newly registered doctor — complete your practice profile.",
               hospitalId: hospital.id,
               availableTimes: "Mon–Fri 09:00–17:00",
               experience: 0,
@@ -108,6 +106,17 @@ export class AuthService {
           },
         },
         include: { doctor: true },
+      });
+    } else if (role === "doctor") {
+      user = await prisma.user.create({
+        data: {
+          email: credentials.email,
+          password: hashedPassword,
+          role: "doctor",
+          name: credentials.name?.trim() || null,
+          phone,
+          createdBy,
+        },
       });
     } else {
       const gender = requireGender(credentials.gender);
@@ -146,10 +155,13 @@ export class AuthService {
 
     const tokenResult = getUserToken(sessionUser, 201);
     setTokenCookies(res, tokenResult.cookies);
-    const patientDob =
-      role === "user" && "patient" in user
-        ? (user.patient?.dateOfBirth ?? null)
-        : null;
+    let patientDob: string | null = null;
+    if (role === "user" && "patient" in user) {
+      const patient = user.patient as { dateOfBirth?: Date | string | null } | null;
+      const raw = patient?.dateOfBirth ?? null;
+      patientDob =
+        raw instanceof Date ? raw.toISOString().slice(0, 10) : raw;
+    }
     return res.status(201).json({
       ...tokenResult.responseBody,
       date_of_birth: patientDob,
@@ -160,10 +172,11 @@ export class AuthService {
   /**
    * Clinic vs doctor portals share User.role=doctor but require different
    * practice memberships:
-   * - Clinic Login → PRACTICE_OWNER / PRACTICE_ADMIN of a CLINIC / MEDICAL_CENTER
+   * - Clinic Login → PRACTICE_OWNER / PRACTICE_ADMIN, and reception or nursing staff, of a CLINIC / MEDICAL_CENTER
    * - Doctor Login → practicing doctors (DOCTOR / SOLO) and clinic owners who
    *   also hold a doctor profile (they can run their own queue too)
-   * Staff created by a clinic use Doctor Login only (not Clinic Login).
+   * Staff doctors use Doctor Login. Reception and nursing logins created
+   * by the clinic owner use Clinic Login (same door as the owner).
    */
   static async assertProviderPortalAccess(
     userId: string,
@@ -191,12 +204,10 @@ export class AuthService {
     );
 
     if (normalized === "clinic") {
-      if (!isClinicAdmin) {
+      if (!isClinicAdmin && !isDesk) {
         throw new AppError(
           403,
-          isDesk
-            ? "Reception and nursing staff use Doctor Login."
-            : "Clinic Login is for clinic owners and admins only. Doctors added by a clinic should use Doctor Login.",
+          "Clinic Login is for the clinic owner, clinic admins, reception, and nursing staff. Doctors added by a clinic use Doctor Login.",
         );
       }
       return;

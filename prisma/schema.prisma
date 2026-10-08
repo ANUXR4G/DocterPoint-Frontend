@@ -79,6 +79,8 @@ model Doctor {
   contactNumbers           Json      @map("contact_numbers")
   appointmentValidityDays  Int       @default(7) @map("appointment_validity_days")
   licenseNo                String?   @map("license_no")
+  /// Signature or seal image shown at the bottom of this doctor's prescription.
+  stampSrc                 String?   @map("stamp_src")
   /// Deferred booking-mode switch (TIME↔TOKEN). Applied on/after this local date.
   pendingSchedule          Json?     @map("pending_schedule")
   pendingScheduleEffective DateTime? @map("pending_schedule_effective") @db.Date
@@ -377,6 +379,8 @@ model Practice {
   /// When false, directory listing is hidden (e.g. subscription suspended).
   isDirectoryListed        Boolean      @default(true) @map("is_directory_listed")
   bgSrc                    String?      @map("bg_src")
+  /// Clinic seal image shown at the bottom of prescriptions.
+  stampSrc                 String?      @map("stamp_src")
   isActive                 Boolean      @default(true) @map("is_active")
   createdAt                DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -444,6 +448,8 @@ model PracticeMember {
   role       PracticeMemberRole
   doctorId   String?            @map("doctor_id") @db.Uuid
   isActive   Boolean            @default(true) @map("is_active")
+  /// Role-access extras: resource type, license expiry, device limits, departments.
+  access     Json?              @map("access")
   createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
   practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)

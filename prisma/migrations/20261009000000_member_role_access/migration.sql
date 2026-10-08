@@ -1,0 +1,2 @@
+ALTER TABLE practice_members
+ADD COLUMN IF NOT EXISTS access JSONB;
