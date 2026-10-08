@@ -22,6 +22,7 @@ import {
 } from "@/components/mobile/PremiumChrome";
 import {
   isClinicAdminRole,
+  isDeskRole,
   usePractice,
 } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
@@ -69,11 +70,12 @@ export default function DashboardScreen() {
 
   const practiceName = membership?.practice.name ?? "your clinic";
   const isClinicAdmin = isClinicAdminRole(membership?.role);
+  const seesClinic = isDeskRole(membership?.role);
   const isIndependent = membership?.practice.type === "SOLO";
   const isStaffDoctor =
-    !isIndependent && !isClinicAdmin && membership?.role === "DOCTOR";
+    !isIndependent && !seesClinic && membership?.role === "DOCTOR";
   const showDoctorOnRows =
-    isClinicAdmin &&
+    seesClinic &&
     (membership?.practice.members ?? []).filter(
       (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
     ).length > 1;

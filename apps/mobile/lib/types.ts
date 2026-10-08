@@ -62,6 +62,7 @@ export type PracticeListItem = {
   slug: string;
   type: string;
   specialty: string | null;
+  specialties?: string[];
   consultationFee: number | null;
   /** Clinic cover / profile image URL (S3 or absolute). */
   bgSrc?: string | null;

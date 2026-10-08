@@ -183,6 +183,20 @@ export async function fetchAuditLog(
   );
 }
 
+export type SpecialtyOption = { id: string; name: string; slug: string };
+
+export async function listSpecialties(opts?: { hasDoctors?: boolean }) {
+  const qs = opts?.hasDoctors ? "?has_doctors=true" : "";
+  return api<SpecialtyOption[]>(`/procto/specialties${qs}`);
+}
+
+export async function createSpecialty(name: string) {
+  return api<SpecialtyOption>("/procto/specialties", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
 export async function createPracticeDoctor(
   practiceId: string,
   body: {
@@ -191,12 +205,40 @@ export async function createPracticeDoctor(
     password: string;
     phone?: string;
     specialty?: string;
+    specialtyIds?: string[];
     licenseNo?: string;
   },
 ) {
   return api(`/procto/practices/${practiceId}/doctors`, {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export async function createPracticeStaff(
+  practiceId: string,
+  body: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    role: "PRACTICE_ADMIN" | "RECEPTIONIST" | "NURSE";
+  },
+) {
+  return api(`/procto/practices/${practiceId}/staff`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function openPracticeSchedule(
+  practiceId: string,
+  userId: string,
+  specialtyIds?: string[],
+) {
+  return api(`/procto/practices/${practiceId}/members/${userId}/open-schedule`, {
+    method: "POST",
+    body: JSON.stringify({ specialtyIds: specialtyIds ?? [] }),
   });
 }
 

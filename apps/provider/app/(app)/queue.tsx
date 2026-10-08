@@ -20,7 +20,7 @@ import {
 import { PremiumAtmosphere, DashMetric } from "@/components/mobile/PremiumChrome";
 import { resolveMediaUrl } from "@/lib/media";
 import {
-  isClinicAdminRole,
+  isDeskRole,
   usePractice,
 } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
@@ -53,7 +53,7 @@ export default function QueueScreen() {
     refresh,
     bookingsInRange,
   } = usePracticeLive();
-  const isClinicAdmin = isClinicAdminRole(membership?.role);
+  const isClinicAdmin = isDeskRole(membership?.role);
   const [today] = useState(() => ymd(new Date()));
   const rangeTo = useMemo(() => {
     const d = new Date();

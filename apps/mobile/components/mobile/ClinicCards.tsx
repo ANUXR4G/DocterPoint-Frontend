@@ -18,7 +18,9 @@ export function ClinicCard({ item }: { item: PracticeListItem }) {
   const router = useRouter();
   const doc = doctorName(item);
   const title = withDrTitle(doc) || item.name;
-  const specialty = item.specialty?.trim() || "General physician";
+  const specialty = item.specialties?.length
+    ? item.specialties.join(" · ")
+    : item.specialty?.trim() || "General physician";
   const city = item.locations?.[0]?.city;
   const rating = item.reviewSummary?.count ? item.reviewSummary.average : null;
   const open = () => router.push(`/(app)/doctor/${item.slug}` as Href);
@@ -44,7 +46,7 @@ export function ClinicCard({ item }: { item: PracticeListItem }) {
               </View>
             ) : null}
           </View>
-          <Text style={styles.specialty} numberOfLines={1}>
+          <Text style={styles.specialty} numberOfLines={2}>
             {specialty}
           </Text>
           {title !== item.name ? (

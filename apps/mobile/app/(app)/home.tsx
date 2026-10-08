@@ -191,8 +191,12 @@ export default function HomeScreen() {
               onAction={() => router.push("/(app)/doctors")}
             />
             <SpecialtyChips
-              onSelect={(q) =>
-                router.push(q ? { pathname: "/(app)/doctors", params: { q } } : "/(app)/doctors")
+              onSelect={(name) =>
+                router.push(
+                  name
+                    ? { pathname: "/(app)/doctors", params: { specialty: name } }
+                    : "/(app)/doctors",
+                )
               }
             />
             <View style={styles.clinics}>

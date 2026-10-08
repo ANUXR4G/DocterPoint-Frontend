@@ -35,6 +35,16 @@ export function isClinicAdminRole(role?: string | null) {
   return role === "PRACTICE_OWNER" || role === "PRACTICE_ADMIN";
 }
 
+/** Owners, admins, reception, and nurses see the whole clinic. A doctor sees only their own list. */
+export function isDeskRole(role?: string | null) {
+  return (
+    role === "PRACTICE_OWNER" ||
+    role === "PRACTICE_ADMIN" ||
+    role === "RECEPTIONIST" ||
+    role === "NURSE"
+  );
+}
+
 /** Mirrors backend assertProfileEditor: owner/admin, or the only doctor of a SOLO practice. */
 export function canManagePractice(m: PracticeMembership | null): boolean {
   if (!m) return false;
@@ -51,7 +61,7 @@ export function selfProviderScope(
   membership: PracticeMembership | null,
 ): string | undefined {
   if (!membership) return undefined;
-  if (isClinicAdminRole(membership.role)) return undefined;
+  if (isDeskRole(membership.role)) return undefined;
   return membership.userId;
 }
 

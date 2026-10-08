@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  Chip,
   EmptyState,
   ErrorText,
   Field,
@@ -22,11 +23,30 @@ import { withDrTitle } from "@/lib/doctorName";
 import { isClinicAdminRole, usePractice } from "@/lib/practiceContext";
 import {
   createPracticeDoctor,
+  createPracticeStaff,
+  createSpecialty,
   fetchPracticeBilling,
+  listSpecialties,
+  openPracticeSchedule,
   setPracticeMemberActive,
   type PracticeBilling,
+  type SpecialtyOption,
 } from "@/lib/procto";
 import { colors, radii, shadows, space } from "@/lib/theme";
+
+const ROLE_LABEL: Record<string, string> = {
+  PRACTICE_OWNER: "Owner",
+  PRACTICE_ADMIN: "Admin",
+  DOCTOR: "Doctor",
+  RECEPTIONIST: "Receptionist",
+  NURSE: "Nurse",
+};
+
+const STAFF_ROLES = [
+  { value: "PRACTICE_ADMIN" as const, label: "Admin" },
+  { value: "RECEPTIONIST" as const, label: "Reception" },
+  { value: "NURSE" as const, label: "Nurse" },
+];
 
 /** Clinic doctor roster — add / deactivate without opening the website. */
 export default function DoctorsScreen() {
@@ -45,8 +65,17 @@ export default function DoctorsScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [specialty, setSpecialty] = useState("");
+  const [specialtyIds, setSpecialtyIds] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<SpecialtyOption[]>([]);
+  const [specQuery, setSpecQuery] = useState("");
   const [licenseNo, setLicenseNo] = useState("");
+  const [staffName, setStaffName] = useState("");
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
+  const [staffPhone, setStaffPhone] = useState("");
+  const [staffRole, setStaffRole] = useState<(typeof STAFF_ROLES)[number]["value"]>(
+    "RECEPTIONIST",
+  );
 
   const doctors = useMemo(
     () =>
@@ -54,6 +83,22 @@ export default function DoctorsScreen() {
         (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
       ),
     [practice?.members],
+  );
+  const staff = useMemo(
+    () =>
+      (practice?.members ?? []).filter(
+        (m) =>
+          m.role === "PRACTICE_ADMIN" ||
+          m.role === "RECEPTIONIST" ||
+          m.role === "NURSE",
+      ),
+    [practice?.members],
+  );
+  const visibleSpecs = catalog.filter((s) =>
+    s.name.toLowerCase().includes(specQuery.trim().toLowerCase()),
+  );
+  const specExact = catalog.some(
+    (s) => s.name.toLowerCase() === specQuery.trim().toLowerCase(),
   );
 
   const loadBilling = useCallback(async () => {
@@ -67,6 +112,17 @@ export default function DoctorsScreen() {
   useEffect(() => {
     void loadBilling();
   }, [loadBilling]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listSpecialties().then((res) => {
+      if (cancelled || res.status !== "successful" || !Array.isArray(res.data)) return;
+      setCatalog(res.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const ent = billing?.entitlement;
   const multiDoctor =
@@ -86,13 +142,17 @@ export default function DoctorsScreen() {
       setError("Password must be at least 6 characters.");
       return;
     }
+    if (!specialtyIds.length) {
+      setError("Select a specialty from the list.");
+      return;
+    }
     setBusy(true);
     const res = await createPracticeDoctor(practice.id, {
       name: name.trim(),
       email: email.trim(),
       password: password.trim(),
       phone: phone.trim() || undefined,
-      specialty: specialty.trim() || undefined,
+      specialtyIds,
       licenseNo: licenseNo.trim() || undefined,
     });
     setBusy(false);
@@ -105,7 +165,8 @@ export default function DoctorsScreen() {
     setEmail("");
     setPassword("");
     setPhone("");
-    setSpecialty("");
+    setSpecialtyIds([]);
+    setSpecQuery("");
     setLicenseNo("");
     await refresh();
     await loadBilling();
@@ -138,6 +199,74 @@ export default function DoctorsScreen() {
       return;
     }
     setMessage("Doctor deactivated.");
+    await refresh();
+  }
+
+  async function openSchedule(userId: string) {
+    if (!practice) return;
+    setError("");
+    setMessage("");
+    setBusy(true);
+    const res = await openPracticeSchedule(practice.id, userId);
+    setBusy(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not open the schedule.");
+      return;
+    }
+    setMessage(res.message || "Schedule is open. Edit it under Hours.");
+    await refresh();
+  }
+
+  async function addNamedSpecialty() {
+    const name = specQuery.trim();
+    if (name.length < 2) return;
+    setBusy(true);
+    setError("");
+    const res = await createSpecialty(name);
+    setBusy(false);
+    const row = res.data;
+    if (res.status !== "successful" || !row?.id) {
+      setError(res.message || "Could not add that specialty.");
+      return;
+    }
+    setCatalog((prev) =>
+      prev.some((p) => p.id === row.id)
+        ? prev
+        : [...prev, row].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    setSpecialtyIds((ids) => (ids.includes(row.id) ? ids : [...ids, row.id]));
+    setSpecQuery("");
+  }
+
+  async function addStaff() {
+    if (!practice) return;
+    setError("");
+    setMessage("");
+    if (!staffName.trim() || !staffEmail.trim() || staffPassword.trim().length < 6) {
+      setError("Name, email, and a password of at least 6 characters are required.");
+      return;
+    }
+    setBusy(true);
+    const res = await createPracticeStaff(practice.id, {
+      name: staffName.trim(),
+      email: staffEmail.trim(),
+      password: staffPassword.trim(),
+      phone: staffPhone.trim() || undefined,
+      role: staffRole,
+    });
+    setBusy(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not add that person.");
+      return;
+    }
+    const label = STAFF_ROLES.find((r) => r.value === staffRole)?.label ?? "Staff";
+    setMessage(
+      `${staffName.trim()} added as ${label}. Admin uses Clinic Login. Reception and nurse use Doctor Login.`,
+    );
+    setStaffName("");
+    setStaffEmail("");
+    setStaffPassword("");
+    setStaffPhone("");
     await refresh();
   }
 
@@ -213,9 +342,18 @@ export default function DoctorsScreen() {
                     <Text style={styles.meta}>{specialtyHint}</Text>
                   ) : null}
                   <Text style={styles.role}>
-                    {m.role === "PRACTICE_OWNER" ? "Owner" : "Doctor"}
+                    {ROLE_LABEL[m.role] ?? m.role}
                   </Text>
                 </View>
+                {m.role === "PRACTICE_OWNER" ? (
+                  <Pressable
+                    onPress={() => void openSchedule(m.userId)}
+                    disabled={busy}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.link}>Open schedule</Text>
+                  </Pressable>
+                ) : null}
                 {canRemove ? (
                   <Pressable
                     onPress={() => confirmDeactivate(m.userId, label)}
@@ -260,10 +398,30 @@ export default function DoctorsScreen() {
               keyboardType="phone-pad"
             />
             <Field
-              label="Specialty"
-              value={specialty}
-              onChangeText={setSpecialty}
+              label="Search specialties *"
+              value={specQuery}
+              onChangeText={setSpecQuery}
+              autoCapitalize="words"
             />
+            <View style={styles.chips}>
+              {visibleSpecs.map((s) => (
+                <Chip
+                  key={s.id}
+                  label={s.name}
+                  active={specialtyIds.includes(s.id)}
+                  onPress={() =>
+                    setSpecialtyIds((ids) =>
+                      ids.includes(s.id) ? ids.filter((id) => id !== s.id) : [...ids, s.id],
+                    )
+                  }
+                />
+              ))}
+            </View>
+            {specQuery.trim().length > 1 && !specExact ? (
+              <Pressable onPress={() => void addNamedSpecialty()} disabled={busy}>
+                <Text style={styles.link}>Add “{specQuery.trim()}”</Text>
+              </Pressable>
+            ) : null}
             <Field
               label="License no"
               value={licenseNo}
@@ -277,6 +435,63 @@ export default function DoctorsScreen() {
             />
           </>
         )}
+
+        {staff.length ? (
+          <>
+            <Text style={styles.section}>Clinic team</Text>
+            {staff.map((m) => (
+              <View key={m.userId} style={styles.card}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{m.user.name || "Unnamed"}</Text>
+                  {m.user.email ? <Text style={styles.meta}>{m.user.email}</Text> : null}
+                  <Text style={styles.role}>{ROLE_LABEL[m.role] ?? m.role}</Text>
+                </View>
+              </View>
+            ))}
+          </>
+        ) : null}
+
+        <Text style={styles.section}>Add clinic staff</Text>
+        <Text style={styles.hint}>
+          Admin uses Clinic Login. Receptionist and nurse use Doctor Login. They are not bookable doctors.
+        </Text>
+        <Field label="Name *" value={staffName} onChangeText={setStaffName} />
+        <View style={styles.chips}>
+          {STAFF_ROLES.map((r) => (
+            <Chip
+              key={r.value}
+              label={r.label}
+              active={staffRole === r.value}
+              onPress={() => setStaffRole(r.value)}
+            />
+          ))}
+        </View>
+        <Field
+          label="Login email *"
+          value={staffEmail}
+          onChangeText={setStaffEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        <Field
+          label="Login password *"
+          value={staffPassword}
+          onChangeText={setStaffPassword}
+          secureTextEntry
+        />
+        <Field
+          label="Phone"
+          value={staffPhone}
+          onChangeText={setStaffPhone}
+          keyboardType="phone-pad"
+        />
+        <PrimaryButton
+          label={busy ? "Saving…" : "Add staff"}
+          onPress={() => void addStaff()}
+          busy={busy}
+          disabled={busy}
+          tone="ghost"
+        />
       </ScrollView>
     </View>
   );
@@ -319,6 +534,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   danger: { fontSize: 13, fontWeight: "700", color: colors.danger },
+  link: { fontSize: 13, fontWeight: "700", color: colors.brand },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: space.md,
+  },
   hint: {
     fontSize: 13,
     color: colors.inkSoft,

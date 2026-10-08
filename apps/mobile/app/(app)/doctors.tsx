@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClinicCard } from "@/components/mobile/ClinicCards";
 import { ScreenHeader } from "@/components/mobile/ScreenHeader";
 import { SearchBar } from "@/components/mobile/SearchBar";
-import { SPECIALTIES, SpecialtyChips } from "@/components/mobile/SpecialtyRow";
+import { SpecialtyChips } from "@/components/mobile/SpecialtyRow";
 import {
   EmptyState,
   ErrorText,
@@ -22,16 +22,15 @@ import { contentBottomPad } from "@/lib/dockLayout";
 import { colors, space } from "@/lib/theme";
 import type { PracticeListItem } from "@/lib/types";
 
-const SPECIALTY_QUERIES = new Set<string>(SPECIALTIES.map((s) => s.query));
-
 export default function DoctorsScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ q?: string }>();
-  const initial = params.q ?? "";
-  const [text, setText] = useState(SPECIALTY_QUERIES.has(initial) ? "" : initial);
-  const [specialty, setSpecialty] = useState<string | undefined>(
-    SPECIALTY_QUERIES.has(initial) ? initial : undefined,
-  );
+  const params = useLocalSearchParams<{ q?: string; specialty?: string }>();
+  const paramText = Array.isArray(params.q) ? params.q[0] : params.q;
+  const paramSpecialty = Array.isArray(params.specialty)
+    ? params.specialty[0]
+    : params.specialty;
+  const [text, setText] = useState(paramText ?? "");
+  const [specialty, setSpecialty] = useState<string | undefined>(paramSpecialty);
   const [practices, setPractices] = useState<PracticeListItem[]>(
     () => (!params.q ? getCachedPractices() ?? [] : []),
   );
@@ -41,11 +40,11 @@ export default function DoctorsScreen() {
   const [error, setError] = useState("");
   const loadGen = useRef(0);
 
-  const query = (text.trim() || specialty || "").trim();
+  const query = text.trim();
 
-  const load = useCallback(async (q: string, opts?: { soft?: boolean }) => {
+  const load = useCallback(async (q: string, specialtyName: string | undefined, opts?: { soft?: boolean }) => {
     const soft = Boolean(opts?.soft);
-    if (soft && !q) {
+    if (soft && !q && !specialtyName) {
       const cached = getCachedPractices();
       if (cached) {
         setPractices(cached);
@@ -56,8 +55,12 @@ export default function DoctorsScreen() {
     const gen = ++loadGen.current;
     setLoading(true);
     setError("");
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (specialtyName) params.set("specialty", specialtyName);
+    const qs = params.toString();
     const res = await api<PracticeListItem[]>(
-      `/procto/practices${q ? `?${new URLSearchParams({ q })}` : ""}`,
+      `/procto/practices${qs ? `?${qs}` : ""}`,
     );
     if (gen !== loadGen.current) return;
     setLoading(false);
@@ -67,23 +70,18 @@ export default function DoctorsScreen() {
     }
     const next = Array.isArray(res.data) ? res.data : [];
     setPractices(next);
-    if (!q) setCachedPractices(next);
+    if (!q && !specialtyName) setCachedPractices(next);
   }, []);
 
   useEffect(() => {
-    const next = params.q ?? "";
-    if (SPECIALTY_QUERIES.has(next)) {
-      setSpecialty(next);
-      setText("");
-    } else {
-      setText(next);
-    }
-  }, [params.q]);
+    setText(paramText ?? "");
+    setSpecialty(paramSpecialty);
+  }, [paramText, paramSpecialty]);
 
   useEffect(() => {
-    const t = setTimeout(() => void load(query, { soft: true }), text ? 350 : 0);
+    const t = setTimeout(() => void load(query, specialty, { soft: true }), text ? 350 : 0);
     return () => clearTimeout(t);
-  }, [query, text, load]);
+  }, [query, specialty, text, load]);
 
   return (
     <Screen style={styles.screen}>
@@ -107,7 +105,7 @@ export default function DoctorsScreen() {
                 if (t.trim()) setSpecialty(undefined);
               }}
               placeholder="Search doctor, clinic or city…"
-              onSubmit={() => void load(query)}
+              onSubmit={() => void load(query, specialty)}
             />
             <View style={styles.chips}>
               <SpecialtyChips
@@ -121,7 +119,7 @@ export default function DoctorsScreen() {
             <ErrorText text={error} />
             {error ? (
               <View style={{ marginTop: space.sm }}>
-                <PrimaryButton label="Retry" onPress={() => void load(query)} busy={loading} />
+                <PrimaryButton label="Retry" onPress={() => void load(query, specialty)} busy={loading} />
               </View>
             ) : null}
           </View>
