@@ -186,20 +186,25 @@ export class AuthService {
     const isPracticingDoctor = memberships.some(
       (m) => m.role === "DOCTOR" || m.practice.type === "SOLO",
     );
+    const isDesk = memberships.some(
+      (m) => m.role === "RECEPTIONIST" || m.role === "NURSE",
+    );
 
     if (normalized === "clinic") {
       if (!isClinicAdmin) {
         throw new AppError(
           403,
-          "Clinic Login is for clinic owners and admins only. Doctors added by a clinic should use Doctor Login.",
+          isDesk
+            ? "Reception and nursing staff use Doctor Login."
+            : "Clinic Login is for clinic owners and admins only. Doctors added by a clinic should use Doctor Login.",
         );
       }
       return;
     }
 
     // portal === "doctor"
-    // Allow: solo / staff doctors, and clinic owners who practice.
-    if (isPracticingDoctor || isClinicAdmin) return;
+    // Allow: solo / staff doctors, clinic owners who practice, and desk staff.
+    if (isPracticingDoctor || isClinicAdmin || isDesk) return;
 
     const user = await prisma.user.findUnique({
       where: { id: userId },

@@ -610,11 +610,41 @@ export const proctoService = {
     );
   },
 
+  listSpecialties: (opts?: { hasDoctors?: boolean }) =>
+    proctoFetch(
+      `/procto/specialties${opts?.hasDoctors ? "?has_doctors=true" : ""}`,
+    ),
+
+  createSpecialty: (name: string) =>
+    proctoFetch(`/procto/specialties`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+
   addPracticeDoctor: (practiceId: string, body: Record<string, unknown>) =>
     proctoFetch(`/procto/practices/${practiceId}/doctors`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  addPracticeStaff: (practiceId: string, body: Record<string, unknown>) =>
+    proctoFetch(`/procto/practices/${practiceId}/staff`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  openPracticeSchedule: (
+    practiceId: string,
+    userId: string,
+    specialtyIds?: string[],
+  ) =>
+    proctoFetch(
+      `/procto/practices/${practiceId}/members/${userId}/open-schedule`,
+      {
+        method: "POST",
+        body: JSON.stringify({ specialtyIds: specialtyIds ?? [] }),
+      },
+    ),
 
   setPracticeMemberActive: (
     practiceId: string,

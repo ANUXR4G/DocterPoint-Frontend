@@ -1679,7 +1679,8 @@ export const BookingService = {
     const frontDesk =
       role === "PRACTICE_OWNER" ||
       role === "PRACTICE_ADMIN" ||
-      role === "RECEPTIONIST";
+      role === "RECEPTIONIST" ||
+      role === "NURSE";
     if (!frontDesk && existing.providerId !== actorUserId) {
       throw new AppError(
         403,
@@ -1723,7 +1724,10 @@ export const BookingService = {
     if (!member?.isActive) ResponseHandler.noPermission("not authorized.");
     const role = member!.role;
     const frontDesk =
-      role === "PRACTICE_OWNER" || role === "PRACTICE_ADMIN" || role === "RECEPTIONIST";
+      role === "PRACTICE_OWNER" ||
+      role === "PRACTICE_ADMIN" ||
+      role === "RECEPTIONIST" ||
+      role === "NURSE";
     if (!frontDesk && existing.providerId !== actorUserId) {
       throw new AppError(
         403,

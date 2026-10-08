@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, Suspense } from "react"
+import { useEffect, useMemo, useRef, useState, Suspense } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import PublicShell from "@/components/layout/PublicShell"
@@ -23,6 +23,7 @@ type Practice = {
   slug: string
   type: string
   specialty: string | null
+  specialties?: string[]
   consultationFee: number | null
   featured?: boolean
   planName?: string | null
@@ -35,19 +36,6 @@ type Practice = {
     user: { id: string; name: string | null; imgSrc?: string | null }
   }[]
 }
-
-const SPECIALTIES = [
-  "All",
-  "Dermatologist",
-  "Gynecologist",
-  "Orthopedist",
-  "General Physician",
-  "Pediatrician",
-  "Dentist",
-  "Cardiologist",
-  "ENT",
-  "Multi-specialty",
-] as const
 
 const CITIES = [
   "All cities",
@@ -126,6 +114,10 @@ function PracticesPageContent() {
   const [q, setQ] = useState("")
   const [city, setCity] = useState("")
   const [specialty, setSpecialty] = useState<string>("All")
+  const [specialtyOptions, setSpecialtyOptions] = useState<string[]>(["All"])
+  const specialtyRow = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
   const [sort, setSort] = useState<SortKey>("relevance")
   const [feeMax, setFeeMax] = useState<"" | "500" | "1000" | "2000">("")
   const [loading, setLoading] = useState(true)
@@ -140,6 +132,36 @@ function PracticesPageContent() {
     if (viewParam === "doctors" || viewParam === "solo") setView("solo")
     else if (viewParam === "clinics" || viewParam === "clinic") setView("clinic")
   }, [viewParam])
+
+  useEffect(() => {
+    let cancelled = false
+    void proctoService.listSpecialties({ hasDoctors: true }).then((res) => {
+      if (cancelled || res.status !== "successful" || !Array.isArray(res.data)) return
+      const names = (res.data as { name?: string }[])
+        .map((row) => row.name?.trim())
+        .filter((name): name is string => Boolean(name))
+      setSpecialtyOptions(["All", ...names])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function updateSpecialtyArrows() {
+    const el = specialtyRow.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 4)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+  }
+
+  useEffect(() => {
+    updateSpecialtyArrows()
+    const el = specialtyRow.current
+    if (!el) return
+    const observer = new ResizeObserver(() => updateSpecialtyArrows())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [specialtyOptions])
 
   useEffect(() => {
     setLoading(true)
@@ -332,24 +354,52 @@ function PracticesPageContent() {
         </div>
 
         {/* Specialty chips */}
-        <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 no-scrollbar">
-          {SPECIALTIES.map((s) => {
-            const active = specialty === s
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSpecialty(s)}
-                className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold transition sm:text-sm ${
-                  active
-                    ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
-                    : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-[var(--solune-surface)] dark:text-slate-300 dark:hover:border-white/20"
-                }`}
-              >
-                {s}
-              </button>
-            )
-          })}
+        <div className="relative mt-5">
+          <button
+            type="button"
+            aria-label="Previous specialties"
+            disabled={!canScrollLeft}
+            onClick={() =>
+              specialtyRow.current?.scrollBy({ left: -240, behavior: "smooth" })
+            }
+            className="absolute left-0 top-1/2 z-10 flex size-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm disabled:opacity-30 dark:border-white/10 dark:bg-neutral-900 dark:text-slate-200"
+          >
+            ‹
+          </button>
+          <div
+            ref={specialtyRow}
+            onScroll={updateSpecialtyArrows}
+            className="no-scrollbar flex gap-2 overflow-x-auto scroll-smooth px-10 pb-1"
+          >
+            {specialtyOptions.map((s) => {
+              const active = specialty === s
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSpecialty(s)}
+                  className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold transition sm:text-sm ${
+                    active
+                      ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
+                      : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-[var(--solune-surface)] dark:text-slate-300 dark:hover:border-white/20"
+                  }`}
+                >
+                  {s}
+                </button>
+              )
+            })}
+          </div>
+          <button
+            type="button"
+            aria-label="Next specialties"
+            disabled={!canScrollRight}
+            onClick={() =>
+              specialtyRow.current?.scrollBy({ left: 240, behavior: "smooth" })
+            }
+            className="absolute right-0 top-1/2 z-10 flex size-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm disabled:opacity-30 dark:border-white/10 dark:bg-neutral-900 dark:text-slate-200"
+          >
+            ›
+          </button>
         </div>
 
         {/* Results toolbar */}
@@ -573,7 +623,9 @@ function PracticesPageContent() {
                       </div>
 
                       <p className="mt-1 text-sm font-medium text-blue-600">
-                        {p.specialty ?? "General Physician"}
+                        {p.specialties?.length
+                          ? p.specialties.join(" · ")
+                          : p.specialty ?? "General Physician"}
                         {isClinic ? ` · ${p.type.replace(/_/g, " ")}` : ""}
                       </p>
 

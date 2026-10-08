@@ -14,6 +14,11 @@ import {
 } from "@prisma/client";
 import { AuthService } from "../auth.js";
 import {
+  assignDoctorSpecialties,
+  resolveSpecialtyIds,
+  slugifySpecialty,
+} from "./specialty.service.js";
+import {
   assertValidTimeRange,
   endOfLocalDay,
   formatLocalDate,
@@ -560,25 +565,89 @@ export const PracticeService = {
       return cached.data;
     }
 
-    const where: Record<string, unknown> = {
-      isActive: true,
-      isDirectoryListed: true,
-    };
-    if (filters?.specialty) where.specialty = { contains: filters.specialty, mode: "insensitive" };
-    if (filters?.q) {
-      where.OR = [
-        { name: { contains: filters.q, mode: "insensitive" } },
-        { specialty: { contains: filters.q, mode: "insensitive" } },
-      ];
+    const and: Prisma.PracticeWhereInput[] = [
+      { isActive: true },
+      { isDirectoryListed: true },
+    ];
+    const label = filters?.specialty?.trim();
+    if (label) {
+      const slug = slugifySpecialty(label);
+      and.push({
+        OR: [
+          { specialty: { equals: label, mode: "insensitive" } },
+          {
+            members: {
+              some: {
+                isActive: true,
+                role: { in: ["DOCTOR", "PRACTICE_OWNER"] },
+                user: {
+                  doctor: {
+                    specialties: {
+                      some: {
+                        specialty: {
+                          isActive: true,
+                          OR: [
+                            { name: { equals: label, mode: "insensitive" } },
+                            ...(slug ? [{ slug }] : []),
+                          ],
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
+    const q = filters?.q?.trim();
+    if (q) {
+      and.push({
+        OR: [
+          { name: { contains: q, mode: "insensitive" } },
+          { specialty: { contains: q, mode: "insensitive" } },
+          {
+            members: {
+              some: {
+                isActive: true,
+                user: { name: { contains: q, mode: "insensitive" } },
+              },
+            },
+          },
+          {
+            members: {
+              some: {
+                isActive: true,
+                user: {
+                  doctor: {
+                    specialties: {
+                      some: {
+                        specialty: {
+                          isActive: true,
+                          name: { contains: q, mode: "insensitive" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      });
     }
     if (filters?.city?.trim()) {
-      where.locations = {
-        some: {
-          city: { contains: filters.city.trim(), mode: "insensitive" },
-          isActive: true,
+      and.push({
+        locations: {
+          some: {
+            city: { contains: filters.city.trim(), mode: "insensitive" },
+            isActive: true,
+          },
         },
-      };
+      });
     }
+    const where: Prisma.PracticeWhereInput = { AND: and };
 
     // Slim select — directory cards only need name/photo/location/members/plan flags.
     const rows = await prisma.practice.findMany({
@@ -607,7 +676,21 @@ export const PracticeService = {
           select: {
             userId: true,
             role: true,
-            user: { select: { id: true, name: true, imgSrc: true } },
+            user: {
+              select: {
+                id: true,
+                name: true,
+                imgSrc: true,
+                doctor: {
+                  select: {
+                    specialties: {
+                      where: { specialty: { isActive: true } },
+                      select: { specialty: { select: { name: true } } },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         subscription: {
@@ -637,9 +720,23 @@ export const PracticeService = {
         const priority = hasFeatureFlag(features, "priorityListing");
         const reviewsEnabled =
           usable && hasFeatureFlag(features, "reviews");
-        const { subscription: _sub, _count, ...rest } = p;
+        const specialtyNames = [
+          ...new Set(
+            p.members.flatMap((m) =>
+              (m.user.doctor?.specialties ?? []).map((link) => link.specialty.name),
+            ),
+          ),
+        ].sort((a, b) => a.localeCompare(b));
+        const members = p.members.map((m) => ({
+          userId: m.userId,
+          role: m.role,
+          user: { id: m.user.id, name: m.user.name, imgSrc: m.user.imgSrc },
+        }));
+        const { subscription: _sub, _count, members: _rawMembers, ...rest } = p;
         return {
           ...rest,
+          members,
+          specialties: specialtyNames,
           featured: priority,
           planName: usable ? p.subscription?.plan?.name ?? null : null,
           nextAvailableHint:
@@ -1047,7 +1144,7 @@ export const PracticeService = {
   },
 
   /**
-   * Clinic-wide booking/patient lists are for owners/admins only.
+   * Clinic-wide booking/patient lists are for owners, admins, reception, and nurses.
    * Staff doctors are forced to their own providerId (even if the client
    * omits or spoofs the query param).
    */
@@ -1057,10 +1154,13 @@ export const PracticeService = {
     requestedProviderId?: string | null,
   ): Promise<string | undefined> {
     const member = await this.assertMember(practiceId, actorUserId);
-    const isAdmin =
-      member.role === "PRACTICE_OWNER" || member.role === "PRACTICE_ADMIN";
+    const seesClinic =
+      member.role === "PRACTICE_OWNER" ||
+      member.role === "PRACTICE_ADMIN" ||
+      member.role === "RECEPTIONIST" ||
+      member.role === "NURSE";
     const requested = requestedProviderId?.trim() || undefined;
-    if (!isAdmin) {
+    if (!seesClinic) {
       if (requested && requested !== actorUserId) {
         throw new AppError(
           403,
@@ -1145,6 +1245,7 @@ export const PracticeService = {
       email: string;
       phone?: string;
       specialty?: string;
+      specialtyIds?: string[];
       licenseNo?: string;
       appointmentValidityDays?: number;
       password?: string;
@@ -1161,6 +1262,10 @@ export const PracticeService = {
     if (!name || !email) {
       throw new AppError(400, "Doctor name and email are required.");
     }
+    const specialtyIds = await resolveSpecialtyIds({
+      specialtyIds: data.specialtyIds,
+      specialty: data.specialty,
+    });
 
     const hospital = await AuthService.ensureIndependentHospital();
     const validity = Math.min(
@@ -1238,6 +1343,10 @@ export const PracticeService = {
           providerId: user.id,
         });
       }
+      if (specialtyIds.length) {
+        await assignDoctorSpecialties(user.id, specialtyIds);
+        clearListPublicCache();
+      }
       clearMineCacheFor(user.id);
       clearMineCacheFor(actorUserId);
       return {
@@ -1301,6 +1410,10 @@ export const PracticeService = {
       });
     }
 
+    if (specialtyIds.length) {
+      await assignDoctorSpecialties(user.id, specialtyIds);
+      clearListPublicCache();
+    }
     clearMineCacheFor(user.id);
     clearMineCacheFor(actorUserId);
 
@@ -1308,6 +1421,133 @@ export const PracticeService = {
       member,
       user: { id: user.id, name: user.name, email: user.email, phone: user.phone },
       temporaryPassword: null as string | null,
+    };
+  },
+
+  /**
+   * Clinic owner or a staff doctor who will see patients.
+   * Ensures a doctor profile and Mon–Fri hours when none exist yet.
+   */
+  async openPracticeSchedule(
+    practiceId: string,
+    memberUserId: string,
+    actorUserId: string,
+    specialtyIds?: string[],
+  ) {
+    await this.assertAdmin(practiceId, actorUserId);
+    const member = await prisma.practiceMember.findUnique({
+      where: { practiceId_userId: { practiceId, userId: memberUserId } },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            doctor: { select: { id: true } },
+          },
+        },
+      },
+    });
+    if (!member?.isActive) {
+      throw new AppError(404, "That person is not on this clinic.");
+    }
+    if (member.role !== "PRACTICE_OWNER" && member.role !== "DOCTOR") {
+      throw new AppError(400, "Open a schedule for a doctor or the clinic owner.");
+    }
+    const resolved = await resolveSpecialtyIds({ specialtyIds });
+    if (!member.user.doctor) {
+      const hospital = await AuthService.ensureIndependentHospital();
+      await prisma.doctor.create({
+        data: {
+          id: member.user.id,
+          description: "General Physician — clinic owner.",
+          hospitalId: hospital.id,
+          availableTimes: "Mon–Fri 09:00–17:00",
+          experience: 0,
+          emails: member.user.email ? [member.user.email] : [],
+          contactNumbers: member.user.phone ? [member.user.phone] : [],
+        },
+      });
+      await prisma.practiceMember.update({
+        where: { id: member.id },
+        data: { doctorId: member.user.id },
+      });
+    }
+    if (resolved.length) {
+      await assignDoctorSpecialties(member.user.id, resolved);
+    }
+    const loc = await prisma.clinicLocation.findFirst({
+      where: { practiceId, isActive: true },
+      select: { id: true },
+    });
+    if (!loc) {
+      throw new AppError(400, "Add a clinic location before opening a schedule.");
+    }
+    const existing = await prisma.providerSchedule.count({
+      where: { practiceId, providerId: member.user.id, isActive: true },
+    });
+    await seedDefaultProviderSchedule({
+      practiceId,
+      locationId: loc.id,
+      providerId: member.user.id,
+    });
+    clearListPublicCache();
+    clearMineCacheFor(member.user.id);
+    clearMineCacheFor(actorUserId);
+    return {
+      userId: member.user.id,
+      name: member.user.name,
+      alreadyOpen: existing > 0,
+    };
+  },
+
+  /** New clinic login: admin, receptionist, or nurse. They are not bookable doctors. */
+  async createStaff(
+    practiceId: string,
+    data: {
+      name: string;
+      email: string;
+      password?: string;
+      phone?: string;
+      role: PracticeMemberRole;
+    },
+    actorUserId: string,
+  ) {
+    await this.assertAdmin(practiceId, actorUserId);
+    const role = data.role;
+    if (role !== "PRACTICE_ADMIN" && role !== "RECEPTIONIST" && role !== "NURSE") {
+      throw new AppError(400, "Role must be clinic admin, receptionist, or nurse.");
+    }
+    const name = data.name?.trim();
+    const email = data.email?.trim().toLowerCase();
+    const password = data.password?.trim();
+    if (!name || !email) throw new AppError(400, "Name and email are required.");
+    if (!password || password.length < 6) {
+      throw new AppError(400, "Password must be at least 6 characters.");
+    }
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new AppError(400, "That email already has an account. Use a different email.");
+    }
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: await generateHash(password),
+        role: "doctor",
+        name,
+        phone: data.phone?.trim() || null,
+        createdBy: "clinic_staff_add",
+      },
+    });
+    const member = await prisma.practiceMember.create({
+      data: { practiceId, userId: user.id, role, doctorId: null },
+    });
+    clearMineCacheFor(user.id);
+    clearMineCacheFor(actorUserId);
+    return {
+      member,
+      user: { id: user.id, name: user.name, email: user.email, role },
     };
   },
 
@@ -3165,10 +3405,13 @@ export const PracticeService = {
     });
 
     return rows.map((row) => {
-      const isAdmin =
-        row.role === "PRACTICE_OWNER" || row.role === "PRACTICE_ADMIN";
+      const seesClinic =
+        row.role === "PRACTICE_OWNER" ||
+        row.role === "PRACTICE_ADMIN" ||
+        row.role === "RECEPTIONIST" ||
+        row.role === "NURSE";
       // Staff doctors must not receive other clinic doctors' PII in the roster.
-      const practice = isAdmin
+      const practice = seesClinic
         ? row.practice
         : {
             ...row.practice,

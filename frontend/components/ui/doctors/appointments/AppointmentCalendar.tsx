@@ -493,7 +493,10 @@ export default function AppointmentCalendar() {
     lastCalendarEvent,
     refresh: refreshDashboard,
   } = usePracticeDashboard()
-  const isFrontDesk = isClinicAdmin || membershipRole === "RECEPTIONIST"
+  const isFrontDesk =
+    isClinicAdmin ||
+    membershipRole === "RECEPTIONIST" ||
+    membershipRole === "NURSE"
   const [error, setError] = useState("")
   const [practiceId, setPracticeId] = useState("")
   const [practiceName, setPracticeName] = useState("")

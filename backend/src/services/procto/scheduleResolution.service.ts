@@ -129,7 +129,7 @@ export function parseResolutionActions(raw: unknown): ResolutionAction[] {
   });
 }
 
-const DESK_ROLES = new Set(["PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"]);
+const DESK_ROLES = new Set(["PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST", "NURSE"]);
 
 /** Owners, admins and reception resolve for any doctor; a doctor only for their own patients. */
 async function assertCanResolve(practiceId: string, actorUserId: string, providerId: string) {

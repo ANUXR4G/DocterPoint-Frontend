@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ThinkingLoader } from "@/components"
 import OnboardPracticeWizard from "@/components/ui/procto/OnboardPracticeWizard"
+import { AddClinicStaff, SpecialtySelect } from "@/components/ui/procto/SpecialtySelect"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import { proctoService } from "@/lib/services/procto"
 import { cookies } from "@/utils/cookies"
@@ -52,7 +53,7 @@ export default function DoctorsManagePage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [phone, setPhone] = useState("")
-  const [specialty, setSpecialty] = useState("")
+  const [specialtyIds, setSpecialtyIds] = useState<string[]>([])
   const [licenseNo, setLicenseNo] = useState("")
   const [multiDoctorAllowed, setMultiDoctorAllowed] = useState(true)
   const [entitlementHint, setEntitlementHint] = useState("")
@@ -142,6 +143,21 @@ export default function DoctorsManagePage() {
     }
   }, [practice?.id, doctors.length])
 
+  async function openOwnerSchedule(userId: string) {
+    if (!practice) return
+    setError("")
+    setMessage("")
+    setBusy(true)
+    const res = await proctoService.openPracticeSchedule(practice.id, userId)
+    setBusy(false)
+    if (res.status !== "successful") {
+      setError(res.message || "Could not open the schedule.")
+      return
+    }
+    setMessage(res.message || "Schedule is open. Edit hours under Schedule.")
+    await load()
+  }
+
   async function addDoctor() {
     if (!practice) return
     setError("")
@@ -154,13 +170,17 @@ export default function DoctorsManagePage() {
       setError("Password must be at least 6 characters.")
       return
     }
+    if (!specialtyIds.length) {
+      setError("Select a specialty from the list.")
+      return
+    }
     setBusy(true)
     const res = await proctoService.addPracticeDoctor(practice.id, {
       name: name.trim(),
       email: email.trim(),
       password: password.trim(),
       phone: phone.trim() || undefined,
-      specialty: specialty.trim() || undefined,
+      specialtyIds,
       licenseNo: licenseNo.trim() || undefined,
     })
     setBusy(false)
@@ -175,7 +195,7 @@ export default function DoctorsManagePage() {
     setEmail("")
     setPassword("")
     setPhone("")
-    setSpecialty("")
+    setSpecialtyIds([])
     setLicenseNo("")
     await load()
   }
@@ -331,7 +351,14 @@ export default function DoctorsManagePage() {
                     Deactivate
                   </button>
                 ) : canManage && m.role === "PRACTICE_OWNER" ? (
-                  <span className="shrink-0 text-[11px] opacity-50">Owner</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void openOwnerSchedule(m.userId)}
+                    className="shrink-0 rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Open schedule
+                  </button>
                 ) : null}
               </li>
             ))}
@@ -404,12 +431,13 @@ export default function DoctorsManagePage() {
                 onChange={(e) => setPhone(e.target.value)}
                 className={fieldClass}
               />
-              <input
-                placeholder="Specialty"
-                value={specialty}
-                onChange={(e) => setSpecialty(e.target.value)}
-                className={fieldClass}
-              />
+              <div className="sm:col-span-2">
+                <SpecialtySelect
+                  value={specialtyIds}
+                  onChange={setSpecialtyIds}
+                  canAdd
+                />
+              </div>
               <input
                 placeholder="License no"
                 value={licenseNo}
@@ -426,6 +454,13 @@ export default function DoctorsManagePage() {
               </button>
             </div>
           )}
+          {practice ? (
+            <AddClinicStaff
+              practiceId={practice.id}
+              canManage={canManage}
+              onCreated={load}
+            />
+          ) : null}
         </section>
       </div>
     </div>

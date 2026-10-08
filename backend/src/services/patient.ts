@@ -528,7 +528,7 @@ export class PatientService {
     const staffMember = await prisma.practiceMember.findFirst({
       where: {
         isActive: true,
-        role: { in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"] },
+        role: { in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST", "NURSE"] },
         OR: [
           { user: { phone } },
           { user: { phone: { endsWith: last10 } } },

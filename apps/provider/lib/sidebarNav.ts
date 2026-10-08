@@ -25,7 +25,8 @@ export function buildSidebarNav(
 ): SidebarNavItem[] {
   const isClinicAdmin = isClinicAdminRole(membership?.role);
   const canManage = canManagePractice(membership);
-  const isReception = membership?.role === "RECEPTIONIST";
+  const isReception =
+    membership?.role === "RECEPTIONIST" || membership?.role === "NURSE";
 
   const care: SidebarNavItem[] = [
     {

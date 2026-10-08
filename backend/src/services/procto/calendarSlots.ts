@@ -11,7 +11,7 @@ import {
 import { addDaysIso, dateKey, pickEffectiveVersion } from "./scheduleVersions.js";
 
 /** Owners, admins and reception work on any doctor's calendar; a doctor only on their own. */
-export const DESK_ROLES = new Set(["PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"]);
+export const DESK_ROLES = new Set(["PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST", "NURSE"]);
 
 /** Clinic wall-clock minutes past midnight (fractional). */
 export function clinicMinutesNow(now: Date = new Date()): number {
