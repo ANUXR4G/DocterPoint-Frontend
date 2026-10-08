@@ -91,7 +91,8 @@ export async function assertCareChatAllowed(
     where: {
       userId: actorUserId,
       isActive: true,
-      role: { in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"] },
+      role: { in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST",
+              "NURSE"] },
     },
     select: { practiceId: true },
   });
@@ -255,6 +256,7 @@ export class ChatService {
                 "PRACTICE_OWNER",
                 "PRACTICE_ADMIN",
                 "RECEPTIONIST",
+              "NURSE",
               ],
             },
           },
@@ -332,6 +334,7 @@ export class ChatService {
                           "PRACTICE_OWNER",
                           "PRACTICE_ADMIN",
                           "RECEPTIONIST",
+              "NURSE",
                         ],
                       },
                     },
@@ -445,7 +448,8 @@ export class ChatService {
           practiceId: booking.practiceId,
           isActive: true,
           role: {
-            in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"],
+            in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST",
+              "NURSE"],
           },
         },
         select: { id: true },

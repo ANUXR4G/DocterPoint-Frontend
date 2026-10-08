@@ -146,7 +146,7 @@ async function resolveStaffToPatientContext(
       userId: staffUserId,
       isActive: true,
       role: {
-        in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"],
+        in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST", "NURSE"],
       },
     },
     select: { practiceId: true },

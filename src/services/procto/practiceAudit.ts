@@ -19,6 +19,7 @@ export const AUDIT_ROLE_LABEL: Record<string, string> = {
   PRACTICE_OWNER: "Clinic owner",
   PRACTICE_ADMIN: "Clinic admin",
   RECEPTIONIST: "Receptionist",
+  NURSE: "Nurse",
   DOCTOR: "Doctor",
 };
 

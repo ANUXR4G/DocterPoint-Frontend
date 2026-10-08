@@ -347,7 +347,7 @@ export async function isStaffOrClinicPhone(
         where: {
           isActive: true,
           role: {
-            in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST"],
+            in: ["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN", "RECEPTIONIST", "NURSE"],
           },
           OR: [
             { user: { phone: digits } },

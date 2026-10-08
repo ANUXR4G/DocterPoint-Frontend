@@ -557,6 +557,48 @@ router.post(
 );
 
 router.post(
+  "/:practiceId/staff",
+  requireAuth("practice:admin"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await PracticeService.createStaff(
+        param(req.params.practiceId),
+        req.body,
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.createSuccessful(res, "staff added to clinic.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/:practiceId/members/:userId/open-schedule",
+  requireAuth("practice:admin"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ids = Array.isArray(req.body?.specialtyIds) ? req.body.specialtyIds : [];
+      const data = await PracticeService.openPracticeSchedule(
+        param(req.params.practiceId),
+        param(req.params.userId),
+        req.sessionUser!.id,
+        ids,
+      );
+      return ResponseHandler.createSuccessful(
+        res,
+        data.alreadyOpen
+          ? "Schedule is already open. Edit hours under Schedule."
+          : "Week opened (Mon–Fri 09:00–17:00). Edit hours under Schedule.",
+        data,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
   "/:practiceId/doctors",
   requireAuth("practice:admin"),
   async (req: Request, res: Response, next: NextFunction) => {
