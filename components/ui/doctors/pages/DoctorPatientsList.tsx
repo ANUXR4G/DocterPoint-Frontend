@@ -18,6 +18,7 @@ import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBa
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import PatientDocumentsModal from "@/components/ui/procto/PatientDocumentsModal"
 import { chartSummaryLines } from "@/lib/clinicalMasters"
+import { withDrTitle } from "@/lib/doctorName"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { formatPracticeDateTime } from "@/lib/practiceTime"
 
@@ -36,7 +37,21 @@ type PracticePatient = PracticePatientRow & {
     createdAt?: string
     patientName?: string | null
     patientPhone?: string | null
+    providerName?: string | null
+    provider?: { name?: string | null } | null
   }>
+}
+
+function visitWhen(b: PracticePatient["recentBookings"][number]): string {
+  const when = b.slotStart
+    ? formatPracticeDateTime(b.slotStart)
+    : b.sessionDate
+      ? String(b.sessionDate).slice(0, 10)
+      : b.createdAt
+        ? formatPracticeDateTime(b.createdAt)
+        : "—"
+  const doctor = withDrTitle(b.provider?.name || b.providerName)
+  return [when, doctor].filter(Boolean).join(" · ")
 }
 
 function ageFromDob(dob?: string | null, age?: number | null): string {
@@ -432,15 +447,7 @@ export default function DoctorPatientsList() {
                                 {bookingStatusLabel(b.status)}
                               </span>
                             </div>
-                            <p className="mt-0.5 opacity-60">
-                              {b.slotStart
-                                ? formatPracticeDateTime(b.slotStart)
-                                : b.sessionDate
-                                  ? String(b.sessionDate).slice(0, 10)
-                                  : b.createdAt
-                                    ? formatPracticeDateTime(b.createdAt)
-                                    : "—"}
-                            </p>
+                            <p className="mt-0.5 opacity-60">{visitWhen(b)}</p>
                             {b.doctorRemarks?.trim() &&
                             !/^Chief complaint:/i.test(b.doctorRemarks) &&
                             !/AI brief for doctor:/i.test(b.doctorRemarks) ? (
@@ -652,15 +659,7 @@ export default function DoctorPatientsList() {
                                       {bookingStatusLabel(b.status)}
                                     </span>
                                   </div>
-                                  <p className="mt-0.5 opacity-60">
-                                    {b.slotStart
-                                      ? formatPracticeDateTime(b.slotStart)
-                                      : b.sessionDate
-                                        ? String(b.sessionDate).slice(0, 10)
-                                        : b.createdAt
-                                          ? formatPracticeDateTime(b.createdAt)
-                                          : "—"}
-                                  </p>
+                                  <p className="mt-0.5 opacity-60">{visitWhen(b)}</p>
                                   {b.doctorRemarks?.trim() &&
                                   !/^Chief complaint:/i.test(b.doctorRemarks) &&
                                   !/AI brief for doctor:/i.test(
