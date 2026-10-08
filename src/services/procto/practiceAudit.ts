@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS = [
   "OVERRIDE_REMOVED",
   "WALK_IN_ADDED",
   "PATIENT_REGISTERED",
+  "BOOKING_MOVED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

@@ -58,6 +58,50 @@ async function lockProviderTimeSlot(
 }
 
 /** `capacity` comes from the engine's slot: 1 in regular hours, more for a shared extra slot. */
+/**
+ * Walk contiguous available engine slots from `slotStart` until `durationMinutes`
+ * is covered. One slot when duration is omitted or fits the first slot.
+ */
+function spanBookedWindow(
+  slots: Array<{ start: Date; end: Date; available: boolean }>,
+  slotStart: Date,
+  durationMinutes?: number,
+): { start: Date; end: Date } {
+  const ordered = [...slots].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
+  const i = ordered.findIndex((s) => sameLocalSlot(s.start, slotStart));
+  const first = i >= 0 ? ordered[i] : undefined;
+  if (!first?.available) {
+    throw new AppError(409, "selected slot is not available.");
+  }
+  const one = (first.end.getTime() - first.start.getTime()) / 60_000;
+  const requested = Number(durationMinutes);
+  const want =
+    Number.isFinite(requested) && requested > 0
+      ? Math.min(240, Math.max(one, requested))
+      : one;
+  let end = first.end;
+  for (
+    let j = i + 1;
+    (end.getTime() - first.start.getTime()) / 60_000 + 0.5 < want;
+    j++
+  ) {
+    const next = ordered[j];
+    if (!next?.available) {
+      throw new AppError(
+        409,
+        "Not enough free consecutive slots for that duration.",
+      );
+    }
+    if (Math.abs(next.start.getTime() - end.getTime()) > 1500) {
+      throw new AppError(409, "Those slots are not consecutive.");
+    }
+    end = next.end;
+  }
+  return { start: first.start, end };
+}
+
 function assertTimeSlotExclusive(
   bookings: Array<{ mode: ScheduleMode; slotStart: Date | null }>,
   slotStart: Date,
@@ -155,6 +199,11 @@ export type CreateBookingInput = {
   documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
   /** WhatsApp bot will send a short session ack — skip duplicate patient template. */
   skipPatientNotification?: boolean;
+  /**
+   * Desk multi-slot: cover this many minutes from slotStart (contiguous free slots).
+   * Omitted or shorter than one slot → a single slot.
+   */
+  durationMinutes?: number;
 };
 
 type DeskPatientRef = {
@@ -440,12 +489,41 @@ export const BookingService = {
         );
         const match = slots.find((s) => sameLocalSlot(s.start, slotStart!));
         assertTimeSlotExclusive(existingBookings, slotStart!, match?.capacity);
-        if (!match?.available) {
-          throw new AppError(409, "selected slot is not available.");
+        // Patients book one slot. Desk multi-slot (procedures) is PROVIDER_APP only.
+        const deskDuration =
+          channel === BookingChannel.PROVIDER_APP
+            ? data.durationMinutes
+            : undefined;
+        let span = spanBookedWindow(slots, slotStart!, deskDuration);
+        const covered = slots.filter(
+          (s) =>
+            s.start.getTime() >= span.start.getTime() &&
+            s.start.getTime() < span.end.getTime() - 500,
+        );
+        if (covered.length > 1) {
+          for (const s of covered) {
+            await lockProviderTimeSlot(tx, data.providerId, s.start);
+          }
+          const again = await tx.practiceBooking.findMany({
+            where: {
+              practiceId: data.practiceId,
+              providerId: data.providerId,
+              status: { notIn: [BookingStatus.CANCELED, BookingStatus.NO_SHOW] },
+              OR: [
+                { slotStart: { gte: dayStart, lte: dayEnd } },
+                { sessionDate: dayStart },
+              ],
+            },
+          });
+          span = spanBookedWindow(
+            timeSlotsForProviderDay(allSchedules, date, again, overrides),
+            span.start,
+            deskDuration,
+          );
         }
         // Always persist the engine's clinic-wall-clock instant (not a skewed client parse).
-        slotStart = match.start;
-        slotEnd = match.end;
+        slotStart = span.start;
+        slotEnd = span.end;
       } else {
         if (!schedule) {
           throw new AppError(404, "no schedule configured for this day.");
@@ -1083,6 +1161,167 @@ export const BookingService = {
       { event: "booking_updated", booking: serializeBooking(updated) },
       updated.patientId,
     ).catch(() => undefined);
+    return updated;
+  },
+
+  /**
+   * Staff calendar move: same day or another day, same doctor or another,
+   * keeping the visit's duration (one row, longer slotEnd when it spans slots).
+   */
+  async moveVisit(
+    bookingId: string,
+    actorUserId: string,
+    input: {
+      providerId?: string;
+      slotStart?: string;
+      durationMinutes?: number;
+      notifyPatient?: boolean;
+    },
+  ) {
+    if (!isUuid(bookingId)) throw new AppError(400, "Invalid appointment.");
+    const existing = await prisma.practiceBooking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!existing) throw new AppError(404, "Appointment not found.");
+    if (existing.mode !== ScheduleMode.TIME_BASED || !existing.slotStart) {
+      throw new AppError(400, "Only timed appointments can be moved on the calendar.");
+    }
+    const fromSlotStart = existing.slotStart;
+    if (
+      ![BookingStatus.SCHEDULED, BookingStatus.REQUESTED, BookingStatus.ACCEPTED].includes(
+        existing.status as "SCHEDULED" | "REQUESTED" | "ACCEPTED",
+      ) ||
+      !isBookingStillUpcoming(existing)
+    ) {
+      throw new AppError(400, "Only upcoming appointments can be moved.");
+    }
+
+    const toProviderId = String(input.providerId || existing.providerId).trim();
+    if (!isUuid(toProviderId)) throw new AppError(400, "Pick a doctor.");
+    const requested = new Date(String(input.slotStart || ""));
+    if (Number.isNaN(requested.getTime())) throw new AppError(400, "Pick a time.");
+    if (!isSlotStartBookable(requested)) {
+      throw new AppError(400, "That time slot has already passed. Pick a later time.");
+    }
+
+    await assertDeskActor(existing.practiceId, existing.providerId, actorUserId, "move appointments");
+    await assertDeskActor(existing.practiceId, toProviderId, actorUserId, "move appointments");
+
+    const target = await prisma.practiceMember.findUnique({
+      where: { practiceId_userId: { practiceId: existing.practiceId, userId: toProviderId } },
+    });
+    if (!target?.isActive) {
+      throw new AppError(400, "That doctor is not an active member of this clinic.");
+    }
+
+    const existingDur =
+      existing.slotEnd != null
+        ? Math.round((existing.slotEnd.getTime() - existing.slotStart.getTime()) / 60_000)
+        : undefined;
+    const durationMinutes =
+      input.durationMinutes != null && Number.isFinite(Number(input.durationMinutes))
+        ? Number(input.durationMinutes)
+        : existingDur;
+
+    const date = startOfLocalDay(requested);
+    const dayStart = startOfLocalDay(date);
+    const dayEnd = endOfLocalDay(date);
+    const schedules = await loadSchedulesOn(
+      {
+        practiceId: existing.practiceId,
+        providerId: toProviderId,
+        locationId: existing.locationId,
+      },
+      formatLocalDate(date),
+    );
+    const [fromDoctor, toDoctor] = await Promise.all([
+      prisma.user.findUnique({ where: { id: existing.providerId }, select: { name: true } }),
+      prisma.user.findUnique({ where: { id: toProviderId }, select: { name: true } }),
+    ]);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await lockProviderTimeSlot(tx, toProviderId, requested);
+      const loadDay = () =>
+        Promise.all([
+          tx.scheduleOverride.findMany({
+            where: { practiceId: existing.practiceId, providerId: toProviderId, date: dayStart },
+          }),
+          tx.practiceBooking.findMany({
+            where: {
+              practiceId: existing.practiceId,
+              providerId: toProviderId,
+              id: { not: bookingId },
+              status: { notIn: [BookingStatus.CANCELED, BookingStatus.NO_SHOW] },
+              OR: [{ slotStart: { gte: dayStart, lte: dayEnd } }, { sessionDate: dayStart }],
+            },
+          }),
+        ]);
+
+      let [overrides, dayBookings] = await loadDay();
+      let slots = timeSlotsForProviderDay(schedules, date, dayBookings, overrides);
+      let span = spanBookedWindow(slots, requested, durationMinutes);
+      const covered = slots.filter(
+        (s) =>
+          s.start.getTime() >= span.start.getTime() &&
+          s.start.getTime() < span.end.getTime() - 500,
+      );
+      if (covered.length > 1) {
+        for (const s of covered) await lockProviderTimeSlot(tx, toProviderId, s.start);
+        ;[overrides, dayBookings] = await loadDay();
+        slots = timeSlotsForProviderDay(schedules, date, dayBookings, overrides);
+        span = spanBookedWindow(slots, span.start, durationMinutes);
+      }
+
+      if (existing.providerId !== toProviderId) {
+        await tx.paymentRequest.updateMany({
+          where: { bookingId },
+          data: { providerId: toProviderId },
+        });
+      }
+      return tx.practiceBooking.update({
+        where: { id: bookingId },
+        data: {
+          providerId: toProviderId,
+          slotStart: span.start,
+          slotEnd: span.end,
+          overrideSlot: false,
+          overrideNote: null,
+        },
+      });
+    });
+
+    const oldWhen =
+      formatPracticeDateTime(existing.slotStart) +
+      (fromDoctor?.name ? ` with ${fromDoctor.name}` : "");
+    if (input.notifyPatient !== false) {
+      void NotificationService.enqueueReschedule(bookingId, oldWhen).catch((err) =>
+        console.warn("move notification failed (non-fatal):", err),
+      );
+    }
+    void broadcastProctoEvent(
+      existing.practiceId,
+      { event: "booking_updated", booking: serializeBooking(updated) },
+      updated.patientId,
+    ).catch(() => undefined);
+    void (async () => {
+      const { recordAudit } = await import("./practiceAudit.js");
+      const who = toDoctor?.name?.trim() || "the doctor";
+      await recordAudit({
+        practiceId: existing.practiceId,
+        actorUserId,
+        action: "BOOKING_MOVED",
+        headline: "Appointment moved",
+        detail: `${existing.patientName || "Patient"} to ${formatPracticeDateTime(updated.slotStart!)} with ${who}`,
+        entityType: "booking",
+        entityId: bookingId,
+        providerId: toProviderId,
+        meta: {
+          fromProviderId: existing.providerId,
+          fromSlotStart: fromSlotStart.toISOString(),
+          notifyPatient: input.notifyPatient !== false,
+        },
+      });
+    })().catch(() => undefined);
     return updated;
   },
 
