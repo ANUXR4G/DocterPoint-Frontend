@@ -11,6 +11,17 @@ import {
   type VitalBand,
 } from "@/lib/clinicalMasters"
 import {
+  PAIN_DURATION_PRESETS,
+  PAIN_DURATION_UNITS,
+  PAIN_FREQUENCIES,
+  PAIN_LOCATION_GROUPS,
+  PAIN_RADIATIONS,
+  PAIN_TYPES,
+  parseCustomDuration,
+  type PainChoice,
+} from "@/lib/painCatalog"
+import { formatPracticeDateTime } from "@/lib/practiceTime"
+import {
   painToolTabForScale,
   shouldOpenPainAssessmentTool,
   type PainToolTab,
@@ -64,11 +75,43 @@ const BAND_LEGEND = [
 type PainRow = NonNullable<ClinicalAssessment["pain"]>[number]
 type AllergyRow = NonNullable<ClinicalAssessment["allergies"]>[number]
 
+export type ClinicalVersion = {
+  id: string
+  savedAt: string
+  actorName?: string | null
+  snapshot: ClinicalAssessment
+}
+
 type Props = {
   mastersRaw?: unknown
   value: ClinicalAssessment | null
+  versions?: ClinicalVersion[]
   readOnly?: boolean
   onChange: (next: ClinicalAssessment) => void
+}
+
+function versionSummary(snapshot: ClinicalAssessment): string {
+  const values = snapshot.vitals?.values ?? {}
+  const vitalBits = Object.entries(values)
+    .filter(([, v]) => v != null && v !== ("" as unknown))
+    .map(([k, v]) => `${k} ${v}`)
+  const painBits = (snapshot.pain ?? [])
+    .map((row) =>
+      [row.scale, row.score, row.location, row.type, row.duration, row.frequency, row.radiation]
+        .filter(Boolean)
+        .join(", "),
+    )
+    .filter(Boolean)
+  const allergyBits = (snapshot.allergies ?? [])
+    .map((row) => row.name)
+    .filter(Boolean)
+  return [
+    vitalBits.length ? `Vitals: ${vitalBits.join(", ")}` : "",
+    painBits.length ? `Pain: ${painBits.join(" · ")}` : "",
+    allergyBits.length ? `Allergies: ${allergyBits.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n")
 }
 
 function emptyPain(): PainRow {
@@ -93,9 +136,50 @@ function emptyAllergy(): AllergyRow {
   }
 }
 
+function withCurrent(current: string, options: string[]) {
+  return current && !options.includes(current) ? [current, ...options] : options
+}
+
+function ChoiceSelect({
+  value,
+  choices,
+  placeholder,
+  disabled,
+  onPick,
+}: {
+  value: string
+  choices: PainChoice[]
+  placeholder: string
+  disabled?: boolean
+  onPick: (next: string) => void
+}) {
+  const labels = choices.map((c) => c.label)
+  return (
+    <select
+      disabled={disabled}
+      value={value}
+      title={choices.find((c) => c.label === value)?.hint}
+      onChange={(e) => onPick(e.target.value)}
+      className={FIELD_INPUT}
+    >
+      <option value="">{placeholder}</option>
+      {withCurrent(value, labels).map((label) => (
+        <option
+          key={label}
+          value={label}
+          title={choices.find((c) => c.label === label)?.hint}
+        >
+          {label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export default function ClinicalAssessmentPanel({
   mastersRaw,
   value,
+  versions = [],
   readOnly,
   onChange,
 }: Props) {
@@ -117,6 +201,7 @@ export default function ClinicalAssessmentPanel({
     idx: number
     tab: PainToolTab
   } | null>(null)
+  const [openVersionId, setOpenVersionId] = useState<string | null>(null)
 
   // Sync only when saved content actually changes — silent reloads / new object
   // references must not wipe rows the doctor just Added.
@@ -207,8 +292,57 @@ export default function ClinicalAssessmentPanel({
     return Array.from(set)
   }, [masters.allergies])
 
+  const savedStamp =
+    value?.savedAt ||
+    versions[0]?.savedAt ||
+    value?.vitals?.recordedAt ||
+    null
+  const savedLabel = savedStamp ? formatPracticeDateTime(savedStamp) : ""
+
+  function setPainField(
+    idx: number,
+    row: PainRow,
+    field: keyof PainRow,
+    next: string,
+  ) {
+    const pain = [...(local.pain ?? [])]
+    pain[idx] = { ...row, [field]: next }
+    commit({ ...local, pain })
+  }
+
   return (
     <section className="dashboard-panel !h-auto !space-y-6 !overflow-visible !p-5">
+      {savedLabel ? (
+        <div className="text-xs text-neutral-600 dark:text-neutral-300">
+          <p className="font-semibold text-neutral-800 dark:text-neutral-100">
+            Saved {savedLabel}
+            {versions[0]?.actorName ? ` · ${versions[0].actorName}` : ""}
+          </p>
+          {versions.length > 1 ? (
+            <ul className="mt-1 space-y-1">
+              {versions.slice(1).map((v) => (
+                <li key={v.id}>
+                  <button
+                    type="button"
+                    className="font-semibold text-[var(--theme-primary)] hover:underline"
+                    onClick={() =>
+                      setOpenVersionId((cur) => (cur === v.id ? null : v.id))
+                    }
+                  >
+                    Earlier save {formatPracticeDateTime(v.savedAt)}
+                    {v.actorName ? ` · ${v.actorName}` : ""}
+                  </button>
+                  {openVersionId === v.id ? (
+                    <p className="mt-0.5 whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">
+                      {versionSummary(v.snapshot)}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {/* VITALS */}
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -337,48 +471,157 @@ export default function ClinicalAssessmentPanel({
                       ))}
                     </select>
                   </td>
-                  {(
-                    [
-                      "score",
-                      "location",
-                      "type",
-                      "duration",
-                      "frequency",
-                      "radiation",
-                    ] as const
-                  ).map((field) => (
-                    <td key={field} className="py-1 pr-2">
-                      {field === "score" &&
-                      shouldOpenPainAssessmentTool(row.scale || "") &&
-                      !readOnly ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const tab =
-                              painToolTabForScale(row.scale || "") ??
-                              "wong-baker"
-                            setPainTool({ idx, tab })
-                          }}
-                          className={`${FIELD_INPUT} cursor-pointer text-left hover:border-teal-400`}
-                          title="Open Pain Assessment Tool"
-                        >
-                          {row.score || "Select with tool…"}
-                        </button>
-                      ) : (
-                        <input
-                          disabled={readOnly}
-                          value={row[field] || ""}
-                          placeholder={`Enter ${field}`}
-                          onChange={(e) => {
-                            const pain = [...(local.pain ?? [])]
-                            pain[idx] = { ...row, [field]: e.target.value }
-                            commit({ ...local, pain })
-                          }}
-                          className={FIELD_INPUT}
-                        />
-                      )}
-                    </td>
-                  ))}
+                  <td className="py-1 pr-2">
+                    {shouldOpenPainAssessmentTool(row.scale || "") &&
+                    !readOnly ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tab =
+                            painToolTabForScale(row.scale || "") ?? "wong-baker"
+                          setPainTool({ idx, tab })
+                        }}
+                        className={`${FIELD_INPUT} cursor-pointer text-left hover:border-teal-400`}
+                        title="Open Pain Assessment Tool"
+                      >
+                        {row.score || "Select with tool…"}
+                      </button>
+                    ) : (
+                      <input
+                        disabled={readOnly}
+                        value={row.score || ""}
+                        placeholder="Score"
+                        onChange={(e) =>
+                          setPainField(idx, row, "score", e.target.value)
+                        }
+                        className={FIELD_INPUT}
+                      />
+                    )}
+                  </td>
+                  <td className="py-1 pr-2">
+                    <select
+                      disabled={readOnly}
+                      value={row.location || ""}
+                      onChange={(e) =>
+                        setPainField(idx, row, "location", e.target.value)
+                      }
+                      className={FIELD_INPUT}
+                    >
+                      <option value="">Location…</option>
+                      {row.location &&
+                      !PAIN_LOCATION_GROUPS.some((g) =>
+                        g.options.includes(row.location || ""),
+                      ) ? (
+                        <option value={row.location}>{row.location}</option>
+                      ) : null}
+                      {PAIN_LOCATION_GROUPS.map((g) => (
+                        <optgroup key={g.group} label={g.group}>
+                          {g.options.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="py-1 pr-2">
+                    <ChoiceSelect
+                      value={row.type || ""}
+                      choices={PAIN_TYPES}
+                      placeholder="Type…"
+                      disabled={readOnly}
+                      onPick={(next) => setPainField(idx, row, "type", next)}
+                    />
+                  </td>
+                  <td className="min-w-[9rem] py-1 pr-2">
+                    <select
+                      disabled={readOnly}
+                      value={
+                        PAIN_DURATION_PRESETS.includes(row.duration || "")
+                          ? row.duration
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setPainField(idx, row, "duration", e.target.value)
+                      }
+                      className={FIELD_INPUT}
+                    >
+                      <option value="">Duration…</option>
+                      {PAIN_DURATION_PRESETS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-1 flex gap-1">
+                      <input
+                        disabled={readOnly}
+                        inputMode="numeric"
+                        value={parseCustomDuration(row.duration || "")?.n ?? ""}
+                        placeholder="No."
+                        onChange={(e) => {
+                          const n = e.target.value.replace(/\D/g, "").slice(0, 3)
+                          const unit =
+                            parseCustomDuration(row.duration || "")?.unit ??
+                            "Days"
+                          setPainField(
+                            idx,
+                            row,
+                            "duration",
+                            n ? `${n} ${unit}` : "",
+                          )
+                        }}
+                        className={`${FIELD_INPUT} w-14`}
+                      />
+                      <select
+                        disabled={readOnly}
+                        value={
+                          parseCustomDuration(row.duration || "")?.unit ?? "Days"
+                        }
+                        onChange={(e) => {
+                          const n =
+                            parseCustomDuration(row.duration || "")?.n ?? ""
+                          if (!n) return
+                          setPainField(
+                            idx,
+                            row,
+                            "duration",
+                            `${n} ${e.target.value}`,
+                          )
+                        }}
+                        className={FIELD_INPUT}
+                      >
+                        {PAIN_DURATION_UNITS.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </td>
+                  <td className="py-1 pr-2">
+                    <ChoiceSelect
+                      value={row.frequency || ""}
+                      choices={PAIN_FREQUENCIES}
+                      placeholder="Frequency…"
+                      disabled={readOnly}
+                      onPick={(next) =>
+                        setPainField(idx, row, "frequency", next)
+                      }
+                    />
+                  </td>
+                  <td className="py-1 pr-2">
+                    <ChoiceSelect
+                      value={row.radiation || ""}
+                      choices={PAIN_RADIATIONS}
+                      placeholder="Radiation…"
+                      disabled={readOnly}
+                      onPick={(next) =>
+                        setPainField(idx, row, "radiation", next)
+                      }
+                    />
+                  </td>
                   <td className="py-1">
                     {!readOnly ? (
                       <button

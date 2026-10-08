@@ -9,6 +9,7 @@ import {
   filterBookingsByDate,
   usePracticeDashboard,
 } from "@/contexts/PracticeDashboardContext"
+import { toast } from "sonner"
 import { firey } from "@/utils"
 import {
   bookingStatusClass,
@@ -166,15 +167,16 @@ export default function DoctorQueue({
     ? "flex min-h-48 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-sky-50/50 p-6 text-center dark:border-white/10 dark:bg-white/5"
     : "flex h-full min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-sky-50/50 p-10 text-center dark:border-white/10 dark:bg-white/5"
 
-  async function onStatus(id: string, status: string) {
+  async function onStatus(id: string, status: string, reason?: string) {
     const previous = allBookings.find((b) => b.id === id)?.status
     if (isTerminalVisitStatus(previous || "")) return
     setBusyId(id)
     patchBooking(id, { status })
-    const res = await proctoService.updateBookingStatus(id, status)
+    const res = await proctoService.updateBookingStatus(id, status, reason)
     setBusyId(null)
     if (res.status !== "successful") {
       if (previous) patchBooking(id, { status: previous })
+      toast.error(res.message || "Could not update status")
       return
     }
     const arrivedAt = (res.data as { arrivedAt?: string | null } | undefined)
@@ -438,9 +440,10 @@ export default function DoctorQueue({
                     busy={busyId === b.id}
                     compact
                     nowrap
-                    showSelect={allowStatusControl}
+                    showSelect={false}
                     ariaLabel={`Update status for ${name}`}
-                    onChange={(status) => void onStatus(b.id, status)}
+                    visitHref={`/doctor/queue/${b.id}`}
+                    onChange={(status, reason) => void onStatus(b.id, status, reason)}
                   />
                   <PrescriptionActionsMenu
                     bookingId={b.id}
@@ -595,7 +598,8 @@ export default function DoctorQueue({
                           compact
                           showSelect={allowStatusControl}
                           ariaLabel={`Update status for ${name}`}
-                          onChange={(status) => void onStatus(b.id, status)}
+                          visitHref={`/doctor/queue/${b.id}`}
+                    onChange={(status, reason) => void onStatus(b.id, status, reason)}
                         />
                         <PrescriptionActionsMenu
                           bookingId={b.id}

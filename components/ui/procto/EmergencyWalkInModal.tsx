@@ -6,6 +6,7 @@ import { proctoService, type DeskPatient } from "@/lib/services/procto"
 import DeskPatientPicker, {
   deskFieldClass,
   deskLabelClass,
+  LookupStatus,
 } from "@/components/ui/procto/DeskPatientPicker"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import { dashboardPortalRoot } from "@/lib/portalRoot"
@@ -38,7 +39,7 @@ export default function EmergencyWalkInModal({
   onClose,
   onAdded,
 }: Props) {
-  const { memberships, practiceId, practiceName } = usePracticeDashboard()
+  const { memberships, practiceId, practiceName, ready } = usePracticeDashboard()
   const membership = memberships[0]
   const myUserId = membership?.userId || ""
   const onlySelf = membership?.role === "DOCTOR"
@@ -64,12 +65,18 @@ export default function EmergencyWalkInModal({
   const [patient, setPatient] = useState<DeskPatient | null>(null)
   const [disease, setDisease] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [patientBusy, setPatientBusy] = useState({
+    searching: false,
+    loadingRecord: false,
+  })
   const [message, setMessage] = useState("")
+  const recordWait = !ready || patientBusy.loadingRecord || submitting
 
   useEffect(() => {
     if (!open) return
     setMessage("")
     setPatient(null)
+    setPatientBusy({ searching: false, loadingRecord: false })
     setDisease("")
     setProviderId((prev) => {
       if (prev && doctors.some((d) => d.id === prev)) return prev
@@ -82,14 +89,14 @@ export default function EmergencyWalkInModal({
     const prev = document.body.style.overflow
     document.body.style.overflow = "hidden"
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !submitting) onClose()
+      if (e.key === "Escape" && !recordWait) onClose()
     }
     window.addEventListener("keydown", onKey)
     return () => {
       document.body.style.overflow = prev
       window.removeEventListener("keydown", onKey)
     }
-  }, [open, submitting, onClose])
+  }, [open, recordWait, onClose])
 
   async function submit() {
     if (!practiceId || !providerId) {
@@ -102,14 +109,21 @@ export default function EmergencyWalkInModal({
     }
     setSubmitting(true)
     setMessage("")
-    const res = await proctoService.createWalkIn({
-      practiceId,
-      providerId,
-      patientId: patient.patientId,
-      patientPhone: patient.phone,
-      ...(disease.trim() ? { disease: disease.trim() } : {}),
-    })
-    setSubmitting(false)
+    let res: Awaited<ReturnType<typeof proctoService.createWalkIn>>
+    try {
+      res = await proctoService.createWalkIn({
+        practiceId,
+        providerId,
+        patientId: patient.patientId,
+        patientPhone: patient.phone,
+        ...(disease.trim() ? { disease: disease.trim() } : {}),
+      })
+    } catch {
+      setMessage("Could not add the walk-in. Try again.")
+      return
+    } finally {
+      setSubmitting(false)
+    }
     if (res.status === "successful") {
       onAdded()
       onClose()
@@ -130,7 +144,7 @@ export default function EmergencyWalkInModal({
       aria-modal="true"
       aria-labelledby="walk-in-title"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !submitting) onClose()
+        if (e.target === e.currentTarget && !recordWait) onClose()
       }}
     >
       <div className="flex max-h-[96dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white text-slate-900 shadow-2xl sm:rounded-3xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -168,7 +182,7 @@ export default function EmergencyWalkInModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={submitting}
+            disabled={recordWait}
             aria-label="Close"
             className="-mr-1 -mt-1 flex size-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
@@ -186,8 +200,11 @@ export default function EmergencyWalkInModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 text-sm">
-          {!doctors.length ? (
+        <div
+          className={`relative min-h-0 flex-1 overflow-y-auto ${recordWait ? "min-h-52" : ""}`}
+        >
+        <div className="space-y-5 px-5 py-5 text-sm">
+          {!ready ? null : !doctors.length ? (
             <p
               className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
               role="alert"
@@ -241,6 +258,7 @@ export default function EmergencyWalkInModal({
                 value={patient}
                 onChange={setPatient}
                 autoFocus
+                onBusyChange={setPatientBusy}
               />
             ) : null}
           </section>
@@ -273,23 +291,54 @@ export default function EmergencyWalkInModal({
             </p>
           ) : null}
         </div>
+        {recordWait ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/85 px-6 backdrop-blur-[2px] dark:bg-slate-900/85">
+            <LookupStatus
+              label={
+                submitting
+                  ? "Adding to the waiting list…"
+                  : !ready
+                    ? "Loading clinic details…"
+                    : "Loading this patient’s details…"
+              }
+              detail="This can take a few seconds. Stay on this screen until it finishes."
+            />
+          </div>
+        ) : null}
+        </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-900/80">
           <button
             type="button"
             className="h-11 rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             onClick={onClose}
-            disabled={submitting}
+            disabled={recordWait}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="h-11 rounded-full bg-red-600 px-5 text-sm font-semibold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-red-600 px-5 text-sm font-semibold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
             onClick={() => void submit()}
-            disabled={submitting || !practiceId || !doctors.length || !patient}
+            disabled={
+              recordWait ||
+              patientBusy.searching ||
+              !practiceId ||
+              !doctors.length ||
+              !patient
+            }
           >
-            {submitting ? "Adding…" : "Add to waiting list"}
+            {submitting ? (
+              <>
+                <span
+                  className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                  aria-hidden
+                />
+                Adding to waiting list…
+              </>
+            ) : (
+              "Add to waiting list"
+            )}
           </button>
         </div>
       </div>

@@ -129,8 +129,10 @@ export default function ClinicLogDocument({
 
   const medicines = (booking.medicines ?? []).filter((m) => m?.name?.trim())
   const remarks = String(booking.doctorRemarks || "").trim()
-  const recordedAt = assessment?.vitals?.recordedAt
-    ? formatPracticeDateTime(assessment.vitals.recordedAt)
+  const recordedAt = assessment?.savedAt || assessment?.vitals?.recordedAt
+    ? formatPracticeDateTime(
+        assessment.savedAt || assessment.vitals?.recordedAt || "",
+      )
     : slotStart
       ? formatPracticeDateTime(slotStart)
       : "—"
