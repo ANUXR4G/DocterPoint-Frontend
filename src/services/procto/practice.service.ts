@@ -1843,6 +1843,10 @@ export const PracticeService = {
             tokenNumber: b.tokenNumber,
             providerId: b.providerId,
             providerName: providerName[b.providerId] ?? null,
+            provider: {
+              id: b.providerId,
+              name: providerName[b.providerId] ?? null,
+            },
             patientName: b.patientName,
             patientPhone: b.patientPhone,
             notes: b.notes,
