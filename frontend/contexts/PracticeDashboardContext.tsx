@@ -78,6 +78,8 @@ export type PracticePatientRow = {
     consultationType?: string | null
     notes?: string | null
     doctorRemarks?: string | null
+    medicines?: Array<{ name?: string; amount?: string; times?: string[] }> | null
+    clinicalAssessment?: unknown
     slotStart?: string | null
     sessionDate?: string | null
     createdAt?: string

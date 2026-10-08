@@ -17,6 +17,7 @@ import {
   SurfaceCard,
 } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
+import { VisitChartSummary } from "@/components/VisitChartSummary";
 import { contentBottomPad } from "@/lib/dockLayout";
 import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { resolveMediaUrl } from "@/lib/media";
@@ -174,9 +175,11 @@ export default function PatientDetailScreen() {
                         <Text style={styles.meta}>{b.provider.name}</Text>
                       ) : null}
                     </View>
-                    <StatusBadge status={b.status} />
                   </View>
-                  <Text style={styles.openLink}>Open visit →</Text>
+                  <VisitChartSummary
+                    booking={b}
+                    onOpen={() => router.push(`/(app)/visit/${b.id}`)}
+                  />
                 </SurfaceCard>
               ))
             )}
@@ -247,10 +250,4 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   visitWhen: { fontSize: 15, fontWeight: "600", color: colors.ink },
-  openLink: {
-    marginTop: space.sm,
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.brand,
-  },
 });

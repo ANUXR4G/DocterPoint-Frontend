@@ -19,6 +19,7 @@ import {
   SurfaceCard,
 } from "@/components/ui";
 import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
+import { VisitChartSummary } from "@/components/VisitChartSummary";
 import { formatPhoneDisplay } from "@/lib/formatPhone";
 import { resolveMediaUrl } from "@/lib/media";
 import { patientRosterKey } from "@/lib/patientRoster";
@@ -104,14 +105,7 @@ export default function PatientsScreen() {
           filtered.map((p) => {
             const key = patientRosterKey(p);
             return (
-              <SurfaceCard
-                key={key}
-                onPress={() =>
-                  router.push(
-                    `/(app)/patients/${encodeURIComponent(key)}` as never,
-                  )
-                }
-              >
+              <SurfaceCard key={key}>
                 <Pressable
                   onPress={() =>
                     router.push(
@@ -154,6 +148,16 @@ export default function PatientsScreen() {
                   </View>
                   <Text style={styles.chevron}>›</Text>
                 </Pressable>
+                {(p.recentBookings ?? p.recent)?.[0] ? (
+                  <VisitChartSummary
+                    booking={(p.recentBookings ?? p.recent)![0]!}
+                    onOpen={() =>
+                      router.push(
+                        `/(app)/visit/${(p.recentBookings ?? p.recent)![0]!.id}` as never,
+                      )
+                    }
+                  />
+                ) : null}
               </SurfaceCard>
             );
           })

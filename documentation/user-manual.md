@@ -158,6 +158,8 @@ Typical tabs:
 
 **Booking on mobile** mirrors the web flow: open a clinic → choose date → slot/token → confirm.
 
+**Visit:** A finished visit, or one that already has a chart, shows **Prescription** with vitals, allergies, pain, remarks, and medicines, plus the doctor’s name, licence, and the clinic address. You can **Cancel appointment** while it is still accepted and not yet started.
+
 **Reviews:** After a **completed** visit, open the booking detail screen and submit a star rating and optional comment.
 
 **API URL:** Set `EXPO_PUBLIC_API_URL` to your backend (e.g. `http://<your-lan-ip>:3001` on a physical device).
@@ -186,8 +188,25 @@ Clinic and doctor portals share the same tools; clinic dashboard emphasises mult
 **Queue** (`/doctor/queue`):
 
 - Lists today’s bookings for your practice.
-- Change status: **Scheduled** → **In progress** → **Completed**, or **Canceled** / **No show**.
-- Open a visit to record notes; completing a visit saves patient details under **Settings → Practice → Patients**.
+- Before arrival: **Arrived**, **No-show** (Did not arrive), or **Canceled** (Patient canceled / Clinic canceled).
+- In waiting: **Start consultation**, **No-show** (Left before being seen), or **Canceled** (Patient left / Clinic canceled).
+- In consultation: **Finish** only. Finish opens the visit so remarks and medicines save with it. Cancel and No-show are not available once the consultation has started.
+- A finished visit is locked.
+
+**Visit documentation** (open a visit from the queue, appointments, or the patient record):
+
+| Section | What you record |
+|---------|-----------------|
+| **Vitals** | Height, weight, BMI, temperature, blood pressure, pulse, respiration, SpO2, random blood sugar. Bands show when a value is outside the clinic’s range. |
+| **Pain** | Scale, score, location, type, duration, frequency, and radiation, chosen from labels. |
+| **Allergies** | Catalog entries, or **No known allergies**. |
+| **Remarks** | Advice and follow-up. |
+| **Prescription** | Medicine name, dose, and timing. |
+| **Documents** | Photos and files for this visit, plus the patient’s general record. |
+
+Each save keeps a version and shows **Saved** with the time. On a finished visit, **Rx** opens the clinic log (vitals, allergies, pain, remarks, prescription) and can send it to the patient on WhatsApp.
+
+The **Patients** list shows the same four lines on each recent visit, so the chart is visible without opening the visit first.
 
 The queue updates in real time when the websocket connection is active.
 
@@ -253,7 +272,7 @@ Under **Doctors** (or **Settings → Account** for clinic-type practices):
 
 ### 7.3 Patients list
 
-**Patients** shows people who have booked or completed a visit. Completed queue visits appear here automatically. Use it for continuity of care and consult history.
+**Patients** shows people who have booked or completed a visit. Each recent visit lists **Vitals**, **Allergies**, **Pain**, and **Prescription**, plus **Open visit**. Completed queue visits appear here automatically.
 
 ---
 
@@ -376,10 +395,12 @@ Typical screens:
 | Screen | Purpose |
 |--------|---------|
 | Queue | Today’s patients and status updates |
+| Appointments | Visits, emergency walk-in, and Rx on a finished visit |
+| Visit | Vitals, pain, allergies, remarks, prescription, documents, and the patient record |
+| Patients | Roster with each visit’s vitals, allergies, pain, and prescription |
 | Schedule | Working schedule view |
-| Overrides | Block or extend days |
 | Inbox / Queries | Patient messages |
-| Profile | Account and practice context |
+| Settings | Account, photos, and the vitals / allergy / pain catalogs |
 
 Sign in with the same **doctor** credentials as the web portal. Point the app API URL to your backend (`EXPO_PUBLIC_API_URL`).
 

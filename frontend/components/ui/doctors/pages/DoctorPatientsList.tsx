@@ -17,6 +17,7 @@ import {
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import PatientDocumentsModal from "@/components/ui/procto/PatientDocumentsModal"
+import { chartSummaryLines } from "@/lib/clinicalMasters"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import { formatPracticeDateTime } from "@/lib/practiceTime"
 
@@ -28,6 +29,8 @@ type PracticePatient = PracticePatientRow & {
     consultationType?: string | null
     notes?: string | null
     doctorRemarks?: string | null
+    medicines?: Array<{ name?: string; amount?: string }> | null
+    clinicalAssessment?: unknown
     slotStart?: string | null
     sessionDate?: string | null
     createdAt?: string
@@ -51,6 +54,30 @@ type PatientAttachment = {
 
 function patientAttachments(p: PracticePatientRow): PatientAttachment[] {
   return Array.isArray(p.attachments) ? p.attachments.filter((d) => d?.url) : []
+}
+
+function VisitChartLines({
+  booking,
+}: {
+  booking: PracticePatient["recentBookings"][number]
+}) {
+  const lines = chartSummaryLines(booking.clinicalAssessment, booking.medicines)
+  const rows = [
+    ["Vitals", lines.vitals],
+    ["Allergies", lines.allergies],
+    ["Pain", lines.pain],
+    ["Prescription", lines.prescription],
+  ] as const
+  return (
+    <dl className="mt-2 space-y-1 text-sm">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt className="inline font-semibold">{label}: </dt>
+          <dd className="inline">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 function AttachmentsIconButton({
@@ -422,6 +449,7 @@ export default function DoctorPatientsList() {
                                 {b.doctorRemarks}
                               </p>
                             ) : null}
+                            <VisitChartLines booking={b} />
                             <Link
                               href={`/doctor/queue/${b.id}`}
                               className="mt-1 inline-block font-semibold text-[var(--theme-primary)] hover:underline"
@@ -645,6 +673,7 @@ export default function DoctorPatientsList() {
                                       {b.doctorRemarks}
                                     </p>
                                   ) : null}
+                                  <VisitChartLines booking={b} />
                                   <Link
                                     href={`/doctor/queue/${b.id}`}
                                     className="mt-1 inline-block font-semibold text-[var(--theme-primary)] hover:underline"
