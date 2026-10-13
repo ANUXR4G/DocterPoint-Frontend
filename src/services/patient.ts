@@ -14,6 +14,7 @@ import { normalizeProfileImageUrl } from "../core/profileImage.js";
 import { normalizeGender, requireGender } from "../core/gender.js";
 import { ageFromDob, normalizeDateOfBirth } from "../core/dob.js";
 import { allocatePatientMrn, ensurePracticeMrnPrefix } from "../core/patientMrn.js";
+import { samePatientMobile } from "../core/phoneMatch.js";
 import {
   saveAadharCardImage,
   saveProfilePhotoImage,
@@ -384,11 +385,21 @@ export class PatientService {
       }),
     ]);
 
+    const onThisNumber = <T extends { phone?: string | null; patient?: { contactNumber?: string | null } | null }>(
+      rows: T[],
+    ) =>
+      rows.filter(
+        (u) =>
+          samePatientMobile(u.phone, digits) ||
+          samePatientMobile(u.patient?.contactNumber, digits),
+      );
+    const phoneHits = onThisNumber(byPhone);
+    const contactHits = onThisNumber(byContact);
     return (
-      pickPrimaryPatientUser(byPhone) ??
-      pickPrimaryPatientUser(byContact) ??
-      byPhone[0] ??
-      byContact[0] ??
+      pickPrimaryPatientUser(phoneHits) ??
+      pickPrimaryPatientUser(contactHits) ??
+      phoneHits[0] ??
+      contactHits[0] ??
       null
     );
   }
@@ -412,20 +423,26 @@ export class PatientService {
     if (digits.length < 10) return [];
     const last10 = digits.slice(-10);
 
-    const users = await prisma.user.findMany({
-      where: {
-        role: "user",
-        OR: [
-          { phone: digits },
-          { phone: { endsWith: last10 } },
-          { patient: { contactNumber: digits } },
-          { patient: { contactNumber: { endsWith: last10 } } },
-        ],
-      },
-      include: { patient: true },
-      orderBy: { createdAt: "asc" },
-      take: 20,
-    });
+    const users = (
+      await prisma.user.findMany({
+        where: {
+          role: "user",
+          OR: [
+            { phone: digits },
+            { phone: { endsWith: last10 } },
+            { patient: { contactNumber: digits } },
+            { patient: { contactNumber: { endsWith: last10 } } },
+          ],
+        },
+        include: { patient: true },
+        orderBy: { createdAt: "asc" },
+        take: 20,
+      })
+    ).filter(
+      (u) =>
+        samePatientMobile(u.phone, digits) ||
+        samePatientMobile(u.patient?.contactNumber, digits),
+    );
 
     // Exactly one owner: phone matches this chat AND not a dependent.
     const phoneMatches = (u: (typeof users)[number]) => {

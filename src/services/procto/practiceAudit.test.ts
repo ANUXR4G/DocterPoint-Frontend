@@ -9,27 +9,27 @@ import { parseLocalDate, startOfLocalDay } from "./slotEngine.js";
 
 describe("audit trail", () => {
   it("stamps events in clinic time", () => {
-    assert.equal(auditStamp(new Date("2026-09-28T19:10:00Z")), "29 Sep 2026, 12:40 AM");
-    assert.equal(auditStamp(new Date("2026-11-05T11:30:00Z")), "5 Nov 2026, 5:00 PM");
+    assert.equal(auditStamp(new Date("2026-09-28T19:10:00Z")), "29/09/2026 00:40");
+    assert.equal(auditStamp(new Date("2026-11-05T11:30:00Z")), "05/11/2026 17:00");
   });
 
   it("writes 'created manually by <Role> <Name> on <Timestamp>'", () => {
     const at = new Date("2026-09-28T19:10:00Z");
     assert.equal(
       auditSummary("Slot created manually", { name: "Asha Rao", role: "RECEPTIONIST" }, at, "Dr Priya Nair, Thu 5 Nov"),
-      "Slot created manually by Receptionist Asha Rao on 29 Sep 2026, 12:40 AM — Dr Priya Nair, Thu 5 Nov.",
+      "Slot created manually by Receptionist Asha Rao on 29/09/2026 00:40 — Dr Priya Nair, Thu 5 Nov.",
     );
     assert.equal(
       auditSummary("Extra slot removed", { name: null, role: null }, at),
-      "Extra slot removed by Staff member on 29 Sep 2026, 12:40 AM.",
+      "Extra slot removed by Staff member on 29/09/2026 00:40.",
     );
     assert.equal(
       auditSummary("Day blocked", { name: "Dr. Priya Nair", role: "DOCTOR" }, at),
-      "Day blocked by Dr. Priya Nair on 29 Sep 2026, 12:40 AM.",
+      "Day blocked by Dr. Priya Nair on 29/09/2026 00:40.",
     );
     assert.equal(
       auditSummary("Day blocked", { name: "Ravi Kumar", role: "DOCTOR" }, at),
-      "Day blocked by Doctor Ravi Kumar on 29 Sep 2026, 12:40 AM.",
+      "Day blocked by Doctor Ravi Kumar on 29/09/2026 00:40.",
     );
   });
 

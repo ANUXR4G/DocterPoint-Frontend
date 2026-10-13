@@ -4,8 +4,10 @@ import { ScheduleMode } from "@prisma/client";
 import {
   countBookingsForSlot,
   filterWaBookableSlotChoices,
+  formatPracticeDateTime,
   formatPracticeTime,
   generateTimeSlots,
+  isClinicDayAfterToday,
   isSlotStartBookable,
   parseLocalDate,
   TIME_SLOT_CAPACITY,
@@ -16,12 +18,21 @@ describe("practice timezone (Asia/Kolkata)", () => {
   it("stores 11:40 clinic time as 06:10Z", () => {
     const d = zonedDateTime("2026-09-25", "11:40");
     assert.equal(d.toISOString(), "2026-09-25T06:10:00.000Z");
-    assert.equal(formatPracticeTime(d), "11:40 AM");
+    assert.equal(formatPracticeTime(d), "11:40");
+    assert.equal(formatPracticeDateTime(d), "25/09/2026 11:40");
   });
 
   it("parseLocalDate is midnight IST (previous day 18:30Z)", () => {
     const d = parseLocalDate("2026-09-25");
     assert.equal(d.toISOString(), "2026-09-24T18:30:00.000Z");
+  });
+});
+
+describe("visit documentation day", () => {
+  it("allows any time on today and blocks the next day", () => {
+    const now = zonedDateTime("2026-10-12", "19:35");
+    assert.equal(isClinicDayAfterToday("2026-10-12", now), false);
+    assert.equal(isClinicDayAfterToday("2026-10-13", now), true);
   });
 });
 
@@ -36,7 +47,7 @@ describe("isSlotStartBookable", () => {
     const now = zonedDateTime("2026-09-26", "10:01").getTime();
     const tenAm = zonedDateTime("2026-09-26", "10:00");
     const tenThirty = zonedDateTime("2026-09-26", "10:30");
-    assert.equal(formatPracticeTime(tenAm), "10:00 AM");
+    assert.equal(formatPracticeTime(tenAm), "10:00");
     assert.equal(isSlotStartBookable(tenAm, now), false);
     assert.equal(isSlotStartBookable(tenThirty, now), true);
   });
@@ -73,11 +84,11 @@ describe("generateTimeSlots omits past starts", () => {
 
     const slots = generateTimeSlots(schedule, day, [], [], nowMs);
     const labels = slots.map((s) => formatPracticeTime(s.start));
-    assert.equal(labels.includes("10:00 AM"), false);
-    assert.ok(labels.includes("10:30 AM"));
-    assert.ok(labels.includes("11:00 AM"));
-    assert.equal(labels.includes("9:00 AM"), false);
-    assert.equal(labels.includes("9:30 AM"), false);
+    assert.equal(labels.includes("10:00"), false);
+    assert.ok(labels.includes("10:30"));
+    assert.ok(labels.includes("11:00"));
+    assert.equal(labels.includes("09:00"), false);
+    assert.equal(labels.includes("09:30"), false);
     for (const s of slots) {
       assert.equal(isSlotStartBookable(s.start, nowMs), true);
     }

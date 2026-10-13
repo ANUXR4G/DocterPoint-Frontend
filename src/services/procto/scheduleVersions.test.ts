@@ -193,7 +193,7 @@ describe("impact assessment reasons", () => {
   test("outside the new working hours", () => {
     const a = assessBooking(mon("10:20"), [row(1, "2026-10-01", { startTime: "11:00" })]);
     assert.equal(a?.code, "OUTSIDE_HOURS");
-    assert.match(a!.reason, /10:20 AM is outside the new hours 11:00–14:00/);
+    assert.match(a!.reason, /10:20 is outside the new hours 11:00–14:00/);
     assert.equal(
       assessBooking(mon("13:40"), [row(1, "2026-10-01", { endTime: "13:50" })])?.code,
       "OUTSIDE_HOURS",

@@ -327,14 +327,8 @@ function nextWorkingDayIsos(count = 7, from: Date = new Date()): string[] {
 }
 
 function dateChipLabel(iso: string, todayIso: string, tomorrowIso: string): string {
-  const d = new Date(`${iso}T12:00:00`);
-  const base = Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleDateString("en-GB", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-      });
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  const base = m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
   if (iso === todayIso) return `Today · ${base}`.slice(0, 24);
   if (iso === tomorrowIso) return `Tomorrow · ${base}`.slice(0, 24);
   return base.slice(0, 24);
@@ -1091,16 +1085,11 @@ function withBookingConfirmButtons(
 }
 
 function formatBookingDateLabel(isoDate: string): string {
-  const d = new Date(`${isoDate}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return isoDate;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : isoDate;
 }
 
-/** WhatsApp slot times — always 12-hour in clinic timezone (e.g. 3:50 PM, not 15:50). */
+/** WhatsApp slot times — 24-hour clinic clock, e.g. 15:50. */
 function formatSlotTimeLabel(d: Date): string {
   return formatPracticeTime(d);
 }

@@ -1,12 +1,39 @@
 import { Router } from "express";
 import type { Request, Response, NextFunction } from "express";
 import { PatientService } from "../services/patient.js";
+import { listHousehold, switchHousehold } from "../services/patientHousehold.js";
 import { IdScanService } from "../services/idScan.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getRedis } from "../db/redis.js";
 import { ResponseHandler } from "../core/response.js";
 
 const router = Router();
+
+router.get(
+  "/household",
+  requireAuth("patient:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await listHousehold(req.sessionUser!.id);
+      return ResponseHandler.fetchSuccessful(res, "profiles on this number.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/household/switch",
+  requireAuth("patient:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const patientUserId = String(req.body?.patientUserId ?? req.body?.id ?? "");
+      return await switchHousehold(req.sessionUser!.id, patientUserId, res);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.get(
   "/profile",

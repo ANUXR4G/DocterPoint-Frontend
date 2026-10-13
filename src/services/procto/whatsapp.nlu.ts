@@ -1126,14 +1126,8 @@ export function formatNluBookConfirmSummary(slots: NluSlots): string {
   if (slots.date) {
     const d = new Date(`${slots.date}T12:00:00`);
     if (!Number.isNaN(d.getTime())) {
-      parts.push(
-        d.toLocaleDateString("en-US", {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }),
-      );
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(slots.date);
+      parts.push(m ? `${m[3]}/${m[2]}/${m[1]}` : slots.date);
     } else {
       parts.push(slots.date);
     }
@@ -1145,9 +1139,7 @@ export function formatNluBookConfirmSummary(slots: NluSlots): string {
   if (slots.preferredHour != null) {
     const h24 = slots.preferredHour;
     const min = slots.preferredMinute ?? 0;
-    const ampm = h24 >= 12 ? "PM" : "AM";
-    const h12 = ((h24 + 11) % 12) + 1;
-    timePart = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+    timePart = `${String(h24).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
   } else if (slots.timeText?.trim()) {
     timePart = slots.timeText.trim();
   } else if (slots.preferredPeriod) {

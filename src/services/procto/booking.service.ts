@@ -9,6 +9,7 @@ import {
 import { prisma } from "../../db/prisma.js";
 import { AppError, ResponseHandler } from "../../core/response.js";
 import { ageFromDob } from "../../core/dob.js";
+import { samePatientMobile } from "../../core/phoneMatch.js";
 import {
   publicPatientAddress,
   publicPatientEmail,
@@ -19,6 +20,7 @@ import {
   endOfLocalDay,
   formatLocalDate,
   formatPracticeTime,
+  isClinicDayAfterToday,
   getTokenSession,
   getValidityBounds,
   hasExtraSlotsForDay,
@@ -805,6 +807,13 @@ export const BookingService = {
     }
 
     assertVisitStatusMove(existing.status, normalized, "status");
+    if (
+      normalized === BookingStatus.WAITING ||
+      normalized === BookingStatus.IN_PROGRESS ||
+      normalized === BookingStatus.COMPLETED
+    ) {
+      this.assertDocumentableToday(existing);
+    }
 
     const closeReason =
       (normalized === BookingStatus.CANCELED || normalized === BookingStatus.NO_SHOW) &&
@@ -1362,6 +1371,29 @@ export const BookingService = {
     return updated;
   },
 
+  /** Clinic calendar day of the visit. Same-day later times are still today. */
+  appointmentDayIso(booking: {
+    slotStart: Date | null;
+    sessionDate: Date | null;
+  }): string | null {
+    if (booking.slotStart) return formatLocalDate(booking.slotStart);
+    if (booking.sessionDate) return localDayOfSessionDate(booking.sessionDate);
+    return null;
+  },
+
+  assertDocumentableToday(booking: {
+    slotStart: Date | null;
+    sessionDate: Date | null;
+  }) {
+    const day = this.appointmentDayIso(booking);
+    if (isClinicDayAfterToday(day)) {
+      throw new AppError(
+        400,
+        "You can document this visit on its appointment day, not on a later day.",
+      );
+    }
+  },
+
   async updateVisit(
     bookingId: string,
     data: {
@@ -1376,6 +1408,8 @@ export const BookingService = {
       documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
       clinicalAssessment?: unknown;
       status?: BookingStatus;
+      /** Patient's chief complaint. Omitted leaves the saved text unchanged. */
+      disease?: string | null;
     },
     actorUserId: string,
   ) {
@@ -1401,10 +1435,21 @@ export const BookingService = {
       );
     }
 
+    const diseaseOnly =
+      data.disease !== undefined &&
+      data.doctorRemarks === undefined &&
+      data.medicines === undefined &&
+      data.documents === undefined &&
+      data.clinicalAssessment === undefined &&
+      !data.status;
+    if (!diseaseOnly) {
+      this.assertDocumentableToday(existing);
+    }
     if (
-      existing.status === BookingStatus.COMPLETED ||
-      existing.status === BookingStatus.CANCELED ||
-      existing.status === BookingStatus.NO_SHOW
+      !diseaseOnly &&
+      (existing.status === BookingStatus.COMPLETED ||
+        existing.status === BookingStatus.CANCELED ||
+        existing.status === BookingStatus.NO_SHOW)
     ) {
       throw new AppError(
         400,
@@ -1477,6 +1522,9 @@ export const BookingService = {
       data: {
         ...(data.doctorRemarks !== undefined
           ? { doctorRemarks: data.doctorRemarks?.trim() || null }
+          : {}),
+        ...(data.disease !== undefined
+          ? { disease: data.disease?.trim().slice(0, 500) || null }
           : {}),
         ...(medicines !== undefined ? { medicines } : {}),
         ...(documents !== undefined ? { documents } : {}),
@@ -2273,8 +2321,16 @@ export const BookingService = {
     const or: Record<string, unknown>[] = [];
     if (opts.patientId) {
       or.push({ patientId: opts.patientId });
-    }
-    if (opts.phone) {
+      // Unlinked visits on this exact number stay with the signed-in person.
+      // Another patient's record on a lookalike number does not.
+      if (opts.phone) {
+        const digits = opts.phone.replace(/\D/g, "").slice(-10);
+        or.push({ patientId: null, patientPhone: opts.phone });
+        if (digits.length >= 10) {
+          or.push({ patientId: null, patientPhone: { endsWith: digits } });
+        }
+      }
+    } else if (opts.phone) {
       const digits = opts.phone.replace(/\D/g, "").slice(-10);
       or.push({ patientPhone: opts.phone });
       if (digits.length >= 10) {
@@ -2319,8 +2375,21 @@ export const BookingService = {
       take: opts.take ?? 50,
     });
 
+    const visible = bookings.filter((b) => {
+      if (opts.patientId) {
+        if (b.patientId === opts.patientId) return true;
+        return (
+          b.patientId == null &&
+          Boolean(opts.phone) &&
+          samePatientMobile(b.patientPhone, opts.phone)
+        );
+      }
+      if (opts.phone) return samePatientMobile(b.patientPhone, opts.phone);
+      return true;
+    });
+
     // Batch providers — avoid N+1 enrichBooking (was 2–3 queries per row).
-    const providerIds = [...new Set(bookings.map((b) => b.providerId))];
+    const providerIds = [...new Set(visible.map((b) => b.providerId))];
     const providers = providerIds.length
       ? await prisma.user.findMany({
           where: { id: { in: providerIds } },
@@ -2329,7 +2398,7 @@ export const BookingService = {
       : [];
     const providerMap = Object.fromEntries(providers.map((p) => [p.id, p]));
 
-    return bookings.map((b) => {
+    return visible.map((b) => {
       const provider = providerMap[b.providerId];
       return {
         ...b,

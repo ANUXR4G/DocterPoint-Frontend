@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../core/response.js";
 import { ageFromDob, normalizeDateOfBirth } from "../../core/dob.js";
+import { samePatientMobile } from "../../core/phoneMatch.js";
 import { normalizeGender } from "../../core/gender.js";
 import { PatientService, pickPrimaryPatientUser } from "../patient.js";
 import { recordAudit } from "./practiceAudit.js";
@@ -163,8 +164,34 @@ async function lastVisits(practiceId: string, ids: string[]) {
  * knows; a full mobile number or exact MRN (the patient is at the desk and gives it) also finds
  * patients registered elsewhere on GlucoGuide, so nobody is registered twice.
  */
-export async function searchDeskPatients(practiceId: string, actorUserId: string, rawQ: unknown) {
+export async function searchDeskPatients(
+  practiceId: string,
+  actorUserId: string,
+  rawQ: unknown,
+  by?: "name",
+) {
   await assertDeskMember(practiceId, actorUserId);
+  if (by === "name") {
+    const text = String(rawQ ?? "").trim().slice(0, 60);
+    if (text.replace(/[^\p{L}]/gu, "").length < 2) return { patients: [] as DeskPatient[] };
+    const scope = await knownScope(practiceId);
+    const match = scope.where.length
+      ? { AND: [{ name: { contains: text, mode: "insensitive" as const } }, { OR: scope.where }] }
+      : null;
+    if (!match) return { patients: [] as DeskPatient[] };
+    const users = await prisma.user.findMany({
+      where: { role: "user", patient: { isNot: null }, AND: [match] },
+      orderBy: { createdAt: "asc" },
+      take: 25,
+      select: PATIENT_SELECT,
+    });
+    const visits = await lastVisits(practiceId, users.map((u) => u.id));
+    const patients = users
+      .map((u) => toDeskPatient(u, scope, visits))
+      .sort((a, b) => Number(b.knownHere) - Number(a.knownHere) || a.name.localeCompare(b.name))
+      .slice(0, 10);
+    return { patients };
+  }
   const q = classifyPatientQuery(rawQ);
   if (q.kind === "short") return { patients: [] as DeskPatient[] };
 
@@ -186,12 +213,20 @@ export async function searchDeskPatients(practiceId: string, actorUserId: string
   }
   if (!match) return { patients: [] as DeskPatient[] };
 
-  const users = await prisma.user.findMany({
+  const found = await prisma.user.findMany({
     where: { role: "user", patient: { isNot: null }, AND: [match] },
     orderBy: { createdAt: "asc" },
     take: 25,
     select: PATIENT_SELECT,
   });
+  const users =
+    q.kind === "phone" && q.digits.length >= 10
+      ? found.filter(
+          (u) =>
+            samePatientMobile(u.phone, q.digits) ||
+            samePatientMobile(u.patient?.contactNumber, q.digits),
+        )
+      : found;
   const visits = await lastVisits(practiceId, users.map((u) => u.id));
   const patients = users
     .map((u) => toDeskPatient(u, scope, visits))
@@ -256,15 +291,22 @@ export async function registerDeskPatient(
   if (emailTaken) throw new AppError(409, "That email is already registered. Search for the patient instead.");
   const key = (n: string | null | undefined) => (n ?? "").toLowerCase().replace(/\s*·.*$/, "").replace(/\s+/g, " ").trim();
   const first = (n: string | null | undefined) => key(n).split(" ")[0] ?? "";
+  const onThisNumber = onNumber.filter(
+    (u) =>
+      samePatientMobile(u.phone, phone) ||
+      samePatientMobile(u.patient?.contactNumber, phone),
+  );
   const same =
-    onNumber.find((u) => key(u.name) === key(name)) ??
-    onNumber.find(
+    onThisNumber.find((u) => key(u.name) === key(name)) ??
+    onThisNumber.find(
       (u) =>
         first(u.name) === first(name) &&
         normalizeDateOfBirth(u.patient?.dateOfBirth ?? "") === dateOfBirth,
     );
   if (same) return addExistingPatient(practiceId, actorUserId, same, dateOfBirth);
-  const owner = pickPrimaryPatientUser(onNumber.filter((u) => last10(u.phone) === d10));
+  const owner = pickPrimaryPatientUser(
+    onThisNumber.filter((u) => samePatientMobile(u.phone, phone)),
+  );
   if (owner && !relationship) {
     throw new AppError(
       409,

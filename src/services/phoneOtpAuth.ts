@@ -11,6 +11,7 @@ import { generateHash, getUserToken, setTokenCookies } from "../core/security.js
 import { allocatePatientMrn } from "../core/patientMrn.js";
 import { getRedis } from "../db/redis.js";
 import { pickPrimaryPatientUser } from "./patient.js";
+import { samePatientMobile } from "../core/phoneMatch.js";
 import { sendWhatsAppText } from "./procto/whatsapp.client.js";
 import {
   OTP_DISPLAY_NAME_PENDING_MESSAGE,
@@ -326,8 +327,15 @@ export class PhoneOtpAuthService {
         take: 10,
       }),
     ]);
+    const onThisNumber = (rows: typeof byPhone) =>
+      rows.filter(
+        (u) =>
+          samePatientMobile(u.phone, phone) ||
+          samePatientMobile(u.patient?.contactNumber, phone),
+      );
     let user =
-      pickPrimaryPatientUser(byPhone) ?? pickPrimaryPatientUser(byContact);
+      pickPrimaryPatientUser(onThisNumber(byPhone)) ??
+      pickPrimaryPatientUser(onThisNumber(byContact));
 
     if (!user) {
       const name = input.name?.trim() || `Patient ${phone.slice(-4)}`;
