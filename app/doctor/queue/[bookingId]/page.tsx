@@ -37,6 +37,7 @@ import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
   formatPracticeTime,
+  isAfterClinicToday,
 } from "@/lib/practiceTime"
 import { patchBookingFields } from "@/lib/liveBooking"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
@@ -249,6 +250,13 @@ export default function VisitPage() {
   const [uploading, setUploading] = useState(false)
 
   const [remarks, setRemarks] = useState("")
+  const remarksBox = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = remarksBox.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.max(40, el.scrollHeight)}px`
+  }, [remarks])
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [documents, setDocuments] = useState<VisitDoc[]>([])
   const [clinicalAssessment, setClinicalAssessment] =
@@ -557,6 +565,14 @@ export default function VisitPage() {
   async function save(nextStatus?: string) {
     if (!bookingId) return
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
+    if (
+      isAfterClinicToday(booking?.slotStart || booking?.sessionDate || null)
+    ) {
+      toast.error(
+        "You can document this visit on its appointment day, not on a later day.",
+      )
+      return
+    }
     const nextMedicines = medicinesToSave()
     medicinesRef.current = nextMedicines
     setMedicines(nextMedicines)
@@ -652,6 +668,10 @@ export default function VisitPage() {
       ? formatPracticeDate(booking.sessionDate)
       : "—"
   const isCompleted = String(booking.status || "").toUpperCase() === "COMPLETED"
+  const futureDay = isAfterClinicToday(
+    booking.slotStart || booking.sessionDate || null,
+  )
+  const chartLocked = isCompleted || futureDay
   const chiefComplaint = chiefComplaintOf(booking)
   const arrival = formatArrival(booking)
   const arrivalDisplay =
@@ -679,7 +699,7 @@ export default function VisitPage() {
 
   return (
     <div
-      className={`dashboard-page-wide !mt-0 space-y-4 ${isCompleted ? "pb-8" : "pb-28"}`}
+      className={`dashboard-page-wide !mt-0 space-y-4 [&>*]:shrink-0 ${isCompleted ? "pb-8" : "pb-28"}`}
     >
       {/* Customer identity first — sticky at top of scroll */}
       <div className="sticky top-0 z-20 bg-[color-mix(in_srgb,var(--solune-canvas)_94%,transparent)] pb-1.5 pt-0 backdrop-blur-md dark:bg-[color-mix(in_srgb,#0f172a_94%,transparent)]">
@@ -759,16 +779,32 @@ export default function VisitPage() {
         ) : null}
       </div>
 
-      {booking.tokenNumber != null ? (
-        <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
-          <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
+      <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
+        <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
+          <Fact label="Doctor" value={blank(booking.provider?.name)} />
+          <Fact
+            label="Location"
+            value={
+              booking.location
+                ? [booking.location.name, booking.location.city]
+                    .filter(Boolean)
+                    .join(", ") || ""
+                : ""
+            }
+          />
+          <Fact label="Mode" value={booking.mode?.replace(/_/g, " ") || ""} />
+          <Fact
+            label="Channel"
+            value={booking.channel?.replace(/_/g, " ") || ""}
+          />
+          {booking.tokenNumber != null ? (
             <Fact label="Token" value={`#${booking.tokenNumber}`} />
-          </dl>
-        </section>
-      ) : null}
+          ) : null}
+        </dl>
+      </section>
 
       {chiefComplaint ? (
-        <section className="dashboard-panel !p-5">
+        <section className="dashboard-panel !h-auto !min-h-0 !p-5">
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
             Chief complaint
           </h2>
@@ -777,17 +813,24 @@ export default function VisitPage() {
               ? "In the patient's words (typed or voice note on WhatsApp)."
               : "Reason for visit given at booking."}
           </p>
-          <p className="mt-3 whitespace-pre-wrap rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm leading-relaxed text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-slate-100">
+          <p className="mt-2 whitespace-pre-wrap rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm leading-snug text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-slate-100">
             {chiefComplaint}
           </p>
         </section>
+      ) : null}
+
+      {futureDay ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+          Documentation opens on the appointment day. Any time later today can
+          still be documented.
+        </p>
       ) : null}
 
       <ClinicalAssessmentPanel
         mastersRaw={booking.practice?.clinicalMasters}
         value={clinicalAssessment}
         versions={clinicalVersions}
-        readOnly={isCompleted}
+        readOnly={chartLocked}
         onChange={(next) => {
           clinicalDirty.current = true
           clinicalReady.current = true
@@ -797,7 +840,7 @@ export default function VisitPage() {
       />
 
       {/* Remarks */}
-      <section className="dashboard-panel !p-5">
+      <section className="dashboard-panel !h-auto !min-h-0 !p-5">
         <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
           Remarks
         </h2>
@@ -805,16 +848,20 @@ export default function VisitPage() {
           Clinical remarks, advice, and follow-up for this visit.
         </p>
         <textarea
+          ref={remarksBox}
           value={remarks}
           onChange={(e) => {
             formDirty.current = true
             setRemarks(e.target.value)
+            const el = e.currentTarget
+            el.style.height = "auto"
+            el.style.height = `${Math.max(40, el.scrollHeight)}px`
           }}
-          readOnly={isCompleted}
-          disabled={isCompleted}
-          rows={5}
+          readOnly={chartLocked}
+          disabled={chartLocked}
+          rows={2}
           placeholder="Clinical remarks, advice, follow-up…"
-          className="mt-3 w-full resize-y rounded-xl border border-neutral-300 bg-transparent px-3 py-2.5 text-sm leading-relaxed disabled:opacity-80 dark:border-neutral-600"
+          className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
         />
       </section>
 
@@ -825,7 +872,7 @@ export default function VisitPage() {
             Medicines
           </h2>
 
-          {!isCompleted ? (
+          {!chartLocked ? (
             <div className="mt-3 space-y-2">
               <input
                 value={medName}
@@ -936,7 +983,7 @@ export default function VisitPage() {
                       {m.times?.length ? ` · ${m.times.join(", ")}` : ""}
                     </p>
                   </div>
-                  {!isCompleted ? (
+                  {!chartLocked ? (
                     <button
                       type="button"
                       onClick={() => void removeMedicine(idx)}
@@ -1005,7 +1052,7 @@ export default function VisitPage() {
             />
           ) : (
           <>
-          {!isCompleted ? (
+          {!chartLocked ? (
             <label
               className={`mt-3 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/50 px-4 py-6 text-center dark:border-blue-500/40 dark:bg-blue-950/20 ${
                 uploading || documents.length >= MAX_BOOKING_DOCUMENTS
@@ -1097,7 +1144,7 @@ export default function VisitPage() {
       )}
 
       {/* Sticky actions — in page flow, not a portal that fights layouts */}
-      {!isCompleted ? (
+      {!chartLocked ? (
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-neutral-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md md:left-[72px] xl:left-60 dark:border-[var(--solune-border-strong)] dark:bg-[color-mix(in_srgb,var(--solune-surface)_92%,transparent)]">
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <p className="hidden text-sm text-neutral-600 sm:block dark:text-slate-300">

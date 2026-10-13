@@ -256,6 +256,7 @@ export default function EmergencyWalkInModal({
                 value={patient}
                 onChange={setPatient}
                 autoFocus
+                nameOnly
                 onBusyChange={setPatientBusy}
               />
             ) : null}

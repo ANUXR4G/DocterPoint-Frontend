@@ -62,13 +62,9 @@ function addMonths(iso: string, months: number) {
 
 const weekdayOf = (iso: string) => isoDate(iso).getUTCDay()
 
-function formatDay(iso: string, withWeekday = true) {
-  return isoDate(iso).toLocaleDateString("en-GB", {
-    ...(withWeekday ? { weekday: "short" as const } : {}),
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  })
+function formatDay(iso: string, _withWeekday = true) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso
 }
 
 function Chip({

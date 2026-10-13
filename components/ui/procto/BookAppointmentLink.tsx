@@ -18,6 +18,7 @@ export function patientBookingLoginUrl(practiceSlug: string) {
 
 type BookAppointmentLinkProps = {
   slug: string
+  doctorId?: string
   className?: string
   children?: React.ReactNode
 }
@@ -25,11 +26,15 @@ type BookAppointmentLinkProps = {
 /** Opens the public practice profile / booking page. */
 export default function BookAppointmentLink({
   slug,
+  doctorId,
   className,
   children = "Book appointment →",
 }: BookAppointmentLinkProps) {
+  const href = doctorId
+    ? `/practices/${slug}?doctor=${encodeURIComponent(doctorId)}`
+    : `/practices/${slug}`
   return (
-    <Link href={`/practices/${slug}`} className={className}>
+    <Link href={href} className={className}>
       {children}
     </Link>
   )

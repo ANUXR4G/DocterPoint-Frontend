@@ -15,6 +15,7 @@ import {
 } from "@/components/admin/AdminViewAllLink"
 import { adminService, type AdminPendingNumber } from "@/lib/services/admin"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import { formatPracticeDate } from "@/lib/practiceTime"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
 
 export default function AdminPendingNumbersPage() {
@@ -122,10 +123,7 @@ export default function AdminPendingNumbersPage() {
             key: "updated",
             header: "Updated",
             cell: (n) =>
-              new Date(n.updatedAt).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              }),
+              formatPracticeDate(n.updatedAt),
           },
           {
             key: "actions",

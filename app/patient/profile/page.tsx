@@ -35,6 +35,7 @@ import {
 } from "@/lib/queries/profile"
 
 import { ProfileEditModal, ProfileSkeleton } from "@/components"
+import HouseholdSwitcher from "@/components/ui/patients/HouseholdSwitcher"
 
 function display(value?: string | number | null) {
   if (value === null || value === undefined || value === "") return null
@@ -221,6 +222,7 @@ export default function ProfilePage() {
               <h1 className="truncate text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
                 {profile.name || "Patient"}
               </h1>
+              <HouseholdSwitcher />
               <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
                 {[profile.profession, profile.address]
                   .filter(Boolean)

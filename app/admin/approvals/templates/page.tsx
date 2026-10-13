@@ -10,6 +10,7 @@ import AdminToolbar from "@/components/admin/AdminToolbar"
 import { AdminBadge, statusTone } from "@/components/admin/AdminBadge"
 import { adminService, type AdminTemplate } from "@/lib/services/admin"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
+import { formatPracticeDate } from "@/lib/practiceTime"
 
 export default function AdminTemplatesPage() {
   const [rows, setRows] = useState<AdminTemplate[]>([])
@@ -128,10 +129,7 @@ export default function AdminTemplatesPage() {
             key: "updated",
             header: "Updated",
             cell: (t) =>
-              new Date(t.updatedAt).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              }),
+              formatPracticeDate(t.updatedAt),
           },
           {
             key: "actions",

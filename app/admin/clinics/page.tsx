@@ -13,6 +13,7 @@ import AdminSection from "@/components/admin/AdminSection"
 import { AdminBadge, statusTone } from "@/components/admin/AdminBadge"
 import { adminService, type AdminPractice } from "@/lib/services/admin"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
+import { formatPracticeDate } from "@/lib/practiceTime"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
 
 type PlanRow = {
@@ -24,15 +25,8 @@ type PlanRow = {
 
 function formatPeriodEnd(iso?: string | null) {
   if (!iso) return "Open-ended"
-  try {
-    return new Date(iso).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    })
-  } catch {
-    return iso
-  }
+  const formatted = formatPracticeDate(iso)
+  return formatted === "—" ? iso : formatted
 }
 
 export default function AdminClinicsPage() {

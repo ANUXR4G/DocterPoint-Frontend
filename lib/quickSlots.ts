@@ -1,4 +1,4 @@
-import { PRACTICE_TIMEZONE } from "@/lib/practiceTime"
+import { formatPracticeDateTime } from "@/lib/practiceTime"
 import type {
   DayWindows,
   ExtraWindow,
@@ -247,16 +247,7 @@ export function addedByLine(x: ExtraWindow): string {
     : /^dr\b/i.test(x.addedBy.name)
       ? x.addedBy.name
       : `${(x.addedBy.role && CLINIC_ROLE_LABEL[x.addedBy.role]) || "Staff"} ${x.addedBy.name}`
-  const when = x.createdAt
-    ? new Date(x.createdAt).toLocaleString("en-US", {
-        timeZone: PRACTICE_TIMEZONE,
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-    : ""
+  const when = x.createdAt ? formatPracticeDateTime(x.createdAt) : ""
   if (!who && !when) return "Added manually"
   return `Added ${who ? `by ${who}` : "manually"}${when ? ` · ${when}` : ""}`
 }

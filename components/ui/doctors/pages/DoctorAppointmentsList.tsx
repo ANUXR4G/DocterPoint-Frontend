@@ -17,7 +17,6 @@ import {
   isEmergencyWalkIn,
   sortBookingsByWhen,
 } from "@/lib/bookingDisplay"
-import ChiefComplaintCell from "@/components/ui/procto/ChiefComplaintCell"
 import { isPracticingDoctor } from "@/lib/rosterDoctor"
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import EmergencyWalkInModal from "@/components/ui/procto/EmergencyWalkInModal"
@@ -31,7 +30,11 @@ import {
   type AppointmentRangePreset,
   type IsoRange,
 } from "@/lib/appointmentDateRange"
-import { practiceTodayIso } from "@/lib/practiceTime"
+import {
+  formatPracticeDate,
+  formatPracticeTime,
+  practiceTodayIso,
+} from "@/lib/practiceTime"
 import AppointmentDateRangeFilter from "@/components/ui/procto/AppointmentDateRangeFilter"
 import { PatientNameHover } from "@/components/ui/procto/PatientBookingHover"
 import BookingStatusControls from "@/components/ui/procto/BookingStatusControls"
@@ -67,6 +70,20 @@ function bookingProviderId(b: ProctoBooking): string | null {
   )
 }
 
+function bookingWhenParts(b: ProctoBooking): { day: string; time: string } {
+  const slot = b.slotStart || (b as { slot_start?: string | null }).slot_start
+  if (slot) {
+    const d = new Date(slot)
+    if (!Number.isNaN(d.getTime())) {
+      return {
+        day: formatPracticeDate(d),
+        time: formatPracticeTime(d),
+      }
+    }
+  }
+  return { day: formatBookingWhenDetailed(b), time: "" }
+}
+
 function ChatIconButton({
   enabled,
   patientName,
@@ -84,15 +101,58 @@ function ChatIconButton({
       type="button"
       title={label}
       aria-label={label}
-      onClick={onOpen}
-      className={`inline-flex size-9 items-center justify-center rounded-xl border transition ${
+      onClick={() => {
+        if (enabled) onOpen()
+      }}
+      disabled={!enabled}
+      className={`inline-flex size-7 shrink-0 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed ${
         enabled
           ? "border-[var(--theme-primary)]/30 bg-[var(--theme-primary)]/10 text-[var(--theme-primary)] hover:bg-[var(--theme-primary)]/20"
-          : "border-neutral-200 bg-neutral-50 text-neutral-400 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-500 dark:hover:bg-neutral-800"
+          : "border-neutral-200 bg-neutral-50 text-neutral-400 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-500"
       }`}
     >
       <MessageCircle className="size-4" aria-hidden />
     </button>
+  )
+}
+
+function ChiefComplaintField({
+  value,
+  busy,
+  onSave,
+}: {
+  value: string
+  busy: boolean
+  onSave: (disease: string) => void
+}) {
+  const [text, setText] = useState(value)
+  useEffect(() => {
+    setText(value)
+  }, [value])
+  const empty = !text.trim()
+  return (
+    <input
+      value={text}
+      disabled={busy}
+      maxLength={500}
+      placeholder="Add chief complaint"
+      aria-label="Chief complaint"
+      title="Chief complaint — type and leave the box to save"
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        const next = text.trim()
+        if (next === value) return
+        onSave(next)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur()
+      }}
+      className={`h-8 w-full min-w-0 rounded-md border bg-transparent px-2 text-xs text-neutral-800 placeholder:text-neutral-400 focus:border-[var(--theme-primary)] focus:outline-none disabled:opacity-60 dark:text-slate-100 dark:placeholder:text-neutral-500 ${
+        empty
+          ? "border-dashed border-neutral-300 dark:border-neutral-600"
+          : "border-neutral-200 dark:border-neutral-600"
+      }`}
+    />
   )
 }
 
@@ -312,6 +372,28 @@ export default function DoctorAppointmentsList({
     }
   }
 
+  async function onComplaint(id: string, disease: string) {
+    const row = rangeRows.find((b) => b.id === id)
+    const previous = row?.disease ?? null
+    const next = disease.trim() || null
+    if ((previous?.trim() || null) === next) return
+    const patchRemote = (value: string | null) =>
+      setRemoteRows((prev) =>
+        prev ? prev.map((b) => (b.id === id ? { ...b, disease: value } : b)) : prev,
+      )
+    setBusyId(id)
+    setActionError("")
+    patchBooking(id, { disease: next })
+    patchRemote(next)
+    const res = await proctoService.updateBookingVisit(id, { disease: next })
+    setBusyId(null)
+    if (res.status !== "successful") {
+      patchBooking(id, { disease: previous })
+      patchRemote(previous)
+      setActionError(res.message || "Could not save the chief complaint")
+    }
+  }
+
   function onPaymentUpdate(
     id: string,
     patch: {
@@ -335,8 +417,9 @@ export default function DoctorAppointmentsList({
   )
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <DashboardPageHeader
+        className="shrink-0"
         compact
         eyebrow={isClinic ? "Clinic" : "Doctor"}
         title="Appointments"
@@ -406,8 +489,9 @@ export default function DoctorAppointmentsList({
         </p>
       ) : null}
 
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+      <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
         <AppointmentDateRangeFilter
+          className="min-w-0 basis-full"
           preset={rangePreset}
           onPresetChange={setRangePreset}
           custom={customRange}
@@ -482,7 +566,7 @@ export default function DoctorAppointmentsList({
         </p>
       ) : (
         <>
-          <ul className="mt-4 space-y-2 md:hidden">
+          <ul className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto md:hidden">
             {filtered.map((b) => (
               <li
                 key={b.id}
@@ -521,20 +605,21 @@ export default function DoctorAppointmentsList({
                 <p className="mt-1 text-xs text-neutral-500">
                   Doctor: {bookingDoctorName(b)}
                 </p>
-                {chiefComplaintOf(b) ? (
-                  <p className="mt-1 line-clamp-2 text-xs text-neutral-700 dark:text-slate-300">
-                    <span className="opacity-60">Chief complaint: </span>
-                    {chiefComplaintOf(b)}
-                  </p>
-                ) : null}
-                <div className="mt-3 flex items-center gap-2">
+                <label className="mt-2 block text-xs text-neutral-500">
+                  Chief complaint
+                  <ChiefComplaintField
+                    value={chiefComplaintOf(b)}
+                    busy={busyId === b.id}
+                    onSave={(disease) => void onComplaint(b.id, disease)}
+                  />
+                </label>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   <BookingStatusControls
                     status={b.status || "SCHEDULED"}
                     busy={busyId === b.id}
                     compact
                     showActionButtons={false}
                     ariaLabel={`Update status for ${b.patientName || "patient"}`}
-                    visitHref={`/doctor/queue/${b.id}`}
                     onChange={(status, reason) => void onStatus(b.id, status, reason)}
                   />
                   <ChatIconButton
@@ -544,6 +629,7 @@ export default function DoctorAppointmentsList({
                   />
                   <PrescriptionActionsMenu
                     bookingId={b.id}
+                    compact
                     enabled={
                       String(b.status || "").toUpperCase() === "COMPLETED"
                     }
@@ -568,69 +654,78 @@ export default function DoctorAppointmentsList({
             ))}
           </ul>
 
-          <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-neutral-300 bg-white dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] md:block">
-            <table className="w-full min-w-[1020px] text-left text-sm">
-              <thead className="bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-[var(--solune-elevated)] dark:text-neutral-300">
+          <div className="mt-3 hidden min-h-0 w-full flex-1 overflow-auto rounded-2xl border border-neutral-300 bg-white dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] md:block">
+            <table className="w-full min-w-[1180px] text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-[var(--solune-elevated)] dark:text-neutral-300">
                 <tr>
-                  <th className="px-4 py-3">Patient</th>
-                  <th className="px-4 py-3">MRN</th>
-                  <th className="px-4 py-3">Doctor</th>
-                  <th className="px-4 py-3">When</th>
-                  <th className="px-4 py-3">Arrival</th>
-                  <th className="min-w-[180px] px-4 py-3">Chief complaint</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Payment</th>
-                  <th className="px-4 py-3">Chat</th>
-                  <th className="px-4 py-3">Rx</th>
-                  <th className="px-4 py-3 text-right">Visit</th>
+                  <th className="px-3 py-2">Patient</th>
+                  <th className="px-3 py-2">MRN</th>
+                  <th className="px-3 py-2">Doctor</th>
+                  <th className="px-3 py-2">When</th>
+                  <th className="px-3 py-2">Arrival</th>
+                  <th className="min-w-[180px] px-3 py-2">Chief complaint</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Payment</th>
+                  <th className="px-3 py-2">Chat</th>
+                  <th className="px-3 py-2">Rx</th>
+                  <th className="px-3 py-2 text-right">Visit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                {filtered.map((b) => (
+                {filtered.map((b) => {
+                  const when = bookingWhenParts(b)
+                  const arrived = formatArrival(b)
+                  return (
                   <tr key={b.id}>
-                    <td className="px-4 py-3 font-semibold">
+                    <td className="px-3 py-2 font-semibold">
                       <PatientNameHover booking={b} />
-                      <p className="text-xs font-medium opacity-60">
+                      <p className="text-[11px] font-medium opacity-60">
                         {formatPhoneDisplay(
                           b.patientPhone || b.patient_phone,
                           "",
                         )}
                       </p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums tracking-wide">
+                    <td className="whitespace-nowrap px-3 py-2 text-xs font-semibold tabular-nums">
                       {b.patient?.mrn?.trim() || "—"}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
+                    <td className="whitespace-nowrap px-3 py-2 text-xs font-semibold">
                       {bookingDoctorName(b)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold">
-                      {formatBookingWhenDetailed(b)}
+                    <td className="whitespace-nowrap px-3 py-2 text-xs font-semibold">
+                      <div>{when.day}</div>
+                      <div className="text-[11px] font-medium opacity-70">
+                        {when.time}
+                      </div>
                       {isEmergencyWalkIn(b) ? (
-                        <div className="mt-1">
+                        <div className="mt-0.5">
                           <EmergencyWalkInBadge />
                         </div>
                       ) : null}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs font-semibold tabular-nums">
-                      {formatArrival(b) || (
+                    <td className="whitespace-nowrap px-3 py-2 text-xs font-semibold tabular-nums">
+                      {arrived || (
                         <span className="text-neutral-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <ChiefComplaintCell text={chiefComplaintOf(b)} />
+                    <td className="px-3 py-2">
+                      <ChiefComplaintField
+                        value={chiefComplaintOf(b)}
+                        busy={busyId === b.id}
+                        onSave={(disease) => void onComplaint(b.id, disease)}
+                      />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <BookingStatusControls
                         status={b.status || "SCHEDULED"}
                         busy={busyId === b.id}
                         compact
                         showActionButtons={false}
                         ariaLabel={`Update status for ${b.patientName || "patient"}`}
-                        visitHref={`/doctor/queue/${b.id}`}
-                    onChange={(status, reason) => void onStatus(b.id, status, reason)}
+                        onChange={(status, reason) => void onStatus(b.id, status, reason)}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <PaymentStatusButton
                         bookingId={b.id}
                         status={b.paymentStatus ?? b.payment_status}
@@ -641,22 +736,23 @@ export default function DoctorAppointmentsList({
                         onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <ChatIconButton
                         enabled={Boolean(bookingPeerUserId(b))}
                         patientName={b.patientName || b.patient?.name}
                         onOpen={() => setChatBooking(b)}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <PrescriptionActionsMenu
                         bookingId={b.id}
+                        compact
                         enabled={
                           String(b.status || "").toUpperCase() === "COMPLETED"
                         }
                       />
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-2 text-right">
                       <Link
                         href={`/doctor/queue/${b.id}`}
                         className="text-xs font-bold text-[var(--theme-primary)] hover:underline"
@@ -665,7 +761,8 @@ export default function DoctorAppointmentsList({
                       </Link>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -681,6 +778,6 @@ export default function DoctorAppointmentsList({
         bookingId={chatBooking?.id ?? null}
         onClose={() => setChatBooking(null)}
       />
-    </>
+    </div>
   )
 }

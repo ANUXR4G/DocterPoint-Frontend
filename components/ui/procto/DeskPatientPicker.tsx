@@ -20,6 +20,8 @@ type Props = {
   value: DeskPatient | null
   onChange: (patient: DeskPatient | null) => void
   autoFocus?: boolean
+  /** Walk-in: match the patient's name. Phone and MRN stay on Book appointment. */
+  nameOnly?: boolean
   /** When false, the parent modal draws the wait state. */
   showLookupStatus?: boolean
   onBusyChange?: (busy: { searching: boolean; loadingRecord: boolean }) => void
@@ -157,6 +159,7 @@ export default function DeskPatientPicker({
   value,
   onChange,
   autoFocus,
+  nameOnly = false,
   showLookupStatus = true,
   onBusyChange,
 }: Props) {
@@ -195,10 +198,13 @@ export default function DeskPatientPicker({
 
   useEffect(() => {
     const q = query.trim()
+    const letters = q.replace(/[^\p{L}]/gu, "").length
     const digits = q.replace(/\D/g, "")
-    const long = /^[+\d\s()-]+$/.test(q)
-      ? digits.length >= 4
-      : q.replace(/\s/g, "").length >= 2
+    const long = nameOnly
+      ? letters >= 2
+      : /^[+\d\s()-]+$/.test(q)
+        ? digits.length >= 4
+        : q.replace(/\s/g, "").length >= 2
     if (!practiceId || !long) {
       setResults([])
       setSearched("")
@@ -207,10 +213,10 @@ export default function DeskPatientPicker({
     }
     let alive = true
     setSearching(true)
-    const searchQ = phoneSearchQuery(country, q)
+    const searchQ = nameOnly ? q : phoneSearchQuery(country, q)
     const t = window.setTimeout(() => {
       void proctoService
-        .searchDeskPatients(practiceId, searchQ)
+        .searchDeskPatients(practiceId, searchQ, nameOnly ? "name" : undefined)
         .then((res) => {
           if (!alive) return
           setSearching(false)
@@ -235,7 +241,7 @@ export default function DeskPatientPicker({
       alive = false
       window.clearTimeout(t)
     }
-  }, [query, practiceId, country])
+  }, [query, practiceId, country, nameOnly])
 
   function startRegister() {
     const q = query.trim()
@@ -587,25 +593,32 @@ export default function DeskPatientPicker({
   }
 
   const q = query.trim()
+  const searchBox = (
+    <div className="relative">
+      <input
+        ref={searchRef}
+        className={`${fieldClass} !mt-0`}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={nameOnly ? "Patient name" : "Mobile, name or MRN"}
+        autoComplete="off"
+        autoFocus={autoFocus}
+        aria-label={nameOnly ? "Search patient by name" : "Search patient"}
+      />
+      {searching ? (
+        <span className="absolute right-3.5 top-1/2 size-4 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-[var(--theme-primary)]" />
+      ) : null}
+    </div>
+  )
   return (
     <div className="space-y-2.5">
-      <CountryDialPicker country={country} onChange={setCountry}>
-        <div className="relative">
-          <input
-            ref={searchRef}
-            className={`${fieldClass} !mt-0`}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Mobile, name or MRN"
-            autoComplete="off"
-            autoFocus={autoFocus}
-            aria-label="Search patient"
-          />
-          {searching ? (
-            <span className="absolute right-3.5 top-1/2 size-4 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-[var(--theme-primary)]" />
-          ) : null}
-        </div>
-      </CountryDialPicker>
+      {nameOnly ? (
+        searchBox
+      ) : (
+        <CountryDialPicker country={country} onChange={setCountry}>
+          {searchBox}
+        </CountryDialPicker>
+      )}
       {showLookupStatus && searching ? (
         <LookupStatus
           label="Looking up patient details…"
@@ -658,14 +671,17 @@ export default function DeskPatientPicker({
       ) : searched && searched === q && !searching ? (
         <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           No patient found for “{q}”.
-          {/\d/.test(q) && q.replace(/\D/g, "").length < 10
-            ? " Try the full 10-digit mobile, or register them below."
-            : " Register them below."}
+          {nameOnly
+            ? " Register them below."
+            : /\d/.test(q) && q.replace(/\D/g, "").length < 10
+              ? " Try the full 10-digit mobile, or register them below."
+              : " Register them below."}
         </p>
       ) : (
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Type at least 4 digits of the mobile, 2 letters of the name, or the
-          MRN.
+          {nameOnly
+            ? "Type at least 2 letters of the patient's name."
+            : "Type at least 4 digits of the mobile, 2 letters of the name, or the MRN."}
         </p>
       )}
       <button

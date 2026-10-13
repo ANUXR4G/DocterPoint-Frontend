@@ -46,42 +46,11 @@ export function practiceDateIso(input: Date | string | null | undefined): string
   return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`
 }
 
-/** 12-hour time only, e.g. "11:40 AM". */
-export function formatPracticeTime(
-  input: Date | string | null | undefined,
-  empty = "—",
-): string {
-  if (input == null || input === "") return empty
-  const d = input instanceof Date ? input : new Date(input)
-  if (Number.isNaN(d.getTime())) return empty
-  return d.toLocaleTimeString("en-US", {
-    timeZone: PRACTICE_TIMEZONE,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  })
+function pad2(n: number): string {
+  return String(n).padStart(2, "0")
 }
 
-/** Date + 12-hour time, e.g. "9/25/2026, 11:40 AM". */
-export function formatPracticeDateTime(
-  input: Date | string | null | undefined,
-  empty = "—",
-): string {
-  if (input == null || input === "") return empty
-  const d = input instanceof Date ? input : new Date(input)
-  if (Number.isNaN(d.getTime())) return empty
-  return d.toLocaleString("en-US", {
-    timeZone: PRACTICE_TIMEZONE,
-    month: "numeric",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  })
-}
-
-/** Short date in clinic TZ, e.g. "Sep 25, 2026". */
+/** Clinic calendar day as dd/mm/yyyy. */
 export function formatPracticeDate(
   input: Date | string | null | undefined,
   empty = "—",
@@ -89,12 +58,43 @@ export function formatPracticeDate(
   if (input == null || input === "") return empty
   const d = input instanceof Date ? input : new Date(input)
   if (Number.isNaN(d.getTime())) return empty
-  return d.toLocaleDateString("en-US", {
-    timeZone: PRACTICE_TIMEZONE,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+  const p = zonedParts(d)
+  return `${pad2(p.day)}/${pad2(p.month)}/${p.year}`
+}
+
+/** 24-hour clock in clinic TZ, e.g. "19:35". */
+export function formatPracticeTime(
+  input: Date | string | null | undefined,
+  empty = "—",
+): string {
+  if (input == null || input === "") return empty
+  const d = input instanceof Date ? input : new Date(input)
+  if (Number.isNaN(d.getTime())) return empty
+  const p = zonedParts(d)
+  return `${pad2(p.hour)}:${pad2(p.minute)}`
+}
+
+/** dd/mm/yyyy hh:mm in clinic TZ, e.g. "13/10/2026 09:15". */
+export function formatPracticeDateTime(
+  input: Date | string | null | undefined,
+  empty = "—",
+): string {
+  if (input == null || input === "") return empty
+  const date = formatPracticeDate(input, "")
+  const time = formatPracticeTime(input, "")
+  if (!date || !time) return empty
+  return `${date} ${time}`
+}
+
+/** True when the clinic calendar day is after today. Same-day times stay open. */
+export function isAfterClinicToday(
+  input: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const day = practiceDateIso(input)
+  const today = practiceDateIso(now)
+  if (!day || !today) return false
+  return day > today
 }
 
 /** YYYY-MM-DD for "today" in clinic timezone. */

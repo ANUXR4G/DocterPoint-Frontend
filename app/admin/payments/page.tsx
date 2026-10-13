@@ -11,6 +11,7 @@ import AdminMetricCard, { formatInr } from "@/components/admin/AdminMetricCard"
 import { AdminBadge, statusTone } from "@/components/admin/AdminBadge"
 import { adminService } from "@/lib/services/admin"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
+import { formatPracticeDate } from "@/lib/practiceTime"
 
 type Subscription = {
   id: string
@@ -285,11 +286,7 @@ export default function AdminPaymentsPage() {
                 const date = s.currentPeriodEnd || s.gracePeriodEnd
                 return date ? (
                   <span className="text-slate-600 dark:text-slate-400">
-                    {new Date(date).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatPracticeDate(date)}
                   </span>
                 ) : (
                   "—"

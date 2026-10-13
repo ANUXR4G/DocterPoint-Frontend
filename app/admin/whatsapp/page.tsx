@@ -10,6 +10,7 @@ import AdminButton from "@/components/admin/AdminButton"
 import AdminTable from "@/components/admin/AdminTable"
 import { InsightStatCard } from "@/components/dashboard/InsightStatCard"
 import { AdminBadge, statusTone } from "@/components/admin/AdminBadge"
+import { formatPracticeDate } from "@/lib/practiceTime"
 import {
   nextWaNumberStatus,
   waStatusLabel,
@@ -345,11 +346,7 @@ export default function AdminWhatsAppPage() {
               header: "Live since",
               cell: (n) =>
                 n.activatedAt
-                  ? new Date(n.activatedAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })
+                  ? formatPracticeDate(n.activatedAt)
                   : "—",
             },
             {
@@ -404,10 +401,7 @@ export default function AdminWhatsAppPage() {
                 key: "added",
                 header: "Added",
                 cell: (n) =>
-                  new Date(n.createdAt).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  }),
+                  formatPracticeDate(n.createdAt),
               },
             ]}
           />

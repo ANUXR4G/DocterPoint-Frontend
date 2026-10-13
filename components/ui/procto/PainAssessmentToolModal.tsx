@@ -252,6 +252,50 @@ function TabIcon({ tab, active }: { tab: PainToolTab; active: boolean }) {
   return <Smile className={`size-4 ${cls}`} strokeWidth={2.2} />
 }
 
+/** Always-visible Wong-Baker row. One aligned face per score. */
+export function WongBakerFaces({
+  selectedScore,
+  disabled,
+  onSelect,
+}: {
+  selectedScore?: string
+  disabled?: boolean
+  onSelect: (opt: PainToolOption) => void
+}) {
+  return (
+    <div className="grid grid-cols-5 items-stretch gap-1.5 sm:gap-2">
+      {WONG_BAKER_OPTIONS.map((opt) => {
+        const active =
+          selectedScore === opt.score ||
+          selectedScore === opt.label ||
+          selectedScore === opt.id
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onSelect(opt)}
+            className={`flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-xl border px-1 py-2 transition ${
+              active
+                ? "border-teal-500 bg-white ring-2 ring-teal-400/50 dark:bg-neutral-800"
+                : "border-neutral-200 bg-white hover:border-teal-300 disabled:hover:border-neutral-200 dark:border-neutral-600 dark:bg-neutral-800"
+            }`}
+          >
+            <WongBakerFace
+              optionId={opt.id}
+              color={opt.color || ACCENT}
+              size={40}
+            />
+            <span className="text-center text-[11px] font-medium leading-tight text-neutral-700 dark:text-neutral-200">
+              {opt.label}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function PainAssessmentToolModal({
   open,
   initialTab = "wong-baker",
@@ -301,7 +345,7 @@ export default function PainAssessmentToolModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl rounded-xl bg-white shadow-2xl dark:bg-neutral-900"
+        className="flex max-h-[min(92vh,44rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-neutral-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 pt-5 pb-2">
@@ -314,7 +358,7 @@ export default function PainAssessmentToolModal({
         </div>
 
         {/* Scale tabs */}
-        <div className="flex flex-wrap gap-1 border-b border-neutral-200 px-4 dark:border-neutral-700">
+        <div className="grid grid-cols-3 border-b border-neutral-200 dark:border-neutral-700">
           {PAIN_TOOL_TABS.map((t) => {
             const active = tab === t.id
             return (
@@ -325,22 +369,22 @@ export default function PainAssessmentToolModal({
                   setTab(t.id)
                   setSelectedId(null)
                 }}
-                className={`inline-flex items-center gap-2 border-b-2 px-3 py-3 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+                className={`inline-flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-2 py-3 text-center text-[11px] font-bold uppercase leading-tight tracking-wide transition-colors ${
                   active
                     ? "border-teal-600 text-teal-600"
                     : "border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
                 }`}
               >
                 <TabIcon tab={t.id} active={active} />
-                {t.label}
+                <span className="min-w-0">{t.label}</span>
               </button>
             )
           })}
         </div>
 
-        <div className="px-6 py-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {tab === "wong-baker" ? (
-            <div className="flex flex-wrap justify-center gap-4">
+            <div className="grid grid-cols-5 items-stretch gap-2 sm:gap-3">
               {WONG_BAKER_OPTIONS.map((opt) => {
                 const active = selectedId === opt.id
                 return (
@@ -348,7 +392,7 @@ export default function PainAssessmentToolModal({
                     key={opt.id}
                     type="button"
                     onClick={() => setSelectedId(opt.id)}
-                    className={`flex w-[7.5rem] flex-col items-center gap-3 rounded-xl border bg-white px-3 py-4 shadow-sm transition dark:bg-neutral-800 ${
+                    className={`flex min-w-0 flex-col items-center justify-start gap-2 rounded-xl border bg-white px-1.5 py-3 shadow-sm transition dark:bg-neutral-800 ${
                       active
                         ? "border-teal-500 ring-2 ring-teal-400/50"
                         : "border-neutral-200 hover:border-teal-300 dark:border-neutral-600"
@@ -357,9 +401,9 @@ export default function PainAssessmentToolModal({
                     <WongBakerFace
                       optionId={opt.id}
                       color={opt.color || ACCENT}
-                      size={58}
+                      size={52}
                     />
-                    <span className="text-center text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                    <span className="text-center text-xs font-medium leading-tight text-neutral-700 dark:text-neutral-200">
                       {opt.label}
                     </span>
                   </button>

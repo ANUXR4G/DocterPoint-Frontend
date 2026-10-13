@@ -83,10 +83,7 @@ function displaySubtitle(practice: Practice) {
   const doctors = getPracticeProviders(practice.members ?? [])
   if (practice.type !== "SOLO" && doctors.length > 0) {
     return doctors
-      .slice(0, 3)
-      .map((d) => {
-        return withDrTitle(d.name) || "Provider"
-      })
+      .map((d) => withDrTitle(d.name) || "Provider")
       .join(" · ")
   }
   return null
@@ -641,7 +638,6 @@ function PracticesPageContent() {
                       {subtitle ? (
                         <p className="mt-1 break-words text-sm text-neutral-600 dark:text-neutral-300">
                           {subtitle}
-                          {doctors.length > 3 ? ` +${doctors.length - 3} more` : ""}
                         </p>
                       ) : isClinic ? null : (
                         <p className="mt-1 text-sm text-neutral-500">
@@ -695,13 +691,27 @@ function PracticesPageContent() {
                     </div>
 
                     {/* CTAs */}
-                    <div className="flex shrink-0 flex-col items-stretch justify-center gap-2 sm:w-[168px]">
-                      <BookAppointmentLink
-                        slug={p.slug}
-                        className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-[#0088e6]"
-                      >
-                        Book Clinic Visit
-                      </BookAppointmentLink>
+                    <div className="flex shrink-0 flex-col items-stretch justify-center gap-2 sm:w-[200px]">
+                      {doctors.length > 1 ? (
+                        doctors.map((d) => (
+                          <BookAppointmentLink
+                            key={d.id}
+                            slug={p.slug}
+                            doctorId={d.id}
+                            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-center text-sm font-semibold text-white transition hover:bg-[#0088e6]"
+                          >
+                            Book {withDrTitle(d.name) || "doctor"}
+                          </BookAppointmentLink>
+                        ))
+                      ) : (
+                        <BookAppointmentLink
+                          slug={p.slug}
+                          doctorId={doctors[0]?.id}
+                          className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-[#0088e6]"
+                        >
+                          Book Clinic Visit
+                        </BookAppointmentLink>
+                      )}
                       <BookAppointmentLink
                         slug={p.slug}
                         className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:border-white/20 dark:hover:bg-white/5"

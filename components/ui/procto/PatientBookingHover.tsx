@@ -47,11 +47,9 @@ function formatDob(raw: string | null | undefined) {
   if (!raw) return "—"
   const d = new Date(raw)
   if (Number.isNaN(d.getTime())) return raw
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })
+  const day = String(d.getUTCDate()).padStart(2, "0")
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0")
+  return `${day}/${month}/${d.getUTCFullYear()}`
 }
 
 export function BookingHoverDetailsPanel({

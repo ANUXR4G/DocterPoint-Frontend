@@ -656,7 +656,7 @@ html.dark body {
   }
 
   .dashboard-hero {
-    @apply relative overflow-hidden p-5 sm:p-6;
+    @apply relative shrink-0 overflow-hidden p-5 sm:p-6;
     min-height: 11.5rem;
     border-radius: var(--solune-radius-lg);
     border: 1px solid rgba(186, 230, 253, 0.8);

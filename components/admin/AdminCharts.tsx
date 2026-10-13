@@ -16,6 +16,7 @@ import {
 import { Bar, Doughnut, Line } from "react-chartjs-2"
 import type { AdminAnalytics } from "@/lib/services/admin"
 import { formatInr } from "@/components/admin/AdminMetricCard"
+import { formatPracticeDate } from "@/lib/practiceTime"
 import { useAppContext } from "@/hooks/useAppContext"
 import { getThemeColor } from "@/lib/themeColors"
 
@@ -215,18 +216,7 @@ export function DailyBookingsChart({ analytics }: Props) {
   const end = Math.max(range.start, range.end)
   const visible = rows.filter((d) => d.day >= start && d.day <= end)
 
-  const labels = visible.map((d) => {
-    if (d.date) {
-      const dt = new Date(`${d.date}T12:00:00`)
-      if (!Number.isNaN(dt.getTime())) {
-        return dt.toLocaleDateString("en-IN", {
-          day: "numeric",
-          month: "short",
-        })
-      }
-    }
-    return String(d.day)
-  })
+  const labels = visible.map((d) => (d.date ? formatPracticeDate(`${d.date}T12:00:00`) : String(d.day)))
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

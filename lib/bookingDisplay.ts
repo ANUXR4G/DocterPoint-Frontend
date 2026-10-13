@@ -4,7 +4,6 @@ import {
   formatPracticeDateTime,
   formatPracticeTime,
   practiceDateIso,
-  PRACTICE_TIMEZONE,
 } from "@/lib/practiceTime"
 
 /** Statuses that still represent an upcoming / active clinic visit. */
@@ -119,29 +118,12 @@ export function formatBookingWhenDetailed(booking: ProctoBooking): string {
   const slot = booking.slotStart ?? booking.slot_start
 
   if (mode === "TOKEN_BASED" && token != null) {
-    const day = session
-      ? new Date(session).toLocaleDateString("en-US", {
-          timeZone: PRACTICE_TIMEZONE,
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })
-      : ""
-    return `Token #${token}${day ? ` · ${day}` : ""}`
+    const day = session ? formatPracticeDate(session) : ""
+    return `Token #${token}${day && day !== "—" ? ` · ${day}` : ""}`
   }
 
   if (slot) {
-    return new Date(slot).toLocaleString("en-US", {
-      timeZone: PRACTICE_TIMEZONE,
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    })
+    return formatPracticeDateTime(slot)
   }
 
   if (session) {

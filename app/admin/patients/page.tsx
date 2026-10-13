@@ -9,6 +9,7 @@ import AdminToolbar from "@/components/admin/AdminToolbar"
 import { AdminBadge, statusTone } from "@/components/admin/AdminBadge"
 import { adminService, type AdminPatient } from "@/lib/services/admin"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
+import { formatPracticeDate } from "@/lib/practiceTime"
 
 function genderLabel(gender?: string | null) {
   const g = (gender || "").toLowerCase()
@@ -116,11 +117,7 @@ export default function AdminPatientsPage() {
             key: "joined",
             header: "Joined",
             cell: (r) =>
-              new Date(r.createdAt).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              }),
+              formatPracticeDate(r.createdAt),
           },
         ]}
       />
