@@ -139,31 +139,52 @@ function parseBookingChannel(raw: unknown, fallback: BookingChannel): BookingCha
   );
 }
 
+function clip(value: unknown, max: number): string | undefined {
+  const text = String(value ?? "").trim().slice(0, max);
+  return text || undefined;
+}
+
 function normalizeMedicines(
   raw?: Array<{
     name?: string;
     amount?: string;
     dose?: string;
+    doseUnit?: string;
     times?: string[];
     frequency?: string;
+    strength?: string;
+    route?: string;
+    duration?: string;
+    durationUnit?: string;
+    startDate?: string;
+    endDate?: string;
+    instruction?: string;
   }> | null,
 ) {
   return (raw ?? [])
     .map((m) => {
-      const amount =
-        (m.amount ? String(m.amount).trim() : "") ||
-        (m.dose ? String(m.dose).trim() : "") ||
-        undefined;
-      let times: string[] | undefined = Array.isArray(m.times)
-        ? m.times.map(String)
-        : undefined;
-      if ((!times || times.length === 0) && m.frequency) {
-        times = [String(m.frequency).trim()].filter(Boolean);
-      }
+      const dose = clip(m.dose, 40) || clip(m.amount, 40);
+      const doseUnit = clip(m.doseUnit, 20);
+      const frequency =
+        clip(m.frequency, 40) ||
+        (Array.isArray(m.times)
+          ? m.times.map((t) => String(t).trim()).filter(Boolean).join(", ")
+          : undefined);
+      const amount = [dose, doseUnit].filter(Boolean).join(" ") || clip(m.amount, 40);
       return {
-        name: String(m.name || "").trim(),
+        name: String(m.name || "").trim().slice(0, 120),
         amount,
-        times,
+        times: frequency ? [frequency] : undefined,
+        strength: clip(m.strength, 40),
+        route: clip(m.route, 40),
+        dose,
+        doseUnit,
+        frequency,
+        duration: clip(m.duration, 20),
+        durationUnit: clip(m.durationUnit, 20),
+        startDate: clip(m.startDate, 10),
+        endDate: clip(m.endDate, 10),
+        instruction: clip(m.instruction, 200),
       };
     })
     .filter((m) => m.name.length > 0);
@@ -1402,8 +1423,16 @@ export const BookingService = {
         name: string;
         amount?: string;
         dose?: string;
+        doseUnit?: string;
         times?: string[];
         frequency?: string;
+        strength?: string;
+        route?: string;
+        duration?: string;
+        durationUnit?: string;
+        startDate?: string;
+        endDate?: string;
+        instruction?: string;
       }>;
       documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
       clinicalAssessment?: unknown;
