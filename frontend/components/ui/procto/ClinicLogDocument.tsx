@@ -233,7 +233,15 @@ export default function ClinicLogDocument({
       <section className="mt-4 text-sm">
         <h2 className="text-sm font-bold uppercase tracking-wide">Diagnosis</h2>
         {diagnosis ? (
-          <p className="mt-1">{diagnosis}</p>
+          <p className="mt-1">
+            {diagnosis}{" "}
+            <span className="ml-2 text-xs font-semibold text-neutral-500">
+              Principal
+            </span>{" "}
+            <span className="ml-1 inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-bold text-emerald-800">
+              Active
+            </span>
+          </p>
         ) : (
           <p className="mt-1 text-neutral-500">No diagnosis recorded.</p>
         )}
@@ -322,10 +330,30 @@ export default function ClinicLogDocument({
           {medicines.length === 0 ? (
             <p className="mt-2 text-sm text-neutral-500">No medicines prescribed.</p>
           ) : (
-            <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm font-semibold">
-              {medicines.map((m, i) => (
-                <li key={`${m.name}-${i}`}>{m.name}</li>
-              ))}
+            <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm">
+              {medicines.map((m, i) => {
+                const detail = [
+                  m.strength,
+                  m.route,
+                  [m.dose || m.amount, m.doseUnit].filter(Boolean).join(" "),
+                  m.frequency || (m.times?.length ? m.times.join(", ") : ""),
+                  [m.duration, m.durationUnit].filter(Boolean).join(" "),
+                  m.instruction,
+                ]
+                  .map((part) => part?.trim())
+                  .filter(Boolean)
+                  .join(" · ")
+                return (
+                  <li key={`${m.name}-${i}`}>
+                    <span className="font-semibold">{m.name}</span>
+                    {detail ? (
+                      <span className="mt-0.5 block font-normal text-neutral-700">
+                        {detail}
+                      </span>
+                    ) : null}
+                  </li>
+                )
+              })}
             </ol>
           )}
         </section>

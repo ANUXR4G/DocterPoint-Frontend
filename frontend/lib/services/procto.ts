@@ -520,7 +520,21 @@ export const proctoService = {
     bookingId: string,
     body: {
       doctorRemarks?: string | null;
-      medicines?: Array<{ name: string; amount?: string; times?: string[] }>;
+      medicines?: Array<{
+        name: string;
+        amount?: string;
+        times?: string[];
+        strength?: string;
+        route?: string;
+        dose?: string;
+        doseUnit?: string;
+        frequency?: string;
+        duration?: string;
+        durationUnit?: string;
+        startDate?: string;
+        endDate?: string;
+        instruction?: string;
+      }>;
       documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
       clinicalAssessment?: unknown;
       status?: string;
@@ -919,7 +933,21 @@ export type ProctoBooking = {
     mrn?: string | null;
   } | null;
   doctorRemarks?: string | null;
-  medicines?: Array<{ name: string; amount?: string; times?: string[] }> | null;
+  medicines?: Array<{
+    name: string;
+    amount?: string;
+    times?: string[];
+    strength?: string;
+    route?: string;
+    dose?: string;
+    doseUnit?: string;
+    frequency?: string;
+    duration?: string;
+    durationUnit?: string;
+    startDate?: string;
+    endDate?: string;
+    instruction?: string;
+  }> | null;
   documents?: Array<{ name: string; url: string; uploadedAt?: string }> | null;
   clinicalAssessment?: unknown;
 };

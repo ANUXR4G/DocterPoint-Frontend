@@ -33,6 +33,11 @@ import {
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
 import PrescriptionActionsMenu from "@/components/ui/procto/PrescriptionActionsMenu"
+import MedicineEntryTable, {
+  emptyMedicineDraft,
+  medicineFromDraft,
+  type VisitMedicine,
+} from "@/components/ui/procto/MedicineEntryTable"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
@@ -46,7 +51,7 @@ import ClinicalAssessmentPanel from "@/components/ui/procto/ClinicalAssessmentPa
 import type { ClinicalAssessment } from "@/lib/clinicalMasters"
 import { toast } from "sonner"
 
-type Medicine = { name: string; amount?: string; times?: string[] }
+type Medicine = VisitMedicine
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
 
 type VisitBooking = {
@@ -121,18 +126,6 @@ function isAutoVisitBrief(text?: string | null): boolean {
 function doctorRemarksForEdit(text?: string | null): string {
   if (!text?.trim() || isAutoVisitBrief(text)) return ""
   return text.trim()
-}
-
-const TIMES = ["morning", "afternoon", "evening", "night"] as const
-const INTERVAL_HOURS = [2, 4, 6, 8, 12] as const
-const MAX_INTERVAL_HOURS = 48
-
-function everyHoursLabel(hours: number) {
-  return hours === 1 ? "Every 1 hour" : `Every ${hours} hours`
-}
-
-function isDayPart(t: string) {
-  return (TIMES as readonly string[]).includes(t)
 }
 
 /** Optional patient fields: empty when we never collected the value. */
@@ -278,10 +271,9 @@ export default function VisitPage() {
   const [docTab, setDocTab] = useState<"appointment" | "general">("appointment")
   const [generalDocs, setGeneralDocs] = useState<VisitDoc[]>([])
   const [generalLinked, setGeneralLinked] = useState<boolean | null>(null)
-  const [medName, setMedName] = useState("")
-  const [medAmount, setMedAmount] = useState("1")
-  const [medTimes, setMedTimes] = useState<string[]>(["morning"])
-  const [customHours, setCustomHours] = useState("")
+  const [medDraft, setMedDraft] = useState<Medicine>(emptyMedicineDraft)
+  const medDraftRef = useRef<Medicine>(emptyMedicineDraft())
+  medDraftRef.current = medDraft
   const medicinesRef = useRef<Medicine[]>([])
   medicinesRef.current = medicines
 
@@ -382,31 +374,6 @@ export default function VisitPage() {
     if (ready) void loadGeneralDocs()
   }, [ready, loadGeneralDocs])
 
-  function toggleTime(time: string) {
-    setCustomHours("")
-    setMedTimes((prev) => {
-      const parts = prev.filter(isDayPart)
-      return parts.includes(time)
-        ? parts.length > 1
-          ? parts.filter((t) => t !== time)
-          : parts
-        : [...parts, time]
-    })
-  }
-
-  function pickInterval(hours: number) {
-    setCustomHours("")
-    setMedTimes([everyHoursLabel(hours)])
-  }
-
-  function onCustomHours(value: string) {
-    const digits = value.replace(/\D/g, "").slice(0, 2)
-    setCustomHours(digits)
-    const n = Number(digits)
-    if (n >= 1 && n <= MAX_INTERVAL_HOURS) setMedTimes([everyHoursLabel(n)])
-    else if (!medTimes.some(isDayPart)) setMedTimes(["morning"])
-  }
-
   async function persistVisit(
     nextMedicines: Medicine[],
     nextDocuments: VisitDoc[] = documents,
@@ -450,27 +417,15 @@ export default function VisitPage() {
   }
 
   async function addMedicine() {
-    if (!medName.trim() || !bookingId) return
+    const row = medicineFromDraft(medDraftRef.current)
+    if (!row || !bookingId) return
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
-    const hours = Number(customHours)
-    if (customHours && !(hours >= 1 && hours <= MAX_INTERVAL_HOURS)) {
-      toast.error(`Custom timing must be every 1 to ${MAX_INTERVAL_HOURS} hours.`)
-      return
-    }
-    const next = [
-      ...medicines,
-      {
-        name: medName.trim(),
-        amount: medAmount.trim() || "1",
-        times: [...medTimes],
-      },
-    ]
+    const next = [...medicinesRef.current, row]
     medicinesRef.current = next
     setMedicines(next)
-    setMedName("")
-    setMedAmount("1")
-    setMedTimes(["morning"])
-    setCustomHours("")
+    const blank = emptyMedicineDraft()
+    medDraftRef.current = blank
+    setMedDraft(blank)
     await persistVisit(next, documents, { successMessage: "Medicine saved." })
   }
 
@@ -549,17 +504,10 @@ export default function VisitPage() {
   }
 
   function medicinesToSave(): Medicine[] {
-    const name = medName.trim()
     const current = medicinesRef.current
-    if (!name) return current
-    return [
-      ...current,
-      {
-        name,
-        amount: medAmount.trim() || "1",
-        times: [...medTimes],
-      },
-    ]
+    const row = medicineFromDraft(medDraftRef.current)
+    if (!row) return current
+    return [...current, row]
   }
 
   async function save(nextStatus?: string) {
@@ -576,11 +524,10 @@ export default function VisitPage() {
     const nextMedicines = medicinesToSave()
     medicinesRef.current = nextMedicines
     setMedicines(nextMedicines)
-    if (medName.trim()) {
-      setMedName("")
-      setMedAmount("1")
-      setMedTimes(["morning"])
-      setCustomHours("")
+    if (medicineFromDraft(medDraftRef.current)) {
+      const blank = emptyMedicineDraft()
+      medDraftRef.current = blank
+      setMedDraft(blank)
     }
     setSaving(true)
     const res = await proctoService.updateBookingVisit(bookingId, {
@@ -865,140 +812,29 @@ export default function VisitPage() {
         />
       </section>
 
-      {/* Medicines + Documents — both always in view in the page scroll */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <section className="dashboard-panel !p-5">
-          <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
-            Medicines
-          </h2>
+      <section className="dashboard-panel !h-auto !min-h-0 !p-5">
+        <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
+          Medicines
+        </h2>
+        {medicines.length === 0 && chartLocked ? (
+          <p className="mt-3 text-sm opacity-60">No medicines recorded.</p>
+        ) : (
+          <MedicineEntryTable
+            rows={medicines}
+            draft={medDraft}
+            locked={chartLocked}
+            onDraft={(next) => {
+              formDirty.current = true
+              medDraftRef.current = next
+              setMedDraft(next)
+            }}
+            onAdd={() => void addMedicine()}
+            onRemove={(idx) => void removeMedicine(idx)}
+          />
+        )}
+      </section>
 
-          {!chartLocked ? (
-            <div className="mt-3 space-y-2">
-              <input
-                value={medName}
-                onChange={(e) => setMedName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    void addMedicine()
-                  }
-                }}
-                placeholder="Medicine name"
-                className="w-full rounded-xl border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-600"
-              />
-              <div className="flex gap-2">
-                <input
-                  value={medAmount}
-                  onChange={(e) => setMedAmount(e.target.value)}
-                  placeholder="Dose"
-                  className="w-24 rounded-xl border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-600"
-                />
-                <button
-                  type="button"
-                  onClick={() => void addMedicine()}
-                  className="flex-1 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white"
-                >
-                  Add
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {TIMES.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => toggleTime(t)}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold capitalize ${
-                      medTimes.includes(t)
-                        ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
-                        : "border border-neutral-300 dark:border-neutral-600"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs opacity-60">Or every</span>
-                {INTERVAL_HOURS.map((h) => {
-                  const active = !customHours && medTimes[0] === everyHoursLabel(h)
-                  return (
-                    <button
-                      key={h}
-                      type="button"
-                      onClick={() => pickInterval(h)}
-                      aria-pressed={active}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                        active
-                          ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
-                          : "border border-neutral-300 dark:border-neutral-600"
-                      }`}
-                    >
-                      {h} h
-                    </button>
-                  )
-                })}
-                <label
-                  className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-semibold ${
-                    customHours && medTimes[0] === everyHoursLabel(Number(customHours))
-                      ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
-                      : "border border-neutral-300 dark:border-neutral-600"
-                  }`}
-                >
-                  <input
-                    value={customHours}
-                    onChange={(e) => onCustomHours(e.target.value)}
-                    inputMode="numeric"
-                    placeholder="Custom"
-                    aria-label={`Custom interval in hours (1–${MAX_INTERVAL_HOURS})`}
-                    className="w-14 bg-transparent py-0.5 text-center outline-none placeholder:font-normal placeholder:opacity-60"
-                  />
-                  h
-                </label>
-              </div>
-              {customHours && !(Number(customHours) >= 1 && Number(customHours) <= MAX_INTERVAL_HOURS) ? (
-                <p className="text-xs text-red-600 dark:text-red-400">
-                  Enter 1 to {MAX_INTERVAL_HOURS} hours.
-                </p>
-              ) : (
-                <p className="text-xs opacity-60">Timing: {medTimes.join(", ")}</p>
-              )}
-            </div>
-          ) : null}
-
-          {medicines.length === 0 ? (
-            <p className="mt-4 text-sm opacity-60">
-              {isCompleted ? "No medicines recorded." : "None added yet."}
-            </p>
-          ) : (
-            <ul className="mt-4 space-y-2">
-              {medicines.map((m, idx) => (
-                <li
-                  key={`${m.name}-${idx}`}
-                  className="flex items-start justify-between gap-2 rounded-xl border border-neutral-200 px-3 py-2 dark:border-neutral-700"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{m.name}</p>
-                    <p className="text-xs opacity-60">
-                      {m.amount || "—"}
-                      {m.times?.length ? ` · ${m.times.join(", ")}` : ""}
-                    </p>
-                  </div>
-                  {!chartLocked ? (
-                    <button
-                      type="button"
-                      onClick={() => void removeMedicine(idx)}
-                      className="shrink-0 text-xs font-medium text-red-600 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="dashboard-panel !p-5">
+      <section className="dashboard-panel !p-5">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
               Documents
@@ -1116,8 +952,7 @@ export default function VisitPage() {
           )}
           </>
           )}
-        </section>
-      </div>
+      </section>
 
       {/* Chat — single panel, no nested card / clipped height */}
       {selfId && peerId ? (

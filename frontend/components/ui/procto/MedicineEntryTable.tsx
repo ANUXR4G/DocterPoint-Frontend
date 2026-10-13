@@ -1,0 +1,327 @@
+"use client"
+
+export type VisitMedicine = {
+  name: string
+  amount?: string
+  times?: string[]
+  strength?: string
+  route?: string
+  dose?: string
+  doseUnit?: string
+  frequency?: string
+  duration?: string
+  durationUnit?: string
+  startDate?: string
+  endDate?: string
+  instruction?: string
+}
+
+export const emptyMedicineDraft = (): VisitMedicine => ({
+  name: "",
+  strength: "",
+  route: "",
+  dose: "",
+  doseUnit: "",
+  frequency: "",
+  duration: "",
+  durationUnit: "",
+  startDate: "",
+  endDate: "",
+  instruction: "",
+})
+
+const ROUTES = [
+  "Oral",
+  "Topical",
+  "Intravenous",
+  "Intramuscular",
+  "Subcutaneous",
+  "Inhalation",
+  "Nasal",
+  "Eye",
+  "Ear",
+  "Rectal",
+  "Sublingual",
+]
+
+const DOSE_UNITS = [
+  "mg",
+  "mcg",
+  "g",
+  "ml",
+  "tablet",
+  "capsule",
+  "drop",
+  "puff",
+  "unit",
+  "IU",
+]
+
+const FREQUENCIES = [
+  "Once daily",
+  "Twice daily",
+  "Three times daily",
+  "Four times daily",
+  "At bedtime",
+  "As needed",
+  "Every 6 hours",
+  "Every 8 hours",
+  "Every 12 hours",
+  "Weekly",
+]
+
+const DURATION_UNITS = ["Day", "Week", "Month"]
+
+export function medicineFromDraft(draft: VisitMedicine): VisitMedicine | null {
+  const name = draft.name.trim()
+  if (!name) return null
+  const dose = draft.dose?.trim() || ""
+  const doseUnit = draft.doseUnit?.trim() || ""
+  const frequency = draft.frequency?.trim() || ""
+  const amount = [dose, doseUnit].filter(Boolean).join(" ")
+  return {
+    name,
+    strength: draft.strength?.trim() || undefined,
+    route: draft.route?.trim() || undefined,
+    dose: dose || undefined,
+    doseUnit: doseUnit || undefined,
+    frequency: frequency || undefined,
+    duration: draft.duration?.trim() || undefined,
+    durationUnit: draft.durationUnit?.trim() || undefined,
+    startDate: draft.startDate?.trim() || undefined,
+    endDate: draft.endDate?.trim() || undefined,
+    instruction: draft.instruction?.trim() || undefined,
+    amount: amount || undefined,
+    times: frequency ? [frequency] : undefined,
+  }
+}
+
+function shownDose(m: VisitMedicine) {
+  return m.dose?.trim() || m.amount?.trim() || ""
+}
+
+function shownFrequency(m: VisitMedicine) {
+  return m.frequency?.trim() || (m.times?.length ? m.times.join(", ") : "")
+}
+
+function shownDate(value?: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value?.trim() || "")
+  if (!match) return value?.trim() || ""
+  return `${match[3]}/${match[2]}/${match[1]}`
+}
+
+const th =
+  "whitespace-nowrap border border-neutral-200 bg-neutral-50 px-2 py-2 text-left text-[11px] font-semibold text-neutral-800"
+const td = "border border-neutral-200 px-1 py-1 align-middle text-xs text-neutral-900"
+const field =
+  "w-full min-w-[4.75rem] rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-neutral-900 outline-none placeholder:text-neutral-400"
+
+export default function MedicineEntryTable({
+  rows,
+  draft,
+  locked,
+  onDraft,
+  onAdd,
+  onRemove,
+}: {
+  rows: VisitMedicine[]
+  draft: VisitMedicine
+  locked: boolean
+  onDraft: (next: VisitMedicine) => void
+  onAdd: () => void
+  onRemove: (index: number) => void
+}) {
+  function set<K extends keyof VisitMedicine>(key: K, value: string) {
+    onDraft({ ...draft, [key]: value })
+  }
+
+  return (
+    <div className="mt-3 overflow-x-auto rounded-lg bg-white p-2 text-neutral-900">
+      <table className="w-full min-w-[1180px] border-collapse">
+        <thead>
+          <tr>
+            {[
+              "S.No",
+              "Medicine",
+              "Strength",
+              "Route",
+              "Dose",
+              "Dose Unit",
+              "Frequency",
+              "Duration",
+              "Duration Unit",
+              "Start Time",
+              "End Time",
+              "Special Instruction",
+            ].map((label) => (
+              <th key={label} className={th}>
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m, idx) => (
+            <tr key={`${m.name}-${idx}`}>
+              <td className={`${td} text-center tabular-nums`}>{idx + 1}</td>
+              <td className={td}>
+                <span>{m.name}</span>
+                {locked ? null : (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(idx)}
+                    className="ml-2 text-[11px] font-medium text-red-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </td>
+              <td className={td}>{m.strength || ""}</td>
+              <td className={td}>{m.route || ""}</td>
+              <td className={td}>{shownDose(m)}</td>
+              <td className={td}>{m.doseUnit || ""}</td>
+              <td className={td}>{shownFrequency(m)}</td>
+              <td className={td}>{m.duration || ""}</td>
+              <td className={td}>{m.durationUnit || ""}</td>
+              <td className={td}>{shownDate(m.startDate)}</td>
+              <td className={td}>{shownDate(m.endDate)}</td>
+              <td className={td}>{m.instruction || ""}</td>
+            </tr>
+          ))}
+          {locked ? null : (
+            <tr>
+              <td className={`${td} text-center tabular-nums`}>{rows.length + 1}</td>
+              <td className={td}>
+                <input
+                  value={draft.name}
+                  onChange={(e) => set("name", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      onAdd()
+                    }
+                  }}
+                  placeholder="Type to search med"
+                  className={`${field} min-w-[9rem]`}
+                />
+              </td>
+              <td className={td}>
+                <input
+                  value={draft.strength || ""}
+                  onChange={(e) => set("strength", e.target.value)}
+                  className={field}
+                />
+              </td>
+              <td className={td}>
+                <select
+                  value={draft.route || ""}
+                  onChange={(e) => set("route", e.target.value)}
+                  className={field}
+                >
+                  <option value="">Select...</option>
+                  {ROUTES.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td className={td}>
+                <input
+                  value={draft.dose || ""}
+                  onChange={(e) => set("dose", e.target.value)}
+                  className={`${field} min-w-[3.5rem]`}
+                />
+              </td>
+              <td className={td}>
+                <select
+                  value={draft.doseUnit || ""}
+                  onChange={(e) => set("doseUnit", e.target.value)}
+                  className={field}
+                >
+                  <option value="">Select...</option>
+                  {DOSE_UNITS.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td className={td}>
+                <select
+                  value={draft.frequency || ""}
+                  onChange={(e) => set("frequency", e.target.value)}
+                  className={field}
+                >
+                  <option value="">Select...</option>
+                  {FREQUENCIES.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td className={td}>
+                <input
+                  value={draft.duration || ""}
+                  onChange={(e) => set("duration", e.target.value)}
+                  className={`${field} min-w-[3.5rem]`}
+                />
+              </td>
+              <td className={td}>
+                <select
+                  value={draft.durationUnit || ""}
+                  onChange={(e) => set("durationUnit", e.target.value)}
+                  className={field}
+                >
+                  <option value="">Select...</option>
+                  {DURATION_UNITS.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td className={td}>
+                <input
+                  type="date"
+                  value={draft.startDate || ""}
+                  onChange={(e) => set("startDate", e.target.value)}
+                  aria-label="Start date"
+                  className={field}
+                />
+              </td>
+              <td className={td}>
+                <input
+                  type="date"
+                  value={draft.endDate || ""}
+                  onChange={(e) => set("endDate", e.target.value)}
+                  aria-label="End date"
+                  className={field}
+                />
+              </td>
+              <td className={td}>
+                <input
+                  value={draft.instruction || ""}
+                  onChange={(e) => set("instruction", e.target.value)}
+                  className={`${field} min-w-[8rem]`}
+                />
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      {locked ? null : (
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={onAdd}
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
+          >
+            Add
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
