@@ -555,7 +555,7 @@ export default function ClinicDashboard() {
       <DoctorAnalytics />
 
       <section className="space-y-4">
-        <div className="flex h-12 flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="dashboard-section-title">Today&apos;s queue</h2>
             <p className="dashboard-section-sub">

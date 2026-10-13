@@ -1,6 +1,6 @@
 /** Shared booking/practice types for GlucoGuide patient app. */
 
-import { formatPracticeDateTime } from "./practiceTime";
+import { formatPracticeDate, formatPracticeDateTime } from "./practiceTime";
 
 export type ProctoBooking = {
   id: string;
@@ -127,7 +127,7 @@ export function bookingWhen(b: ProctoBooking): string {
   const session = b.sessionDate ?? b.session_date;
   const slot = b.slotStart ?? b.slot_start;
   if (mode === "TOKEN_BASED" && token != null) {
-    const day = session ? new Date(session).toLocaleDateString() : "";
+    const day = session ? formatPracticeDate(session) : "";
     return `Token #${token}${day ? ` · ${day}` : ""}`;
   }
   if (slot) {

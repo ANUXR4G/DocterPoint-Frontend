@@ -25,14 +25,14 @@ describe("NLU book confirmation", () => {
     assert.equal(shouldConfirmNluBook("booking", {}), false);
   });
 
-  it("formats confirm summary like Sept 25 at 3:00 PM", () => {
+  it("formats confirm summary as dd/mm/yyyy hh:mm", () => {
     const summary = formatNluBookConfirmSummary({
       date: "2026-09-25",
       preferredHour: 15,
       preferredMinute: 0,
     });
-    assert.match(summary, /Sep(t)?\s*25/i);
-    assert.match(summary, /3:00\s*PM/i);
+    assert.match(summary, /25\/09\/2026/);
+    assert.match(summary, /15:00/);
   });
 
   it("nluBookConfirm prompt asks Did you mean", () => {

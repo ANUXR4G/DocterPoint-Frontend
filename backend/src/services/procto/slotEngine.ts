@@ -95,31 +95,34 @@ export function zonedDateTime(
   return new Date(utcGuess - (asIfUtc - utcGuess));
 }
 
-/** Format an instant in the practice timezone (12-hour clock by default). */
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** dd/mm/yyyy hh:mm in the practice timezone. Time-only when withDate is false. */
 export function formatPracticeDateTime(
   date: Date,
   opts?: { withDate?: boolean; withSeconds?: boolean },
 ): string {
-  const withDate = opts?.withDate !== false;
-  return date.toLocaleString("en-US", {
-    timeZone: PRACTICE_TIMEZONE,
-    ...(withDate
-      ? { month: "numeric", day: "numeric", year: "numeric" }
-      : {}),
-    hour: "numeric",
-    minute: "2-digit",
-    ...(opts?.withSeconds ? { second: "2-digit" } : {}),
-    hour12: true,
-  });
+  const p = zonedParts(date);
+  const time = opts?.withSeconds
+    ? `${pad2(p.hour)}:${pad2(p.minute)}:${pad2(p.second)}`
+    : `${pad2(p.hour)}:${pad2(p.minute)}`;
+  if (opts?.withDate === false) return time;
+  return `${pad2(p.day)}/${pad2(p.month)}/${p.year} ${time}`;
 }
 
 export function formatPracticeTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
-    timeZone: PRACTICE_TIMEZONE,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return formatPracticeDateTime(date, { withDate: false });
+}
+
+/** Clinic calendar day is after today. Clock time on the same day does not count. */
+export function isClinicDayAfterToday(
+  dayIso: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!dayIso || !/^\d{4}-\d{2}-\d{2}$/.test(dayIso)) return false;
+  return dayIso > formatLocalDate(now);
 }
 
 export function parseTimeOnDate(date: Date, timeStr: string): Date {

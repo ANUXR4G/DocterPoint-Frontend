@@ -487,6 +487,7 @@ router.get(
         requireUuid(param(req.params.practiceId), "practiceId"),
         req.sessionUser!.id,
         req.query.q,
+        req.query.by === "name" ? "name" : undefined,
       );
       return ResponseHandler.fetchSuccessful(res, "patients found.", data);
     } catch (error) {

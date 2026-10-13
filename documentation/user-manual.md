@@ -2,7 +2,7 @@
 
 **Product:** GlucoGuide clinic booking & WhatsApp reception (web: GlucoGuide)  
 **Audience:** Patients, doctors, clinic owners, reception staff, platform admins  
-**Last updated:** August 2026  
+**Last updated:** 13/10/2026  
 **Related docs:** [login.md](./login.md) (demo accounts) · [flow.md](./flow.md) (technical flows) · [WhatsApp-How-It-Works.md](./WhatsApp-How-It-Works.md)
 
 ---
@@ -116,9 +116,12 @@ Use **Logout** in the sidebar or profile menu. Sessions use secure cookies; clos
 ### 4.2 Find a clinic
 
 1. Go to **Find clinics** (`/practices`) or the home page directory.
-2. Search by **name**, **specialty**, or **city**.
-3. Open a clinic card to view the **public profile** (`/practices/[slug]`).
-4. Cards show **ratings** when verified reviews exist.
+2. Search by **doctor name**, **specialty**, or **city**.
+3. A clinic with more than one doctor shows **one Book button per doctor** (for example **Book Dr. Kabir Mehta** and **Book Dr. Mohammed Gouse**). Opening a button selects that doctor and that doctor’s slots.
+4. The clinic owner is not listed for booking until they open their own schedule.
+5. Cards show **ratings** when verified reviews exist.
+
+Dates on screen are **dd/mm/yyyy**. When a time is shown it is **dd/mm/yyyy HH:mm** (24-hour, clinic time Asia/Kolkata).
 
 ### 4.3 Book an appointment
 
@@ -127,7 +130,7 @@ From a clinic profile:
 1. **Consultation type** — **Time slot** (fixed time) or **Token queue** (numbered queue for the day).
 2. **Date** — Choose an available day (schedules are set by the clinic).
 3. **Slot or token** — Pick from live availability.
-4. **Confirm** — Enter or confirm name, phone, and email. Guests can book with phone only; signed-in patients use profile details.
+4. **Confirm** — Sign in first. The visit is booked on your own patient record. A typed patient id from the browser is ignored.
 5. **Confirmation** — You receive a confirmation screen and (when configured) WhatsApp/SMS.
 
 **Manage bookings** (`/patient/bookings`):
@@ -156,9 +159,15 @@ Typical tabs:
 | Queries | Messages or queries to clinic (if enabled) |
 | Profile | Account details |
 
-**Booking on mobile** mirrors the web flow: open a clinic → choose date → slot/token → confirm.
+**Finding a doctor.** Home and **Find a clinic** show **one card per bookable doctor**, with the clinic name under the doctor. Tap the card to book that doctor. The clinic owner is not offered until they open a schedule.
+
+**Booking on mobile** mirrors the web flow: open that doctor → choose date → slot/token → confirm. Dates are **dd/mm/yyyy**. A time is **dd/mm/yyyy HH:mm**.
+
+**One mobile, more than one person.** The country code is part of the number, so `+971 …` and `+1 …` are different people even when the last digits match. Sign-in opens the **account holder**. A person registered as **Child** (also son or daughter) on that same number appears under **People on this number**, labeled **Child · with** the parent. Open that chip to see the child’s own visits and profile. A spouse or any other adult stays on their own record and is not opened by the parent’s sign-in.
 
 **Visit:** A finished visit, or one that already has a chart, shows **Prescription** with vitals, allergies, pain, remarks, and medicines, plus the doctor’s name, licence, and the clinic address. You can **Cancel appointment** while it is still accepted and not yet started.
+
+**Current Android install (08/10/2026, version 0.2.0):** https://expo.dev/artifacts/eas/JSAtpLLJ1--T7QMBAlRUPjg-szIpbdsqrC38Zknkr3E.apk — this file does not yet include the doctor cards or the child switcher. Those appear on the website now and on the phone after the next app build.
 
 **Reviews:** After a **completed** visit, open the booking detail screen and submit a star rating and optional comment.
 
@@ -192,6 +201,7 @@ Clinic and doctor portals share the same tools; clinic dashboard emphasises mult
 - In waiting: **Start consultation**, **No-show** (Left before being seen), or **Canceled** (Patient left / Clinic canceled).
 - In consultation: **Finish** only. Finish opens the visit so remarks and medicines save with it. Cancel and No-show are not available once the consultation has started.
 - A finished visit is locked.
+- Documentation follows the **clinic calendar day** (Asia/Kolkata), not the clock. Any visit whose day is today or earlier can be documented, including a slot later today. A visit on a **later day** cannot: vitals, pain, allergies, remarks, medicines, documents, arrived, start, and finish stay closed. **Cancel** and **No-show** stay available. The chief complaint can still be updated.
 
 **Visit documentation** (open a visit from the queue, appointments, or the patient record):
 
@@ -216,7 +226,11 @@ The queue updates in real time when the websocket connection is active.
 
 ### 6.4 Appointments
 
-**Appointments** lists historical and upcoming visits with filters. Use it for completed-visit review and follow-up, complementing the live queue.
+**Appointments** lists historical and upcoming visits with filters. Columns include Patient, MRN, Doctor, When, Arrival, Chief complaint, Status, Payment, Chat, Rx, and Visit. **When** is **dd/mm/yyyy HH:mm**.
+
+**Chief complaint** is blank until someone records it. The doctor can add or change it on this list, including after the visit is finished. That save updates only the reason for the visit.
+
+**Book appointment** looks up a patient by mobile, name, or MRN. A full mobile matches that number only (`+971` does not return a `+1` number that ends with the same digits). **Emergency walk-in** looks up by **name only** (two or more letters). Pick the patient, the doctor, and an optional chief complaint. No slot is required.
 
 ### 6.5 Analytics
 
@@ -272,7 +286,7 @@ Under **Doctors** (or **Settings → Account** for clinic-type practices):
 
 ### 7.3 Patients list
 
-**Patients** shows people who have booked or completed a visit. Each recent visit lists **Vitals**, **Allergies**, **Pain**, and **Prescription**, plus **Open visit**. Completed queue visits appear here automatically.
+**Patients** shows **one row per MRN**. The same person is not repeated because of visit status. Two people who share a phone but have different MRNs stay on two rows. Each recent visit lists **Vitals**, **Allergies**, **Pain**, and **Prescription**, plus **Open visit**. Completed queue visits appear here automatically.
 
 ---
 
@@ -402,7 +416,13 @@ Typical screens:
 | Inbox / Queries | Patient messages |
 | Settings | Account, photos, and the vitals / allergy / pain catalogs |
 
-Sign in with the same **doctor** credentials as the web portal. Point the app API URL to your backend (`EXPO_PUBLIC_API_URL`).
+Sign in with the same **doctor** credentials as the web portal. A clinic owner or receptionist sees every practicing doctor when booking or filtering the queue. A doctor signed in as staff sees their own list.
+
+The visit screen uses the same day rule as the website: document any visit on today’s clinic date, including a later time today; do not document a visit on a later date. Dates are **dd/mm/yyyy HH:mm**.
+
+**Current Android install (08/10/2026, version 0.1.0):** https://expo.dev/artifacts/eas/RzZMwjytUnv6J4uOdDyHvE5lsuMfS4omHCztOJRGx5I.apk — this file does not yet include the day rule or the dd/mm/yyyy clock. Those appear on the website now and on the phone after the next app build.
+
+Point the app API URL to your backend (`EXPO_PUBLIC_API_URL`).
 
 ---
 
@@ -430,6 +450,24 @@ Admin actions affect production data; follow your organisation’s change-contro
 - Use the correct portal: patient vs doctor vs clinic vs admin.
 - **Role mismatch** — e.g. doctor account on patient login shows an error; use **Doctor login**.
 - Reset password via your deployment’s reset flow, or re-seed demo data locally (`cd backend && yarn seed`).
+
+### A doctor I added does not appear for booking
+
+- Confirm the person is an active **Doctor** on the clinic roster, and that the clinic plan allows more than one doctor.
+- The clinic **owner** is not bookable until **Open schedule** is used for that owner.
+- On **Find clinics**, use that doctor’s own **Book** button. The clinic card lists every bookable doctor.
+- The Android apps installed from the 08/10/2026 builds still show the older list until a new build is installed. The website already lists each doctor.
+
+### Sign-in shows only one person on a shared mobile
+
+- Sign-in opens the **account holder** on that exact number, including country code.
+- Register a child as **Child** (or son / daughter) on the parent’s number. They then appear under **People on this number**, with the parent’s name.
+- A spouse or another adult is a separate record. The desk can still find them by the full mobile when booking. Their chart is not opened by the parent’s sign-in.
+
+### I cannot document a future appointment
+
+- Documentation is allowed on the appointment’s clinic day, at any time that day.
+- A visit dated after today stays closed until that day. Cancel and no-show still work.
 
 ### No slots on the booking page
 

@@ -2,7 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ClinicCard } from "@/components/mobile/ClinicCards";
+import { ClinicCard, clinicDoctorCards } from "@/components/mobile/ClinicCards";
 import { ScreenHeader } from "@/components/mobile/ScreenHeader";
 import { SearchBar } from "@/components/mobile/SearchBar";
 import { SpecialtyChips } from "@/components/mobile/SpecialtyRow";
@@ -87,8 +87,8 @@ export default function DoctorsScreen() {
     <Screen style={styles.screen}>
       <ScreenHeader title="Find a clinic" />
       <FlatList
-        data={practices}
-        keyExtractor={(d) => d.id}
+        data={clinicDoctorCards(practices)}
+        keyExtractor={(d) => d.key}
         contentContainerStyle={[
           styles.content,
           { paddingBottom: contentBottomPad(insets.bottom) },
@@ -133,11 +133,18 @@ export default function DoctorsScreen() {
             <EmptyState text="No clinics found. Try another search or specialty." />
           )
         }
-        renderItem={({ item }) => <ClinicCard item={item} />}
+        renderItem={({ item }) => (
+          <ClinicCard
+            item={item.item}
+            doctorUserId={item.doctorUserId}
+            doctorName={item.doctorName}
+          />
+        )}
         ListFooterComponent={
           !loading && !error && practices.length > 0 ? (
             <Text style={styles.count}>
-              {practices.length} clinic{practices.length === 1 ? "" : "s"}
+              {clinicDoctorCards(practices).length} doctor
+              {clinicDoctorCards(practices).length === 1 ? "" : "s"}
             </Text>
           ) : null
         }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
   getPracticeProvider,
@@ -119,13 +119,22 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
   )
 
   const location = practice.locations[0]
+  const requestedDoctor = useSearchParams().get("doctor") || ""
   const clinicDoctors = useMemo(
     () => getPracticeProviders(practice.members),
     [practice.members],
   )
-  const [providerId, setProviderId] = useState(
-    () => getPracticeProvider(practice.members)?.id ?? "",
-  )
+  const [providerId, setProviderId] = useState(() => {
+    const ids = getPracticeProviders(practice.members).map((d) => d.id)
+    if (requestedDoctor && ids.includes(requestedDoctor)) return requestedDoctor
+    return getPracticeProvider(practice.members)?.id ?? ""
+  })
+  useEffect(() => {
+    if (!requestedDoctor) return
+    if (clinicDoctors.some((d) => d.id === requestedDoctor)) {
+      setProviderId(requestedDoctor)
+    }
+  }, [requestedDoctor, clinicDoctors])
   const provider = clinicDoctors.find((d) => d.id === providerId) ?? clinicDoctors[0]
   const validityFromProfile =
     provider &&

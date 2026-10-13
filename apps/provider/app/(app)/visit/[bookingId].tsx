@@ -50,6 +50,7 @@ import {
   type BookingRow,
   type VisitDocument,
 } from "@/lib/types";
+import { isAfterClinicToday } from "@/lib/practiceTime";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -235,6 +236,10 @@ export default function VisitScreen() {
 
   const completed =
     String(booking?.status || "").toUpperCase() === "COMPLETED";
+  const futureDay = booking
+    ? isAfterClinicToday(booking.slotStart || booking.sessionDate || null)
+    : false;
+  const chartLocked = completed || futureDay;
   const peerId = booking?.patientId || booking?.patient?.id || null;
   const patientName =
     booking?.patientName ||
@@ -244,7 +249,7 @@ export default function VisitScreen() {
   const p = booking?.patient;
 
   async function persistMedicines(next: Med[]) {
-    if (!bookingId || booking?.status === "COMPLETED") return
+    if (!bookingId || booking?.status === "COMPLETED" || futureDay) return
     setBusy(true)
     setError("")
     let docsToSave = documentsRef.current
@@ -331,7 +336,7 @@ export default function VisitScreen() {
   }
 
   async function saveVisit(alsoStatus?: string) {
-    if (!bookingId) return;
+    if (!bookingId || futureDay) return;
     setBusy(true);
     setError("");
     const draftName = medName.trim();
@@ -364,6 +369,17 @@ export default function VisitScreen() {
 
   async function applyStatus(status: string, reason?: string) {
     if (!bookingId) return;
+    if (
+      futureDay &&
+      (status === "WAITING" ||
+        status === "IN_PROGRESS" ||
+        status === "COMPLETED")
+    ) {
+      setError(
+        "You can document this visit on its appointment day, not on a later day.",
+      );
+      return;
+    }
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") {
       setError("Completed appointments cannot change status.");
       return;
@@ -443,7 +459,7 @@ export default function VisitScreen() {
     name: string;
     mimeType?: string | null;
   }) {
-    if (!bookingId) return;
+    if (!bookingId || futureDay) return;
     if (!clinicalReady.current) {
       setError("Wait for the visit to finish loading, then add the file again.");
       return;
@@ -487,7 +503,7 @@ export default function VisitScreen() {
   }
 
   async function removeDocument(idx: number) {
-    if (!bookingId || completed) return;
+    if (!bookingId || chartLocked) return;
     loadSeq.current += 1;
     const next = documentsRef.current.filter((_, i) => i !== idx);
     const previous = documentsRef.current;
@@ -628,25 +644,17 @@ export default function VisitScreen() {
               </Text>
             ) : null}
             {booking.mode ? (
-              <Text style={styles.rowLabel}>
+              <Text style={styles.metaQuiet}>
                 Mode: {booking.mode.replace(/_/g, " ")}
               </Text>
             ) : null}
             {booking.channel ? (
-              <Text style={styles.rowLabel}>
+              <Text style={styles.metaQuiet}>
                 Channel: {booking.channel.replace(/_/g, " ")}
               </Text>
             ) : null}
             {booking.tokenNumber != null ? (
               <Text style={styles.rowLabel}>Token: #{booking.tokenNumber}</Text>
-            ) : null}
-            {booking.location ? (
-              <Text style={styles.rowLabel}>
-                Location:{" "}
-                {[booking.location.name, booking.location.city]
-                  .filter(Boolean)
-                  .join(", ") || ""}
-              </Text>
             ) : null}
             {booking.notes ? (
               <Text style={styles.notes}>
@@ -660,6 +668,13 @@ export default function VisitScreen() {
         <View style={styles.actions}>
           {nextActions(booking.status)
             .filter((s) => !s.opensVisit)
+            .filter(
+              (s) =>
+                !futureDay ||
+                (s.status !== "WAITING" &&
+                  s.status !== "IN_PROGRESS" &&
+                  s.status !== "COMPLETED"),
+            )
             .map((s) => (
             <Chip
               key={s.status}
@@ -681,10 +696,17 @@ export default function VisitScreen() {
         </View>
 
         <Text style={styles.section}>Vitals · Pain · Allergies</Text>
-        <Text style={styles.lockedHint}>
-          Capture vitals with color bands, pain rows, and allergies. Tap Save
-          clinical below (or Save visit notes at the bottom).
-        </Text>
+        {futureDay ? (
+          <Text style={styles.lockedHint}>
+            Documentation opens on the appointment day. Any time later today
+            can still be documented.
+          </Text>
+        ) : (
+          <Text style={styles.lockedHint}>
+            Capture vitals with color bands, pain rows, and allergies. Tap Save
+            clinical below (or Save visit notes at the bottom).
+          </Text>
+        )}
         {chartReady ? (
           <ClinicalAssessmentPanel
             mastersRaw={
@@ -692,7 +714,7 @@ export default function VisitScreen() {
               booking.practice?.clinicalMasters
             }
             value={clinicalAssessment}
-            readOnly={completed}
+            readOnly={chartLocked}
             onChange={(next) => {
               clinicalDirty.current = true;
               clinicalReady.current = true;
@@ -703,7 +725,7 @@ export default function VisitScreen() {
         ) : (
           <Text style={styles.hint}>Loading chart…</Text>
         )}
-        {!completed ? (
+        {!chartLocked ? (
           <PrimaryButton
             label={busy ? "Saving…" : "Save clinical"}
             onPress={() => void saveVisit()}
@@ -719,15 +741,15 @@ export default function VisitScreen() {
         <TextInput
           value={remarks}
           onChangeText={setRemarks}
-          editable={!completed}
+          editable={!chartLocked}
           multiline
           placeholder="Clinical remarks, advice, follow-up…"
           placeholderTextColor={colors.inkFaint}
-          style={[styles.area, completed && styles.readonly]}
+          style={[styles.area, chartLocked && styles.readonly]}
         />
 
         <Text style={styles.section}>Medicines</Text>
-        {!completed ? (
+        {!chartLocked ? (
           <View style={styles.card}>
             <TextInput
               value={medName}
@@ -793,7 +815,7 @@ export default function VisitScreen() {
                   {m.times?.length ? ` · ${m.times.join(", ")}` : ""}
                 </Text>
               </View>
-              {!completed ? (
+              {!chartLocked ? (
                 <Chip
                   label="Remove"
                   onPress={() => removeMedicine(idx)}
@@ -920,7 +942,7 @@ export default function VisitScreen() {
           )
         ) : (
           <View style={styles.card}>
-            {!completed ? (
+            {!chartLocked ? (
               <View style={{ gap: space.sm, marginBottom: space.md }}>
                 <PrimaryButton
                   label={uploading ? "Uploading…" : "Add photo"}
@@ -951,7 +973,7 @@ export default function VisitScreen() {
                     </Text>
                     <Text style={styles.meta}>Tap to open</Text>
                   </Pressable>
-                  {!completed ? (
+                  {!chartLocked ? (
                     <Chip
                       label="Remove"
                       onPress={() => void removeDocument(idx)}
@@ -965,7 +987,7 @@ export default function VisitScreen() {
 
         <ErrorText text={error} />
 
-        {!completed ? (
+        {!chartLocked ? (
           <View style={{ gap: space.md, marginTop: space.lg }}>
             <PrimaryButton
               label="Save visit notes"
@@ -1071,6 +1093,12 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginBottom: space.sm,
     lineHeight: 20,
+  },
+  metaQuiet: {
+    fontSize: 11,
+    color: colors.inkSoft,
+    marginBottom: 4,
+    lineHeight: 14,
   },
   notes: {
     marginTop: space.xs,

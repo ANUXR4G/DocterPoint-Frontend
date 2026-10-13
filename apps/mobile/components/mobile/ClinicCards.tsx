@@ -8,22 +8,62 @@ import { PressableScale } from "@/lib/motion";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import type { PracticeListItem } from "@/lib/types";
 
-function doctorName(item: PracticeListItem) {
-  const doc = item.members?.find((m) => m.role === "DOCTOR");
-  return doc?.user?.name?.trim() || item.name;
+export type ClinicDoctorCard = {
+  key: string;
+  item: PracticeListItem;
+  doctorUserId?: string;
+  doctorName?: string;
+};
+
+/** One card per bookable doctor so a second doctor is not hidden behind the first. */
+export function clinicDoctorCards(list: PracticeListItem[]): ClinicDoctorCard[] {
+  const cards: ClinicDoctorCard[] = [];
+  for (const item of list) {
+    const docs = (item.members ?? []).filter(
+      (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
+    );
+    if (!docs.length) {
+      cards.push({ key: item.id, item });
+      continue;
+    }
+    for (const doc of docs) {
+      cards.push({
+        key: `${item.id}:${doc.userId}`,
+        item,
+        doctorUserId: doc.userId,
+        doctorName: doc.user?.name?.trim() || undefined,
+      });
+    }
+  }
+  return cards;
 }
 
 /** Doctor / clinic card — photo, rating, specialty, city and a Book visit action. */
-export function ClinicCard({ item }: { item: PracticeListItem }) {
+export function ClinicCard({
+  item,
+  doctorUserId,
+  doctorName,
+}: {
+  item: PracticeListItem;
+  doctorUserId?: string;
+  doctorName?: string;
+}) {
   const router = useRouter();
-  const doc = doctorName(item);
+  const doc = doctorName?.trim() || item.name;
   const title = withDrTitle(doc) || item.name;
   const specialty = item.specialties?.length
     ? item.specialties.join(" · ")
     : item.specialty?.trim() || "General physician";
   const city = item.locations?.[0]?.city;
   const rating = item.reviewSummary?.count ? item.reviewSummary.average : null;
-  const open = () => router.push(`/(app)/doctor/${item.slug}` as Href);
+  const open = () =>
+    router.push({
+      pathname: "/(app)/doctor/[slug]",
+      params: {
+        slug: item.slug,
+        ...(doctorUserId ? { providerId: doctorUserId } : {}),
+      },
+    } as Href);
 
   return (
     <PressableScale

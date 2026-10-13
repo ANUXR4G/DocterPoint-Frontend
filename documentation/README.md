@@ -4,7 +4,7 @@ Project docs for GlucoGuide live in this folder only.
 
 | Doc | Purpose |
 |-----|---------|
-| [user-manual.md](./user-manual.md) | **End-user guide** — patients, doctors, clinics, mobile, WhatsApp |
+| [user-manual.md](./user-manual.md) | **End-user guide** — patients, doctors, clinics, mobile, WhatsApp. PDF: [user-manual.pdf](./user-manual.pdf) |
 | [login.md](./login.md) | Demo credentials |
 | [flow.md](./flow.md) | User and system flows |
 | [Gender-Analytics-Flow.md](./Gender-Analytics-Flow.md) | Gender + analytics class diagrams and flowcharts |

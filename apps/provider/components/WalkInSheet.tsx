@@ -166,10 +166,7 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
 
   useEffect(() => {
     const q = query.trim();
-    const digits = q.replace(/\D/g, "");
-    const long = /^[+\d\s()-]+$/.test(q)
-      ? digits.length >= 4
-      : q.replace(/\s/g, "").length >= 2;
+    const long = q.replace(/[^\p{L}]/gu, "").length >= 2;
     if (!visible || !practiceId || !long || patient || mode !== "search") {
       setResults([]);
       setSearched("");
@@ -179,7 +176,7 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
     let alive = true;
     setSearching(true);
     const t = setTimeout(() => {
-      void searchDeskPatients(practiceId, q)
+      void searchDeskPatients(practiceId, q, "name")
         .then((res) => {
           if (!alive) return;
           setSearching(false);
@@ -482,7 +479,7 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
                     style={styles.input}
                     value={query}
                     onChangeText={setQuery}
-                    placeholder="Search by mobile, name or MRN"
+                    placeholder="Patient name"
                     placeholderTextColor={colors.inkFaint}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -508,7 +505,7 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
                     <Text style={styles.empty}>No patient found for “{q}”. Register them below.</Text>
                   ) : !searching ? (
                     <Text style={styles.hint}>
-                      Type at least 4 digits of the mobile, 2 letters of the name, or the MRN.
+                      Type at least 2 letters of the patient's name.
                     </Text>
                   ) : null}
                   <SecondaryButton label="Register new patient" onPress={startRegister} />

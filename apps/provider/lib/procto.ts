@@ -66,9 +66,13 @@ export type DeskPatient = {
   existingPatient?: boolean;
 };
 
-export async function searchDeskPatients(practiceId: string, q: string) {
+export async function searchDeskPatients(
+  practiceId: string,
+  q: string,
+  by?: "name",
+) {
   return api<{ patients: DeskPatient[] }>(
-    `/procto/practices/${practiceId}/desk-patients?q=${encodeURIComponent(q)}`,
+    `/procto/practices/${practiceId}/desk-patients?q=${encodeURIComponent(q)}${by === "name" ? "&by=name" : ""}`,
   );
 }
 

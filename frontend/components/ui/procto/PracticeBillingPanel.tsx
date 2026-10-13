@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { proctoService } from "@/lib/services/procto"
+import { formatPracticeDate } from "@/lib/practiceTime"
 import {
   openRazorpaySubscriptionCheckout,
   type RazorpayCheckoutPayload,
@@ -126,14 +127,7 @@ function statusTone(status: string) {
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return "—"
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return "—"
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })
+  return formatPracticeDate(value)
 }
 
 export default function PracticeBillingPanel({

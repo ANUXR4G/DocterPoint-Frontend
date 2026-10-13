@@ -80,14 +80,10 @@ import { recordAudit } from "./practiceAudit.js";
 import { broadcastProctoEvent } from "./proctoSocket.js";
 import { randomUUID } from "node:crypto";
 
-/** "2026-11-05" → "Thu 5 Nov". */
+/** "2026-11-05" → "05/11/2026". */
 function shortDay(iso: string): string {
-  return new Date(`${iso}T12:00:00.000Z`).toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
 
 type NoticePlan = {

@@ -38,14 +38,14 @@ describe("payment confirmation message", () => {
       sessionDate: null,
       tokenNumber: null,
     });
-    assert.match(slot ?? "", /9\/30\/2026, 10:30 AM/);
+    assert.match(slot ?? "", /30\/09\/2026 10:30/);
     assert.equal(
       appointmentWhenLabel({
         slotStart: null,
         sessionDate: new Date("2026-09-30T00:00:00Z"),
         tokenNumber: 12,
       }),
-      "9/30/2026 (Token #12)",
+      "30/09/2026 (Token #12)",
     );
     assert.equal(
       appointmentWhenLabel({ slotStart: null, sessionDate: null, tokenNumber: 3 }),

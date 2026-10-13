@@ -68,7 +68,13 @@ function ymd(d: Date) {
 }
 
 export default function PracticeBookScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { slug, providerId: requestedProvider } = useLocalSearchParams<{
+    slug: string;
+    providerId?: string;
+  }>();
+  const requestedId = Array.isArray(requestedProvider)
+    ? requestedProvider[0]
+    : requestedProvider;
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -144,7 +150,8 @@ export default function PracticeBookScreen() {
       setPractice(p);
       const docs = (p.members || []).filter((m) => m.role === "DOCTOR");
       const list = docs.length ? docs : p.members || [];
-      if (list[0]) setProviderId(list[0].userId);
+      const preferred = list.find((m) => m.userId === requestedId) ?? list[0];
+      if (preferred) setProviderId(preferred.userId);
 
       const profile = (profileRes.data || profileRes) as PatientProfile;
       const contact =
@@ -154,7 +161,7 @@ export default function PracticeBookScreen() {
         "";
       setPhone(String(contact).replace(/\D/g, "").slice(-10));
     });
-  }, [slug]);
+  }, [slug, requestedId]);
 
   useEffect(() => {
     if (!practice || !providerId || !location || !date) return;

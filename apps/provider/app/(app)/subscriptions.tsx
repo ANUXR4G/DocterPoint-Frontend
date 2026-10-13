@@ -29,6 +29,7 @@ import {
   type PracticeBilling,
   type RazorpaySubCheckout,
 } from "@/lib/procto";
+import { formatPracticeDate } from "@/lib/practiceTime";
 import { colors, radii, space } from "@/lib/theme";
 import { contentBottomPad } from "@/lib/dockLayout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -52,14 +53,7 @@ function featureList(plan: ClinicPlan): string[] {
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatPracticeDate(value);
 }
 
 export default function SubscriptionsScreen() {

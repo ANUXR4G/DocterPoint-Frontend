@@ -18,22 +18,18 @@ export type BookingReviewSnapshot = {
 export function formatBookingDateLabel(dateIso: string): string {
   const d = new Date(`${dateIso}T12:00:00`)
   if (Number.isNaN(d.getTime())) return dateIso
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  })
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateIso)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : dateIso
 }
 
 export function formatBookingTimeLabel(slotStartIso: string): string {
   const d = new Date(slotStartIso)
   if (Number.isNaN(d.getTime())) return slotStartIso
-  return d.toLocaleTimeString("en-US", {
+  return d.toLocaleTimeString("en-GB", {
     timeZone: "Asia/Kolkata",
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hourCycle: "h23",
   })
 }
 

@@ -94,16 +94,12 @@ export function resolvePresetRange(
   }
 }
 
-/** Short human label, e.g. "Sep 21 – Sep 27, 2026". */
+/** dd/mm/yyyy, or dd/mm/yyyy – dd/mm/yyyy when the range spans days. */
 export function formatIsoRange({ from, to }: IsoRange): string {
-  const fmt = (iso: string, withYear: boolean) =>
-    new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
-      timeZone: "UTC",
-      month: "short",
-      day: "numeric",
-      ...(withYear ? { year: "numeric" } : {}),
-    })
-  if (from === to) return fmt(from, true)
-  const sameYear = from.slice(0, 4) === to.slice(0, 4)
-  return `${fmt(from, !sameYear)} – ${fmt(to, true)}`
+  const fmt = (iso: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : iso
+  }
+  if (from === to) return fmt(from)
+  return `${fmt(from)} – ${fmt(to)}`
 }

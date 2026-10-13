@@ -7,7 +7,7 @@ import {
   type AuditAction,
   type AuditEvent,
 } from "@/lib/services/procto"
-import { PRACTICE_TIMEZONE } from "@/lib/practiceTime"
+import { formatPracticeDateTime } from "@/lib/practiceTime"
 import { CLINIC_ROLE_LABEL } from "@/lib/quickSlots"
 
 const ACTIONS: Array<[AuditAction | "", string]> = [
@@ -37,20 +37,7 @@ const ACTION_STYLE: Record<AuditAction, string> = {
 const DOCTOR_ROLES = new Set(["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"])
 
 function when(iso: string) {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: PRACTICE_TIMEZONE,
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    })
-      .formatToParts(new Date(iso))
-      .map((x) => [x.type, x.value]),
-  )
-  return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute} ${p.dayPeriod}`
+  return formatPracticeDateTime(iso)
 }
 
 function csvCell(v: unknown) {

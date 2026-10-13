@@ -3,7 +3,8 @@ import { useCallback, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
-import { ClinicCard } from "@/components/mobile/ClinicCards";
+import { ClinicCard, clinicDoctorCards } from "@/components/mobile/ClinicCards";
+import { HouseholdPicker } from "@/components/mobile/HouseholdPicker";
 import { PatientDashboard, SectionHead } from "@/components/mobile/PatientDashboard";
 import { SpecialtyChips } from "@/components/mobile/SpecialtyRow";
 import { ErrorText, Loading, PrimaryButton, Screen } from "@/components/ui";
@@ -165,6 +166,13 @@ export default function HomeScreen() {
           </PressableScale>
         </AnimatedView>
 
+        <HouseholdPicker
+          onSwitched={() => {
+            void loadProfile();
+            void refreshBookings({ soft: true, force: true });
+          }}
+        />
+
         {displayError ? (
           <AnimatedView from="fade" style={styles.errorCard}>
             <ErrorText text={displayError} />
@@ -200,8 +208,13 @@ export default function HomeScreen() {
               }
             />
             <View style={styles.clinics}>
-              {practices.slice(0, 2).map((p) => (
-                <ClinicCard key={p.id} item={p} />
+              {clinicDoctorCards(practices).slice(0, 6).map((card) => (
+                <ClinicCard
+                  key={card.key}
+                  item={card.item}
+                  doctorUserId={card.doctorUserId}
+                  doctorName={card.doctorName}
+                />
               ))}
             </View>
           </AnimatedView>

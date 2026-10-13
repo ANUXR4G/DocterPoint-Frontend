@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
+import { HouseholdPicker } from "@/components/mobile/HouseholdPicker";
 import {
   PremiumAtmosphere,
   PremiumCard,
@@ -111,6 +112,8 @@ export default function ProfileScreen() {
     setPhotoBusy(false);
   }
 
+  const [profileGen, setProfileGen] = useState(0);
+
   useEffect(() => {
     api<PatientProfile>("/patient/profile").then((res) => {
       setLoading(false);
@@ -131,7 +134,7 @@ export default function ProfileScreen() {
       });
       setPhoto(resolveMediaUrl(p.img_src ?? p.imgSrc));
     });
-  }, []);
+  }, [profileGen]);
 
   async function save() {
     setSaving(true);
@@ -188,6 +191,7 @@ export default function ProfileScreen() {
           title="Profile"
           subtitle="Keep your phone updated so WhatsApp bookings link to this account."
         />
+        <HouseholdPicker onSwitched={() => setProfileGen((n) => n + 1)} />
 
         <PremiumCard style={styles.formCard}>
           <View style={styles.photoRow}>

@@ -23,23 +23,19 @@ export const AUDIT_ROLE_LABEL: Record<string, string> = {
   DOCTOR: "Doctor",
 };
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** "29 Sep 2026, 12:40 AM" in clinic time. */
+/** "29/09/2026 00:40" in clinic time. */
 export function auditStamp(at: Date): string {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: PRACTICE_TIMEZONE,
-    day: "numeric",
-    month: "numeric",
+    day: "2-digit",
+    month: "2-digit",
     year: "numeric",
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
   }).formatToParts(at);
-  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
-  const h = get("hour") % 24;
-  const time = `${h % 12 || 12}:${String(get("minute")).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
-  return `${get("day")} ${MONTHS[get("month") - 1]} ${get("year")}, ${time}`;
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
 }
 
 /** "Slot created manually by Receptionist Asha Rao on 29 Sep 2026, 12:40 AM — <detail>." */

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Button, IconInput } from "@/components"
 import { proctoService, type RazorpaySettings } from "@/lib/services/procto"
+import { formatPracticeDate } from "@/lib/practiceTime"
 
 const sectionLabel =
   "mb-3 text-sm font-bold uppercase tracking-[0.12em] text-blue-600 dark:text-sky-400"
@@ -111,13 +112,7 @@ export default function RazorpayAccountPanel({ practiceId }: { practiceId: strin
     }
   }
 
-  const verified = settings.verifiedAt
-    ? new Date(settings.verifiedAt).toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : null
+  const verified = settings.verifiedAt ? formatPracticeDate(settings.verifiedAt) : null
 
   return (
     <form

@@ -94,12 +94,7 @@ export function appointmentWhenLabel(b: {
 }): string | null {
   if (b.slotStart) return formatPracticeDateTime(b.slotStart);
   if (!b.sessionDate) return null;
-  const day = b.sessionDate.toLocaleDateString("en-US", {
-    timeZone: "UTC",
-    month: "numeric",
-    day: "numeric",
-    year: "numeric",
-  });
+  const day = `${String(b.sessionDate.getUTCDate()).padStart(2, "0")}/${String(b.sessionDate.getUTCMonth() + 1).padStart(2, "0")}/${b.sessionDate.getUTCFullYear()}`;
   return b.tokenNumber != null ? `${day} (Token #${b.tokenNumber})` : day;
 }
 

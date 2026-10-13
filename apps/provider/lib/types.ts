@@ -211,7 +211,10 @@ export function bookingDoctorName(b: {
 
 export function whenLabel(b: BookingRow) {
   if (b.mode === "TOKEN_BASED") {
-    return `Token #${b.tokenNumber ?? "?"} · ${b.sessionDate?.slice(0, 10) ?? ""}`;
+    const raw = b.sessionDate?.slice(0, 10) ?? "";
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    const day = m ? `${m[3]}/${m[2]}/${m[1]}` : raw;
+    return `Token #${b.tokenNumber ?? "?"} · ${day}`;
   }
   if (b.slotStart) {
     return formatPracticeDateTime(b.slotStart);

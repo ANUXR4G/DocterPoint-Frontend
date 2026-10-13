@@ -203,6 +203,14 @@ export const proctoService = {
 
   getMyBookings: () => proctoFetch("/procto/bookings/mine"),
 
+  getHousehold: () => proctoFetch("/patient/household"),
+
+  switchHousehold: (patientUserId: string) =>
+    proctoFetch("/patient/household/switch", {
+      method: "POST",
+      body: JSON.stringify({ patientUserId }),
+    }),
+
   cancelBooking: (id: string, phone?: string, reason?: string) =>
     proctoFetch(`/procto/bookings/${id}/cancel`, {
       method: "PATCH",
@@ -430,9 +438,9 @@ export const proctoService = {
       body: JSON.stringify({ ...body, type: "EXTRA_SLOT" }),
     }) as Promise<ProctoResult<ExtraSlotsResult | ExtraSlotsNeedsConfirmation>>,
 
-  searchDeskPatients: (practiceId: string, q: string) =>
+  searchDeskPatients: (practiceId: string, q: string, by?: "name") =>
     proctoFetch(
-      `/procto/practices/${practiceId}/desk-patients?q=${encodeURIComponent(q)}`,
+      `/procto/practices/${practiceId}/desk-patients?q=${encodeURIComponent(q)}${by === "name" ? "&by=name" : ""}`,
     ) as Promise<ProctoResult<{ patients: DeskPatient[] }>>,
 
   registerDeskPatient: (practiceId: string, body: DeskPatientRegistration) =>
@@ -516,6 +524,7 @@ export const proctoService = {
       documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
       clinicalAssessment?: unknown;
       status?: string;
+      disease?: string | null;
     },
   ) =>
     proctoFetch(`/procto/bookings/${bookingId}/visit`, {

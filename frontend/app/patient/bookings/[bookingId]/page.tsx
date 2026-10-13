@@ -442,7 +442,7 @@ export default function PatientVisitPage() {
           <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             Mode
           </p>
-          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+          <p className="mt-1 text-sm font-semibold leading-snug text-slate-900 dark:text-white">
             {formatLabel(booking.mode)}
           </p>
         </div>
@@ -453,7 +453,7 @@ export default function PatientVisitPage() {
           <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             Channel
           </p>
-          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+          <p className="mt-1 text-sm font-semibold leading-snug text-slate-900 dark:text-white">
             {formatLabel(booking.channel)}
           </p>
         </div>

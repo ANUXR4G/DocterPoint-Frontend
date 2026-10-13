@@ -10,6 +10,7 @@ import AdminToolbar from "@/components/admin/AdminToolbar"
 import { AdminBadge } from "@/components/admin/AdminBadge"
 import { adminService, type AdminReview } from "@/lib/services/admin"
 import { useAdminOpsRefresh } from "@/hooks/useAdminOpsRefresh"
+import { formatPracticeDate } from "@/lib/practiceTime"
 
 export default function AdminReviewsPage() {
   const [rows, setRows] = useState<AdminReview[]>([])
@@ -153,11 +154,7 @@ export default function AdminReviewsPage() {
             key: "date",
             header: "Submitted",
             cell: (r) =>
-              new Date(r.createdAt).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              }),
+              formatPracticeDate(r.createdAt),
           },
           {
             key: "actions",

@@ -345,6 +345,12 @@ router.patch(
           documents: req.body.documents,
           clinicalAssessment: req.body.clinicalAssessment,
           status: req.body.status as BookingStatus | undefined,
+          ...(req.body.disease !== undefined
+            ? {
+                disease:
+                  req.body.disease == null ? null : String(req.body.disease),
+              }
+            : {}),
         },
         req.sessionUser!.id,
       );

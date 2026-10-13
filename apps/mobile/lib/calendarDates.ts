@@ -82,25 +82,16 @@ export function formatMonthTitle(d: Date): string {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
+function dmy(d: Date): string {
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
 export function formatWeekTitle(d: Date): string {
-  const a = startOfWeek(d);
-  const b = endOfWeek(d);
-  const left = a.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const right = b.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${left} – ${right}`;
+  return `${dmy(startOfWeek(d))} – ${dmy(endOfWeek(d))}`;
 }
 
 export function formatDayTitle(d: Date): string {
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return dmy(d);
 }
 
 export function weekdayShort(d: Date): string {

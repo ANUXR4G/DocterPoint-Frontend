@@ -1,6 +1,6 @@
 import {
+  formatPracticeDate,
   formatPracticeTime,
-  PRACTICE_TIMEZONE,
   practiceDayKey,
 } from "@/lib/practiceTime";
 import { colors } from "@/lib/theme";
@@ -164,12 +164,7 @@ export function visitDayTime(booking: ProctoBooking): string {
   const dayText =
     day === "Today" || day === "Tomorrow"
       ? day
-      : new Date(whenMs).toLocaleDateString("en-IN", {
-          timeZone: PRACTICE_TIMEZONE,
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-        });
+      : formatPracticeDate(new Date(whenMs));
   const token = booking.tokenNumber ?? booking.token_number;
   if (booking.mode === "TOKEN_BASED" && token != null) {
     return `${dayText} · Token #${token}`;
