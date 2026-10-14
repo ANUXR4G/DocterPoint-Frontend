@@ -5,12 +5,15 @@ import {
   SafeAreaProvider,
   initialWindowMetrics,
 } from "react-native-safe-area-context";
+import { CareThemeProvider } from "@/lib/careTheme";
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false }} />
+      <CareThemeProvider>
+        <StatusBar style="dark" />
+        <Stack screenOptions={{ headerShown: false }} />
+      </CareThemeProvider>
     </SafeAreaProvider>
   );
 }

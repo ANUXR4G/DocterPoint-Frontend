@@ -19,6 +19,7 @@ import { PremiumAtmosphere } from "@/components/mobile/PremiumChrome";
 import { contentBottomPad } from "@/lib/dockLayout";
 import { canManagePractice, usePractice } from "@/lib/practiceContext";
 import { updatePracticeProfile } from "@/lib/procto";
+import { ThemeSwatches } from "@/lib/careTheme";
 import { colors, radii, space } from "@/lib/theme";
 
 const NOTICE_OPTIONS = [
@@ -119,6 +120,7 @@ export default function SettingsScreen() {
             { paddingBottom: contentBottomPad(insets.bottom) },
           ]}
         >
+          <ThemeSwatches />
           <PageTitle
             eyebrow="Account"
             title="Settings"
@@ -143,6 +145,7 @@ export default function SettingsScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
       >
+        <ThemeSwatches />
         <PageTitle
           eyebrow="Clinic"
           title="Settings"

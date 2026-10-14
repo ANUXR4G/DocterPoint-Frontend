@@ -168,7 +168,7 @@ export default function AccountScreen() {
             <View style={styles.text}>
               <Text style={styles.label}>Settings</Text>
               <Text style={styles.hint} numberOfLines={1}>
-                Practice profile, fees and contact — in this app
+                Colour theme, clinic profile, fees and contact
               </Text>
             </View>
             <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />

@@ -4,7 +4,8 @@ import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GlucoBotFab } from "@/components/GlucoBotFab";
 import { AppTopBar } from "@/components/mobile/AppTopBar";
-import { FloatingDock } from "@/components/mobile/FloatingDock";
+import { CareTabBar } from "@/components/mobile/CareTabBar";
+import { useCareTheme } from "@/lib/careTheme";
 import { Loading } from "@/components/ui";
 import { clearSession } from "@/lib/api";
 import {
@@ -28,6 +29,7 @@ import { colors, radii, space } from "@/lib/theme";
 
 export default function AppLayout() {
   const router = useRouter();
+  const { theme } = useCareTheme();
   const cachedMemberships = getCachedMemberships();
   const [memberships, setMemberships] = useState<PracticeMembership[]>(
     () => cachedMemberships ?? [],
@@ -183,7 +185,7 @@ export default function AppLayout() {
     <PracticeProvider value={value}>
       <PracticeLiveProvider>
         <SafeAreaView
-          style={{ flex: 1, backgroundColor: colors.paper }}
+          style={{ flex: 1, backgroundColor: theme.paper }}
           edges={["top", "left", "right"]}
         >
           <View style={{ flex: 1 }}>
@@ -206,7 +208,7 @@ export default function AppLayout() {
                 headerStatusBarHeight: 0,
                 tabBarStyle: { display: "none" },
                 sceneStyle: {
-                  backgroundColor: colors.paper,
+                  backgroundColor: theme.paper,
                 },
               }}
             >
@@ -268,7 +270,7 @@ export default function AppLayout() {
                 options={{ title: "Audit log" }}
               />
             </Tabs>
-            <FloatingDock />
+            <CareTabBar />
             <GlucoBotFab />
           </View>
         </SafeAreaView>

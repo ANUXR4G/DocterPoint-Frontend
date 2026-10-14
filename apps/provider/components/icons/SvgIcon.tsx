@@ -21,6 +21,7 @@ export type SvgIconName =
   | "chartOutline"
   | "more"
   | "moreOutline"
+  | "person"
   | "chevronLeft"
   | "chevronRight"
   | "close"
@@ -176,6 +177,13 @@ export function SvgIcon({
           <Line x1="18" y1="20" x2="18" y2="10" />
           <Line x1="12" y1="20" x2="12" y2="4" />
           <Line x1="6" y1="20" x2="6" y2="14" />
+        </Svg>
+      );
+    case "person":
+      return (
+        <Svg {...common}>
+          <Circle cx="12" cy="8" r="3.2" />
+          <Path d="M5.5 19.5c1.4-3.2 3.7-4.8 6.5-4.8s5.1 1.6 6.5 4.8" />
         </Svg>
       );
     case "more":

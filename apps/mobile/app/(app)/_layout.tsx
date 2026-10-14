@@ -10,9 +10,11 @@ import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { getToken } from "@/lib/api";
 import { PatientLiveProvider } from "@/lib/PatientLiveContext";
 import { onSessionExpired } from "@/lib/sessionEvents";
+import { useCareTheme } from "@/lib/careTheme";
 import { colors } from "@/lib/theme";
 
 export default function AppLayout() {
+  const { theme } = useCareTheme();
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
 
@@ -40,7 +42,7 @@ export default function AppLayout() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.paper }}>
+    <View style={{ flex: 1, backgroundColor: theme.paper }}>
       <PatientLiveProvider>
       <Tabs
         tabBar={(props) => <FloatingDock {...(props as FloatingDockProps)} />}
@@ -63,7 +65,7 @@ export default function AppLayout() {
             elevation: 0,
           },
           sceneStyle: {
-            backgroundColor: colors.paper,
+            backgroundColor: theme.paper,
           },
         }}
       >
@@ -101,6 +103,14 @@ export default function AppLayout() {
           options={{
             href: null,
             title: "Help & Support",
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            href: null,
+            title: "Settings",
+            headerShown: false,
           }}
         />
         <Tabs.Screen

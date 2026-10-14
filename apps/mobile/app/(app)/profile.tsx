@@ -287,6 +287,20 @@ export default function ProfileScreen() {
         <View style={styles.menu}>
           <Pressable
             accessibilityRole="button"
+            onPress={() => router.push("/(app)/settings" as never)}
+            style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+          >
+            <View style={styles.menuIcon}>
+              <SvgIcon name="settings" size={20} color={colors.brand} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuLabel}>Settings</Text>
+              <Text style={styles.menuHint}>Colour theme for Home and the tab bar</Text>
+            </View>
+            <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
             onPress={() => router.push("/(app)/queries")}
             style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
           >

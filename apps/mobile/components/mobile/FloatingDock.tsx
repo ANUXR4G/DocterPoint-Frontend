@@ -1,17 +1,12 @@
-import type { ReactNode } from "react";
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type GestureResponderEvent,
-} from "react-native";
-import { BlurView } from "expo-blur";
+import { useState, type ReactNode } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SvgIcon, type SvgIconName } from "@/components/icons/SvgIcon";
-import { dockLayout, dockLift } from "@/lib/dockLayout";
-import { colors } from "@/lib/theme";
+import {
+  CareGlyph,
+  RainbowSparkle,
+  type CareGlyphName,
+} from "@/components/mobile/careArt";
+import { useCareTheme } from "@/lib/careTheme";
 
 type TabRoute = {
   key: string;
@@ -19,7 +14,6 @@ type TabRoute = {
   params?: object;
 };
 
-/** Minimal props from React Navigation bottom tab bar. */
 export type FloatingDockProps = {
   state: {
     index: number;
@@ -32,7 +26,6 @@ export type FloatingDockProps = {
         title?: string;
         tabBarLabel?: string | ((props: unknown) => ReactNode);
         href?: string | null;
-        tabBarAccessibilityLabel?: string;
       };
     }
   >;
@@ -46,211 +39,159 @@ export type FloatingDockProps = {
   };
 };
 
-const TAB_ICONS: Record<
-  string,
-  { label: string; active: SvgIconName; idle: SvgIconName }
-> = {
-  home: { label: "Home", active: "home", idle: "homeOutline" },
-  doctors: { label: "Clinics", active: "medkit", idle: "medkitOutline" },
-  appointments: {
-    label: "Bookings",
-    active: "calendar",
-    idle: "calendarOutline",
-  },
-  profile: { label: "Profile", active: "person", idle: "personOutline" },
+const TAB_ICONS: Record<string, { label: string; icon: CareGlyphName }> = {
+  home: { label: "Home", icon: "home" },
+  doctors: { label: "Clinics", icon: "people" },
+  appointments: { label: "Visits", icon: "calendar" },
+  profile: { label: "Profile", icon: "person" },
 };
 
-/** Even px sizes stay sharp on @2x/@3x — never scale icon glyphs. */
-const ICON_SIZE = 22;
+const MORE: { label: string; route: string; icon: CareGlyphName }[] = [
+  { label: "Settings", route: "settings", icon: "settings" },
+  { label: "Calendar", route: "record", icon: "calendar" },
+  { label: "Help", route: "queries", icon: "note" },
+];
 
-/** Detail screens with their own bottom action bar. */
 const HIDE_ON = new Set(["doctor/[slug]"]);
 
-function DockItem({
-  label,
-  a11yLabel,
-  iconActive,
-  iconIdle,
-  focused,
-  onPress,
-  onLongPress,
-}: {
-  label: string;
-  a11yLabel: string;
-  iconActive: SvgIconName;
-  iconIdle: SvgIconName;
-  focused: boolean;
-  onPress: (e: GestureResponderEvent) => void;
-  onLongPress: (e: GestureResponderEvent) => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: focused }}
-      accessibilityLabel={a11yLabel}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
-      hitSlop={4}
-    >
-      <View style={styles.iconSlot} collapsable={false}>
-        <SvgIcon
-          name={focused ? iconActive : iconIdle}
-          size={ICON_SIZE}
-          color={focused ? colors.brand : colors.inkFaint}
-        />
-      </View>
-      <Text
-        style={[styles.label, focused && styles.labelActive]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-/** Floating labelled tab bar — teal active tab, matches the patient web portal nav. */
-export function FloatingDock({
-  state,
-  descriptors,
-  navigation,
-}: FloatingDockProps) {
+/** Same care tab bar as the doctor app: Home, Clinics, sparkle, Visits, Profile. */
+export function FloatingDock({ state, descriptors, navigation }: FloatingDockProps) {
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
+  const [more, setMore] = useState(false);
   const current = state.routes[state.index];
   if (current && HIDE_ON.has(current.name)) return null;
 
-  const visible = state.routes.filter((route) => {
-    const options = descriptors[route.key]?.options;
-    return options?.href !== null;
-  });
-
-  const focusedVisibleIndex = visible.findIndex(
-    (route) => current?.key === route.key,
+  const visible = state.routes.filter(
+    (route) => descriptors[route.key]?.options?.href !== null && TAB_ICONS[route.name],
+  );
+  const left = visible.filter((route) => route.name === "home" || route.name === "doctors");
+  const right = visible.filter(
+    (route) => route.name === "appointments" || route.name === "profile",
   );
 
+  function open(route: TabRoute) {
+    const event = navigation.emit({
+      type: "tabPress",
+      target: route.key,
+      canPreventDefault: true,
+    });
+    if (current?.key !== route.key && !event.defaultPrevented) {
+      navigation.navigate(route.name, route.params);
+    }
+  }
+
+  function item(route: TabRoute) {
+    const meta = TAB_ICONS[route.name];
+    const focused = current?.key === route.key;
+    return (
+      <Pressable
+        key={route.key}
+        accessibilityRole="button"
+        accessibilityState={{ selected: focused }}
+        accessibilityLabel={meta.label}
+        onPress={() => open(route)}
+        style={[styles.item, focused && { backgroundColor: theme.line }]}
+      >
+        <CareGlyph name={meta.icon} size={22} color={focused ? theme.ink : theme.muted} />
+        <Text style={[styles.label, { color: focused ? theme.ink : theme.muted }]}>
+          {meta.label}
+        </Text>
+      </Pressable>
+    );
+  }
+
   return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.wrap, { bottom: dockLift(insets.bottom) }]}
-    >
-      <View style={styles.dockShell}>
-        <View style={styles.dockClip}>
-          <BlurView
-            intensity={Platform.OS === "ios" ? 60 : 80}
-            tint={Platform.OS === "ios" ? "systemThinMaterialLight" : "light"}
-            blurMethod="dimezisBlurView"
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <View style={styles.wash} pointerEvents="none" />
-
-          <View style={styles.row}>
-            {visible.map((route, index) => {
-              const meta = TAB_ICONS[route.name];
-              if (!meta) return null;
-
-              const focused = focusedVisibleIndex === index;
-              const options = descriptors[route.key]?.options;
-              const label =
-                typeof options?.tabBarLabel === "string"
-                  ? options.tabBarLabel
-                  : meta.label;
-              const a11yLabel =
-                typeof options?.title === "string" ? options.title : label;
-
-              return (
-                <DockItem
-                  key={route.key}
-                  label={label}
-                  a11yLabel={a11yLabel}
-                  iconActive={meta.active}
-                  iconIdle={meta.idle}
-                  focused={focused}
-                  onPress={() => {
-                    const event = navigation.emit({
-                      type: "tabPress",
-                      target: route.key,
-                      canPreventDefault: true,
-                    });
-                    if (!focused && !event.defaultPrevented) {
-                      navigation.navigate(route.name, route.params);
-                    }
-                  }}
-                  onLongPress={() => {
-                    navigation.emit({
-                      type: "tabLongPress",
-                      target: route.key,
-                    });
-                  }}
-                />
-              );
-            })}
-          </View>
+    <>
+      <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <View style={[styles.bar, { backgroundColor: theme.card, borderColor: theme.line }]}>
+          {left.map(item)}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More"
+            onPress={() => setMore(true)}
+            style={styles.spark}
+          >
+            <RainbowSparkle />
+          </Pressable>
+          {right.map(item)}
         </View>
       </View>
-    </View>
+      <Modal visible={more} transparent animationType="fade" onRequestClose={() => setMore(false)}>
+        <Pressable style={styles.scrim} onPress={() => setMore(false)}>
+          <View style={[styles.sheet, { backgroundColor: theme.card }]}>
+            {MORE.map((row) => (
+              <Pressable
+                key={row.route}
+                onPress={() => {
+                  setMore(false);
+                  navigation.navigate(row.route);
+                }}
+                style={styles.moreRow}
+              >
+                <CareGlyph name={row.icon} size={20} color={theme.ink} />
+                <Text style={[styles.moreLabel, { color: theme.ink }]}>{row.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
     position: "absolute",
-    left: 0,
-    right: 0,
-    paddingHorizontal: dockLayout.horizontal,
+    left: 12,
+    right: 12,
+    bottom: 0,
   },
-  dockShell: {
-    borderRadius: dockLayout.radius,
-    shadowColor: "#0B1220",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  dockClip: {
-    height: dockLayout.height,
-    borderRadius: dockLayout.radius,
-    overflow: "hidden",
+  bar: {
+    height: 68,
+    borderRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255, 255, 255, 0.9)",
-    backgroundColor:
-      Platform.OS === "ios"
-        ? "rgba(255, 255, 255, 0.7)"
-        : "rgba(255, 255, 255, 0.97)",
-    justifyContent: "center",
-  },
-  wash: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(255, 255, 255, 0.45)",
-  },
-  row: {
     flexDirection: "row",
     alignItems: "center",
-    zIndex: 1,
+    paddingHorizontal: 8,
+    shadowColor: "#1C1C1E",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   item: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 2,
+    borderRadius: 18,
     paddingVertical: 6,
+    marginHorizontal: 2,
   },
-  itemPressed: {
-    opacity: 0.6,
-  },
-  iconSlot: {
-    width: ICON_SIZE,
-    height: ICON_SIZE,
+  label: { fontSize: 10, fontWeight: "600" },
+  spark: {
+    width: 54,
+    height: 54,
+    marginTop: -22,
+    borderRadius: 27,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#fff",
   },
-  label: {
-    marginTop: 4,
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.inkFaint,
+  scrim: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.28)",
+    justifyContent: "flex-end",
+    padding: 16,
   },
-  labelActive: {
-    color: colors.brand,
+  sheet: { borderRadius: 20, padding: 8, marginBottom: 84 },
+  moreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
+  moreLabel: { fontSize: 16, fontWeight: "600" },
 });

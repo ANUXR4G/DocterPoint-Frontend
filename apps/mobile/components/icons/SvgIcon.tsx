@@ -34,7 +34,8 @@ export type SvgIconName =
   | "addCircle"
   | "edit"
   | "trash"
-  | "business";
+  | "business"
+  | "settings";
 
 type Props = {
   name: SvgIconName;
@@ -192,6 +193,13 @@ export function SvgIcon({
         <Svg {...common}>
           <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
           <Circle cx="12" cy="13" r="4" />
+        </Svg>
+      );
+    case "settings":
+      return (
+        <Svg {...common}>
+          <Circle cx="12" cy="12" r="3" />
+          <Path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18" />
         </Svg>
       );
     case "help":

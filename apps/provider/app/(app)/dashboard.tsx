@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Image,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -8,43 +10,23 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  Chip,
-  EmptyState,
-  ErrorText,
-  PageTitle,
-  StatusBadge,
-  SurfaceCard,
-} from "@/components/ui";
-import {
-  DashMetric,
-  PremiumAtmosphere,
-} from "@/components/mobile/PremiumChrome";
-import {
-  isClinicAdminRole,
-  isDeskRole,
-  usePractice,
-} from "@/lib/practiceContext";
+import * as SecureStore from "expo-secure-store";
+import { CareGlyph, CareQuickAction, CareStatCard } from "@/components/mobile/careArt";
+import { CareWelcome } from "@/components/mobile/CareWelcome";
+import { useCareTheme } from "@/lib/careTheme";
+import { contentBottomPad } from "@/lib/dockLayout";
+import { resolveMediaUrl } from "@/lib/media";
+import { formatPracticeTime } from "@/lib/practiceTime";
+import { usePractice } from "@/lib/practiceContext";
 import { usePracticeLive } from "@/lib/PracticeLiveContext";
-import { RxButton } from "@/components/ClinicLogSheet";
-import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
-import { withDrTitle } from "@/lib/doctorName";
 import {
   bookingPatientLabel,
-  nextActions,
   whenLabel,
   ymd,
   type BookingRow,
 } from "@/lib/types";
-import { formatPracticeTime } from "@/lib/practiceTime";
-import { colors, space } from "@/lib/theme";
-import { contentBottomPad } from "@/lib/dockLayout";
-import {
-  countQueueStatusFilters,
-  splitDayQueue,
-} from "@/lib/bookingStatus";
 
-const QUEUE_PREVIEW = 5;
+const WELCOME_KEY = "gg.careWelcome";
 
 function queueWhen(b: BookingRow) {
   if (b.mode === "TOKEN_BASED") return `Token #${b.tokenNumber ?? "?"}`;
@@ -52,307 +34,351 @@ function queueWhen(b: BookingRow) {
   return whenLabel(b);
 }
 
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
 export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { membership, memberships } = usePractice();
-  const {
-    patients,
-    liveConnected,
-    error: liveError,
-    refresh,
-    bookingsOnDate,
-  } = usePracticeLive();
-  const { busyId, error: actionError, setStatus } = useBookingStatusActions();
+  const { theme } = useCareTheme();
+  const { membership } = usePractice();
+  const { patients, error: liveError, refresh, bookingsOnDate } = usePracticeLive();
   const [refreshing, setRefreshing] = useState(false);
+  const [welcome, setWelcome] = useState<boolean | null>(null);
   const today = ymd(new Date());
   const bookings = bookingsOnDate(today);
-  const error = actionError || liveError || "";
 
-  const practiceName = membership?.practice.name ?? "your clinic";
-  const isClinicAdmin = isClinicAdminRole(membership?.role);
-  const seesClinic = isDeskRole(membership?.role);
-  const isIndependent = membership?.practice.type === "SOLO";
-  const isStaffDoctor =
-    !isIndependent && !seesClinic && membership?.role === "DOCTOR";
-  const showDoctorOnRows =
-    seesClinic &&
-    (membership?.practice.members ?? []).filter(
-      (m) =>
-        m.role === "DOCTOR" ||
-        (m.role === "PRACTICE_OWNER" && Boolean(m.doctorId)),
-    ).length > 1;
+  useEffect(() => {
+    void SecureStore.getItemAsync(WELCOME_KEY).then((v) => setWelcome(v !== "1"));
+  }, []);
 
-  const counts = useMemo(
-    () => countQueueStatusFilters(bookings.map((b) => b.status)),
-    [bookings],
+  async function dismissWelcome(href?: string) {
+    await SecureStore.setItemAsync(WELCOME_KEY, "1");
+    setWelcome(false);
+    if (href) router.push(href as never);
+  }
+
+  const me = membership?.practice.members.find(
+    (m) => m.userId === membership.userId,
+  )?.user;
+  const name = me?.name?.trim() || "Doctor";
+  const photo = resolveMediaUrl(me?.imgSrc);
+
+  const inProgress = bookings.filter(
+    (b) => String(b.status).toUpperCase() === "IN_PROGRESS",
+  ).length;
+  const pending = bookings.filter((b) =>
+    ["WAITING", "ACCEPTED", "SCHEDULED", "CONFIRMED", "REQUESTED"].includes(
+      String(b.status).toUpperCase(),
+    ),
+  ).length;
+  const alerts = bookings.filter((b) =>
+    ["NO_SHOW", "CANCELED", "CANCELLED"].includes(String(b.status).toUpperCase()),
+  ).length;
+  const seen = useMemo(() => {
+    const ids = new Set(
+      bookings.map((b) => b.patientId || b.patientPhone).filter(Boolean),
+    );
+    return ids.size;
+  }, [bookings]);
+  const next = bookings.find(
+    (b) => !["COMPLETED", "CANCELED", "CANCELLED", "NO_SHOW"].includes(
+      String(b.status).toUpperCase(),
+    ),
   );
-  const openQueue = counts.waiting + counts.in_appointment;
-  const { active, finished } = useMemo(
-    () => splitDayQueue(bookings),
-    [bookings],
-  );
-  const preview = active.slice(0, QUEUE_PREVIEW);
 
-  const eyebrow = isStaffDoctor
-    ? "Clinic staff · Doctor portal"
-    : isIndependent
-      ? "Independent practice · Doctor portal"
-      : isClinicAdmin
-        ? "Clinic portal"
-        : "Doctor portal";
-  const title = isStaffDoctor ? `Queue at ${practiceName}` : "Today at a glance";
-  const subtitle = isStaffDoctor
-    ? `You are signed in under ${practiceName}. Manage your own queue and patients; the clinic oversees the full roster.`
-    : `${practiceName} · live queue and summary metrics.`;
+  if (welcome) {
+    return (
+      <CareWelcome
+        name={name.split(" ")[0]}
+        onContinue={() => void dismissWelcome()}
+        onFocus={(title) => {
+          const href =
+            title === "Daily Tasks"
+              ? "/(app)/queue"
+              : title === "Patient Care"
+                ? "/(app)/patients"
+                : "/(app)/appointments";
+          void dismissWelcome(href);
+        }}
+      />
+    );
+  }
+
+  const stats = [
+    {
+      label: "Today's Visits",
+      value: pad(bookings.length),
+      hint: `${inProgress} in progress`,
+      background: theme.visit,
+      ink: theme.visitInk,
+      glyph: "calendar" as const,
+      ratio: bookings.length ? inProgress / bookings.length : 0,
+      href: "/(app)/appointments",
+    },
+    {
+      label: "Today's Tasks",
+      value: pad(pending),
+      hint: `${pending} pending`,
+      background: theme.task,
+      ink: theme.taskInk,
+      glyph: "checklist" as const,
+      ratio: bookings.length ? pending / bookings.length : 0,
+      href: "/(app)/queue",
+    },
+    {
+      label: "Today's Patients",
+      value: pad(seen || patients.length),
+      hint: `${seen} on today's list`,
+      background: theme.people,
+      ink: theme.peopleInk,
+      glyph: "people" as const,
+      ratio: patients.length ? Math.min(1, seen / patients.length) : 0,
+      href: "/(app)/patients",
+    },
+    {
+      label: "Today's Alerts",
+      value: pad(alerts),
+      hint: alerts ? "Need review" : "None waiting",
+      background: theme.alert,
+      ink: theme.alertInk,
+      glyph: "bell" as const,
+      ratio: bookings.length ? alerts / bookings.length : 0,
+      href: "/(app)/notifications",
+    },
+  ];
 
   return (
-    <View style={styles.root}>
-      <PremiumAtmosphere />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: space.lg,
-            paddingBottom: contentBottomPad(insets.bottom),
-          },
-        ]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await refresh({ soft: true, force: true });
-              setRefreshing(false);
-            }}
-            tintColor={colors.brand}
-          />
-        }
-      >
-        <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} />
-
-        <View style={styles.chips}>
-          <Chip label={liveConnected ? "Live" : "Connecting…"} />
-        </View>
-
-        {memberships.length > 1 ? (
-          <Text style={styles.switchHint}>
-            Switch practice anytime from Account in the menu.
+    <ScrollView
+      style={{ flex: 1, backgroundColor: theme.paper }}
+      contentContainerStyle={{
+        paddingHorizontal: 18,
+        paddingTop: 8,
+        paddingBottom: contentBottomPad(insets.bottom),
+      }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await refresh({ soft: true, force: true });
+            setRefreshing(false);
+          }}
+          tintColor={theme.visitInk}
+        />
+      }
+    >
+      <View style={styles.header}>
+        {photo ? (
+          <Image source={{ uri: photo }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: theme.visit }]}>
+            <Text style={{ color: theme.visitInk, fontWeight: "700" }}>
+              {name.slice(0, 1)}
+            </Text>
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.greet, { color: theme.muted }]}>
+            {new Date().getHours() < 12
+              ? "Good morning"
+              : new Date().getHours() < 17
+                ? "Good afternoon"
+                : "Good evening"}
           </Text>
-        ) : null}
-
-        <View style={styles.quickLinks}>
-          {(
-            [
-              { label: "Patient Support", href: "/(app)/inbox" },
-              { label: "Appointments", href: "/(app)/appointments" },
-              { label: "Patients", href: "/(app)/patients" },
-              { label: "Calendar", href: "/(app)/calendar" },
-              { label: "Analytics", href: "/(app)/analytics" },
-              { label: "Notifications", href: "/(app)/notifications" },
-              isIndependent || isClinicAdmin
-                ? { label: "Subscription", href: "/(app)/subscriptions" }
-                : { label: "My hours", href: "/(app)/schedule" },
-              { label: "Settings", href: "/(app)/settings" },
-            ] as Array<{ label: string; href: string }>
-          ).map((item) => (
-            <Chip
-              key={item.href}
-              label={item.label}
-              onPress={() => router.push(item.href as never)}
-            />
-          ))}
-        </View>
-
-        <ErrorText text={error} />
-
-        <View style={styles.metricsRow}>
-          <DashMetric
-            label="Patients"
-            value={patients.length}
-            hint={isStaffDoctor ? "Your patients" : "Clinic roster"}
-            tone="blue"
-            onPress={() => router.push("/(app)/patients")}
-          />
-          <DashMetric
-            label="Today"
-            value={bookings.length}
-            hint="Bookings"
-            tone="sky"
-            onPress={() => router.push("/(app)/queue")}
-          />
-        </View>
-        <View style={styles.metricsRow}>
-          <DashMetric
-            label="On queue"
-            value={openQueue}
-            hint="Waiting + in progress"
-            tone="amber"
-            onPress={() => router.push("/(app)/queue")}
-          />
-          <DashMetric
-            label="Finished"
-            value={counts.done}
-            hint="Closed today"
-            tone="emerald"
-            onPress={() => router.push("/(app)/analytics")}
-          />
-        </View>
-
-        <View style={styles.sectionRow}>
-          <Text style={styles.section}>{"Today's queue"}</Text>
-          <Chip
-            label="Full queue →"
-            onPress={() => router.push("/(app)/queue")}
-          />
-        </View>
-
-        {!bookings.length && !liveError ? (
-          <EmptyState text="No visits scheduled today. New bookings from web, WhatsApp, or the patient app appear here live." />
-        ) : null}
-
-        {bookings.length > 0 && !active.length ? (
-          <Text style={styles.queueNote}>
-            Everyone is seen for today — {finished.length} finished.
+          <Text style={[styles.name, { color: theme.ink }]} numberOfLines={1}>
+            {name}
           </Text>
-        ) : null}
+        </View>
+        <Pressable
+          accessibilityLabel="Notifications"
+          onPress={() => router.push("/(app)/notifications" as never)}
+          style={[styles.bell, { backgroundColor: theme.card }]}
+        >
+          <CareGlyph name="bell" size={18} color={theme.ink} />
+        </Pressable>
+      </View>
 
-        {preview.map((b) => {
-          const name = bookingPatientLabel(b);
-          const busy = busyId === b.id;
-          return (
-            <SurfaceCard
-              key={b.id}
-              onPress={() => router.push(`/(app)/visit/${b.id}`)}
-            >
-              <View style={styles.row}>
-                <View style={styles.whenPill}>
-                  <Text style={styles.whenText}>{queueWhen(b)}</Text>
-                </View>
-                <Text style={styles.name} numberOfLines={1}>
-                  {name}
+      {liveError ? (
+        <Text style={[styles.error, { color: theme.alertInk }]}>{liveError}</Text>
+      ) : null}
+
+      <View style={styles.grid}>
+        {stats.map((s) => (
+          <CareStatCard
+            key={s.label}
+            label={s.label}
+            value={s.value}
+            hint={s.hint}
+            background={s.background}
+            ink={s.ink}
+            glyph={s.glyph}
+            ratio={s.ratio}
+            onPress={() => router.push(s.href as never)}
+          />
+        ))}
+      </View>
+
+      <Text style={[styles.section, { color: theme.ink }]}>Quick Actions</Text>
+      <View style={styles.actions}>
+        <CareQuickAction label="Start Visit" glyph="bolt" onPress={() => router.push("/(app)/queue" as never)} />
+        <CareQuickAction label="Note" glyph="note" onPress={() => router.push("/(app)/inbox" as never)} />
+        <CareQuickAction label="Wellness" glyph="heart" onPress={() => router.push("/(app)/calendar" as never)} />
+        <CareQuickAction label="Patients" glyph="people" onPress={() => router.push("/(app)/patients" as never)} />
+      </View>
+
+      <View style={styles.sectionRow}>
+        <Text style={[styles.section, { color: theme.ink }]}>Today's Schedule</Text>
+        <Pressable onPress={() => router.push("/(app)/appointments")}>
+          <Text style={[styles.link, { color: theme.muted }]}>View all</Text>
+        </Pressable>
+      </View>
+
+      {next ? (
+        <View style={[styles.schedule, { backgroundColor: theme.card }]}>
+          <View style={styles.scheduleTop}>
+            {resolveMediaUrl(next.patient?.imgSrc) ? (
+              <Image source={{ uri: resolveMediaUrl(next.patient?.imgSrc)! }} style={styles.scheduleAvatar} />
+            ) : (
+              <View style={[styles.scheduleAvatar, { backgroundColor: theme.visit, alignItems: "center", justifyContent: "center" }]}>
+                <Text style={{ color: theme.visitInk, fontWeight: "700" }}>
+                  {bookingPatientLabel(next).slice(0, 1)}
                 </Text>
-                <StatusBadge status={b.status} />
               </View>
-              {showDoctorOnRows && b.provider?.name ? (
-                <Text style={styles.meta}>{withDrTitle(b.provider.name)}</Text>
-              ) : null}
-              {b.disease ? <Text style={styles.meta}>{b.disease}</Text> : null}
-              <View style={styles.actions}>
-                {nextActions(b.status).map((s) => (
-                  <Chip
-                    key={s.status}
-                    label={busy ? "Saving…" : s.label}
-                    onPress={
-                      busy
-                        ? undefined
-                        : () => {
-                            if (s.opensVisit) {
-                              router.push(`/(app)/visit/${b.id}`);
-                              return;
-                            }
-                            setStatus(b.id, s.status, s.reasons);
-                          }
-                    }
-                    disabled={busy}
-                  />
-                ))}
-                <RxButton bookingId={b.id} status={b.status} />
-                <Chip
-                  label="Open visit"
-                  onPress={() => router.push(`/(app)/visit/${b.id}`)}
-                />
-              </View>
-            </SurfaceCard>
-          );
-        })}
-
-        {active.length > QUEUE_PREVIEW ? (
-          <Chip
-            label={`+${active.length - QUEUE_PREVIEW} more in the full queue`}
-            onPress={() => router.push("/(app)/queue")}
-          />
-        ) : null}
-
-        {active.length > 0 && finished.length > 0 ? (
-          <Text style={styles.queueNote}>
-            {finished.length} finished today.
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.patient, { color: theme.ink }]} numberOfLines={1}>
+                {bookingPatientLabel(next)}
+              </Text>
+              <Text style={[styles.meta, { color: theme.muted }]} numberOfLines={1}>
+                {next.disease?.trim() || next.patient?.mrn || "Clinic visit"}
+              </Text>
+            </View>
+            <View style={[styles.badge, { backgroundColor: theme.task }]}>
+              <Text style={[styles.badgeText, { color: theme.taskInk }]}>Scheduled</Text>
+            </View>
+          </View>
+          <View style={styles.whenRow}>
+            <CareGlyph name="calendar" size={14} color={theme.muted} />
+            <Text style={[styles.meta, { color: theme.muted, flex: 1 }]} numberOfLines={1}>
+              {queueWhen(next)}
+              {next.location?.address ? `   ${next.location.address}` : ""}
+            </Text>
+          </View>
+          <View style={styles.scheduleActions}>
+            <Pressable
+              accessibilityLabel="Open visit"
+              onPress={() => router.push(`/(app)/visit/${next.id}` as never)}
+              style={[styles.round, { backgroundColor: theme.paper }]}
+            >
+              <CareGlyph name="video" size={18} color={theme.ink} />
+            </Pressable>
+            <Pressable
+              onPress={() => router.push(`/(app)/visit/${next.id}` as never)}
+              style={[styles.start, { backgroundColor: theme.accent }]}
+            >
+              <Text style={[styles.startText, { color: theme.ink }]}>Start Visit</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Open visit"
+              onPress={() => router.push(`/(app)/visit/${next.id}` as never)}
+              style={[styles.round, { backgroundColor: theme.ink }]}
+            >
+              <CareGlyph name="expand" size={16} color="#fff" />
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View style={[styles.schedule, { backgroundColor: theme.card }]}>
+          <Text style={[styles.patient, { color: theme.ink }]}>No visit waiting</Text>
+          <Text style={[styles.meta, { color: theme.muted, marginTop: 6 }]}>
+            New bookings from the web, WhatsApp, or the patient app show up here.
           </Text>
-        ) : null}
-      </ScrollView>
-    </View>
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.paper },
-  scroll: { flex: 1 },
-  content: {
-    paddingHorizontal: space.xl,
-    gap: space.md,
+  header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  switchHint: {
-    fontSize: 13,
-    color: colors.inkFaint,
+  greet: { fontSize: 13 },
+  name: { fontSize: 20, fontWeight: "700", letterSpacing: -0.3 },
+  bell: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  metricsRow: {
-    flexDirection: "row",
-    gap: space.md,
+  error: { marginBottom: 8, fontSize: 13 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  stat: { width: "48%", borderRadius: 22, padding: 14, flexGrow: 1 },
+  statIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  statLabel: { marginTop: 12, fontSize: 13, fontWeight: "600" },
+  statValue: { marginTop: 4, fontSize: 32, fontWeight: "700", letterSpacing: -1 },
+  bar: { marginTop: 8, height: 4, borderRadius: 4, overflow: "hidden" },
+  barFill: { height: 4, borderRadius: 4 },
+  statHint: { marginTop: 6, fontSize: 12 },
+  section: { marginTop: 22, marginBottom: 12, fontSize: 18, fontWeight: "700" },
   sectionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: space.sm,
   },
-  section: {
-    marginTop: space.sm,
-    marginBottom: space.xs,
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.inkFaint,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
+  link: { fontSize: 13, fontWeight: "600" },
+  actions: { flexDirection: "row", justifyContent: "space-between" },
+  action: { alignItems: "center", width: 72 },
+  actionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.sm,
-    marginBottom: space.xs,
-  },
-  quickLinks: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.sm,
-    paddingVertical: space.xs,
-  },
-  queueNote: {
-    fontSize: 13,
-    color: colors.inkSoft,
-  },
-  row: {
+  actionLabel: { marginTop: 6, fontSize: 11, fontWeight: "600", textAlign: "center" },
+  schedule: { borderRadius: 22, padding: 14 },
+  scheduleTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  scheduleAvatar: { width: 42, height: 42, borderRadius: 21 },
+  whenRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12 },
+  patient: { fontSize: 16, fontWeight: "700" },
+  meta: { fontSize: 13 },
+  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText: { fontSize: 12, fontWeight: "700" },
+  scheduleActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 14,
   },
-  whenPill: {
-    paddingHorizontal: space.sm,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: colors.brandLight,
+  start: {
+    height: 40,
+    paddingHorizontal: 22,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  whenText: { fontSize: 12, fontWeight: "700", color: colors.brand },
-  name: { fontSize: 16, fontWeight: "600", color: colors.ink, flex: 1 },
-  meta: {
-    marginTop: space.xs,
-    fontSize: 13,
-    color: colors.inkSoft,
+  round: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  actions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.sm,
-    marginTop: space.md,
-  },
+  startText: { fontSize: 15, fontWeight: "700" },
 });

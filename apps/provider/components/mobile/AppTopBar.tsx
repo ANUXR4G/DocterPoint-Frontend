@@ -38,6 +38,11 @@ export function AppTopBar() {
   const pathname = usePathname();
   const { membership } = usePractice();
   const title = titleForPath(pathname);
+  const careRoot =
+    ["/dashboard", "/patients", "/appointments", "/profile"].some(
+      (part) => pathname === part || pathname.endsWith(part),
+    ) && !pathname.includes("/patients/");
+  if (careRoot) return null;
 
   return (
     <View style={styles.bar}>
