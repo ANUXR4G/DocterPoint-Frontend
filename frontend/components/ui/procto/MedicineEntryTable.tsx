@@ -111,10 +111,11 @@ function shownDate(value?: string) {
 }
 
 const th =
-  "whitespace-nowrap border border-neutral-200 bg-neutral-50 px-2 py-2 text-left text-[11px] font-semibold text-neutral-800"
-const td = "border border-neutral-200 px-1 py-1 align-middle text-xs text-neutral-900"
+  "whitespace-nowrap border border-neutral-200 bg-neutral-50 px-2 py-2 text-left text-[11px] font-semibold text-neutral-800 dark:border-neutral-600 dark:bg-neutral-800 dark:!text-neutral-100"
+const td =
+  "border border-neutral-200 px-1 py-1 align-middle text-xs text-neutral-900 dark:border-neutral-600 dark:!text-neutral-100"
 const field =
-  "w-full min-w-[4.75rem] rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-neutral-900 outline-none placeholder:text-neutral-400"
+  "w-full min-w-[4.75rem] rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-neutral-500 dark:bg-neutral-900 dark:!text-neutral-100 dark:placeholder:!text-neutral-400 dark:[color-scheme:dark]"
 
 export default function MedicineEntryTable({
   rows,
@@ -136,7 +137,7 @@ export default function MedicineEntryTable({
   }
 
   return (
-    <div className="mt-3 overflow-x-auto rounded-lg bg-white p-2 text-neutral-900">
+    <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-200 bg-white p-2 text-neutral-900 dark:border-neutral-600 dark:bg-neutral-950 dark:!text-neutral-100">
       <table className="w-full min-w-[1180px] border-collapse">
         <thead>
           <tr>
