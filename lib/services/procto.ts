@@ -1349,19 +1349,22 @@ export type PaymentsListResponse = {
   paymentsEnabled: boolean;
 };
 
-/** Doctors linked to this clinic (PracticeMember), DOCTOR first; solo owner fallback. */
+/** Staff doctors first. A clinic owner is included only with their own doctor profile. */
 export function getPracticeProviders(
-  members: { role: string; user: { id: string; name: string | null } }[],
+  members: {
+    role: string;
+    user: { id: string; name: string | null; doctor?: unknown };
+  }[],
 ) {
-  const doctors = members
-    .filter(
-      (m) =>
-        m.role === "DOCTOR" ||
-        (m.role === "PRACTICE_OWNER" &&
-          Boolean((m as { doctorId?: string | null }).doctorId)),
-    )
-    .map((m) => m.user);
-  return doctors;
+  const listed = members.filter((m) => {
+    if (m.role === "DOCTOR") return true;
+    if (m.role !== "PRACTICE_OWNER") return false;
+    const row = m as { doctorId?: string | null; user?: { doctor?: unknown } };
+    return Boolean(row.doctorId) || Boolean(row.user?.doctor);
+  });
+  const staff = listed.filter((m) => m.role === "DOCTOR");
+  const owners = listed.filter((m) => m.role !== "DOCTOR");
+  return [...staff, ...owners].map((m) => m.user);
 }
 
 export function getPracticeProvider(

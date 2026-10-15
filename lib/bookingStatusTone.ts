@@ -9,7 +9,7 @@ export function bookingStatusTone(status: string) {
     case "CANCELLED":
       return "bg-rose-500/15 text-rose-800 ring-1 ring-rose-500/30 dark:text-rose-200"
     case "NO_SHOW":
-      return "bg-violet-500/15 text-violet-800 ring-1 ring-violet-500/30 dark:text-violet-200"
+      return "bg-[#FFF4CC] text-[#8A6A08] ring-1 ring-[#E6B325]/40 dark:bg-[#3d3208] dark:text-[#F3D36B]"
     case "WAITING":
     case "CHECKED_IN":
       return "bg-teal-500/15 text-teal-800 ring-1 ring-teal-500/30 dark:text-teal-200"

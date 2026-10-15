@@ -276,6 +276,20 @@ export default function VisitPage() {
   medDraftRef.current = medDraft
   const medicinesRef = useRef<Medicine[]>([])
   medicinesRef.current = medicines
+  const visitHeaderRef = useRef<HTMLDivElement>(null)
+  const visitPageRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const header = visitHeaderRef.current
+    const page = visitPageRef.current
+    if (!header || !page) return
+    const apply = () => {
+      page.style.setProperty("--visit-header-h", `${header.offsetHeight}px`)
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(header)
+    return () => observer.disconnect()
+  }, [booking?.id])
 
   const applyVisitData = useCallback((data: VisitBooking, mode: "hydrate" | "refresh") => {
     setBooking(data)
@@ -646,10 +660,14 @@ export default function VisitPage() {
 
   return (
     <div
+      ref={visitPageRef}
       className={`dashboard-page-wide !mt-0 space-y-4 [&>*]:shrink-0 ${isCompleted ? "pb-8" : "pb-28"}`}
     >
       {/* Customer identity first — sticky at top of scroll */}
-      <div className="sticky top-0 z-20 bg-[color-mix(in_srgb,var(--solune-canvas)_94%,transparent)] pb-1.5 pt-0 backdrop-blur-md dark:bg-[color-mix(in_srgb,#0f172a_94%,transparent)]">
+      <div
+        ref={visitHeaderRef}
+        className="sticky top-0 z-20 bg-[color-mix(in_srgb,var(--solune-canvas)_94%,transparent)] pb-1.5 pt-0 backdrop-blur-md dark:bg-[color-mix(in_srgb,#0f172a_94%,transparent)]"
+      >
         <section
           className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none"
           aria-label={`Patient ${patientName}`}
@@ -750,21 +768,19 @@ export default function VisitPage() {
         </dl>
       </section>
 
-      {chiefComplaint ? (
-        <section className="dashboard-panel !h-auto !min-h-0 !p-5">
-          <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
-            Chief complaint
-          </h2>
-          <p className="mt-1 text-xs opacity-60">
-            {booking.channel === "WHATSAPP_AI"
-              ? "In the patient's words (typed or voice note on WhatsApp)."
-              : "Reason for visit given at booking."}
-          </p>
-          <p className="mt-2 whitespace-pre-wrap rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm leading-snug text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-slate-100">
-            {chiefComplaint}
-          </p>
-        </section>
-      ) : null}
+      <section className="dashboard-panel !h-auto !min-h-0 !p-5">
+        <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
+          Chief complaint
+        </h2>
+        <p className="mt-1 text-xs opacity-60">
+          {booking.channel === "WHATSAPP_AI"
+            ? "In the patient's words (typed or voice note on WhatsApp)."
+            : "Required at booking."}
+        </p>
+        <p className="mt-2 whitespace-pre-wrap rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm leading-snug text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-slate-100">
+          {chiefComplaint || "No chief complaint"}
+        </p>
+      </section>
 
       {futureDay ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
@@ -784,6 +800,24 @@ export default function VisitPage() {
           clinicalRef.current = next
           setClinicalAssessment(next)
         }}
+        medicines={
+          medicines.length === 0 && chartLocked ? (
+            <p className="text-sm opacity-60">No medicines recorded.</p>
+          ) : (
+            <MedicineEntryTable
+              rows={medicines}
+              draft={medDraft}
+              locked={chartLocked}
+              onDraft={(next) => {
+                formDirty.current = true
+                medDraftRef.current = next
+                setMedDraft(next)
+              }}
+              onAdd={() => void addMedicine()}
+              onRemove={(idx) => void removeMedicine(idx)}
+            />
+          )
+        }
       />
 
       {/* Remarks */}
@@ -813,28 +847,6 @@ export default function VisitPage() {
       </section>
 
       <section className="dashboard-panel !h-auto !min-h-0 !p-5">
-        <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
-          Medicines
-        </h2>
-        {medicines.length === 0 && chartLocked ? (
-          <p className="mt-3 text-sm opacity-60">No medicines recorded.</p>
-        ) : (
-          <MedicineEntryTable
-            rows={medicines}
-            draft={medDraft}
-            locked={chartLocked}
-            onDraft={(next) => {
-              formDirty.current = true
-              medDraftRef.current = next
-              setMedDraft(next)
-            }}
-            onAdd={() => void addMedicine()}
-            onRemove={(idx) => void removeMedicine(idx)}
-          />
-        )}
-      </section>
-
-      <section className="dashboard-panel !p-5">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
               Documents

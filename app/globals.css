@@ -636,7 +636,8 @@ html.dark body {
     @apply box-border;
   }
 
-  /* Every signed-in dashboard fills the area beside the sidebar. */
+  /* Every signed-in dashboard fills the area beside the sidebar.
+     The shell keeps an 8px gutter so full-width pages stay off the edges. */
   .dashboard-page,
   .dashboard-page-wide {
     @apply box-border flex min-h-0 w-full max-w-none flex-1 flex-col space-y-6 overflow-y-auto;

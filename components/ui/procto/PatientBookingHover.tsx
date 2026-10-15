@@ -35,8 +35,9 @@ function statusBadgeClass(status: string) {
       return "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100"
     case "IN_PROGRESS":
       return "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
-    case "CANCELED":
     case "NO_SHOW":
+      return "bg-[#FFF4CC] text-[#8A6A08] dark:bg-[#3d3208] dark:text-[#F3D36B]"
+    case "CANCELED":
       return "bg-neutral-200 text-neutral-800 dark:bg-neutral-700 dark:text-neutral-100"
     default:
       return "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100"

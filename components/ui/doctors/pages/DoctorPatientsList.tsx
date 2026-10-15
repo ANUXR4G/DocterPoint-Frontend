@@ -419,7 +419,7 @@ export default function DoctorPatientsList() {
                                 {b.disease?.trim() &&
                                 !/^general\s+consultation$/i.test(b.disease)
                                   ? b.disease
-                                  : "Visit"}
+                                  : "No chief complaint"}
                               </span>
                               <span
                                 className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusClass(b.status)}`}
@@ -619,7 +619,7 @@ export default function DoctorPatientsList() {
                                         b.disease,
                                       )
                                         ? b.disease
-                                        : "Visit"}
+                                        : "No chief complaint"}
                                     </span>
                                     <span
                                       className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusClass(b.status)}`}

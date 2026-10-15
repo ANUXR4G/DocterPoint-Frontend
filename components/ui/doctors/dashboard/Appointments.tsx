@@ -3,12 +3,12 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { type ProctoBooking } from "@/lib/services/procto"
-import { consultationTypeLabel } from "@/lib/bookingDisplay"
 import {
   bookingStatusLabel,
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
+import { chiefComplaintOf } from "@/lib/bookingDisplay"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 import {
   filterBookingsByRange,
@@ -103,7 +103,7 @@ export default function Appointments() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs font-semibold opacity-70">
-                  {b.disease || consultationTypeLabel(b.consultationType) || "—"}
+                  {b.disease?.trim() || "No chief complaint"}
                 </p>
               </li>
             ))}
@@ -115,7 +115,7 @@ export default function Appointments() {
                   <th className="px-4 py-3">Patient</th>
                   <th className="px-4 py-3">MRN</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Reason</th>
+                  <th className="px-4 py-3">Chief complaint</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
@@ -131,7 +131,7 @@ export default function Appointments() {
                       {bookingStatusLabel(b.status || "")}
                     </td>
                     <td className="px-4 py-3">
-                      {b.disease || consultationTypeLabel(b.consultationType) || "—"}
+                      {chiefComplaintOf(b) || "—"}
                     </td>
                   </tr>
                 ))}

@@ -5,7 +5,6 @@ import { useParams } from "next/navigation"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import PublicShell from "@/components/layout/PublicShell"
-import { StarRating } from "@/components/ui/procto/PracticeReviewForm"
 import {
   getPracticeProviders,
   proctoService,
@@ -157,15 +156,6 @@ export default function PracticeDetailPage() {
               ...(telephone ? { telephone } : {}),
             },
           }),
-      ...(practice.reviewSummary?.count
-        ? {
-            aggregateRating: {
-              "@type": "AggregateRating",
-              ratingValue: practice.reviewSummary.average,
-              reviewCount: practice.reviewSummary.count,
-            },
-          }
-        : {}),
     }
   }, [practice, clinicDoctors, location])
 
@@ -226,14 +216,6 @@ export default function PracticeDetailPage() {
                 {practice.consultationFee != null &&
                   ` · ₹${practice.consultationFee}`}
               </p>
-              {practice.reviewSummary && practice.reviewSummary.count > 0 ? (
-                <p className="mt-1">
-                  <StarRating
-                    average={practice.reviewSummary.average}
-                    count={practice.reviewSummary.count}
-                  />
-                </p>
-              ) : null}
               {clinicDoctors.length > 0 && (
                 <div className="mt-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -318,21 +300,7 @@ export default function PracticeDetailPage() {
                         className="rounded-xl border border-slate-100 bg-sky-50/40 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5"
                       >
                         <p className="font-semibold text-slate-900 dark:text-white">
-                          <span className="font-medium">{r.authorName}</span>
-                        </p>
-                        <p className="mt-1 text-slate-700 dark:text-slate-300">
-                          Clinic{" "}
-                          <span className="text-blue-600">
-                            {"★".repeat(r.rating)}
-                          </span>
-                          {r.providerRating != null ? (
-                            <>
-                              {" · "}Doctor{" "}
-                              <span className="text-blue-600">
-                                {"★".repeat(r.providerRating)}
-                              </span>
-                            </>
-                          ) : null}
+                          {r.authorName}
                         </p>
                         {r.body ? (
                           <p className="mt-1 text-slate-600 dark:text-slate-400">

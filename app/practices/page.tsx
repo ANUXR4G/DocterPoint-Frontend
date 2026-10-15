@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import PublicShell from "@/components/layout/PublicShell"
 import BookAppointmentLink from "@/components/ui/procto/BookAppointmentLink"
-import { StarRating } from "@/components/ui/procto/PracticeReviewForm"
 import { proctoService, getPracticeProviders } from "@/lib/services/procto"
 import {
   applyPracticesRecovery,
@@ -625,15 +624,6 @@ function PracticesPageContent() {
                           : p.specialty ?? "General Physician"}
                         {isClinic ? ` · ${p.type.replace(/_/g, " ")}` : ""}
                       </p>
-
-                      {p.reviewSummary && p.reviewSummary.count > 0 ? (
-                        <p className="mt-1">
-                          <StarRating
-                            average={p.reviewSummary.average}
-                            count={p.reviewSummary.count}
-                          />
-                        </p>
-                      ) : null}
 
                       {subtitle ? (
                         <p className="mt-1 break-words text-sm text-neutral-600 dark:text-neutral-300">

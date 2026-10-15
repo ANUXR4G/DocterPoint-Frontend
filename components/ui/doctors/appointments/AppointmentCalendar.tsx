@@ -19,7 +19,6 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
-import { consultationTypeLabel } from "@/lib/bookingDisplay"
 import { isPracticingDoctor } from "@/lib/rosterDoctor"
 import {
   formatPracticeDateTime,
@@ -151,7 +150,7 @@ function statusClass(status: string) {
     case "CANCELED":
       return "bg-red-100 text-red-900 border-red-300 dark:bg-red-900/40 dark:text-red-100 dark:border-red-700"
     case "NO_SHOW":
-      return "bg-neutral-200 text-neutral-800 border-neutral-300 dark:bg-neutral-700 dark:text-neutral-100 dark:border-neutral-600"
+      return "bg-[#FFF4CC] text-[#8A6A08] border-[#E6B325] dark:bg-[#3d3208] dark:text-[#F3D36B] dark:border-[#E6B325]"
     default:
       return "bg-sky-100 text-sky-900 border-sky-300 dark:bg-sky-900/40 dark:text-sky-100 dark:border-sky-700"
   }
@@ -236,13 +235,9 @@ function BookingDetails({
           </dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="opacity-60">Disease</dt>
+          <dt className="opacity-60">Chief complaint</dt>
           <dd className="text-right font-semibold">
-            {booking.disease ||
-              consultationTypeLabel(
-                booking.consultationType || booking.consultation_type,
-              ) ||
-              "—"}
+            {booking.disease?.trim() || "No chief complaint"}
           </dd>
         </div>
         <div className="flex justify-between gap-3">
@@ -420,9 +415,12 @@ function BookingCard({
               ) : null}
             </p>
             <p className="mt-0.5 truncate text-xs opacity-80">
-              {booking.provider?.name
-                ? drName(booking.provider.name)
-                : booking.disease || booking.mode.replace(/_/g, " ")}
+              {[
+                booking.provider?.name ? drName(booking.provider.name) : null,
+                booking.disease?.trim() || "No chief complaint",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
           </>
         )}

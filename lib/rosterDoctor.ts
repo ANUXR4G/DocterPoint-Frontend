@@ -1,10 +1,12 @@
-/** A bookable doctor. The clinic owner is not one until they open a schedule. */
+/** A bookable doctor. The clinic owner is one only with their own doctor profile. */
 export function isPracticingDoctor(m: {
   role?: string | null
   isActive?: boolean
   doctorId?: string | null
+  user?: { doctor?: unknown } | null
 }): boolean {
   if (m.isActive === false) return false
   if (m.role === "DOCTOR") return true
-  return m.role === "PRACTICE_OWNER" && Boolean(m.doctorId)
+  if (m.role !== "PRACTICE_OWNER") return false
+  return Boolean(m.doctorId) || Boolean(m.user?.doctor)
 }

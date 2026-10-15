@@ -13,7 +13,6 @@ import {
   IconMapPin,
   IconNotes,
   IconPhone,
-  IconPill,
   IconStethoscope,
   IconUser,
 } from "@tabler/icons-react"
@@ -29,7 +28,7 @@ import {
   uploadBookingDocument,
 } from "@/lib/uploadBookingDocument"
 import {
-  consultationTypeLabel,
+  chiefComplaintOf,
   formatBookingWhenDetailed,
 } from "@/lib/bookingDisplay"
 import {
@@ -54,6 +53,7 @@ type VisitBooking = {
   consultationType?: string | null
   disease?: string | null
   doctorRemarks?: string | null
+  clinicalAssessment?: unknown
   medicines?: Medicine[] | null
   documents?: VisitDoc[] | null
   slotStart?: string | null
@@ -80,8 +80,26 @@ type VisitBooking = {
   } | null
 }
 
-function dash(v: string | null | undefined) {
-  return v?.trim() ? v : "—"
+function dash(v: string | number | null | undefined) {
+  if (v == null) return "—"
+  const text = String(v).trim()
+  return text || "—"
+}
+
+type Chart = {
+  savedAt?: string | null
+  noKnownAllergies?: boolean
+  vitals?: {
+    recordedAt?: string | null
+    values?: Record<string, number | null>
+  }
+  allergies?: { name?: string; severity?: string; active?: string }[]
+  pain?: { scale?: string; score?: string; location?: string; type?: string }[]
+}
+
+function chartOf(raw: unknown): Chart | null {
+  if (!raw || typeof raw !== "object") return null
+  return raw as Chart
 }
 
 function formatLabel(value: string) {
@@ -151,7 +169,7 @@ function DetailRow({
         <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
           {label}
         </p>
-        <p className="mt-0.5 break-words text-sm font-medium text-slate-900 dark:text-white">
+        <p className="mt-0.5 whitespace-pre-wrap break-words text-sm font-medium text-slate-900 dark:text-white">
           {value}
         </p>
       </div>
@@ -337,10 +355,80 @@ export default function PatientVisitPage() {
       ? formatPracticeDate(booking.sessionDate)
       : "—"
 
-  const disease =
-    dash(booking.disease) !== "—"
-      ? dash(booking.disease)
-      : dash(consultationTypeLabel(booking.consultationType))
+  const chart = chartOf(booking.clinicalAssessment)
+  const vitalValues = chart?.vitals?.values ?? {}
+  const bp =
+    vitalValues.bp_sys != null || vitalValues.bp_dia != null
+      ? `${vitalValues.bp_sys ?? "—"}/${vitalValues.bp_dia ?? "—"}`
+      : ""
+  const allergyText = chart?.noKnownAllergies
+    ? "No known allergy"
+    : (chart?.allergies ?? [])
+        .filter((row) => row.name?.trim())
+        .map((row) =>
+          [row.name, row.severity, row.active === "Yes" ? "Active" : null]
+            .filter(Boolean)
+            .join(" — "),
+        )
+        .join("; ")
+  const painText = (chart?.pain ?? [])
+    .filter((row) => row.scale?.trim() || row.score?.trim() || row.location?.trim())
+    .map((row) =>
+      [row.scale, row.score, row.location, row.type].filter(Boolean).join(" · "),
+    )
+    .join("; ")
+  const recordedAt = chart?.savedAt || chart?.vitals?.recordedAt || ""
+  const recorded = recordedAt ? formatPracticeDateTime(recordedAt) : ""
+  const recordRows: Array<[string, string]> = [
+    ["Chief complaint", dash(chiefComplaintOf(booking))],
+    ["Mode", dash(formatLabel(booking.mode || ""))],
+    ["Channel", dash(formatLabel(booking.channel || ""))],
+    ["Token", booking.tokenNumber != null ? `#${booking.tokenNumber}` : "—"],
+    ["Recorded", dash(recorded)],
+    ["Height", dash(vitalValues.ht)],
+    ["Weight", dash(vitalValues.wt)],
+    ["BMI", dash(vitalValues.bmi)],
+    ["Temperature", dash(vitalValues.temp)],
+    ["Blood pressure", dash(bp)],
+    ["Pulse", dash(vitalValues.pr)],
+    ["Respiration", dash(vitalValues.rr)],
+    ["SpO2", dash(vitalValues.spo2)],
+    ["RBS", dash(vitalValues.rbs)],
+    ["Allergies", dash(allergyText)],
+    ["Pain", dash(painText)],
+    ["Remarks", dash(doctorRemarks)],
+    [
+      "Medicines",
+      medicines.length
+        ? medicines
+            .map((m, i) => {
+              const how = [m.amount, m.times?.length ? m.times.join(", ") : ""]
+                .filter(Boolean)
+                .join(" · ")
+              return `${i + 1}. ${m.name}${how ? ` — ${how}` : ""}`
+            })
+            .join("\n")
+        : "—",
+    ],
+  ]
+
+  function downloadPrescription() {
+    if (!booking) return
+    const lines = [
+      "Prescription",
+      withDrTitle(doctor?.name) || booking.practice?.name || "Clinic visit",
+      booking.practice?.name || "",
+      "",
+      ...recordRows.map(([label, value]) => `${label}: ${value}`),
+    ].join("\n")
+    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `prescription-${booking.id.slice(0, 8)}.txt`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   const isCompleted = (booking.status || "").toUpperCase() === "COMPLETED"
   const practiceId =
@@ -489,51 +577,27 @@ export default function PatientVisitPage() {
                 }
                 icon={IconMapPin}
               />
-              <DetailRow label="Your problem" value={disease} icon={IconNotes} />
+              <DetailRow
+                label="Chief complaint"
+                value={dash(chiefComplaintOf(booking))}
+                icon={IconNotes}
+              />
             </div>
           </SectionCard>
 
-          <SectionCard title="Doctor remarks" icon={IconNotes}>
-            {doctorRemarks ? (
-              <p className="whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm leading-relaxed text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-                {doctorRemarks}
-              </p>
-            ) : isCompleted ? (
-              <EmptyNote>No remarks from the doctor yet.</EmptyNote>
-            ) : (
-              <EmptyNote>
-                The doctor will add remarks after your visit. Your problem was
-                shared with them when you booked.
-              </EmptyNote>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Medicines" icon={IconPill}>
-            {medicines.length === 0 ? (
-              <EmptyNote>No medicines prescribed for this visit.</EmptyNote>
-            ) : (
-              <ul className="space-y-2">
-                {medicines.map((m, idx) => (
-                  <li
-                    key={`${m.name}-${idx}`}
-                    className="flex gap-3 rounded-xl border border-slate-100 bg-white px-3.5 py-3 dark:border-white/10 dark:bg-slate-800/40"
-                  >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">
-                      <IconPill className="size-4" stroke={1.75} />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                        {m.name}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        Dose: {m.amount || "—"}
-                        {m.times?.length ? ` · ${m.times.join(", ")}` : ""}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <SectionCard title="Visit record" icon={IconNotes}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {recordRows.map(([label, value]) => (
+                <DetailRow key={label} label={label} value={value} />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={downloadPrescription}
+              className="mt-4 inline-flex h-11 items-center rounded-full bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            >
+              Download prescription
+            </button>
           </SectionCard>
 
           <SectionCard title="Documents" icon={IconFileText}>
@@ -658,10 +722,7 @@ export default function PatientVisitPage() {
 
       {isCompleted && practiceId ? (
         <section className="dashboard-panel mt-6">
-          <div className="mb-4 flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-              ★
-            </span>
+          <div className="mb-4">
             <h2 className="dashboard-section-title">Your review</h2>
           </div>
           {alreadyReviewed ? (
