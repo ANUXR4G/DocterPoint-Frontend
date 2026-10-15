@@ -19,6 +19,7 @@ import {
   fetchBooking,
   sendClinicLogWhatsApp,
 } from "@/lib/procto";
+import { sharePrescriptionPdf } from "@/lib/sharePrescription";
 import {
   formatPracticeDate,
   formatPracticeDateTime,
@@ -332,8 +333,6 @@ export function ClinicLogSheet({
 
 /** Finished visits only — same Rx menu as the web appointments column. */
 export function RxButton({ bookingId, status }: { bookingId: string; status?: string | null }) {
-  const [open, setOpen] = useState(false);
-  const [startTab, setStartTab] = useState<"visit" | "prescription">("visit");
   if (String(status || "").toUpperCase() !== "COMPLETED") return null;
 
   function sendNow() {
@@ -347,38 +346,31 @@ export function RxButton({ bookingId, status }: { bookingId: string; status?: st
     });
   }
 
+  function preview() {
+    void fetchBooking(bookingId).then(async (res) => {
+      if (res.status !== "successful" || !res.data) {
+        Alert.alert("Prescription", res.message || "Could not load the prescription.");
+        return;
+      }
+      try {
+        await sharePrescriptionPdf(res.data);
+      } catch {
+        Alert.alert("Prescription", "Could not create the prescription PDF.");
+      }
+    });
+  }
+
   return (
-    <>
-      <Chip
-        label="Rx"
-        onPress={() =>
-          Alert.alert("Prescription / clinic log", undefined, [
-            {
-              text: "Preview Rx",
-              onPress: () => {
-                setStartTab("visit");
-                setOpen(true);
-              },
-            },
-            {
-              text: "Preview Prescription",
-              onPress: () => {
-                setStartTab("prescription");
-                setOpen(true);
-              },
-            },
-            { text: "Send to customer", onPress: sendNow },
-            { text: "Keep", style: "cancel" },
-          ])
-        }
-      />
-      <ClinicLogSheet
-        visible={open}
-        bookingId={open ? bookingId : null}
-        initialTab={startTab}
-        onClose={() => setOpen(false)}
-      />
-    </>
+    <Chip
+      label="Rx"
+      onPress={() =>
+        Alert.alert("Prescription", undefined, [
+          { text: "Preview Rx", onPress: preview },
+          { text: "Send to customer", onPress: sendNow },
+          { text: "Keep", style: "cancel" },
+        ])
+      }
+    />
   );
 }
 

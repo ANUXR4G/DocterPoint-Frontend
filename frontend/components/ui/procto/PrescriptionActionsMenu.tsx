@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react"
 import { ClipboardPlus, Eye, MessageCircle } from "lucide-react"
 import ClinicLogModal from "@/components/ui/procto/ClinicLogModal"
-import type { ClinicLogTab } from "@/components/ui/procto/ClinicLogDocument"
 import { proctoService } from "@/lib/services/procto"
 
 type Props = {
@@ -30,7 +29,6 @@ export default function PrescriptionActionsMenu({
 }: Props) {
   const [open, setOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
-  const [previewTab, setPreviewTab] = useState<ClinicLogTab>("visit")
   const [sending, setSending] = useState(false)
   const [notice, setNotice] = useState("")
   const rootRef = useRef<HTMLDivElement>(null)
@@ -46,8 +44,7 @@ export default function PrescriptionActionsMenu({
 
   if (!enabled) return null
 
-  function openPreview(tab: ClinicLogTab) {
-    setPreviewTab(tab)
+  function openPreview() {
     setViewOpen(true)
     setOpen(false)
     setNotice("")
@@ -70,7 +67,6 @@ export default function PrescriptionActionsMenu({
     <ClinicLogModal
       open={viewOpen}
       bookingId={viewOpen ? bookingId : null}
-      initialTab={previewTab}
       onClose={() => setViewOpen(false)}
     />
   )
@@ -80,17 +76,10 @@ export default function PrescriptionActionsMenu({
       <div className={`flex flex-wrap items-center gap-2 ${className}`}>
         <button
           type="button"
-          onClick={() => openPreview("visit")}
+          onClick={() => openPreview()}
           className="inline-flex h-9 items-center rounded-full border border-teal-600/30 bg-teal-600/10 px-3 text-sm font-semibold text-teal-800 hover:bg-teal-600/20 dark:text-teal-200"
         >
           Preview Rx
-        </button>
-        <button
-          type="button"
-          onClick={() => openPreview("prescription")}
-          className="inline-flex h-9 items-center rounded-full border border-sky-600/30 bg-sky-600/10 px-3 text-sm font-semibold text-sky-800 hover:bg-sky-600/20 dark:text-sky-200"
-        >
-          Preview Prescription
         </button>
         <button
           type="button"
@@ -138,19 +127,10 @@ export default function PrescriptionActionsMenu({
             type="button"
             role="menuitem"
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:text-neutral-100 dark:hover:bg-neutral-800"
-            onClick={() => openPreview("visit")}
+            onClick={() => openPreview()}
           >
             <Eye className="size-4 shrink-0 text-teal-600" aria-hidden />
             Preview Rx
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:text-neutral-100 dark:hover:bg-neutral-800"
-            onClick={() => openPreview("prescription")}
-          >
-            <Eye className="size-4 shrink-0 text-sky-600" aria-hidden />
-            Preview Prescription
           </button>
           <button
             type="button"

@@ -36,6 +36,11 @@ import {
   formatPracticeDateTime,
 } from "@/lib/practiceTime"
 import { withDrTitle } from "@/lib/doctorName"
+import {
+  buildPrescriptionPdf,
+  prescriptionBlob,
+  prescriptionFileName,
+} from "@/lib/prescriptionPdf"
 
 type Medicine = { name: string; amount?: string; times?: string[] }
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
@@ -412,20 +417,14 @@ export default function PatientVisitPage() {
     ],
   ]
 
-  function downloadPrescription() {
+  async function downloadPrescription() {
     if (!booking) return
-    const lines = [
-      "Prescription",
-      withDrTitle(doctor?.name) || booking.practice?.name || "Clinic visit",
-      booking.practice?.name || "",
-      "",
-      ...recordRows.map(([label, value]) => `${label}: ${value}`),
-    ].join("\n")
-    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" })
+    const bytes = await buildPrescriptionPdf(booking)
+    const blob = prescriptionBlob(bytes)
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `prescription-${booking.id.slice(0, 8)}.txt`
+    link.download = prescriptionFileName(booking)
     link.click()
     URL.revokeObjectURL(url)
   }
