@@ -55,7 +55,7 @@ export default function DashboardShell({
         {/* Sticky top bar — pinned while main content scrolls */}
         <Header role={role} embedded />
         <main
-          className={`dashboard-main min-h-0 w-full flex-1 overflow-hidden p-2 text-[var(--solune-ink)] dark:text-slate-100 ${className}`}
+          className={`dashboard-main min-h-0 w-full min-w-0 flex-1 overflow-auto p-2 text-[var(--solune-ink)] dark:text-slate-100 ${className}`}
         >
           {children}
         </main>

@@ -5,46 +5,49 @@ import { prescriptionModel, type RxBooking } from "@/lib/prescriptionPdf"
 export default function PrescriptionSheet({ booking }: { booking: RxBooking }) {
   const model = prescriptionModel(booking)
   return (
-    <article className="mx-auto max-w-3xl bg-white px-8 py-6 text-[13px] text-black">
-      <div className="grid grid-cols-[72px_1fr_72px] items-start">
-        <p className="text-xs font-semibold">Logo</p>
-        <div className="text-center">
+    <article className="print-sheet mx-auto max-w-3xl bg-white px-8 py-6 text-[13px] text-black">
+      <header className="flex items-start justify-between gap-4">
+        <div>
           <p className="text-base font-semibold">{model.clinic}</p>
-          {model.address ? <p className="mt-0.5">{model.address}</p> : null}
+          {model.address ? <p>{model.address}</p> : null}
+          {model.tel ? <p>Tel : {model.tel}</p> : null}
+          {model.email ? <p>Email : {model.email}</p> : null}
+        </div>
+        <div
+          aria-hidden
+          className="print-logo grid size-10 shrink-0 place-items-center rounded-md border text-2xl font-bold leading-none"
+        >
+          +
+        </div>
+      </header>
+      <h1 className="mt-4 text-center text-lg font-bold tracking-wide underline">
+        PHARMACY PRESCRIPTION
+      </h1>
+      <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border-2 border-cyan-500 px-3 py-2">
+        <p><span className="print-accent font-semibold">Patient&apos;s Name:</span> {model.patientName}</p>
+        <p><span className="print-accent font-semibold">Mobile No:</span> {model.mobile || "—"}</p>
+        <p><span className="print-accent font-semibold">Patient MRN:</span> {model.mrn || "—"}</p>
+        <p><span className="print-accent font-semibold">ID:</span> {model.shortId}</p>
+        <p><span className="print-accent font-semibold">Date of Birth:</span> {model.dob || "—"}</p>
+        <p><span className="print-accent font-semibold">Age / Gender:</span> {model.ageGender || "—"}</p>
+        <p className="break-all"><span className="print-accent font-semibold">Visit ID:</span> {model.visitId}</p>
+        <p><span className="print-accent font-semibold">Appointment:</span> {model.appointment || "—"}</p>
+        <p className="col-span-2"><span className="print-accent font-semibold">Doctor</span> {model.doctor || "—"}</p>
+      </div>
+      <div className="mt-4 grid gap-4 sm:grid-cols-[1.2fr_0.8fr]">
+        <div>
+          <h2 className="font-bold">CHIEF COMPLAINT</h2>
+          <p>{model.chiefLine}</p>
+        </div>
+        <div className="font-semibold">
+          {model.allergyLines.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
         </div>
       </div>
-      <div className="mt-3 border-t border-black pt-2">
-        <div className="flex justify-between gap-4 font-semibold">
-          <p>ID: {model.id}</p>
-          <p>Date: {model.date}</p>
-        </div>
-        <div className="mt-1 grid grid-cols-2 gap-x-6 font-semibold">
-          <p>Name : {model.nameLine}</p>
-          <p>Mob. No.: {model.phone}</p>
-          <p>Address: {model.patientAddress}</p>
-          <p>Email : {model.email}</p>
-        </div>
-        <p className="mt-2">{model.vitals}</p>
-      </div>
-      <div className="mt-3 grid grid-cols-2 border border-black">
-        <div className="border-r border-black px-2 py-1">
-          <p className="border-b border-black pb-1 font-semibold">Chief Complaints</p>
-          <div className="min-h-16 py-1">
-            {model.complaints.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-          </div>
-        </div>
-        <div className="px-2 py-1">
-          <p className="border-b border-black pb-1 font-semibold">Allergy</p>
-          <div className="min-h-16 py-1">
-            {model.allergies.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-          </div>
-        </div>
-      </div>
-      <p className="mt-3 font-semibold">Diagnosis:</p>
+      <p className="mt-3 font-bold">Diagnosis</p>
+      <p className="print-dx text-base font-semibold">{model.diagnosis || "—"}</p>
+      {model.vitalLine ? <p className="mt-2 font-semibold">{model.vitalLine}</p> : null}
       <p className="mt-3 text-base font-semibold">Rx</p>
       <table className="mt-1 w-full border-collapse text-left">
         <thead>
@@ -55,33 +58,50 @@ export default function PrescriptionSheet({ booking }: { booking: RxBooking }) {
           </tr>
         </thead>
         <tbody>
-          {model.medicines.length === 0 ? (
+          {model.pharmacy.length === 0 ? (
             <tr>
-              <td className="py-2" colSpan={3} />
+              <td className="py-2" colSpan={3}>No medicines prescribed.</td>
             </tr>
           ) : (
-            model.medicines.map((med, index) => (
+            model.pharmacy.map((med, index) => (
               <tr key={`${med.name}-${index}`} className="align-top">
                 <td className="py-1 pr-3">
-                  <p>
-                    {index + 1}) {med.name}
-                  </p>
+                  <p>{index + 1}) {med.name}</p>
                   {med.strength ? <p className="pl-4 text-[11px]">{med.strength}</p> : null}
                 </td>
-                <td className="py-1 pr-3">{med.dosage}</td>
-                <td className="py-1">{med.duration}</td>
+                <td className="py-1 pr-3">
+                  <p>{med.dosage}</p>
+                  {med.instruction ? <p>({med.instruction})</p> : null}
+                </td>
+                <td className="py-1">
+                  <p>{med.duration}</p>
+                  {med.total ? <p>{med.total}</p> : null}
+                </td>
               </tr>
             ))
           )}
         </tbody>
       </table>
-      <p className="mt-3 font-semibold">Advice:</p>
-      <div className="min-h-10">
+      <p className="mt-3 font-bold">Advice Given:</p>
+      <div className="min-h-8">
         {model.advice.map((line) => (
           <p key={line}>{line}</p>
         ))}
       </div>
-      <p className="mt-6 border-t border-black pt-2 text-xs">Printed on : {model.printed}</p>
+      <footer className="mt-8">
+        <div className="mx-auto flex size-28 items-center justify-center overflow-hidden rounded-full border-2 border-cyan-600 text-center text-[11px] font-semibold leading-tight">
+          {model.stampSrc && /^https?:/i.test(model.stampSrc) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={model.stampSrc} alt="Doctor stamp" className="h-full w-full object-contain" />
+          ) : (
+            <span className="px-3">
+              {model.doctor || "Doctor"}
+              {model.license ? <span className="mt-1 block font-normal">{model.license}</span> : null}
+            </span>
+          )}
+        </div>
+        <p className="mt-6 border-t border-black pt-2">Printed On : {model.printed}</p>
+      </footer>
     </article>
   )
 }

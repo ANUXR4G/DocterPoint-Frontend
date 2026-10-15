@@ -37,6 +37,10 @@ import {
 } from "@/lib/practiceTime"
 import { withDrTitle } from "@/lib/doctorName"
 import {
+  buildConsultationPdf,
+  consultationFileName,
+} from "@/lib/consultationPdf"
+import {
   buildPrescriptionPdf,
   prescriptionBlob,
   prescriptionFileName,
@@ -417,14 +421,20 @@ export default function PatientVisitPage() {
     ],
   ]
 
-  async function downloadPrescription() {
+  async function downloadPrint(kind: "consultation" | "prescription") {
     if (!booking) return
-    const bytes = await buildPrescriptionPdf(booking)
+    const bytes =
+      kind === "consultation"
+        ? await buildConsultationPdf(booking)
+        : await buildPrescriptionPdf(booking)
     const blob = prescriptionBlob(bytes)
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = prescriptionFileName(booking)
+    link.download =
+      kind === "consultation"
+        ? consultationFileName(booking)
+        : prescriptionFileName(booking)
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -590,13 +600,22 @@ export default function PatientVisitPage() {
                 <DetailRow key={label} label={label} value={value} />
               ))}
             </div>
-            <button
-              type="button"
-              onClick={downloadPrescription}
-              className="mt-4 inline-flex h-11 items-center rounded-full bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-            >
-              Download prescription
-            </button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void downloadPrint("consultation")}
+                className="inline-flex h-11 items-center rounded-full bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+              >
+                Download consultation
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadPrint("prescription")}
+                className="inline-flex h-11 items-center rounded-full border border-slate-300 px-5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800"
+              >
+                Download prescription
+              </button>
+            </div>
           </SectionCard>
 
           <SectionCard title="Documents" icon={IconFileText}>

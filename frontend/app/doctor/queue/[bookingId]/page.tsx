@@ -661,12 +661,12 @@ export default function VisitPage() {
   return (
     <div
       ref={visitPageRef}
-      className={`dashboard-page-wide !mt-0 space-y-4 [&>*]:shrink-0 ${isCompleted ? "pb-8" : "pb-28"}`}
+      className={`dashboard-page-wide !mt-0 space-y-4 [&>*]:shrink-0 ${isCompleted ? "pb-8" : "pb-4"}`}
     >
-      {/* Customer identity first — sticky at top of scroll */}
+      {/* Customer identity — scrolls with the visit so the chart stays reachable */}
       <div
         ref={visitHeaderRef}
-        className="sticky top-0 z-20 bg-[color-mix(in_srgb,var(--solune-canvas)_94%,transparent)] pb-1.5 pt-0 backdrop-blur-md dark:bg-[color-mix(in_srgb,#0f172a_94%,transparent)]"
+        className="pb-1.5 pt-0"
       >
         <section
           className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none"
@@ -744,7 +744,7 @@ export default function VisitPage() {
         ) : null}
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
+      <section className="max-w-full overflow-x-auto rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
         <dl className="grid gap-x-4 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3 sm:px-8">
           <Fact label="Doctor" value={blank(booking.provider?.name)} />
           <Fact
@@ -765,6 +765,16 @@ export default function VisitPage() {
           {booking.tokenNumber != null ? (
             <Fact label="Token" value={`#${booking.tokenNumber}`} />
           ) : null}
+          <Fact label="Chief complaint" value={chiefComplaint || "—"} />
+          <Fact
+            label="Diagnosis"
+            value={
+              (booking.consultationType || "").trim() &&
+              !/^general\s+consultation$/i.test(booking.consultationType || "")
+                ? (booking.consultationType || "").trim()
+                : chiefComplaint || "—"
+            }
+          />
         </dl>
       </section>
 
@@ -992,7 +1002,7 @@ export default function VisitPage() {
 
       {/* Sticky actions — in page flow, not a portal that fights layouts */}
       {!chartLocked ? (
-        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-neutral-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md md:left-[72px] xl:left-60 dark:border-[var(--solune-border-strong)] dark:bg-[color-mix(in_srgb,var(--solune-surface)_92%,transparent)]">
+        <div className="sticky bottom-0 z-30 -mx-2 border-t border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur-md dark:border-[var(--solune-border-strong)] dark:bg-[color-mix(in_srgb,var(--solune-surface)_92%,transparent)]">
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <p className="hidden text-sm text-neutral-600 sm:block dark:text-slate-300">
               <span className="font-medium text-neutral-900 dark:text-white">

@@ -640,7 +640,7 @@ html.dark body {
      The shell keeps an 8px gutter so full-width pages stay off the edges. */
   .dashboard-page,
   .dashboard-page-wide {
-    @apply box-border flex min-h-0 w-full max-w-none flex-1 flex-col space-y-6 overflow-y-auto;
+    @apply box-border flex min-h-0 w-full min-w-0 max-w-none flex-1 flex-col space-y-6 overflow-auto;
   }
 
   /* Shared dashboard CTAs — same language on doctor / clinic / patient / admin */
@@ -753,6 +753,25 @@ html.dark body {
   .dark .dashboard-metric {
     background-color: var(--solune-surface);
     border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .dashboard-page,
+  .dashboard-page-wide,
+  .chart-x {
+    scrollbar-width: thin;
+    scrollbar-color: #64748b transparent;
+  }
+  .dashboard-page::-webkit-scrollbar,
+  .dashboard-page-wide::-webkit-scrollbar,
+  .chart-x::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .dashboard-page::-webkit-scrollbar-thumb,
+  .dashboard-page-wide::-webkit-scrollbar-thumb,
+  .chart-x::-webkit-scrollbar-thumb {
+    background: #64748b;
+    border-radius: 999px;
   }
 
   .dashboard-panel {
@@ -1785,6 +1804,26 @@ html.dark .text-neutral-900,
 html.dark .text-gray-900,
 html.dark .text-zinc-900 {
   color: #f5f2ee;
+}
+
+.print-sheet {
+  background: #fff !important;
+  color: #111 !important;
+}
+.print-sheet,
+.print-sheet * {
+  color: #111 !important;
+}
+.print-sheet .print-accent {
+  color: #0e7490 !important;
+}
+.print-sheet .print-dx {
+  color: #166534 !important;
+}
+.print-sheet .print-logo {
+  color: #1d4ed8 !important;
+  background: #eff6ff !important;
+  border-color: #2563eb !important;
 }
 
 html.dark .text-slate-800,
