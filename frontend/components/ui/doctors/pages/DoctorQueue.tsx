@@ -420,12 +420,10 @@ export default function DoctorQueue({
                           Arrived: {formatArrival(b)}
                         </p>
                       ) : null}
-                      {chiefComplaintOf(b) ? (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-neutral-700 dark:text-slate-300">
-                          <span className="opacity-60">Chief complaint: </span>
-                          {chiefComplaintOf(b)}
-                        </p>
-                      ) : null}
+                      <p className="mt-0.5 line-clamp-2 text-xs text-neutral-700 dark:text-slate-300">
+                        <span className="opacity-60">Chief complaint: </span>
+                        {chiefComplaintOf(b) || "No chief complaint"}
+                      </p>
                     </div>
                   </div>
                   <span

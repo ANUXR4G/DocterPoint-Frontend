@@ -105,6 +105,10 @@ export default function EmergencyWalkInModal({
       setMessage("Find the patient or register them first.")
       return
     }
+    if (!disease.trim()) {
+      setMessage("Chief complaint is required.")
+      return
+    }
     setSubmitting(true)
     setMessage("")
     let res: Awaited<ReturnType<typeof proctoService.createWalkIn>>
@@ -266,10 +270,7 @@ export default function EmergencyWalkInModal({
             <div className="flex items-center gap-2">
               <Step n={2} done={Boolean(disease.trim())} />
               <span className="font-semibold text-slate-900 dark:text-white">
-                Chief complaint
-              </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                optional
+                Chief Complaint *
               </span>
             </div>
             <textarea
@@ -278,6 +279,8 @@ export default function EmergencyWalkInModal({
               value={disease}
               onChange={(e) => setDisease(e.target.value)}
               placeholder="e.g. chest pain, high fever"
+              required
+              aria-required
             />
           </section>
 
@@ -324,7 +327,8 @@ export default function EmergencyWalkInModal({
               patientBusy.searching ||
               !practiceId ||
               !doctors.length ||
-              !patient
+              !patient ||
+              !disease.trim()
             }
           >
             {submitting ? (

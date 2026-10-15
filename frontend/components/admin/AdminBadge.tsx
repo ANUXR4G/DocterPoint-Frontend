@@ -45,7 +45,8 @@ export function statusTone(
     ].includes(s)
   )
     return "amber"
-  if (["SUSPENDED", "CANCELLED", "REJECTED", "NO_SHOW", "CANCELED"].includes(s))
+  if (s === "NO_SHOW") return "amber"
+  if (["SUSPENDED", "CANCELLED", "REJECTED", "CANCELED"].includes(s))
     return "red"
   if (["TRIALING", "ASSIGNED"].includes(s)) return "blue"
   return "neutral"

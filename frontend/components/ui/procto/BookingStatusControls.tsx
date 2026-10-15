@@ -22,6 +22,7 @@ void [
   "dark:bg-green-950/40 dark:text-green-100 dark:border-green-700",
   "dark:bg-red-950/40 dark:text-red-100 dark:border-red-700",
   "dark:bg-neutral-700 dark:text-neutral-100 dark:border-neutral-500",
+  "bg-[#FFF4CC] text-[#8A6A08] border-[#E6B325] ring-[#E6B325]/40 dark:border-[#E6B325] dark:bg-[#3d3208] dark:text-[#F3D36B]",
   "dark:bg-neutral-800 dark:text-neutral-100 dark:border-neutral-600",
 ]
 

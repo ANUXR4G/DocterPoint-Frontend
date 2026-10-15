@@ -378,9 +378,6 @@ export default function HomePage() {
                       </div>
                       <div className="absolute bottom-12 right-0 rounded-2xl border border-sky-100 bg-white px-4 py-3 shadow-lg sm:right-4 dark:border-white/10 dark:bg-slate-800">
                         <p className="text-xs font-semibold text-blue-600 dark:text-sky-400">
-                          ★★★★★
-                        </p>
-                        <p className="text-[11px] text-slate-500">
                           5400+ happy patients
                         </p>
                       </div>

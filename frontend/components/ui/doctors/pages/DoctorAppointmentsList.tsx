@@ -135,7 +135,9 @@ function ChiefComplaintField({
       value={text}
       disabled={busy}
       maxLength={500}
-      placeholder="Add chief complaint"
+      placeholder="Chief complaint (required)"
+      required
+      aria-required
       aria-label="Chief complaint"
       title="Chief complaint — type and leave the box to save"
       onChange={(e) => setText(e.target.value)}
@@ -375,8 +377,12 @@ export default function DoctorAppointmentsList({
   async function onComplaint(id: string, disease: string) {
     const row = rangeRows.find((b) => b.id === id)
     const previous = row?.disease ?? null
-    const next = disease.trim() || null
-    if ((previous?.trim() || null) === next) return
+    const next = disease.trim()
+    if (!next) {
+      setActionError("Chief complaint is required.")
+      return
+    }
+    if ((previous?.trim() || "") === next) return
     const patchRemote = (value: string | null) =>
       setRemoteRows((prev) =>
         prev ? prev.map((b) => (b.id === id ? { ...b, disease: value } : b)) : prev,

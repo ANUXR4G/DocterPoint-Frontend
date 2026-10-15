@@ -45,7 +45,7 @@ export function bookingStatusClass(status: string): string {
     case "CANCELLED":
       return "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-100"
     case "NO_SHOW":
-      return "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-100"
+      return "bg-[#FFF4CC] text-[#8A6A08] dark:bg-[#3d3208] dark:text-[#F3D36B]"
     default:
       return "bg-sky-100 text-sky-800 dark:bg-neutral-800 dark:text-neutral-100"
   }
@@ -64,7 +64,7 @@ export function bookingActionSelectClass(status: string): string {
     case "CANCELED":
       return "border-red-400 bg-red-100 text-red-900 dark:border-red-700 dark:bg-red-950/40 dark:text-red-100"
     case "NO_SHOW":
-      return "border-neutral-400 bg-neutral-200 text-neutral-800 dark:border-neutral-500 dark:bg-neutral-700 dark:text-neutral-100"
+      return "border-[#E6B325] bg-[#FFF4CC] text-[#8A6A08] dark:border-[#E6B325] dark:bg-[#3d3208] dark:text-[#F3D36B]"
     default:
       return "border-sky-400 bg-sky-100 text-sky-900 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
   }

@@ -11,53 +11,13 @@ type Props = {
   onSubmitted?: () => void
 }
 
-function StarPicker({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: number
-  onChange: (n: number) => void
-}) {
-  return (
-    <div>
-      <p className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-        {label}
-      </p>
-      <div className="flex gap-1.5" role="radiogroup" aria-label={label}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            role="radio"
-            aria-checked={value === n}
-            aria-label={`${n} star${n === 1 ? "" : "s"}`}
-            onClick={() => onChange(n)}
-            className={`text-2xl leading-none transition ${
-              value >= n
-                ? "text-amber-500"
-                : "text-slate-300 hover:text-amber-300 dark:text-slate-600"
-            }`}
-          >
-            ★
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export default function PracticeReviewForm({
   practiceId,
   bookingId,
   defaultAuthorName = "",
-  providerName,
   onSubmitted,
 }: Props) {
   const [authorName, setAuthorName] = useState(defaultAuthorName)
-  const [rating, setRating] = useState(5)
-  const [providerRating, setProviderRating] = useState(5)
   const [body, setBody] = useState("")
   const [msg, setMsg] = useState("")
   const [busy, setBusy] = useState(false)
@@ -69,15 +29,13 @@ export default function PracticeReviewForm({
     const res = await proctoService.submitReview(practiceId, {
       bookingId,
       authorName: authorName.trim() || undefined,
-      rating,
-      providerRating,
+      rating: 5,
+      providerRating: 5,
       body: body || undefined,
     })
     setBusy(false)
     if (res.status === "successful") {
       setBody("")
-      setRating(5)
-      setProviderRating(5)
       setMsg("Thanks for your review. It will appear on the clinic profile.")
       onSubmitted?.()
     } else {
@@ -88,19 +46,13 @@ export default function PracticeReviewForm({
   return (
     <form onSubmit={submit} className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-        Rate your visit
+        Your review
       </p>
       <input
         className="form-input w-full rounded-lg px-3 py-2 text-sm"
         placeholder="Your name (optional)"
         value={authorName}
         onChange={(e) => setAuthorName(e.target.value)}
-      />
-      <StarPicker label="Clinic" value={rating} onChange={setRating} />
-      <StarPicker
-        label={providerName ? `Doctor · ${providerName}` : "Doctor"}
-        value={providerRating}
-        onChange={setProviderRating}
       />
       <textarea
         className="form-input w-full rounded-lg px-3 py-2 text-sm"
@@ -129,28 +81,5 @@ export default function PracticeReviewForm({
         </p>
       ) : null}
     </form>
-  )
-}
-
-export function StarRating({
-  average,
-  count,
-  className = "",
-}: {
-  average: number | null
-  count: number
-  className?: string
-}) {
-  if (!count || average == null) return null
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-sm font-semibold text-amber-700 dark:text-amber-300 ${className}`}
-    >
-      <span aria-hidden>★</span>
-      <span>{average.toFixed(1)}</span>
-      <span className="font-normal text-slate-500 dark:text-slate-400">
-        ({count})
-      </span>
-    </span>
   )
 }

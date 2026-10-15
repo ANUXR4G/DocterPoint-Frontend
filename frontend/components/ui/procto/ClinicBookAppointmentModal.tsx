@@ -235,6 +235,10 @@ export default function ClinicBookAppointmentModal({
       setMessage("No token session available for this date.")
       return
     }
+    if (!disease.trim()) {
+      setMessage("Chief complaint is required.")
+      return
+    }
 
     setSubmitting(true)
     setMessage("")
@@ -464,13 +468,15 @@ export default function ClinicBookAppointmentModal({
         ) : null}
 
         <label className="block">
-          <span className="font-semibold">Reason for visit (optional)</span>
+          <span className="font-semibold">Chief complaint *</span>
           <textarea
             className={fieldClass}
             rows={2}
             value={disease}
             onChange={(e) => setDisease(e.target.value)}
-            placeholder="Optional — leave blank if not needed"
+            placeholder="e.g. chest pain, high fever"
+            required
+            aria-required
           />
         </label>
 

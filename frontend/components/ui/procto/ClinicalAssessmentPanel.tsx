@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   ALLERGY_SEVERITIES,
   computeBmi,
@@ -78,6 +78,8 @@ type Props = {
   versions?: ClinicalVersion[]
   readOnly?: boolean
   onChange: (next: ClinicalAssessment) => void
+  /** Medicine entry shown on the tab after Allergies. */
+  medicines?: ReactNode
 }
 
 function versionSummary(snapshot: ClinicalAssessment): string {
@@ -132,6 +134,7 @@ export default function ClinicalAssessmentPanel({
   versions = [],
   readOnly,
   onChange,
+  medicines,
 }: Props) {
   const masters: ClinicalMasters = useMemo(
     () => mergeClinicalMasters(mastersRaw),
@@ -152,6 +155,9 @@ export default function ClinicalAssessmentPanel({
     tab: PainToolTab
   } | null>(null)
   const [openVersionId, setOpenVersionId] = useState<string | null>(null)
+  const [section, setSection] = useState<
+    "vitals" | "pain" | "allergies" | "medicines"
+  >("vitals")
 
   // Sync only when saved content actually changes — silent reloads / new object
   // references must not wipe rows the doctor just Added.
@@ -290,7 +296,42 @@ export default function ClinicalAssessmentPanel({
           ) : null}
         </div>
       ) : null}
+      <div
+        role="tablist"
+        aria-label="Clinical sections"
+        className="sticky z-10 grid grid-cols-2 gap-1 rounded-xl border border-neutral-200 bg-white p-1 sm:grid-cols-4 dark:border-neutral-700 dark:bg-[var(--solune-surface)]"
+        style={{ top: "var(--visit-header-h, 0px)" }}
+      >
+        {(
+          [
+            ["vitals", "Vitals"],
+            ["pain", "Pain assessment"],
+            ["allergies", "Allergies"],
+            ["medicines", "Medicines"],
+          ] as const
+        ).map(([id, label]) => {
+          const active = section === id
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setSection(id)}
+              className={`rounded-lg px-2 py-2 text-sm font-semibold transition ${
+                active
+                  ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
+                  : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              }`}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* VITALS */}
+      {section === "vitals" ? (
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
@@ -367,10 +408,10 @@ export default function ClinicalAssessmentPanel({
           })}
         </div>
       </div>
-
-      <hr className="border-neutral-200 dark:border-neutral-700" />
+      ) : null}
 
       {/* PAIN */}
+      {section === "pain" ? (
       <div>
         <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
           Pain assessment
@@ -531,10 +572,10 @@ export default function ClinicalAssessmentPanel({
           }}
         />
       </div>
-
-      <hr className="border-neutral-200 dark:border-neutral-700" />
+      ) : null}
 
       {/* ALLERGIES */}
+      {section === "allergies" ? (
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
@@ -720,6 +761,16 @@ export default function ClinicalAssessmentPanel({
           </button>
         ) : null}
       </div>
+      ) : null}
+
+      {section === "medicines" ? (
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
+            Medicines
+          </h2>
+          <div className="mt-3">{medicines}</div>
+        </div>
+      ) : null}
     </section>
   )
 }
