@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { Download, MessageCircle, X } from "lucide-react"
+import ConsultationSheet from "@/components/ui/procto/ConsultationSheet"
 import PrescriptionSheet from "@/components/ui/procto/PrescriptionSheet"
+import {
+  buildConsultationPdf,
+  consultationFileName,
+} from "@/lib/consultationPdf"
 import {
   buildPrescriptionPdf,
   prescriptionBlob,
@@ -12,13 +17,22 @@ import {
 import { dashboardPortalRoot } from "@/lib/portalRoot"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 
+type PrintKind = "consultation" | "prescription"
+
 type Props = {
   open: boolean
   bookingId: string | null
   onClose: () => void
+  /** Which sheet opens first. Both prints stay available in the preview. */
+  initialKind?: PrintKind
 }
 
-export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
+export default function ClinicLogModal({
+  open,
+  bookingId,
+  onClose,
+  initialKind = "consultation",
+}: Props) {
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -26,6 +40,7 @@ export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
   const [sending, setSending] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState("")
+  const [kind, setKind] = useState<PrintKind>(initialKind)
 
   useEffect(() => setMounted(true), [])
 
@@ -36,6 +51,7 @@ export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
     setError("")
     setBooking(null)
     setNotice("")
+    setKind(initialKind)
     void proctoService.getBooking(bookingId).then((res) => {
       if (cancelled) return
       setLoading(false)
@@ -48,7 +64,7 @@ export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
     return () => {
       cancelled = true
     }
-  }, [open, bookingId])
+  }, [open, bookingId, initialKind])
 
   async function sendToCustomer() {
     if (!bookingId || sending) return
@@ -68,16 +84,26 @@ export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
     setSaving(true)
     setNotice("")
     try {
-      const bytes = await buildPrescriptionPdf(booking)
+      const bytes =
+        kind === "consultation"
+          ? await buildConsultationPdf(booking)
+          : await buildPrescriptionPdf(booking)
       const blob = prescriptionBlob(bytes)
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = prescriptionFileName(booking)
+      link.download =
+        kind === "consultation"
+          ? consultationFileName(booking)
+          : prescriptionFileName(booking)
       link.click()
       URL.revokeObjectURL(url)
     } catch {
-      setNotice("Could not create the prescription PDF.")
+      setNotice(
+        kind === "consultation"
+          ? "Could not create the consultation PDF."
+          : "Could not create the prescription PDF.",
+      )
     } finally {
       setSaving(false)
     }
@@ -109,9 +135,25 @@ export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
         <div className="sticky top-0 z-10 border-b border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
             <h2 id="clinic-log-title" className="text-sm font-bold text-neutral-900">
-              Prescription
+              {kind === "consultation" ? "Consultation" : "Prescription"}
             </h2>
             <div className="flex items-center gap-2">
+              <div className="flex rounded-full border border-neutral-300 p-0.5 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setKind("consultation")}
+                  className={`rounded-full px-3 py-1 ${kind === "consultation" ? "bg-neutral-900 text-white" : "text-neutral-700"}`}
+                >
+                  Consultation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKind("prescription")}
+                  className={`rounded-full px-3 py-1 ${kind === "prescription" ? "bg-neutral-900 text-white" : "text-neutral-700"}`}
+                >
+                  Prescription
+                </button>
+              </div>
               <button
                 type="button"
                 disabled={!booking || saving || loading}
@@ -119,7 +161,7 @@ export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border border-neutral-300 px-3 text-xs font-semibold text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
               >
                 <Download className="size-3.5" aria-hidden />
-                {saving ? "Saving…" : "Download PDF"}
+                {saving ? "Saving…" : kind === "consultation" ? "Download consultation" : "Download prescription"}
               </button>
               <button
                 type="button"
@@ -148,13 +190,19 @@ export default function ClinicLogModal({ open, bookingId, onClose }: Props) {
         </div>
         <div className="max-h-[min(85vh,900px)] overflow-y-auto">
           {loading ? (
-            <p className="p-8 text-sm text-neutral-500">Loading prescription…</p>
+            <p className="p-8 text-sm text-neutral-500">
+              {kind === "consultation" ? "Loading consultation…" : "Loading prescription…"}
+            </p>
           ) : error ? (
             <p className="p-8 text-sm text-red-600" role="alert">
               {error}
             </p>
           ) : booking ? (
-            <PrescriptionSheet booking={booking} />
+            kind === "consultation" ? (
+              <ConsultationSheet booking={booking} />
+            ) : (
+              <PrescriptionSheet booking={booking} />
+            )
           ) : null}
         </div>
       </div>

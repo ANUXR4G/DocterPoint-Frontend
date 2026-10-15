@@ -254,12 +254,11 @@ export default function ClinicalAssessmentPanel({
 
   return (
     <section
-      className="dashboard-panel space-y-6 p-5"
+      className="dashboard-panel min-w-0 max-w-full space-y-6 p-5"
       style={{
         height: "auto",
         minHeight: "min-content",
         flexShrink: 0,
-        overflow: "visible",
       }}
     >
       {savedLabel ? (
@@ -374,8 +373,8 @@ export default function ClinicalAssessmentPanel({
         <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
           Pain assessment
         </h2>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
+        <div className="chart-x mt-3 min-w-0 max-w-full overflow-x-auto">
+          <table className="w-max min-w-full text-left text-sm">
             <thead className="text-xs uppercase text-neutral-500">
               <tr>
                 <th className="py-1 pr-2">S.No</th>
@@ -407,7 +406,7 @@ export default function ClinicalAssessmentPanel({
                           setPainTool({ idx, tab })
                         }
                       }}
-                      className={FIELD_INPUT}
+                      className={`${FIELD_INPUT} min-w-[11rem]`}
                     >
                       <option value="">Select…</option>
                       {masters.painScales.map((s) => (
@@ -439,7 +438,7 @@ export default function ClinicalAssessmentPanel({
                               "wong-baker"
                             setPainTool({ idx, tab })
                           }}
-                          className={`${FIELD_INPUT} cursor-pointer text-left hover:border-teal-400`}
+                          className={`${FIELD_INPUT} min-w-[9rem] cursor-pointer text-left hover:border-teal-400`}
                           title="Open Pain Assessment Tool"
                         >
                           {row.score || "Select with tool…"}
@@ -454,7 +453,7 @@ export default function ClinicalAssessmentPanel({
                             pain[idx] = { ...row, [field]: e.target.value }
                             commit({ ...local, pain })
                           }}
-                          className={FIELD_INPUT}
+                          className={`${FIELD_INPUT} min-w-[9rem]`}
                         />
                       )}
                     </td>
@@ -546,8 +545,8 @@ export default function ClinicalAssessmentPanel({
             </button>
           ) : null}
         </div>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
+        <div className="chart-x mt-3 min-w-0 max-w-full overflow-x-auto">
+          <table className="w-max min-w-full text-left text-sm">
             <thead className="text-xs uppercase text-neutral-500">
               <tr>
                 <th className="py-1 pr-2">S.No</th>
@@ -585,7 +584,7 @@ export default function ClinicalAssessmentPanel({
                             noKnownAllergies: false,
                           })
                         }}
-                        className={FIELD_INPUT}
+                        className={`${FIELD_INPUT} min-w-[9rem]`}
                       >
                         <option value="">Select…</option>
                         {categories.map((c) => (
@@ -614,7 +613,7 @@ export default function ClinicalAssessmentPanel({
                               e.target.value === "No known allergy",
                           })
                         }}
-                        className={FIELD_INPUT}
+                        className={`${FIELD_INPUT} min-w-[9rem]`}
                       >
                         <option value="">Select allergy…</option>
                         {names.map((n) => (
@@ -633,7 +632,7 @@ export default function ClinicalAssessmentPanel({
                           allergies[idx] = { ...row, severity: e.target.value }
                           commit({ ...local, allergies })
                         }}
-                        className={FIELD_INPUT}
+                        className={`${FIELD_INPUT} min-w-[9rem]`}
                       >
                         <option value="">Select…</option>
                         {ALLERGY_SEVERITIES.map((s) => (
@@ -652,7 +651,7 @@ export default function ClinicalAssessmentPanel({
                           allergies[idx] = { ...row, active: e.target.value }
                           commit({ ...local, allergies })
                         }}
-                        className={FIELD_INPUT}
+                        className={`${FIELD_INPUT} min-w-[9rem]`}
                       >
                         <option value="">Select…</option>
                         <option value="Yes">Yes</option>
@@ -671,7 +670,7 @@ export default function ClinicalAssessmentPanel({
                           }
                           commit({ ...local, allergies })
                         }}
-                        className={FIELD_INPUT}
+                        className={`${FIELD_INPUT} min-w-[9rem]`}
                       />
                     </td>
                     <td className="py-1">
