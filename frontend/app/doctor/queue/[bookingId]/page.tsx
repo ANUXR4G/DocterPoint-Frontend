@@ -715,7 +715,10 @@ export default function VisitPage() {
     if (!bookingId || sendingWa) return
     const completed = String(booking?.status || "").toUpperCase() === "COMPLETED"
     if (!completed && (formDirty.current || clinicalDirty.current)) {
-      const saved = await persistVisit(medicinesRef.current, documentsRef.current)
+      const nextMedicines = medicinesToSave()
+      medicinesRef.current = nextMedicines
+      setMedicines(nextMedicines)
+      const saved = await persistVisit(nextMedicines, documentsRef.current)
       if (!saved) return
     }
     setSendingWa(true)

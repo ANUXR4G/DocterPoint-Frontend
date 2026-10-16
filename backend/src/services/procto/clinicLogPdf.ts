@@ -2,7 +2,7 @@ import { WhatsAppNumberStatus } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../core/response.js";
 import { formatPracticeDateTime, formatLocalDate } from "./slotEngine.js";
-import { sendWhatsAppDocument } from "./whatsapp.client.js";
+import { sendPrescriptionPdfTemplate, sendWhatsAppDocument } from "./whatsapp.client.js";
 import { resolveWhatsAppMsisdn } from "../chat.whatsappFanout.js";
 import {
   buildPrescriptionPdf,
@@ -136,6 +136,19 @@ function appointmentLabel(booking: {
   return booking.slotStart ? formatPracticeDateTime(booking.slotStart) : "";
 }
 
+async function customerWindowOpen(practiceId: string, patientPhone: string): Promise<boolean> {
+  const conv = await prisma.whatsAppConversation.findFirst({
+    where: {
+      practiceId,
+      patientPhone: { endsWith: patientPhone.slice(-10) },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { updatedAt: true },
+  });
+  if (!conv) return false;
+  return Date.now() - conv.updatedAt.getTime() < 23 * 60 * 60 * 1000;
+}
+
 async function optedOut(practiceId: string, patientPhone: string): Promise<boolean> {
   const conv = await prisma.whatsAppConversation.findFirst({
     where: {
@@ -166,9 +179,19 @@ async function practicePhoneNumberId(practiceId: string): Promise<string | undef
       ],
     },
     orderBy: [{ status: "asc" }, { activatedAt: "desc" }],
-    select: { wabaPhoneNumberId: true },
+    select: { wabaPhoneNumberId: true, phoneNumber: true },
   });
-  return wa?.wabaPhoneNumberId || settings.whatsappPhoneNumberId?.trim() || undefined;
+  const stored = wa?.wabaPhoneNumberId?.trim() || "";
+  const approved =
+    settings.glucoguideOtpPhoneNumberId?.trim() ||
+    settings.whatsappPhoneNumberId?.trim() ||
+    "";
+  const line = String(wa?.phoneNumber || "").replace(/\D/g, "").slice(-10);
+  const platform = settings.glucoguideOtpPhone.replace(/\D/g, "").slice(-10);
+  // The platform line must send from the approved id. A stale test id on the
+  // row (left by an old env pin) would drop the document.
+  if (line && platform && line === platform && approved) return approved;
+  return stored || approved || undefined;
 }
 
 /**
@@ -214,8 +237,13 @@ export async function sendClinicLogPdf(bookingId: string): Promise<{
   const medicines = medicinesOf(booking.medicines).filter((med) => med.name?.trim());
   const chartPreview = chartOf(booking.clinicalAssessment);
   const advice = chartPreview.advice;
-  if (!medicines.length && !advice) {
-    throw new AppError(400, "Add medicines or advice before sending to the customer.");
+  const diagnosis = chartPreview.diagnosis;
+  const complaint = String(booking.disease || "").trim();
+  if (!medicines.length && !advice && !diagnosis && complaint.length < 3) {
+    throw new AppError(
+      400,
+      "Add a diagnosis, medicines, or advice before sending to the customer.",
+    );
   }
 
   const phones = [
@@ -275,15 +303,30 @@ export async function sendClinicLogPdf(bookingId: string): Promise<{
     medicines,
   });
 
-  const result = await sendWhatsAppDocument(
-    to,
-    {
-      filename,
-      mimeType: "application/pdf",
-      buffer: Buffer.from(bytes),
-    },
-    await practicePhoneNumberId(booking.practiceId),
-  );
+  const phoneNumberId = await practicePhoneNumberId(booking.practiceId);
+  const pdf = Buffer.from(bytes);
+  const windowOpen = await customerWindowOpen(booking.practiceId, to);
+  // The file message type is approved once. After that, each prescription is
+  // attached and sent. A new PDF is never submitted for review.
+  let result = windowOpen
+    ? { ok: false as const }
+    : await sendPrescriptionPdfTemplate(
+        to,
+        {
+          filename,
+          buffer: pdf,
+          practiceName: booking.practice.name,
+          doctorName,
+        },
+        phoneNumberId,
+      );
+  if (!result.ok) {
+    result = await sendWhatsAppDocument(
+      to,
+      { filename, mimeType: "application/pdf", buffer: pdf },
+      phoneNumberId,
+    );
+  }
   if (!result.ok && !result.simulated) {
     throw new AppError(
       502,

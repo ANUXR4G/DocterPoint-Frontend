@@ -72,7 +72,8 @@ All are **UTILITY**, language `en`, named parameters. Create in WhatsApp Manager
 | `CLINIC_QUEUE_ALERT` | `docline_clinic_queue_alert` | Staff alert |
 | `CLINIC_CARE_MESSAGE` | `docline_clinic_care_message` | Doctor/clinic care-chat → patient (outside 24h window) |
 | `VISIT_SUMMARY` | `docline_visit_summary` | Catalog only. Finishing a visit does not send this text. **Send to customer** sends a prescription PDF. |
-| `PRESCRIPTION_UPDATE` | `docline_prescription` | Catalog only. **Send to customer** sends a prescription PDF document, not this text template. Medicine save and visit finish do not send WhatsApp. |
+| `PRESCRIPTION_UPDATE` | `docline_prescription` | Catalog only. **Send to customer** sends a prescription PDF, not this text template. Medicine save and visit finish do not send WhatsApp. |
+| `PRESCRIPTION_FILE` | `docline_prescription_file` | UTILITY, DOCUMENT header. Reviewed once. **Send to customer** attaches that visit’s PDF when the 24 h window is closed. Do not submit this name as a text-only template. |
 
 Bodies live in `whatsapp.metaTemplates.ts`. Sync into DB:
 

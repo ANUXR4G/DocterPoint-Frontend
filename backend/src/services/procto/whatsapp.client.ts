@@ -419,6 +419,223 @@ export async function sendWhatsAppDocument(
   }
 }
 
+const PRESCRIPTION_FILE_TEMPLATE = "docline_prescription_file";
+
+async function uploadTemplateSample(buffer: Buffer, filename: string): Promise<string> {
+  const token = settings.whatsappAccessToken;
+  const appId = settings.metaAppId?.trim();
+  if (!token || !appId) throw new Error("WhatsApp app id is not configured.");
+  const sessionRes = await fetch(
+    `https://graph.facebook.com/${settings.whatsappApiVersion}/${appId}/uploads?file_name=${encodeURIComponent(filename)}&file_length=${buffer.length}&file_type=${encodeURIComponent("application/pdf")}`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
+  const session = (await sessionRes.json()) as { id?: string; error?: MetaGraphErrorBody };
+  if (!sessionRes.ok || !session.id) {
+    throw new Error(session.error?.message || "Could not start the prescription file upload.");
+  }
+  const uploadRes = await fetch(
+    `https://graph.facebook.com/${settings.whatsappApiVersion}/${session.id}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `OAuth ${token}`,
+        file_offset: "0",
+        "Content-Type": "application/pdf",
+      },
+      body: new Uint8Array(buffer),
+    },
+  );
+  const uploaded = (await uploadRes.json()) as { h?: string; error?: MetaGraphErrorBody };
+  if (!uploadRes.ok || !uploaded.h) {
+    throw new Error(uploaded.error?.message || "Could not upload the prescription sample.");
+  }
+  return uploaded.h;
+}
+
+let prescriptionTemplateApproved = false;
+
+async function prescriptionFileTemplateStatus(): Promise<"APPROVED" | "PENDING" | "MISSING" | "REJECTED"> {
+  if (prescriptionTemplateApproved) return "APPROVED";
+  const token = settings.whatsappAccessToken;
+  const waba = settings.whatsappWabaId?.trim();
+  if (!token || !waba) return "MISSING";
+  const url = `https://graph.facebook.com/${settings.whatsappApiVersion}/${waba}/message_templates?name=${PRESCRIPTION_FILE_TEMPLATE}&fields=name,status`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const data = (await res.json()) as { data?: Array<{ status?: string }> };
+  const status = data.data?.[0]?.status;
+  if (!status) return "MISSING";
+  if (status === "APPROVED") {
+    prescriptionTemplateApproved = true;
+    return "APPROVED";
+  }
+  if (status === "REJECTED") return "REJECTED";
+  return "PENDING";
+}
+
+async function ensurePrescriptionFileTemplate(sample: Buffer): Promise<"APPROVED" | "PENDING" | "REJECTED"> {
+  const current = await prescriptionFileTemplateStatus();
+  if (current !== "MISSING") return current;
+  const token = settings.whatsappAccessToken;
+  const waba = settings.whatsappWabaId?.trim();
+  if (!token || !waba) throw new Error("WhatsApp business account is not configured.");
+  const handle = await uploadTemplateSample(sample, "Prescription-sample.pdf");
+  const res = await fetch(
+    `https://graph.facebook.com/${settings.whatsappApiVersion}/${waba}/message_templates`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: PRESCRIPTION_FILE_TEMPLATE,
+        language: "en",
+        category: "UTILITY",
+        parameter_format: "NAMED",
+        components: [
+          {
+            type: "HEADER",
+            format: "DOCUMENT",
+            example: { header_handle: [handle] },
+          },
+          {
+            type: "BODY",
+            text:
+              "Your prescription from {{practice_name}} is attached.\n" +
+              "Doctor: {{provider_name}}\n" +
+              "Reply STOP to opt out of appointment alerts.",
+            example: {
+              body_text_named_params: [
+                { param_name: "practice_name", example: "City Care Clinic" },
+                { param_name: "provider_name", example: "Dr Anjali Mehta" },
+              ],
+            },
+          },
+        ],
+      }),
+    },
+  );
+  const created = (await res.json()) as { error?: MetaGraphErrorBody };
+  if (!res.ok && !/already exists|duplicate/i.test(created.error?.message || "")) {
+    throw new Error(created.error?.message || "Could not submit the prescription file template.");
+  }
+  const status = await prescriptionFileTemplateStatus();
+  return status === "MISSING" ? "PENDING" : status;
+}
+
+/**
+ * Send the prescription PDF outside the 24-hour chat window.
+ * WhatsApp only delivers a file then when it is the header of an approved utility template.
+ */
+export async function sendPrescriptionPdfTemplate(
+  to: string,
+  opts: {
+    filename: string;
+    buffer: Buffer;
+    practiceName: string;
+    doctorName: string;
+  },
+  phoneNumberId?: string,
+): Promise<WhatsAppSendResult> {
+  const token = settings.whatsappAccessToken;
+  const phoneId = phoneNumberId ?? settings.whatsappPhoneNumberId;
+  if (!token || !phoneId) {
+    console.log(
+      `[WhatsApp prescription template simulated] → ${to}: ${opts.filename}`,
+    );
+    return { ok: true, simulated: true, usedTemplate: true };
+  }
+
+  const status = prescriptionTemplateApproved
+    ? "APPROVED"
+    : await prescriptionFileTemplateStatus();
+  if (status !== "APPROVED") {
+    if (status === "MISSING") {
+      void ensurePrescriptionFileTemplate(opts.buffer).catch((err) => {
+        console.warn(
+          "[whatsapp] prescription template submit failed:",
+          err instanceof Error ? err.message : err,
+        );
+      });
+    }
+    return { ok: false, usedTemplate: true, error: "template-not-ready" };
+  }
+
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", "application/pdf");
+  form.append(
+    "file",
+    new Blob([new Uint8Array(opts.buffer)], { type: "application/pdf" }),
+    opts.filename,
+  );
+  const uploadRes = await fetch(
+    `https://graph.facebook.com/${settings.whatsappApiVersion}/${phoneId}/media`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form },
+  );
+  const uploadData = (await uploadRes.json()) as { id?: string; error?: MetaGraphErrorBody };
+  if (!uploadRes.ok || !uploadData.id) {
+    return failFromMeta(uploadData.error, uploadRes.statusText, { usedTemplate: true });
+  }
+
+  const res = await fetch(
+    `https://graph.facebook.com/${settings.whatsappApiVersion}/${phoneId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: formatE164(to),
+        type: "template",
+        template: {
+          name: PRESCRIPTION_FILE_TEMPLATE,
+          language: { code: "en" },
+          components: [
+            {
+              type: "header",
+              parameters: [
+                {
+                  type: "document",
+                  document: {
+                    id: uploadData.id,
+                    filename: opts.filename.slice(0, 240),
+                  },
+                },
+              ],
+            },
+            {
+              type: "body",
+              parameters: [
+                {
+                  type: "text",
+                  parameter_name: "practice_name",
+                  text: opts.practiceName.slice(0, 200) || "Clinic",
+                },
+                {
+                  type: "text",
+                  parameter_name: "provider_name",
+                  text: opts.doctorName.slice(0, 200) || "Doctor",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    },
+  );
+  const data = (await res.json()) as {
+    messages?: { id: string }[];
+    error?: MetaGraphErrorBody;
+  };
+  if (!res.ok) {
+    return failFromMeta(data.error, res.statusText, { usedTemplate: true });
+  }
+  return { ok: true, messageId: data.messages?.[0]?.id, usedTemplate: true };
+}
+
 /**
  * Prefer Meta template for proactive utility alerts; fall back to free-form
  * only when simulated / template not approved yet (dev) or send fails.
