@@ -6,7 +6,8 @@ import { LigthMode } from "./LightMode"
 import { DarkMode } from "./DarkMode"
 import { useAppContext } from "@/hooks/useAppContext"
 import { ThemeOptions } from "@/app/providers"
-import { THEME_COLORS, type ThemeColor } from "@/lib/themeColors"
+import ColorWheel from "@/components/theme/ColorWheel"
+import { getThemeColor, THEME_COLORS } from "@/lib/themeColors"
 import { TEXT_SIZES, type TextSize } from "@/lib/textSize"
 import { doctorServices } from "@/lib/services/doctor"
 import { userService } from "@/lib/services/user"
@@ -38,7 +39,7 @@ export default function ThemeUI() {
     setCurrentTheme(mode)
   }
 
-  function handleColorChange(color: ThemeColor) {
+  function handleColorChange(color: string) {
     changeThemeColor(color)
   }
 
@@ -134,8 +135,26 @@ export default function ThemeUI() {
             )
           })}
         </div>
+        <div className="mt-6">
+          <p className="text-sm font-semibold text-slate-700 dark:text-white">
+            Custom colour
+          </p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-neutral-300">
+            Drag the ring to change the hue, and the square to change how strong
+            and how light it is.
+          </p>
+          <div className="mt-4">
+            <ColorWheel
+              color={getThemeColor(themeColor).primary}
+              onChange={handleColorChange}
+            />
+          </div>
+        </div>
         <p className="mt-3 text-sm font-bold capitalize text-[var(--theme-primary)]">
-          {THEME_COLORS.find((c) => c.id === themeColor)?.label ?? "Blue"}
+          {getThemeColor(themeColor).label}
+          {getThemeColor(themeColor).id === "custom"
+            ? ` ${getThemeColor(themeColor).primary}`
+            : ""}
         </p>
       </section>
 
