@@ -11,6 +11,7 @@ import {
   isDateWithinValidity,
   isSlotStartBookable,
   parseLocalDate,
+  bookingHorizonDays,
   PATIENT_BOOKING_HORIZON_DAYS,
   TIME_SLOT_CAPACITY,
   zonedDateTime,
@@ -35,7 +36,11 @@ describe("patient booking horizon", () => {
     const later = new Date();
     later.setDate(later.getDate() + 30);
     assert.equal(PATIENT_BOOKING_HORIZON_DAYS, 90);
+    assert.equal(bookingHorizonDays(null), 90);
+    assert.equal(bookingHorizonDays(120), 90);
+    assert.equal(bookingHorizonDays(14), 14);
     assert.equal(isDateWithinValidity(later, PATIENT_BOOKING_HORIZON_DAYS), true);
+    assert.equal(isDateWithinValidity(later, 45), true);
     assert.equal(isDateWithinValidity(later, 7), false);
   });
 });

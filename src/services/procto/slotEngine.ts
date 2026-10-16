@@ -294,8 +294,15 @@ export function countBookingsOccupying(
   }).length;
 }
 
-/** Patient Find clinics can book any open day in this window, not only the next 7. */
+/** Hard maximum for Find clinics. The clinic chooses a shorter window in settings. */
 export const PATIENT_BOOKING_HORIZON_DAYS = 90;
+
+/** Days ahead a patient may book. A blank value uses the 90-day maximum. */
+export function bookingHorizonDays(appointmentValidityDays?: number | null): number {
+  const n = Number(appointmentValidityDays);
+  if (!Number.isFinite(n) || n < 1) return PATIENT_BOOKING_HORIZON_DAYS;
+  return Math.min(PATIENT_BOOKING_HORIZON_DAYS, Math.floor(n));
+}
 
 /** Inclusive bookable window: today .. today + (validityDays - 1). */
 export function getValidityBounds(appointmentValidityDays: number): {
@@ -303,7 +310,7 @@ export function getValidityBounds(appointmentValidityDays: number): {
   maxDay: Date;
   days: number;
 } {
-  const days = Math.min(90, Math.max(1, appointmentValidityDays || 7));
+  const days = bookingHorizonDays(appointmentValidityDays);
   const today = startOfLocalDay(new Date());
   const maxDay = endOfLocalDay(new Date(today));
   maxDay.setDate(maxDay.getDate() + days - 1);

@@ -10,7 +10,7 @@ import {
 import { AppError, ResponseHandler } from "../core/response.js";
 import { Custom } from "../core/utils.js";
 import { settings, frontendBaseUrl } from "../config/index.js";
-import { assertValidTimeRange, minutesOf } from "./procto/slotEngine.js";
+import { assertValidTimeRange, bookingHorizonDays, minutesOf } from "./procto/slotEngine.js";
 import { requireGender } from "../core/gender.js";
 import { normalizeDateOfBirth, ageFromDob } from "../core/dob.js";
 import { allocatePatientMrn, allocateUniquePracticeMrnPrefix } from "../core/patientMrn.js";
@@ -72,10 +72,7 @@ export class AuthService {
     const decryptedPassword = unwrapPassword(credentials.password);
     const hashedPassword = await generateHash(decryptedPassword);
     const phone = credentials.phone?.trim() || null;
-    const validity = Math.min(
-      90,
-      Math.max(1, Number(credentials.appointmentValidityDays) || 7),
-    );
+    const validity = bookingHorizonDays(credentials.appointmentValidityDays);
     const createdBy =
       role === "doctor" && credentials.portal === "clinic"
         ? "clinic_owner_signup"
@@ -487,10 +484,7 @@ export class AuthService {
       mode === "TIME_BASED"
         ? 1
         : Math.min(50, Math.max(1, Number(input.patientsPerSlot) || 1));
-    const validity = Math.min(
-      90,
-      Math.max(1, Number(input.appointmentValidityDays) || 7),
-    );
+    const validity = bookingHorizonDays(input.appointmentValidityDays);
     const phoneRaw = input.phone?.trim() || "";
     const phoneDigits = phoneRaw.replace(/\D/g, "").slice(-10);
     if (phoneDigits.length !== 10) {

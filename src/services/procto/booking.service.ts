@@ -28,7 +28,7 @@ import {
   isDateWithinValidity,
   isSlotStartBookable,
   parseLocalDate,
-  PATIENT_BOOKING_HORIZON_DAYS,
+  bookingHorizonDays,
   practiceWeekday,
   formatPracticeDateTime,
   resolveProviderBookingMode,
@@ -409,7 +409,7 @@ export const BookingService = {
     const dayEnd = endOfLocalDay(date);
 
     // Parallel fetch: validity + schedule context + membership/location checks
-    const [allSchedules, location, member] = await Promise.all([
+    const [allSchedules, location, member, doctor] = await Promise.all([
       loadSchedulesOn(
         {
           practiceId: data.practiceId,
@@ -434,6 +434,10 @@ export const BookingService = {
         },
         select: { id: true },
       }),
+      prisma.doctor.findUnique({
+        where: { id: data.providerId },
+        select: { appointmentValidityDays: true },
+      }),
     ]);
 
     if (!location) throw new AppError(400, "location does not belong to this practice.");
@@ -453,10 +457,11 @@ export const BookingService = {
       (s) => s.dayOfWeek === dayOfWeek && s.mode === mode,
     );
 
-    if (!isDateWithinValidity(date, PATIENT_BOOKING_HORIZON_DAYS)) {
+    const horizonDays = bookingHorizonDays(doctor?.appointmentValidityDays);
+    if (!isDateWithinValidity(date, horizonDays)) {
       throw new AppError(
         400,
-        `appointments can only be booked within ${PATIENT_BOOKING_HORIZON_DAYS} days`,
+        `appointments can only be booked within ${horizonDays} days`,
       );
     }
 
@@ -2716,8 +2721,13 @@ export const BookingService = {
       }),
     ]);
 
-    const { today, maxDay, days } = getValidityBounds(PATIENT_BOOKING_HORIZON_DAYS);
-    const withinValidity = isDateWithinValidity(date, PATIENT_BOOKING_HORIZON_DAYS);
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: providerId },
+      select: { appointmentValidityDays: true },
+    });
+    const horizonDays = bookingHorizonDays(doctor?.appointmentValidityDays);
+    const { today, maxDay, days } = getValidityBounds(horizonDays);
+    const withinValidity = isDateWithinValidity(date, horizonDays);
     const configuredMode = resolveProviderBookingMode(schedules);
     const configuredModes = configuredMode ? [configuredMode] : [];
     const activeSchedules = schedulesForActiveMode(schedules);
