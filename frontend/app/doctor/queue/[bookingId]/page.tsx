@@ -38,6 +38,7 @@ import MedicineEntryTable, {
   medicineFromDraft,
   type VisitMedicine,
 } from "@/components/ui/procto/MedicineEntryTable"
+import { medicineWithStartDate } from "@/lib/medicineDates"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
@@ -240,9 +241,19 @@ export default function VisitPage() {
   const [error, setError] = useState("")
   const [loadTick, setLoadTick] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [sendingWa, setSendingWa] = useState(false)
   const [uploading, setUploading] = useState(false)
 
   const [remarks, setRemarks] = useState("")
+  const [complaint, setComplaint] = useState("")
+  const [diagnosis, setDiagnosis] = useState("")
+  const [advice, setAdvice] = useState("")
+  const complaintRef = useRef("")
+  const diagnosisRef = useRef("")
+  const adviceRef = useRef("")
+  complaintRef.current = complaint
+  diagnosisRef.current = diagnosis
+  adviceRef.current = advice
   const remarksBox = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     const el = remarksBox.current
@@ -271,7 +282,7 @@ export default function VisitPage() {
   const [docTab, setDocTab] = useState<"appointment" | "general">("appointment")
   const [generalDocs, setGeneralDocs] = useState<VisitDoc[]>([])
   const [generalLinked, setGeneralLinked] = useState<boolean | null>(null)
-  const [medDraft, setMedDraft] = useState<Medicine>(emptyMedicineDraft)
+  const [medDraft, setMedDraft] = useState<Medicine>(() => emptyMedicineDraft())
   const medDraftRef = useRef<Medicine>(emptyMedicineDraft())
   medDraftRef.current = medDraft
   const medicinesRef = useRef<Medicine[]>([])
@@ -300,6 +311,17 @@ export default function VisitPage() {
     // the chart, notes, and files the doctor has changed and not saved.
     if (mode === "hydrate" || (!clinicalDirty.current && !formDirty.current)) {
       setRemarks(doctorRemarksForEdit(data.doctorRemarks))
+      setComplaint(String(data.disease || "").trim())
+      const storedDiagnosis = String(
+        (data.clinicalAssessment as ClinicalAssessment | null)?.diagnosis || "",
+      ).trim()
+      setDiagnosis(storedDiagnosis)
+      diagnosisRef.current = storedDiagnosis
+      const storedAdvice = String(
+        (data.clinicalAssessment as ClinicalAssessment | null)?.advice || "",
+      ).trim()
+      setAdvice(storedAdvice)
+      adviceRef.current = storedAdvice
       const meds = Array.isArray(data.medicines) ? data.medicines : []
       const docs = Array.isArray(data.documents) ? data.documents : []
       setMedicines(meds)
@@ -388,6 +410,19 @@ export default function VisitPage() {
     if (ready) void loadGeneralDocs()
   }, [ready, loadGeneralDocs])
 
+  function chartWithDiagnosis(chart: ClinicalAssessment | null): ClinicalAssessment {
+    return {
+      ...(chart ?? {
+        vitals: { breakfast: null, values: {} },
+        pain: [],
+        allergies: [],
+        noKnownAllergies: false,
+      }),
+      diagnosis: diagnosisRef.current.trim().slice(0, 500),
+      advice: adviceRef.current.trim().slice(0, 1000),
+    }
+  }
+
   async function persistVisit(
     nextMedicines: Medicine[],
     nextDocuments: VisitDoc[] = documents,
@@ -409,12 +444,15 @@ export default function VisitPage() {
         setDocuments(serverDocs)
       }
     }
+    const disease = complaintRef.current.trim()
+    const chart = chartWithDiagnosis(clinicalRef.current)
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
+      ...(disease ? { disease } : {}),
       medicines: nextMedicines,
       documents: docsToSave,
-      ...(clinicalReady.current
-        ? { clinicalAssessment: clinicalRef.current }
+      ...(clinicalReady.current || chart.diagnosis || chart.advice
+        ? { clinicalAssessment: chart }
         : {}),
       ...(opts?.status ? { status: opts.status } : {}),
     })
@@ -453,6 +491,23 @@ export default function VisitPage() {
     medicinesRef.current = next
     setMedicines(next)
     await persistVisit(next, documents, { successMessage: "Medicine removed." })
+  }
+
+  async function changeMedicineStart(idx: number, startDate: string) {
+    if (
+      !bookingId ||
+      String(booking?.status || "").toUpperCase() === "COMPLETED"
+    )
+      return
+    const current = medicinesRef.current[idx]
+    if (!current || !startDate.trim()) return
+    const next = medicinesRef.current.map((row, i) =>
+      i === idx ? medicineWithStartDate(row, startDate) : row,
+    )
+    medicinesRef.current = next
+    setMedicines(next)
+    formDirty.current = true
+    await persistVisit(next, documents, { successMessage: "End date updated." })
   }
 
   async function onUploadGeneral(e: React.ChangeEvent<HTMLInputElement>) {
@@ -544,12 +599,15 @@ export default function VisitPage() {
       setMedDraft(blank)
     }
     setSaving(true)
+    const disease = complaintRef.current.trim()
+    const chart = chartWithDiagnosis(clinicalRef.current)
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
+      ...(disease ? { disease } : {}),
       medicines: nextMedicines,
       documents: documentsRef.current,
-      ...(clinicalReady.current
-        ? { clinicalAssessment: clinicalRef.current }
+      ...(clinicalReady.current || chart.diagnosis || chart.advice
+        ? { clinicalAssessment: chart }
         : {}),
       ...(nextStatus ? { status: nextStatus } : {}),
     })
@@ -567,6 +625,107 @@ export default function VisitPage() {
       return
     }
     toast.success("Visit saved.")
+  }
+
+  async function saveComplaint(nextRaw: string) {
+    if (!bookingId || futureDay) return
+    const next = nextRaw.trim().slice(0, 500)
+    const previous = String(booking?.disease || "").trim()
+    if (next === previous) return
+    if (!next) {
+      toast.error("Chief complaint is required.")
+      setComplaint(previous)
+      return
+    }
+    const res = await proctoService.updateBookingVisit(bookingId, { disease: next })
+    if (res.status !== "successful") {
+      toast.error(res.message || "Could not save the chief complaint.")
+      setComplaint(previous)
+      return
+    }
+    const saved = res.data as VisitBooking
+    setBooking(saved)
+    setComplaint(String(saved.disease || "").trim())
+    patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
+  }
+
+  async function saveDiagnosis(nextRaw: string) {
+    if (!bookingId || chartLocked) return
+    const next = nextRaw.trim().slice(0, 500)
+    const previous = String(
+      (booking?.clinicalAssessment as ClinicalAssessment | null)?.diagnosis || "",
+    ).trim()
+    if (next === previous) return
+    diagnosisRef.current = next
+    const chart = chartWithDiagnosis(clinicalRef.current)
+    clinicalRef.current = chart
+    clinicalReady.current = true
+    setClinicalAssessment(chart)
+    const res = await proctoService.updateBookingVisit(bookingId, {
+      clinicalAssessment: chart,
+    })
+    if (res.status !== "successful") {
+      toast.error(res.message || "Could not save the diagnosis.")
+      diagnosisRef.current = previous
+      setDiagnosis(previous)
+      return
+    }
+    const saved = res.data as VisitBooking
+    setBooking(saved)
+    const stored = String(
+      (saved.clinicalAssessment as ClinicalAssessment | null)?.diagnosis || "",
+    ).trim()
+    diagnosisRef.current = stored
+    setDiagnosis(stored)
+    patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
+  }
+
+  async function saveAdvice(nextRaw: string) {
+    if (!bookingId || chartLocked) return
+    const next = nextRaw.trim().slice(0, 1000)
+    const previous = String(
+      (booking?.clinicalAssessment as ClinicalAssessment | null)?.advice || "",
+    ).trim()
+    if (next === previous) return
+    adviceRef.current = next
+    const chart = chartWithDiagnosis(clinicalRef.current)
+    clinicalRef.current = chart
+    clinicalReady.current = true
+    setClinicalAssessment(chart)
+    const res = await proctoService.updateBookingVisit(bookingId, {
+      clinicalAssessment: chart,
+    })
+    if (res.status !== "successful") {
+      toast.error(res.message || "Could not save the advice.")
+      adviceRef.current = previous
+      setAdvice(previous)
+      return
+    }
+    const saved = res.data as VisitBooking
+    setBooking(saved)
+    const stored = String(
+      (saved.clinicalAssessment as ClinicalAssessment | null)?.advice || "",
+    ).trim()
+    adviceRef.current = stored
+    setAdvice(stored)
+    patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
+  }
+
+  async function sendToCustomer() {
+    if (!bookingId || sendingWa) return
+    const completed = String(booking?.status || "").toUpperCase() === "COMPLETED"
+    if (!completed && (formDirty.current || clinicalDirty.current)) {
+      const saved = await persistVisit(medicinesRef.current, documentsRef.current)
+      if (!saved) return
+    }
+    setSendingWa(true)
+    const res = await proctoService.sendClinicLogWhatsApp(bookingId)
+    setSendingWa(false)
+    if (res.status !== "successful") {
+      toast.error(res.message || "Could not send via WhatsApp.")
+      return
+    }
+    toast.success("Prescription PDF sent on WhatsApp.")
   }
 
   if (!detailLoaded) {
@@ -766,15 +925,7 @@ export default function VisitPage() {
             <Fact label="Token" value={`#${booking.tokenNumber}`} />
           ) : null}
           <Fact label="Chief complaint" value={chiefComplaint || "—"} />
-          <Fact
-            label="Diagnosis"
-            value={
-              (booking.consultationType || "").trim() &&
-              !/^general\s+consultation$/i.test(booking.consultationType || "")
-                ? (booking.consultationType || "").trim()
-                : chiefComplaint || "—"
-            }
-          />
+          <Fact label="Diagnosis" value={diagnosis || "—"} />
         </dl>
       </section>
 
@@ -783,13 +934,48 @@ export default function VisitPage() {
           Chief complaint
         </h2>
         <p className="mt-1 text-xs opacity-60">
-          {booking.channel === "WHATSAPP_AI"
-            ? "In the patient's words (typed or voice note on WhatsApp)."
-            : "Required at booking."}
+          Enter a new complaint or replace the one saved at booking.
         </p>
-        <p className="mt-2 whitespace-pre-wrap rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm leading-snug text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-slate-100">
-          {chiefComplaint || "No chief complaint"}
+        <textarea
+          value={complaint}
+          onChange={(e) => {
+            formDirty.current = true
+            setComplaint(e.target.value)
+          }}
+          onBlur={() => void saveComplaint(complaint)}
+          readOnly={futureDay}
+          disabled={futureDay}
+          maxLength={500}
+          rows={2}
+          placeholder="Chief complaint"
+          aria-label="Chief complaint"
+          className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+        />
+      </section>
+
+      <section className="dashboard-panel !h-auto !min-h-0 !p-5">
+        <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
+          Diagnosis
+        </h2>
+        <p className="mt-1 text-xs opacity-60">
+          This is printed on the prescription sent to the patient.
         </p>
+        <textarea
+          value={diagnosis}
+          onChange={(e) => {
+            formDirty.current = true
+            diagnosisRef.current = e.target.value
+            setDiagnosis(e.target.value)
+          }}
+          onBlur={() => void saveDiagnosis(diagnosis)}
+          readOnly={chartLocked}
+          disabled={chartLocked}
+          maxLength={500}
+          rows={2}
+          placeholder="Diagnosis"
+          aria-label="Diagnosis"
+          className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+        />
       </section>
 
       {futureDay ? (
@@ -805,10 +991,11 @@ export default function VisitPage() {
         versions={clinicalVersions}
         readOnly={chartLocked}
         onChange={(next) => {
+          const merged = chartWithDiagnosis(next)
           clinicalDirty.current = true
           clinicalReady.current = true
-          clinicalRef.current = next
-          setClinicalAssessment(next)
+          clinicalRef.current = merged
+          setClinicalAssessment(merged)
         }}
         medicines={
           medicines.length === 0 && chartLocked ? (
@@ -825,18 +1012,41 @@ export default function VisitPage() {
               }}
               onAdd={() => void addMedicine()}
               onRemove={(idx) => void removeMedicine(idx)}
+              onStartDate={(idx, startDate) => void changeMedicineStart(idx, startDate)}
             />
           )
         }
+        advice={
+          <div>
+            <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
+              Advice
+            </h3>
+            <textarea
+              value={advice}
+              onChange={(e) => {
+                clinicalDirty.current = true
+                adviceRef.current = e.target.value
+                setAdvice(e.target.value)
+              }}
+              onBlur={() => void saveAdvice(advice)}
+              readOnly={chartLocked}
+              disabled={chartLocked}
+              maxLength={1000}
+              rows={2}
+              placeholder="Advice for the patient"
+              aria-label="Advice"
+              className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+            />
+          </div>
+        }
       />
 
-      {/* Remarks */}
       <section className="dashboard-panel !h-auto !min-h-0 !p-5">
         <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
           Remarks
         </h2>
         <p className="mt-1 text-xs opacity-60">
-          Clinical remarks, advice, and follow-up for this visit.
+          Clinical remarks for this visit. These are not printed as prescription advice.
         </p>
         <textarea
           ref={remarksBox}
@@ -851,7 +1061,8 @@ export default function VisitPage() {
           readOnly={chartLocked}
           disabled={chartLocked}
           rows={2}
-          placeholder="Clinical remarks, advice, follow-up…"
+          placeholder="Clinical remarks"
+          aria-label="Clinical remarks"
           className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
         />
       </section>
@@ -1027,6 +1238,14 @@ export default function VisitPage() {
                 className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 disabled:opacity-50 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-elevated)] dark:text-slate-100 dark:hover:bg-[var(--solune-surface-muted)]"
               >
                 {saving ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                disabled={saving || sendingWa}
+                onClick={() => void sendToCustomer()}
+                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {sendingWa ? "Sending…" : "Send to customer"}
               </button>
               <button
                 type="button"

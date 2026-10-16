@@ -336,6 +336,10 @@ export type ClinicalAssessment = {
     description?: string;
   }>;
   noKnownAllergies?: boolean;
+  /** Diagnosis written on this visit. Printed on the prescription. */
+  diagnosis?: string;
+  /** Advice printed under the medicines. Not clinical remarks. */
+  advice?: string;
   /** When this vitals / pain / allergy snapshot was saved. */
   savedAt?: string | null;
 };
@@ -395,6 +399,8 @@ export function normalizeClinicalAssessment(
     pain,
     allergies,
     noKnownAllergies: Boolean(o.noKnownAllergies),
+    diagnosis: String(o.diagnosis ?? "").trim().slice(0, 500),
+    advice: String(o.advice ?? "").trim().slice(0, 1000),
     savedAt: o.savedAt ? String(o.savedAt) : null,
   };
 }

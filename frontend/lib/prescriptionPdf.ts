@@ -170,7 +170,11 @@ export function prescriptionModel(booking: RxBooking) {
     allergyLines: allergyGroups(booking.clinicalAssessment),
     vitalLine: vitals,
     pharmacy: pharmacyRows(booking.medicines),
-    advice: adviceLines(booking.doctorRemarks),
+    advice: adviceLines(
+      booking.clinicalAssessment && typeof booking.clinicalAssessment === "object"
+        ? (booking.clinicalAssessment as { advice?: string }).advice
+        : "",
+    ),
   }
 }
 
@@ -376,7 +380,7 @@ export async function buildPrescriptionPdf(booking: RxBooking): Promise<Uint8Arr
   page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.8, color: INK })
   y -= 16
   ensure(20)
-  draw("Advice Given:", left, 11, bold)
+  draw("Advice:", left, 11, bold)
   y -= 14
   const advice = model.advice.length ? model.advice : [""]
   for (const line of advice) {

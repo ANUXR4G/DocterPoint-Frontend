@@ -38,6 +38,7 @@ import {
   timeSlotsForProviderDay,
 } from "./slotEngine.js";
 import { arrivalPatch } from "./bookingArrival.js";
+import { explicitClinicLogTemplate } from "./clinicLogSend.js";
 import { assertVisitStatusMove } from "./bookingStatusFlow.js";
 import { loadSchedulesOn, localDayOfSessionDate } from "./scheduleVersions.js";
 import { NotificationService } from "./notification.service.js";
@@ -343,6 +344,10 @@ export const BookingService = {
         403,
         "This clinic is not listed for public booking yet. Subscribe under Billing to go live.",
       );
+    }
+
+    if (!data.disease?.trim()) {
+      throw new AppError(400, "Chief complaint is required.");
     }
 
     if (channel === BookingChannel.WHATSAPP_AI) {
@@ -662,6 +667,11 @@ export const BookingService = {
     },
     actorUserId: string,
   ) {
+    const complaint = data.disease?.trim().slice(0, 500) || "";
+    if (!complaint) {
+      throw new AppError(400, "Chief complaint is required.");
+    }
+
     const { patientId, patientPhone, patientName, mrn } = await loadDeskPatient(
       data.practiceId,
       data.patientId,
@@ -716,7 +726,7 @@ export const BookingService = {
         slotStart: now,
         slotEnd: new Date(now.getTime() + 15 * 60 * 1000),
         consultationType: EMERGENCY_WALK_IN,
-        disease: data.disease?.trim().slice(0, 500) || null,
+        disease: complaint,
       },
       include: { practice: true, location: true },
     });
@@ -1464,6 +1474,10 @@ export const BookingService = {
       );
     }
 
+    if (data.disease !== undefined && !data.disease?.trim()) {
+      throw new AppError(400, "Chief complaint is required.");
+    }
+
     const diseaseOnly =
       data.disease !== undefined &&
       data.doctorRemarks === undefined &&
@@ -1525,14 +1539,6 @@ export const BookingService = {
     if (nextStatus && nextStatus !== existing.status) {
       assertVisitStatusMove(existing.status, nextStatus, "visit");
     }
-
-    const prevMedsKey = JSON.stringify(existing.medicines ?? []);
-    const nextMedsKey = JSON.stringify(medicines ?? existing.medicines ?? []);
-    const medicinesChanged =
-      data.medicines !== undefined && prevMedsKey !== nextMedsKey;
-    const hasMedicines =
-      (medicines ?? (Array.isArray(existing.medicines) ? existing.medicines : []))
-        .length > 0;
 
     const prevDocsKey = JSON.stringify(existing.documents ?? []);
     const nextDocsKey = JSON.stringify(documents ?? existing.documents ?? []);
@@ -1631,19 +1637,13 @@ export const BookingService = {
       ).catch(() => undefined);
     }
     if (nextStatus === BookingStatus.COMPLETED) {
-      void NotificationService.enqueueVisitSummary(bookingId).catch((err) =>
-        console.warn("visit summary notification failed (non-fatal):", err),
-      );
       void NotificationService.enqueueClinicStatusChange(
         bookingId,
         "COMPLETED",
       ).catch(() => undefined);
-    } else if (medicinesChanged && hasMedicines) {
-      // Mid-visit prescription save → patient WhatsApp (finish uses VISIT_SUMMARY).
-      void NotificationService.enqueuePrescriptionUpdate(bookingId).catch((err) =>
-        console.warn("prescription WhatsApp notify failed (non-fatal):", err),
-      );
     }
+    // Saving medicines or finishing the visit does not message the patient.
+    // Send to customer delivers a prescription PDF on WhatsApp.
 
     void broadcastProctoEvent(
       existing.practiceId,
@@ -1792,12 +1792,8 @@ export const BookingService = {
   },
 
   /**
-   * Care chat "attach": save the file on the appointment, post it in the
-   * clinic ↔ patient chat, and deliver it on the patient's WhatsApp.
-   */
-  /**
-   * Re-send clinic log / visit summary (remarks + Rx) to the patient WhatsApp.
-   * Used from the appointments list Rx menu after a visit is COMPLETED.
+   * Explicit Send to customer. Delivers a prescription PDF on WhatsApp.
+   * Saving medicines or finishing the visit never calls this.
    */
   async sendClinicLogWhatsApp(bookingId: string, actorUserId: string) {
     const booking = await prisma.practiceBooking.findUnique({
@@ -1835,23 +1831,30 @@ export const BookingService = {
         "You can only send clinic logs for visits assigned to you.",
       );
     }
-    if (existing.status !== BookingStatus.COMPLETED) {
+    if (!explicitClinicLogTemplate(existing.status)) {
       throw new AppError(
         400,
-        "Clinic log WhatsApp is available after the appointment is finished.",
+        "This appointment is closed and cannot be sent.",
       );
     }
     if (!String(existing.patientPhone || "").trim()) {
       throw new AppError(400, "This visit has no patient phone number.");
     }
 
-    const queued = await NotificationService.enqueueVisitSummary(bookingId);
-    if (!queued) {
-      throw new AppError(500, "Could not queue the WhatsApp clinic log.");
-    }
-    return { notificationId: queued.id, templateKey: "VISIT_SUMMARY" };
+    const { sendClinicLogPdf } = await import("./clinicLogPdf.js");
+    const sent = await sendClinicLogPdf(bookingId);
+    return {
+      filename: sent.filename,
+      messageId: sent.messageId ?? null,
+      simulated: Boolean(sent.simulated),
+      delivery: "pdf",
+    };
   },
 
+  /**
+   * Care chat "attach": save the file on the appointment, post it in the
+   * clinic ↔ patient chat, and deliver it on the patient's WhatsApp.
+   */
   async shareDocumentWithPatient(
     bookingId: string,
     input: { name?: string; url?: string; caption?: string },
@@ -2084,6 +2087,8 @@ export const BookingService = {
             consultationFee: true,
             clinicalMasters: true,
             stampSrc: true,
+            phone: true,
+            email: true,
           },
         },
         location: { select: { name: true, address: true, city: true } },
@@ -2344,6 +2349,8 @@ export const BookingService = {
     statuses?: BookingStatus[];
     /** Only visits that have not started (slot) / not a past token day. */
     upcomingOnly?: boolean;
+    /** Newest slot first, so future visits are not dropped by the take limit. */
+    order?: "asc" | "desc";
     updatedSince?: Date;
     take?: number;
   }) {
@@ -2400,7 +2407,11 @@ export const BookingService = {
         },
         location: { select: { name: true, address: true, city: true } },
       },
-      orderBy: [{ slotStart: "asc" }, { sessionDate: "asc" }, { createdAt: "desc" }],
+      orderBy: [
+        { slotStart: opts.order === "desc" ? "desc" : "asc" },
+        { sessionDate: opts.order === "desc" ? "desc" : "asc" },
+        { createdAt: "desc" },
+      ],
       take: opts.take ?? 50,
     });
 
