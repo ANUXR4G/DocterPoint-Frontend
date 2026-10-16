@@ -1422,7 +1422,7 @@ function DoctorAccountForm({
             className="form-input mt-1 h-14 w-full px-4 text-base font-semibold"
           />
           <span className="gg-faint mt-1 block text-sm font-medium">
-            How far ahead patients can book (1–90 days). Default 7.
+            Find clinics lets patients book any open day in the next 90 days.
           </span>
         </label>
       </div>

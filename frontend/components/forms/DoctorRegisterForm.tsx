@@ -419,7 +419,7 @@ export default function DoctorRegisterForm({
             className="form-input mt-1 h-14 w-full min-w-0 px-4 text-sm"
           />
           <span className="gg-faint mt-1 block text-xs">
-            How far ahead patients can book (1–90 days). Default 7.
+            Find clinics lets patients book any open day in the next 90 days.
           </span>
         </label>
       </div>

@@ -270,7 +270,7 @@ Each doctor can run **one mode**:
 - **Time slots** — Patients pick a clock time; `maxPerSlot` controls parallel bookings.
 - **Token queue** — Patients receive a token number for the session.
 
-Set **working days**, **start/end**, **break**, **slot duration**, and **appointment validity** (how far ahead patients can book).
+Set **working days**, **start/end**, **break**, and **slot duration**. Patients booking from Find clinics can choose any open day in the next 90 days.
 
 **Overrides** block days or add extra sessions (holidays, evening clinics).
 
@@ -471,7 +471,7 @@ Admin actions affect production data; follow your organisation’s change-contro
 
 ### No slots on the booking page
 
-- Clinic may be closed that day, fully booked, or outside **appointment validity** window.
+- Clinic may be closed that day or fully booked. Dates more than 90 days ahead are not offered.
 - Try the next weekday; seeded demos are often Mon–Sat only.
 
 ### Queue is empty
