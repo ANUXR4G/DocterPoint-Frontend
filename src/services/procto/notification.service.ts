@@ -1,7 +1,6 @@
 import { NotificationType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { formatPracticeDateTime, formatLocalDate } from "./slotEngine.js";
-import { bookingConfirmPracticeName } from "./whatsapp.metaTemplates.js";
 import { enqueueNotificationEvent } from "../../workers/notificationQueue.js";
 
 export type NotifyOpts = {
@@ -241,6 +240,7 @@ const CLINIC_INBOX_TEMPLATE_KEYS = [
  */
 const PATIENT_OUTBOUND_INBOX_KEYS = [
   "BOOKING_CONFIRMATION",
+  "WALK_IN_CONFIRMATION",
   "CANCELLATION",
   "REMINDER",
   "REMINDER_24H",
@@ -335,14 +335,12 @@ export const NotificationService = {
         type: NotificationType.BOOKING_CONFIRMATION,
         payload: {
           to: booking.patientPhone,
-          templateKey: "BOOKING_CONFIRMATION",
+          templateKey:
+            booking.consultationType === "EMERGENCY_WALK_IN"
+              ? "WALK_IN_CONFIRMATION"
+              : "BOOKING_CONFIRMATION",
           recipientRole: "patient",
           ...base,
-          practiceName: bookingConfirmPracticeName(
-            booking.practice.name,
-            booking.patientName,
-            booking.consultationType,
-          ),
         },
       });
     }
@@ -1125,6 +1123,7 @@ function notificationTitle(
   const key = String(payload.templateKey || type);
   const map: Record<string, string> = {
     BOOKING_CONFIRMATION: "Message to patient · Booking confirmed",
+    WALK_IN_CONFIRMATION: "Message to patient · Walk-in confirmed",
     CLINIC_NEW_BOOKING: "New appointment",
     CANCELLATION: "Message to patient · Booking cancelled",
     CLINIC_CANCEL: "Booking cancelled",
