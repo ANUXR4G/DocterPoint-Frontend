@@ -44,8 +44,8 @@ describe("preferInteractiveId — booking confirm buttons", () => {
 });
 
 describe("Cancel title vs confirm:cancel hijack", () => {
-  it("typed Cancel exits; confirm:cancel does not", () => {
-    assert.equal(parseGlobalKeywordHijack("Cancel"), "exit");
+  it("typed Cancel starts cancel; confirm:cancel does not hijack", () => {
+    assert.equal(parseGlobalKeywordHijack("Cancel"), "cancel");
     assert.equal(parseGlobalKeywordHijack("confirm:cancel"), null);
   });
 });

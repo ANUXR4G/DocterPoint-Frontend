@@ -902,6 +902,24 @@ async function applyGlobalKeywordHijack(opts: {
       lang,
     });
   }
+  if (hijack === "cancel") {
+    return startCancelFlow({
+      convId,
+      practice,
+      patientPhone,
+      state: cleared,
+      lang,
+    });
+  }
+  if (hijack === "reschedule") {
+    return startRescheduleFlow({
+      convId,
+      practice,
+      patientPhone,
+      state: cleared,
+      lang,
+    });
+  }
   return null;
 }
 
