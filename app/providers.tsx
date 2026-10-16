@@ -3,11 +3,11 @@
 import { createContext, useCallback, useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { QueryClient, QueryClientProvider } from "react-query"
+import { isHexColor } from "@/lib/colorWheel"
 import {
   applyThemeColor,
   DEFAULT_THEME_COLOR,
   isThemeColor,
-  type ThemeColor,
 } from "@/lib/themeColors"
 import {
   applyTextSize,
@@ -36,8 +36,8 @@ type AppState = {
   closeMenu: () => void
   theme: ThemeOptions | null
   changeTheme: (theme: ThemeOptions) => void
-  themeColor: ThemeColor
-  changeThemeColor: (color: ThemeColor) => void
+  themeColor: string
+  changeThemeColor: (color: string) => void
   textSize: TextSize
   changeTextSize: (size: TextSize) => void
 }
@@ -73,7 +73,7 @@ const queryClient = new QueryClient({
 function Providers({ children }: { children: React.ReactNode }) {
   const [isHydrated, setIsHydrated] = useState(false)
   const [theme, setTheme] = useState<ThemeOptions>("system")
-  const [themeColor, setThemeColor] = useState<ThemeColor>(DEFAULT_THEME_COLOR)
+  const [themeColor, setThemeColor] = useState<string>(DEFAULT_THEME_COLOR)
   const [textSize, setTextSize] = useState<TextSize>(DEFAULT_TEXT_SIZE)
   const [showMenu, setShowMenu] = useState<boolean>(false)
   const [showHelp, setShowHelp] = useState<boolean>(false)
@@ -108,7 +108,7 @@ function Providers({ children }: { children: React.ReactNode }) {
     setTheme(next)
   }
 
-  function changeThemeColor(color: ThemeColor) {
+  function changeThemeColor(color: string) {
     setThemeColor(color)
     localStorage.setItem("theme-color", color)
     applyThemeColor(color)
@@ -126,7 +126,7 @@ function Providers({ children }: { children: React.ReactNode }) {
     const storedColor = localStorage.getItem("theme-color")
     const storedTextSize = localStorage.getItem("text-size")
     setTheme(storedTheme)
-    if (isThemeColor(storedColor)) {
+    if (isThemeColor(storedColor) || isHexColor(storedColor)) {
       setThemeColor(storedColor)
       applyThemeColor(storedColor)
     } else {

@@ -1,3 +1,5 @@
+import { isHexColor, normalizeHex, shadeHex } from "@/lib/colorWheel"
+
 export const THEME_COLORS = [
   { id: "violet", label: "Violet", primary: "#b794f6", hover: "#9b7fe8" },
   { id: "blue", label: "Blue", primary: "#7cb8ff", hover: "#5aa3f0" },
@@ -17,12 +19,23 @@ export function isThemeColor(value: string | null | undefined): value is ThemeCo
   return THEME_COLORS.some((c) => c.id === value)
 }
 
-export function getThemeColor(id: ThemeColor) {
-  return THEME_COLORS.find((c) => c.id === id) ?? THEME_COLORS[0]
+export function getThemeColor(id: string) {
+  const preset = THEME_COLORS.find((c) => c.id === id)
+  if (preset) return preset
+  if (isHexColor(id)) {
+    const primary = normalizeHex(id)
+    return {
+      id: "custom" as const,
+      label: "Custom",
+      primary,
+      hover: shadeHex(primary),
+    }
+  }
+  return THEME_COLORS[0]
 }
 
 /** Apply accent CSS vars + data attribute on <html> */
-export function applyThemeColor(id: ThemeColor, root: HTMLElement = document.documentElement) {
+export function applyThemeColor(id: string, root: HTMLElement = document.documentElement) {
   const color = getThemeColor(id)
   root.setAttribute("data-theme-color", color.id)
   root.style.setProperty("--theme-primary", color.primary)

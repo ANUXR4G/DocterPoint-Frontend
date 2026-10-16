@@ -73,19 +73,34 @@ export default function RootLayout({
                     zinc: ['#8a8580', '#6b6560']
                   };
                   var colorKey = localStorage.getItem('theme-color') || 'violet';
-                  var pair = colors[colorKey] || colors.violet;
+                  var pair = colors[colorKey];
+                  var primary;
+                  var hover;
+                  var attr = colorKey;
+                  if (pair) {
+                    primary = pair[0];
+                    hover = pair[1];
+                  } else if (/^#[0-9a-fA-F]{6}$/.test(colorKey)) {
+                    primary = colorKey;
+                    hover = 'color-mix(in srgb, ' + colorKey + ' 82%, #000000)';
+                    attr = 'custom';
+                  } else {
+                    primary = colors.violet[0];
+                    hover = colors.violet[1];
+                    attr = 'violet';
+                  }
                   var root = document.documentElement;
-                  root.setAttribute('data-theme-color', colorKey);
-                  root.style.setProperty('--theme-primary', pair[0]);
-                  root.style.setProperty('--theme-primary-hover', pair[1]);
+                  root.setAttribute('data-theme-color', attr);
+                  root.style.setProperty('--theme-primary', primary);
+                  root.style.setProperty('--theme-primary-hover', hover);
                   root.style.setProperty('--theme-primary-foreground', '#ffffff');
-                  root.style.setProperty('--primary-blue', pair[0]);
-                  root.style.setProperty('--color-iris-accent', pair[0]);
-                  root.style.setProperty('--color-clinical-cyan', pair[0]);
-                  root.style.setProperty('--color-cyan-soft', pair[0]);
-                  root.style.setProperty('--dashboard-accent', pair[0]);
-                  root.style.setProperty('--solune-purple', pair[0]);
-                  root.style.setProperty('--solune-purple-soft', 'color-mix(in srgb, ' + pair[0] + ' 14%, #ffffff)');
+                  root.style.setProperty('--primary-blue', primary);
+                  root.style.setProperty('--color-iris-accent', primary);
+                  root.style.setProperty('--color-clinical-cyan', primary);
+                  root.style.setProperty('--color-cyan-soft', primary);
+                  root.style.setProperty('--dashboard-accent', primary);
+                  root.style.setProperty('--solune-purple', primary);
+                  root.style.setProperty('--solune-purple-soft', 'color-mix(in srgb, ' + primary + ' 14%, #ffffff)');
                 } catch (e) {}
               })();
             `,
