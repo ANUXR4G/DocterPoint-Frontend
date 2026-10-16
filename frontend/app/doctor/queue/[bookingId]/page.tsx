@@ -287,6 +287,7 @@ export default function VisitPage() {
   medDraftRef.current = medDraft
   const medicinesRef = useRef<Medicine[]>([])
   medicinesRef.current = medicines
+  const instructionSaved = useRef<string[]>([])
   const visitHeaderRef = useRef<HTMLDivElement>(null)
   const visitPageRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -326,6 +327,7 @@ export default function VisitPage() {
       const docs = Array.isArray(data.documents) ? data.documents : []
       setMedicines(meds)
       medicinesRef.current = meds
+      instructionSaved.current = meds.map((row) => row.instruction || "")
       setDocuments(docs)
       documentsRef.current = docs
       const chart = (data.clinicalAssessment as ClinicalAssessment) ?? null
@@ -508,6 +510,41 @@ export default function VisitPage() {
     setMedicines(next)
     formDirty.current = true
     await persistVisit(next, documents, { successMessage: "End date updated." })
+  }
+
+  async function changeMedicineInstruction(
+    idx: number,
+    instruction: string,
+    commit: boolean,
+  ) {
+    if (
+      !bookingId ||
+      String(booking?.status || "").toUpperCase() === "COMPLETED"
+    )
+      return
+    const current = medicinesRef.current[idx]
+    if (!current) return
+    const value = commit ? instruction.trim() : instruction
+    if (commit && (instructionSaved.current[idx] || "") === value) {
+      if ((current.instruction || "") !== value) {
+        const trimmed = medicinesRef.current.map((row, i) =>
+          i === idx ? { ...row, instruction: value || undefined } : row,
+        )
+        medicinesRef.current = trimmed
+        setMedicines(trimmed)
+      }
+      return
+    }
+    const next = medicinesRef.current.map((row, i) =>
+      i === idx ? { ...row, instruction: value || undefined } : row,
+    )
+    medicinesRef.current = next
+    setMedicines(next)
+    formDirty.current = true
+    if (!commit) return
+    await persistVisit(next, documents, {
+      successMessage: "Special instruction updated.",
+    })
   }
 
   async function onUploadGeneral(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1016,6 +1053,9 @@ export default function VisitPage() {
               onAdd={() => void addMedicine()}
               onRemove={(idx) => void removeMedicine(idx)}
               onStartDate={(idx, startDate) => void changeMedicineStart(idx, startDate)}
+              onInstruction={(idx, instruction, commit) =>
+                void changeMedicineInstruction(idx, instruction, commit)
+              }
             />
           )
         }
