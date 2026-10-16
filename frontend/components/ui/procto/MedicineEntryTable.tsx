@@ -78,6 +78,74 @@ const FREQUENCIES = [
 
 const DURATION_UNITS = ["Day", "Week", "Month"]
 
+const SCHEDULE_FIELDS = new Set(["duration", "durationUnit", "startDate"])
+
+/** Apply one edited field on a saved medicine and keep dose, timing, and end date in step. */
+export function editedVisitMedicine(
+  row: VisitMedicine,
+  patch: Partial<VisitMedicine>,
+  commit: boolean,
+): VisitMedicine {
+  const next: VisitMedicine = { ...row, ...patch }
+  if ("startDate" in patch && !String(patch.startDate || "").trim()) {
+    next.startDate = row.startDate
+  }
+  if (commit) {
+    const name = (next.name || "").trim()
+    next.name = name || row.name
+    next.strength = next.strength?.trim() || undefined
+    next.route = next.route?.trim() || undefined
+    next.dose = next.dose?.trim() || undefined
+    next.doseUnit = next.doseUnit?.trim() || undefined
+    next.frequency = next.frequency?.trim() || undefined
+    next.duration = next.duration?.trim() || undefined
+    next.durationUnit = next.durationUnit?.trim() || undefined
+    next.instruction = next.instruction?.trim() || undefined
+    next.startDate = next.startDate?.trim() || row.startDate
+    next.endDate = next.endDate?.trim() || undefined
+  }
+  const keys = Object.keys(patch)
+  const reschedule =
+    keys.some((key) => SCHEDULE_FIELDS.has(key)) &&
+    !(keys.length === 1 && keys[0] === "endDate")
+  if (reschedule) {
+    const scheduled = medicineWithStartDate(next, next.startDate || "")
+    next.startDate = scheduled.startDate
+    next.endDate =
+      medicineEndDate(
+        scheduled.startDate || "",
+        next.duration || "",
+        next.durationUnit || "",
+      ) || undefined
+  }
+  if ("dose" in patch || "doseUnit" in patch) {
+    const amount = [next.dose, next.doseUnit].filter(Boolean).join(" ")
+    next.amount = amount || undefined
+  }
+  if ("frequency" in patch) {
+    next.times = next.frequency ? [next.frequency] : undefined
+  }
+  return next
+}
+
+export function visitMedicineSignature(row: VisitMedicine): string {
+  return [
+    row.name || "",
+    row.strength || "",
+    row.route || "",
+    row.dose || "",
+    row.doseUnit || "",
+    row.frequency || "",
+    row.duration || "",
+    row.durationUnit || "",
+    row.startDate || "",
+    row.endDate || "",
+    row.instruction || "",
+    row.amount || "",
+    (row.times || []).join(","),
+  ].join("\u001f")
+}
+
 export function medicineFromDraft(draft: VisitMedicine): VisitMedicine | null {
   const name = draft.name.trim()
   if (!name) return null
@@ -115,6 +183,11 @@ function shownFrequency(m: VisitMedicine) {
   return m.frequency?.trim() || (m.times?.length ? m.times.join(", ") : "")
 }
 
+function optionsWithCurrent(options: string[], current: string) {
+  if (current && !options.includes(current)) return [current, ...options]
+  return options
+}
+
 function shownDate(value?: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value?.trim() || "")
   if (!match) return value?.trim() || ""
@@ -137,8 +210,7 @@ export default function MedicineEntryTable({
   onDraft,
   onAdd,
   onRemove,
-  onStartDate,
-  onInstruction,
+  onEdit,
 }: {
   rows: VisitMedicine[]
   draft: VisitMedicine
@@ -146,10 +218,12 @@ export default function MedicineEntryTable({
   onDraft: (next: VisitMedicine) => void
   onAdd: () => void
   onRemove: (index: number) => void
-  /** Saved row: a new start date keeps the duration and moves the end date. */
-  onStartDate?: (index: number, startDate: string) => void
-  /** Saved row: edit special instruction without removing the medicine. */
-  onInstruction?: (index: number, instruction: string, commit: boolean) => void
+  /** Saved row: update any field. Text commits when the doctor leaves the field. */
+  onEdit?: (
+    index: number,
+    patch: Partial<VisitMedicine>,
+    commit: boolean,
+  ) => void
 }) {
   function set<K extends keyof VisitMedicine>(key: K, value: string) {
     const next: VisitMedicine = { ...draft, [key]: value }
@@ -188,11 +262,28 @@ export default function MedicineEntryTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((m, idx) => (
-            <tr key={`${m.name}-${idx}`}>
+          {rows.map((m, idx) => {
+            const editable = !locked && Boolean(onEdit)
+            const edit = (
+              patch: Partial<VisitMedicine>,
+              commit: boolean,
+            ) => onEdit?.(idx, patch, commit)
+            const frequency = shownFrequency(m)
+            return (
+            <tr key={idx}>
               <td className={`${td} text-center tabular-nums`}>{idx + 1}</td>
               <td className={td}>
-                <span>{m.name}</span>
+                {editable ? (
+                  <input
+                    value={m.name}
+                    aria-label={`Medicine name ${idx + 1}`}
+                    className={`${field} min-w-[9rem]`}
+                    onChange={(e) => edit({ name: e.target.value }, false)}
+                    onBlur={(e) => edit({ name: e.target.value }, true)}
+                  />
+                ) : (
+                  <span>{m.name}</span>
+                )}
                 {locked ? null : (
                   <button
                     type="button"
@@ -203,42 +294,165 @@ export default function MedicineEntryTable({
                   </button>
                 )}
               </td>
-              <td className={td}>{m.strength || ""}</td>
-              <td className={td}>{m.route || ""}</td>
-              <td className={td}>{shownDose(m)}</td>
-              <td className={td}>{m.doseUnit || ""}</td>
-              <td className={td}>{shownFrequency(m)}</td>
-              <td className={td}>{m.duration || ""}</td>
-              <td className={td}>{m.durationUnit || ""}</td>
               <td className={td}>
-                {locked || !onStartDate ? (
-                  shownDate(m.startDate)
+                {editable ? (
+                  <input
+                    value={m.strength || ""}
+                    aria-label={`Strength for ${m.name}`}
+                    className={field}
+                    onChange={(e) => edit({ strength: e.target.value }, false)}
+                    onBlur={(e) => edit({ strength: e.target.value }, true)}
+                  />
                 ) : (
+                  m.strength || ""
+                )}
+              </td>
+              <td className={td}>
+                {editable ? (
+                  <select
+                    value={m.route || ""}
+                    aria-label={`Route for ${m.name}`}
+                    className={field}
+                    onChange={(e) => edit({ route: e.target.value }, true)}
+                  >
+                    <option value="">Select...</option>
+                    {optionsWithCurrent(ROUTES, m.route || "").map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  m.route || ""
+                )}
+              </td>
+              <td className={td}>
+                {editable ? (
+                  <input
+                    value={m.dose != null ? m.dose : shownDose(m)}
+                    aria-label={`Dose for ${m.name}`}
+                    className={`${field} min-w-[3.5rem]`}
+                    onChange={(e) => edit({ dose: e.target.value }, false)}
+                    onBlur={(e) => edit({ dose: e.target.value }, true)}
+                  />
+                ) : (
+                  shownDose(m)
+                )}
+              </td>
+              <td className={td}>
+                {editable ? (
+                  <select
+                    value={m.doseUnit || ""}
+                    aria-label={`Dose unit for ${m.name}`}
+                    className={field}
+                    onChange={(e) => edit({ doseUnit: e.target.value }, true)}
+                  >
+                    <option value="">Select...</option>
+                    {optionsWithCurrent(DOSE_UNITS, m.doseUnit || "").map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  m.doseUnit || ""
+                )}
+              </td>
+              <td className={td}>
+                {editable ? (
+                  <select
+                    value={frequency}
+                    aria-label={`Frequency for ${m.name}`}
+                    className={field}
+                    onChange={(e) => edit({ frequency: e.target.value }, true)}
+                  >
+                    <option value="">Select...</option>
+                    {optionsWithCurrent(FREQUENCIES, frequency).map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  frequency
+                )}
+              </td>
+              <td className={td}>
+                {editable ? (
+                  <input
+                    value={m.duration || ""}
+                    aria-label={`Duration for ${m.name}`}
+                    className={`${field} min-w-[3.5rem]`}
+                    onChange={(e) => edit({ duration: e.target.value }, false)}
+                    onBlur={(e) => edit({ duration: e.target.value }, true)}
+                  />
+                ) : (
+                  m.duration || ""
+                )}
+              </td>
+              <td className={td}>
+                {editable ? (
+                  <select
+                    value={m.durationUnit || ""}
+                    aria-label={`Duration unit for ${m.name}`}
+                    className={field}
+                    onChange={(e) => edit({ durationUnit: e.target.value }, true)}
+                  >
+                    <option value="">Select...</option>
+                    {optionsWithCurrent(DURATION_UNITS, m.durationUnit || "").map(
+                      (v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                ) : (
+                  m.durationUnit || ""
+                )}
+              </td>
+              <td className={td}>
+                {editable ? (
                   <input
                     type="date"
                     value={m.startDate?.trim() || ""}
                     aria-label={`Start date for ${m.name}`}
                     className={dateField}
-                    onChange={(e) => onStartDate(idx, e.target.value)}
+                    onChange={(e) => edit({ startDate: e.target.value }, true)}
                   />
+                ) : (
+                  shownDate(m.startDate)
                 )}
               </td>
-              <td className={td}>{shownDate(m.endDate)}</td>
               <td className={td}>
-                {locked || !onInstruction ? (
-                  m.instruction || ""
+                {editable ? (
+                  <input
+                    type="date"
+                    value={m.endDate?.trim() || ""}
+                    aria-label={`End date for ${m.name}`}
+                    className={dateField}
+                    onChange={(e) => edit({ endDate: e.target.value }, true)}
+                  />
                 ) : (
+                  shownDate(m.endDate)
+                )}
+              </td>
+              <td className={td}>
+                {editable ? (
                   <input
                     value={m.instruction || ""}
                     aria-label={`Special instruction for ${m.name}`}
                     className={`${field} min-w-[8rem]`}
-                    onChange={(e) => onInstruction(idx, e.target.value, false)}
-                    onBlur={(e) => onInstruction(idx, e.target.value, true)}
+                    onChange={(e) => edit({ instruction: e.target.value }, false)}
+                    onBlur={(e) => edit({ instruction: e.target.value }, true)}
                   />
+                ) : (
+                  m.instruction || ""
                 )}
               </td>
             </tr>
-          ))}
+            )
+          })}
           {locked ? null : (
             <tr>
               <td className={`${td} text-center tabular-nums`}>{rows.length + 1}</td>
