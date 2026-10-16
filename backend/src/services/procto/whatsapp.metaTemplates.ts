@@ -63,6 +63,34 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
     audience: "patient",
   },
   {
+    key: "WALK_IN_CONFIRMATION",
+    metaName: "docline_walkin_confirm",
+    category: "UTILITY",
+    language: "en",
+    body:
+      "Your appointment at {{practice_name}} is confirmed for {{patient_name}}.\n" +
+      "When: {{when_label}}\n" +
+      "Doctor: {{provider_name}}\n" +
+      "Location: {{location}}\n" +
+      "Reply STOP to opt out of appointment alerts.",
+    examples: {
+      practice_name: "City Care Clinic",
+      patient_name: "Anurag",
+      when_label: "26 Aug 2026, 10:30 AM",
+      provider_name: "Dr Anjali Mehta",
+      location: "Road 11, Gulshan-2, Gulshan",
+    },
+    paramNames: [
+      "practice_name",
+      "patient_name",
+      "when_label",
+      "provider_name",
+      "location",
+    ],
+    requiresTemplateOutsideWindow: true,
+    audience: "patient",
+  },
+  {
     key: "REMINDER",
     metaName: "docline_appointment_reminder",
     category: "UTILITY",
@@ -381,24 +409,6 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
   },
 ];
 
-/**
- * The approved confirmation template has no patient field.
- * Walk-ins name the patient in the clinic line so the message reads
- * "Your appointment at {clinic} for {patient} is confirmed."
- */
-export function bookingConfirmPracticeName(
-  practiceName: string,
-  patientName: string | null | undefined,
-  consultationType?: string | null,
-): string {
-  const clinic = practiceName.replace(/\s+/g, " ").trim() || "your clinic";
-  const patient = String(patientName || "").replace(/\s+/g, " ").trim();
-  if (consultationType === "EMERGENCY_WALK_IN" && patient) {
-    return `${clinic} for ${patient}`.slice(0, 200);
-  }
-  return clinic;
-}
-
 export function getMetaTemplateByKey(key: string): MetaTemplateDef | undefined {
   // Day-before reminder reuses the approved appointment reminder template.
   const resolved = key === "REMINDER_24H" ? "REMINDER" : key;
@@ -470,6 +480,14 @@ export function payloadToMetaParams(
     case "BOOKING_CONFIRMATION":
       return {
         practice_name: s("practiceName", "your clinic"),
+        when_label: s("whenLabel", "your scheduled time"),
+        provider_name: s("providerName", "your doctor"),
+        location: s("location", "clinic"),
+      };
+    case "WALK_IN_CONFIRMATION":
+      return {
+        practice_name: s("practiceName", "your clinic"),
+        patient_name: s("patientName", "the patient"),
         when_label: s("whenLabel", "your scheduled time"),
         provider_name: s("providerName", "your doctor"),
         location: s("location", "clinic"),
