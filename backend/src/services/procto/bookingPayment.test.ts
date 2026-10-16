@@ -20,6 +20,7 @@ import {
 import { razorpay } from "../../lib/razorpay.js";
 import { settings } from "../../config/index.js";
 import {
+  bookingConfirmPracticeName,
   getMetaTemplateByKey,
   renderUtilityTemplateBody,
 } from "./whatsapp.metaTemplates.js";
@@ -72,6 +73,31 @@ describe("payment confirmation message", () => {
         "Amount due at the clinic: ₹400\n" +
         "Payment ID: pay_123\n" +
         "Reply STOP to opt out of appointment alerts.",
+    );
+  });
+});
+
+describe("walk-in confirmation", () => {
+  test("names the patient in the approved confirmation sentence", () => {
+    const practiceName = bookingConfirmPracticeName(
+      "City Care Clinic",
+      "Anurag",
+      "EMERGENCY_WALK_IN",
+    );
+    assert.equal(practiceName, "City Care Clinic for Anurag");
+    const body = renderUtilityTemplateBody("BOOKING_CONFIRMATION", {
+      practiceName,
+      whenLabel: "17 Oct 2026, 12:50 AM",
+      providerName: "Dr Priya Nair",
+      location: "Noida",
+    });
+    assert.match(
+      body || "",
+      /^Your appointment at City Care Clinic for Anurag is confirmed\./,
+    );
+    assert.equal(
+      bookingConfirmPracticeName("City Care Clinic", "Anurag", "NEW"),
+      "City Care Clinic",
     );
   });
 });

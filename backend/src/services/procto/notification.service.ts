@@ -1,6 +1,7 @@
 import { NotificationType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { formatPracticeDateTime, formatLocalDate } from "./slotEngine.js";
+import { bookingConfirmPracticeName } from "./whatsapp.metaTemplates.js";
 import { enqueueNotificationEvent } from "../../workers/notificationQueue.js";
 
 export type NotifyOpts = {
@@ -316,11 +317,12 @@ export const NotificationService = {
     const booking = await loadBooking(bookingId);
     if (!booking) return null;
 
+    const patientName = booking.patientName?.trim() || "Patient";
     const base = {
       practiceName: booking.practice.name,
       location: formatBookingLocation(booking.location),
       providerName: booking.provider?.name ?? "",
-      patientName: booking.patientName ?? "Patient",
+      patientName,
       patientPhone: booking.patientPhone,
       channel: booking.channel,
       ...whenFields(booking),
@@ -336,6 +338,11 @@ export const NotificationService = {
           templateKey: "BOOKING_CONFIRMATION",
           recipientRole: "patient",
           ...base,
+          practiceName: bookingConfirmPracticeName(
+            booking.practice.name,
+            booking.patientName,
+            booking.consultationType,
+          ),
         },
       });
     }
