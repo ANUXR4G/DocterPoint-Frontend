@@ -294,6 +294,9 @@ export function countBookingsOccupying(
   }).length;
 }
 
+/** Patient Find clinics can book any open day in this window, not only the next 7. */
+export const PATIENT_BOOKING_HORIZON_DAYS = 90;
+
 /** Inclusive bookable window: today .. today + (validityDays - 1). */
 export function getValidityBounds(appointmentValidityDays: number): {
   today: Date;

@@ -8,8 +8,10 @@ import {
   formatPracticeTime,
   generateTimeSlots,
   isClinicDayAfterToday,
+  isDateWithinValidity,
   isSlotStartBookable,
   parseLocalDate,
+  PATIENT_BOOKING_HORIZON_DAYS,
   TIME_SLOT_CAPACITY,
   zonedDateTime,
 } from "./slotEngine.js";
@@ -25,6 +27,16 @@ describe("practice timezone (Asia/Kolkata)", () => {
   it("parseLocalDate is midnight IST (previous day 18:30Z)", () => {
     const d = parseLocalDate("2026-09-25");
     assert.equal(d.toISOString(), "2026-09-24T18:30:00.000Z");
+  });
+});
+
+describe("patient booking horizon", () => {
+  it("allows a day well past the old 7-day window and inside 90 days", () => {
+    const later = new Date();
+    later.setDate(later.getDate() + 30);
+    assert.equal(PATIENT_BOOKING_HORIZON_DAYS, 90);
+    assert.equal(isDateWithinValidity(later, PATIENT_BOOKING_HORIZON_DAYS), true);
+    assert.equal(isDateWithinValidity(later, 7), false);
   });
 });
 

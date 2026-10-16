@@ -28,6 +28,7 @@ import {
   isDateWithinValidity,
   isSlotStartBookable,
   parseLocalDate,
+  PATIENT_BOOKING_HORIZON_DAYS,
   practiceWeekday,
   formatPracticeDateTime,
   resolveProviderBookingMode,
@@ -408,11 +409,7 @@ export const BookingService = {
     const dayEnd = endOfLocalDay(date);
 
     // Parallel fetch: validity + schedule context + membership/location checks
-    const [doctor, allSchedules, location, member] = await Promise.all([
-      prisma.doctor.findUnique({
-        where: { id: data.providerId },
-        select: { appointmentValidityDays: true },
-      }),
+    const [allSchedules, location, member] = await Promise.all([
       loadSchedulesOn(
         {
           practiceId: data.practiceId,
@@ -456,11 +453,10 @@ export const BookingService = {
       (s) => s.dayOfWeek === dayOfWeek && s.mode === mode,
     );
 
-    const validityDays = doctor?.appointmentValidityDays ?? 7;
-    if (!isDateWithinValidity(date, validityDays)) {
+    if (!isDateWithinValidity(date, PATIENT_BOOKING_HORIZON_DAYS)) {
       throw new AppError(
         400,
-        `appointments can only be booked within ${validityDays} day(s)`,
+        `appointments can only be booked within ${PATIENT_BOOKING_HORIZON_DAYS} days`,
       );
     }
 
@@ -2700,11 +2696,7 @@ export const BookingService = {
     const dayStart = startOfLocalDay(date);
     const dayEnd = endOfLocalDay(date);
 
-    const [doctor, schedules, bookings, overrides] = await Promise.all([
-      prisma.doctor.findUnique({
-        where: { id: providerId },
-        select: { appointmentValidityDays: true },
-      }),
+    const [schedules, bookings, overrides] = await Promise.all([
       loadSchedulesOn({ practiceId, providerId, locationId }, formatLocalDate(date)).then(
         (rows) => rows.filter((s) => s.dayOfWeek === dayOfWeek),
       ),
@@ -2724,9 +2716,8 @@ export const BookingService = {
       }),
     ]);
 
-    const validityDays = doctor?.appointmentValidityDays ?? 7;
-    const { today, maxDay, days } = getValidityBounds(validityDays);
-    const withinValidity = isDateWithinValidity(date, validityDays);
+    const { today, maxDay, days } = getValidityBounds(PATIENT_BOOKING_HORIZON_DAYS);
+    const withinValidity = isDateWithinValidity(date, PATIENT_BOOKING_HORIZON_DAYS);
     const configuredMode = resolveProviderBookingMode(schedules);
     const configuredModes = configuredMode ? [configuredMode] : [];
     const activeSchedules = schedulesForActiveMode(schedules);
