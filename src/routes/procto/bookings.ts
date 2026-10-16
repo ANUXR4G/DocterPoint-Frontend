@@ -194,6 +194,8 @@ router.get(
       const data = await BookingService.listForPatient({
         patientId: userId,
         phone,
+        take: 100,
+        order: "desc",
       });
       return ResponseHandler.fetchSuccessful(res, "bookings fetched.", data);
     } catch (error) {
@@ -468,7 +470,7 @@ router.post(
   },
 );
 
-/** Finished visit: re-send clinic log / prescription summary on patient WhatsApp. */
+/** Explicit Send to customer: prescription PDF on the patient's WhatsApp. */
 router.post(
   "/:id/send-clinic-log",
   requireAuth("booking:update"),

@@ -35,6 +35,7 @@
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^6.9.16",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.3.289",
     "pg": "^8.23.0",
     "ws": "^8.18.0"

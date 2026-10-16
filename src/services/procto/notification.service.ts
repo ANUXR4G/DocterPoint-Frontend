@@ -626,8 +626,8 @@ export const NotificationService = {
   },
 
   /**
-   * Patient WhatsApp: prescription / medicines when the doctor saves them
-   * during an open visit (before finish). Finish still sends VISIT_SUMMARY.
+   * Patient WhatsApp: saved prescription. Called only from Send to customer
+   * on an open visit. Saving medicines does not enqueue this.
    */
   async enqueuePrescriptionUpdate(bookingId: string) {
     const booking = await loadBooking(bookingId);
