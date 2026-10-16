@@ -290,7 +290,6 @@ export default function VisitPage() {
   medicinesRef.current = medicines
   const medicineSaved = useRef<string[]>([])
   const medicineGeneration = useRef(0)
-  const medicineFlush = useRef<Promise<void> | null>(null)
   const visitHeaderRef = useRef<HTMLDivElement>(null)
   const visitPageRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -489,54 +488,32 @@ export default function VisitPage() {
     return true
   }
 
-  async function addMedicine() {
+  function addMedicine() {
     const row = medicineFromDraft(medDraftRef.current)
     if (!row || !bookingId) return
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
     const next = [...medicinesRef.current, row]
+    formDirty.current = true
     medicinesRef.current = next
     setMedicines(next)
     const blank = emptyMedicineDraft()
     medDraftRef.current = blank
     setMedDraft(blank)
-    await persistVisit(next, documents, { successMessage: "Medicine saved." })
   }
 
-  async function removeMedicine(idx: number) {
+  function removeMedicine(idx: number) {
     if (
       !bookingId ||
       String(booking?.status || "").toUpperCase() === "COMPLETED"
     )
       return
     const next = medicines.filter((_, i) => i !== idx)
+    formDirty.current = true
     medicinesRef.current = next
     setMedicines(next)
-    await persistVisit(next, documents, { successMessage: "Medicine removed." })
   }
 
-  function medicinesDiffer(rows: Medicine[]) {
-    return rows.some(
-      (row, i) => visitMedicineSignature(row) !== (medicineSaved.current[i] || ""),
-    )
-  }
-
-  async function flushMedicineEdits() {
-    let savedAny = false
-    for (;;) {
-      const generation = medicineGeneration.current
-      const snapshot = medicinesRef.current.map((row) => ({ ...row }))
-      if (!medicinesDiffer(snapshot)) break
-      const ok = await persistVisit(snapshot, documentsRef.current, {
-        medicineGeneration: generation,
-      })
-      if (!ok) return
-      savedAny = true
-      if (medicineGeneration.current === generation) break
-    }
-    if (savedAny) toast.success("Medicine updated.")
-  }
-
-  async function editMedicine(
+  function editMedicine(
     idx: number,
     patch: Partial<Medicine>,
     commit: boolean,
@@ -550,16 +527,9 @@ export default function VisitPage() {
     if (!current) return
     const edited = editedVisitMedicine(current, patch, commit)
     const next = medicinesRef.current.map((row, i) => (i === idx ? edited : row))
-    medicineGeneration.current += 1
+    formDirty.current = true
     medicinesRef.current = next
     setMedicines(next)
-    if (!commit || !medicinesDiffer(next)) return
-    formDirty.current = true
-    if (!medicineFlush.current) {
-      medicineFlush.current = flushMedicineEdits().finally(() => {
-        medicineFlush.current = null
-      })
-    }
   }
 
   async function onUploadGeneral(e: React.ChangeEvent<HTMLInputElement>) {
@@ -677,90 +647,6 @@ export default function VisitPage() {
       return
     }
     toast.success("Visit saved.")
-  }
-
-  async function saveComplaint(nextRaw: string) {
-    if (!bookingId || futureDay) return
-    const next = nextRaw.trim().slice(0, 500)
-    const previous = String(booking?.disease || "").trim()
-    if (next === previous) return
-    if (!next) {
-      toast.error("Chief complaint is required.")
-      setComplaint(previous)
-      return
-    }
-    const res = await proctoService.updateBookingVisit(bookingId, { disease: next })
-    if (res.status !== "successful") {
-      toast.error(res.message || "Could not save the chief complaint.")
-      setComplaint(previous)
-      return
-    }
-    const saved = res.data as VisitBooking
-    setBooking(saved)
-    setComplaint(String(saved.disease || "").trim())
-    patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
-  }
-
-  async function saveDiagnosis(nextRaw: string) {
-    if (!bookingId || chartLocked) return
-    const next = nextRaw.trim().slice(0, 500)
-    const previous = String(
-      (booking?.clinicalAssessment as ClinicalAssessment | null)?.diagnosis || "",
-    ).trim()
-    if (next === previous) return
-    diagnosisRef.current = next
-    const chart = chartWithDiagnosis(clinicalRef.current)
-    clinicalRef.current = chart
-    clinicalReady.current = true
-    setClinicalAssessment(chart)
-    const res = await proctoService.updateBookingVisit(bookingId, {
-      clinicalAssessment: chart,
-    })
-    if (res.status !== "successful") {
-      toast.error(res.message || "Could not save the diagnosis.")
-      diagnosisRef.current = previous
-      setDiagnosis(previous)
-      return
-    }
-    const saved = res.data as VisitBooking
-    setBooking(saved)
-    const stored = String(
-      (saved.clinicalAssessment as ClinicalAssessment | null)?.diagnosis || "",
-    ).trim()
-    diagnosisRef.current = stored
-    setDiagnosis(stored)
-    patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
-  }
-
-  async function saveAdvice(nextRaw: string) {
-    if (!bookingId || chartLocked) return
-    const next = nextRaw.trim().slice(0, 1000)
-    const previous = String(
-      (booking?.clinicalAssessment as ClinicalAssessment | null)?.advice || "",
-    ).trim()
-    if (next === previous) return
-    adviceRef.current = next
-    const chart = chartWithDiagnosis(clinicalRef.current)
-    clinicalRef.current = chart
-    clinicalReady.current = true
-    setClinicalAssessment(chart)
-    const res = await proctoService.updateBookingVisit(bookingId, {
-      clinicalAssessment: chart,
-    })
-    if (res.status !== "successful") {
-      toast.error(res.message || "Could not save the advice.")
-      adviceRef.current = previous
-      setAdvice(previous)
-      return
-    }
-    const saved = res.data as VisitBooking
-    setBooking(saved)
-    const stored = String(
-      (saved.clinicalAssessment as ClinicalAssessment | null)?.advice || "",
-    ).trim()
-    adviceRef.current = stored
-    setAdvice(stored)
-    patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
   }
 
   async function sendToCustomer() {
@@ -997,7 +883,6 @@ export default function VisitPage() {
             formDirty.current = true
             setComplaint(e.target.value)
           }}
-          onBlur={() => void saveComplaint(complaint)}
           readOnly={futureDay}
           disabled={futureDay}
           maxLength={500}
@@ -1022,7 +907,6 @@ export default function VisitPage() {
             diagnosisRef.current = e.target.value
             setDiagnosis(e.target.value)
           }}
-          onBlur={() => void saveDiagnosis(diagnosis)}
           readOnly={chartLocked}
           disabled={chartLocked}
           maxLength={500}
@@ -1065,9 +949,9 @@ export default function VisitPage() {
                 medDraftRef.current = next
                 setMedDraft(next)
               }}
-              onAdd={() => void addMedicine()}
-              onRemove={(idx) => void removeMedicine(idx)}
-              onEdit={(idx, patch, commit) => void editMedicine(idx, patch, commit)}
+              onAdd={() => addMedicine()}
+              onRemove={(idx) => removeMedicine(idx)}
+              onEdit={(idx, patch, commit) => editMedicine(idx, patch, commit)}
             />
           )
         }
@@ -1083,7 +967,6 @@ export default function VisitPage() {
                 adviceRef.current = e.target.value
                 setAdvice(e.target.value)
               }}
-              onBlur={() => void saveAdvice(advice)}
               readOnly={chartLocked}
               disabled={chartLocked}
               maxLength={1000}
