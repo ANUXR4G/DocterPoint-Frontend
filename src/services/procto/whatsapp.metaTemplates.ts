@@ -381,6 +381,24 @@ export const META_UTILITY_TEMPLATES: MetaTemplateDef[] = [
   },
 ];
 
+/**
+ * The approved confirmation template has no patient field.
+ * Walk-ins name the patient in the clinic line so the message reads
+ * "Your appointment at {clinic} for {patient} is confirmed."
+ */
+export function bookingConfirmPracticeName(
+  practiceName: string,
+  patientName: string | null | undefined,
+  consultationType?: string | null,
+): string {
+  const clinic = practiceName.replace(/\s+/g, " ").trim() || "your clinic";
+  const patient = String(patientName || "").replace(/\s+/g, " ").trim();
+  if (consultationType === "EMERGENCY_WALK_IN" && patient) {
+    return `${clinic} for ${patient}`.slice(0, 200);
+  }
+  return clinic;
+}
+
 export function getMetaTemplateByKey(key: string): MetaTemplateDef | undefined {
   // Day-before reminder reuses the approved appointment reminder template.
   const resolved = key === "REMINDER_24H" ? "REMINDER" : key;
