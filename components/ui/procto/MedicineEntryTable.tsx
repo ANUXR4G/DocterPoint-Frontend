@@ -1,5 +1,11 @@
 "use client"
 
+import {
+  defaultMedicineStartDate,
+  medicineEndDate,
+  medicineWithStartDate,
+} from "@/lib/medicineDates"
+
 export type VisitMedicine = {
   name: string
   amount?: string
@@ -25,7 +31,7 @@ export const emptyMedicineDraft = (): VisitMedicine => ({
   frequency: "",
   duration: "",
   durationUnit: "",
-  startDate: "",
+  startDate: defaultMedicineStartDate(),
   endDate: "",
   instruction: "",
 })
@@ -79,6 +85,11 @@ export function medicineFromDraft(draft: VisitMedicine): VisitMedicine | null {
   const doseUnit = draft.doseUnit?.trim() || ""
   const frequency = draft.frequency?.trim() || ""
   const amount = [dose, doseUnit].filter(Boolean).join(" ")
+  const startDate = draft.startDate?.trim() || defaultMedicineStartDate()
+  const endDate =
+    medicineEndDate(startDate, draft.duration || "", draft.durationUnit || "") ||
+    draft.endDate?.trim() ||
+    undefined
   return {
     name,
     strength: draft.strength?.trim() || undefined,
@@ -88,8 +99,8 @@ export function medicineFromDraft(draft: VisitMedicine): VisitMedicine | null {
     frequency: frequency || undefined,
     duration: draft.duration?.trim() || undefined,
     durationUnit: draft.durationUnit?.trim() || undefined,
-    startDate: draft.startDate?.trim() || undefined,
-    endDate: draft.endDate?.trim() || undefined,
+    startDate,
+    endDate,
     instruction: draft.instruction?.trim() || undefined,
     amount: amount || undefined,
     times: frequency ? [frequency] : undefined,
@@ -116,6 +127,8 @@ const td =
   "border border-neutral-200 px-1 py-1 align-middle text-xs text-neutral-900 dark:border-neutral-600 dark:!text-neutral-100"
 const field =
   "w-full min-w-[4.75rem] rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-neutral-500 dark:bg-neutral-900 dark:!text-neutral-100 dark:placeholder:!text-neutral-400 dark:[color-scheme:dark]"
+const dateField =
+  "w-full min-w-[11rem] rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-neutral-900 outline-none dark:border-neutral-500 dark:bg-neutral-900 dark:!text-neutral-100 dark:[color-scheme:dark]"
 
 export default function MedicineEntryTable({
   rows,
@@ -124,6 +137,7 @@ export default function MedicineEntryTable({
   onDraft,
   onAdd,
   onRemove,
+  onStartDate,
 }: {
   rows: VisitMedicine[]
   draft: VisitMedicine
@@ -131,9 +145,18 @@ export default function MedicineEntryTable({
   onDraft: (next: VisitMedicine) => void
   onAdd: () => void
   onRemove: (index: number) => void
+  /** Saved row: a new start date keeps the duration and moves the end date. */
+  onStartDate?: (index: number, startDate: string) => void
 }) {
   function set<K extends keyof VisitMedicine>(key: K, value: string) {
-    onDraft({ ...draft, [key]: value })
+    const next: VisitMedicine = { ...draft, [key]: value }
+    if (key === "duration" || key === "durationUnit" || key === "startDate") {
+      const scheduled = medicineWithStartDate(next, next.startDate || "")
+      next.startDate = scheduled.startDate
+      if (scheduled.endDate) next.endDate = scheduled.endDate
+      else if (key === "duration" || key === "durationUnit") next.endDate = ""
+    }
+    onDraft(next)
   }
 
   return (
@@ -184,7 +207,19 @@ export default function MedicineEntryTable({
               <td className={td}>{shownFrequency(m)}</td>
               <td className={td}>{m.duration || ""}</td>
               <td className={td}>{m.durationUnit || ""}</td>
-              <td className={td}>{shownDate(m.startDate)}</td>
+              <td className={td}>
+                {locked || !onStartDate ? (
+                  shownDate(m.startDate)
+                ) : (
+                  <input
+                    type="date"
+                    value={m.startDate?.trim() || ""}
+                    aria-label={`Start date for ${m.name}`}
+                    className={dateField}
+                    onChange={(e) => onStartDate(idx, e.target.value)}
+                  />
+                )}
+              </td>
               <td className={td}>{shownDate(m.endDate)}</td>
               <td className={td}>{m.instruction || ""}</td>
             </tr>
@@ -286,10 +321,10 @@ export default function MedicineEntryTable({
               <td className={td}>
                 <input
                   type="date"
-                  value={draft.startDate || ""}
+                  value={draft.startDate?.trim() || defaultMedicineStartDate()}
                   onChange={(e) => set("startDate", e.target.value)}
                   aria-label="Start date"
-                  className={field}
+                  className={dateField}
                 />
               </td>
               <td className={td}>
@@ -298,7 +333,7 @@ export default function MedicineEntryTable({
                   value={draft.endDate || ""}
                   onChange={(e) => set("endDate", e.target.value)}
                   aria-label="End date"
-                  className={field}
+                  className={dateField}
                 />
               </td>
               <td className={td}>

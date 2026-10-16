@@ -80,6 +80,8 @@ type Props = {
   onChange: (next: ClinicalAssessment) => void
   /** Medicine entry shown on the tab after Allergies. */
   medicines?: ReactNode
+  /** Special advice, shown directly under the medicines table. */
+  advice?: ReactNode
 }
 
 function versionSummary(snapshot: ClinicalAssessment): string {
@@ -118,6 +120,12 @@ function emptyPain(): PainRow {
   }
 }
 
+/** New pain/allergy rows stay in position 2 so the first entry does not move. */
+function insertAsSecond<T>(rows: T[], row: T): T[] {
+  if (rows.length === 0) return [row]
+  return [rows[0], row, ...rows.slice(1)]
+}
+
 function emptyAllergy(): AllergyRow {
   return {
     category: "Food",
@@ -135,6 +143,7 @@ export default function ClinicalAssessmentPanel({
   readOnly,
   onChange,
   medicines,
+  advice,
 }: Props) {
   const masters: ClinicalMasters = useMemo(
     () => mergeClinicalMasters(mastersRaw),
@@ -486,7 +495,7 @@ export default function ClinicalAssessmentPanel({
             onClick={() =>
               commit({
                 ...local,
-                pain: [emptyPain(), ...(local.pain ?? [])],
+                pain: insertAsSecond(local.pain ?? [], emptyPain()),
               })
             }
             className="mt-2 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)]"
@@ -706,7 +715,7 @@ export default function ClinicalAssessmentPanel({
               commit({
                 ...local,
                 noKnownAllergies: false,
-                allergies: [emptyAllergy(), ...(local.allergies ?? [])],
+                allergies: insertAsSecond(local.allergies ?? [], emptyAllergy()),
               })
             }
             className="mt-2 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)]"
@@ -721,6 +730,7 @@ export default function ClinicalAssessmentPanel({
           Medicines
         </h2>
         <div className="mt-3">{medicines}</div>
+        {advice ? <div className="mt-4">{advice}</div> : null}
       </div>
     </section>
   )

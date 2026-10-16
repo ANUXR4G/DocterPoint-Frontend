@@ -82,7 +82,7 @@ export default function PrescriptionSheet({ booking }: { booking: RxBooking }) {
           )}
         </tbody>
       </table>
-      <p className="mt-3 font-bold">Advice Given:</p>
+      <p className="mt-3 font-bold">Advice:</p>
       <div className="min-h-8">
         {model.advice.map((line) => (
           <p key={line}>{line}</p>

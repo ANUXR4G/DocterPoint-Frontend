@@ -343,7 +343,13 @@ export function consultationModel(booking: ConsultBooking) {
       : startLabel
     : ""
   const chief = realLabel(booking.disease)
-  const diagnosis = realLabel(booking.consultationType || booking.consultation_type)
+  const enteredDiagnosis =
+    booking.clinicalAssessment && typeof booking.clinicalAssessment === "object"
+      ? String((booking.clinicalAssessment as { diagnosis?: string }).diagnosis || "")
+      : ""
+  const diagnosis =
+    realLabel(enteredDiagnosis) ||
+    realLabel(booking.consultationType || booking.consultation_type)
   const remarks = [booking.doctorRemarks, booking.notes]
     .map((line) => (line || "").trim())
     .filter((line, index, all) => line && all.indexOf(line) === index)
