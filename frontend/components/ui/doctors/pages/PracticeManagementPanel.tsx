@@ -1590,7 +1590,7 @@ function SchedulePanel({
     String(seed?.maxPerSlot || 1),
   );
   const [appointmentValidityDays, setAppointmentValidityDays] = useState(
-    String(providerUser.doctor?.appointmentValidityDays ?? 7),
+    String(providerUser.doctor?.appointmentValidityDays ?? 90),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1634,7 +1634,7 @@ function SchedulePanel({
     setName(providerUser.name ?? "");
     setLicenseNo(providerUser.doctor?.licenseNo ?? "");
     setAppointmentValidityDays(
-      String(providerUser.doctor?.appointmentValidityDays ?? 7),
+      String(providerUser.doctor?.appointmentValidityDays ?? 90),
     );
   }, [providerUser]);
 
@@ -1714,7 +1714,7 @@ function SchedulePanel({
     }
     const validity = Number(appointmentValidityDays);
     if (!Number.isInteger(validity) || validity < 1 || validity > 90) {
-      setError("Appointment validity must be 1 to 90 days.");
+      setError("Patients can book 1 to 90 days ahead.");
       return false;
     }
 
@@ -1750,7 +1750,7 @@ function SchedulePanel({
       licenseNo: licenseNo.trim() || providerUser.doctor?.licenseNo || undefined,
       appointmentValidityDays: (() => {
         const days = Number(appointmentValidityDays);
-        return Number.isFinite(days) && days >= 1 && days <= 90 ? days : 7;
+        return Number.isFinite(days) && days >= 1 && days <= 90 ? days : 90;
       })(),
     });
     setSaving(false);
@@ -2033,17 +2033,19 @@ function SchedulePanel({
               />
             </label>
             <label className="text-sm sm:col-span-2">
-              <span className="opacity-70 text-xs">Appointment validity (days) *</span>
-              <input
-                type="number"
-                min={1}
-                max={90}
-                value={appointmentValidityDays}
-                onChange={(e) => setAppointmentValidityDays(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-3 py-2.5 text-sm dark:bg-neutral-900 dark:border-neutral-700"
-              />
-              <span className="mt-1 block text-xs opacity-50">
-                Find clinics lets patients book any open day in the next 90 days.
+              <span className="opacity-70 text-xs">
+                Patients can book any open day in the next
+              </span>
+              <span className="mt-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={appointmentValidityDays}
+                  onChange={(e) => setAppointmentValidityDays(e.target.value)}
+                  className="w-28 rounded-lg border px-3 py-2.5 text-sm dark:bg-neutral-900 dark:border-neutral-700"
+                />
+                <span className="text-sm">days</span>
               </span>
             </label>
           </div>

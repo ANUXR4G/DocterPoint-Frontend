@@ -51,7 +51,7 @@ export default function DoctorRegisterForm({
   const [breakEndTime, setBreakEndTime] = useState("14:00")
   const [slotDurationMins, setSlotDurationMins] = useState("15")
   const [patientsPerSlot, setPatientsPerSlot] = useState("1")
-  const [appointmentValidityDays, setAppointmentValidityDays] = useState("7")
+  const [appointmentValidityDays, setAppointmentValidityDays] = useState("90")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
 
@@ -143,7 +143,7 @@ export default function DoctorRegisterForm({
             patientsPerSlot: Number(patientsPerSlot) || 1,
             appointmentValidityDays: (() => {
               const days = Number(appointmentValidityDays)
-              return Number.isFinite(days) && days >= 1 && days <= 90 ? days : 7
+              return Number.isFinite(days) && days >= 1 && days <= 90 ? days : 90
             })(),
           }),
         },
@@ -408,18 +408,18 @@ export default function DoctorRegisterForm({
         </label>
         <label className="block min-w-0 text-sm min-[480px]:col-span-2">
           <span className="gg-muted text-xs font-medium">
-            Appointment validity (days) *
+            Patients can book any open day in the next
           </span>
-          <input
-            type="number"
-            min={1}
-            max={90}
-            value={appointmentValidityDays}
-            onChange={(e) => setAppointmentValidityDays(e.target.value)}
-            className="form-input mt-1 h-14 w-full min-w-0 px-4 text-sm"
-          />
-          <span className="gg-faint mt-1 block text-xs">
-            Find clinics lets patients book any open day in the next 90 days.
+          <span className="mt-1 flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={appointmentValidityDays}
+              onChange={(e) => setAppointmentValidityDays(e.target.value)}
+              className="form-input h-14 w-28 min-w-0 px-4 text-sm"
+            />
+            <span className="text-sm">days</span>
           </span>
         </label>
       </div>

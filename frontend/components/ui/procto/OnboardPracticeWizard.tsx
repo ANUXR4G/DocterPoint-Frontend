@@ -75,7 +75,7 @@ export default function OnboardPracticeWizard() {
   const [telNo, setTelNo] = useState("")
   const [email, setEmail] = useState("")
   const [doctorName, setDoctorName] = useState("")
-  const [validityDays, setValidityDays] = useState("7")
+  const [validityDays, setValidityDays] = useState("90")
   const [photoUrl, setPhotoUrl] = useState("")
 
   async function submit() {
@@ -114,7 +114,7 @@ export default function OnboardPracticeWizard() {
       email: email.trim(),
       doctorName: doctorName.trim() || undefined,
       appointmentValidityDays:
-        Number.isFinite(days) && days >= 1 && days <= 90 ? days : 7,
+        Number.isFinite(days) && days >= 1 && days <= 90 ? days : 90,
       ...(cover ? { bgSrc: cover, photoUrl: cover } : {}),
       location: {
         name: locationName.trim() || "Main Clinic",
@@ -339,19 +339,18 @@ export default function OnboardPracticeWizard() {
                     className={fieldClass}
                   />
                 </Field>
-                <Field
-                  label="Appointment validity (days)"
-                  required
-                  hint="Find clinics lets patients book any open day in the next 90 days."
-                >
-                  <input
-                    type="number"
-                    min={1}
-                    max={90}
-                    value={validityDays}
-                    onChange={(e) => setValidityDays(e.target.value)}
-                    className={fieldClass}
-                  />
+                <Field label="Patients can book any open day in the next" required>
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={validityDays}
+                      onChange={(e) => setValidityDays(e.target.value)}
+                      className={`${fieldClass} w-28`}
+                    />
+                    <span className="text-sm">days</span>
+                  </span>
                 </Field>
                 <Field
                   label="Consultation / appointment fee (₹)"

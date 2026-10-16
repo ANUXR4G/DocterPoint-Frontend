@@ -58,7 +58,7 @@ export default function RegisterScreen() {
         breakEndTime: "14:00",
         slotDurationMins: 15,
         patientsPerSlot: 1,
-        appointmentValidityDays: 7,
+        appointmentValidityDays: 90,
       }),
     });
     setBusy(false);

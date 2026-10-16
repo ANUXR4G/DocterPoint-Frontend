@@ -25,6 +25,7 @@ import {
   formatPracticeDateTime,
   getTokenSession,
   minutesOf,
+  bookingHorizonDays,
   parseLocalDate,
   PRACTICE_TIMEZONE,
   practiceWeekday,
@@ -446,9 +447,8 @@ export const PracticeService = {
             ...(data.phone ? { contactNumbers: [data.phone.trim()] } : {}),
             ...(data.appointmentValidityDays != null
               ? {
-                  appointmentValidityDays: Math.min(
-                    90,
-                    Math.max(1, Number(data.appointmentValidityDays) || 7),
+                  appointmentValidityDays: bookingHorizonDays(
+                    data.appointmentValidityDays,
                   ),
                 }
               : {}),
@@ -473,10 +473,7 @@ export const PracticeService = {
         continue;
       }
 
-      const validity = Math.min(
-        90,
-        Math.max(1, Number(doc.appointmentValidityDays) || 7),
-      );
+      const validity = bookingHorizonDays(doc.appointmentValidityDays);
       const tempPassword = await generateHash("Doctor@Temp1");
       const user = await prisma.user.create({
         data: {
@@ -1355,10 +1352,7 @@ export const PracticeService = {
     });
 
     const hospital = await AuthService.ensureIndependentHospital();
-    const validity = Math.min(
-      90,
-      Math.max(1, Number(data.appointmentValidityDays) || 7),
-    );
+    const validity = bookingHorizonDays(data.appointmentValidityDays);
 
     let user = await prisma.user.findUnique({ where: { email } });
 
@@ -3991,7 +3985,7 @@ export const PracticeService = {
     const name = data.name?.trim();
     const validity =
       data.appointmentValidityDays != null
-        ? Math.min(90, Math.max(1, Number(data.appointmentValidityDays) || 7))
+        ? bookingHorizonDays(data.appointmentValidityDays)
         : undefined;
 
     const provider = await prisma.$transaction(async (tx) => {
