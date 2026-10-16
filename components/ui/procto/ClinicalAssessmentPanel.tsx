@@ -120,7 +120,7 @@ function emptyPain(): PainRow {
   }
 }
 
-/** New pain/allergy rows stay in position 2 so the first entry does not move. */
+/** New pain rows stay in position 2 so the first entry does not move. */
 function insertAsSecond<T>(rows: T[], row: T): T[] {
   if (rows.length === 0) return [row]
   return [rows[0], row, ...rows.slice(1)]
@@ -715,7 +715,7 @@ export default function ClinicalAssessmentPanel({
               commit({
                 ...local,
                 noKnownAllergies: false,
-                allergies: insertAsSecond(local.allergies ?? [], emptyAllergy()),
+                allergies: [...(local.allergies ?? []), emptyAllergy()],
               })
             }
             className="mt-2 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)]"
