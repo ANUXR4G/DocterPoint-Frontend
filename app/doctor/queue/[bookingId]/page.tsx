@@ -34,11 +34,12 @@ import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
 import PrescriptionActionsMenu from "@/components/ui/procto/PrescriptionActionsMenu"
 import MedicineEntryTable, {
+  editedVisitMedicine,
   emptyMedicineDraft,
   medicineFromDraft,
+  visitMedicineSignature,
   type VisitMedicine,
 } from "@/components/ui/procto/MedicineEntryTable"
-import { medicineWithStartDate } from "@/lib/medicineDates"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
@@ -287,7 +288,9 @@ export default function VisitPage() {
   medDraftRef.current = medDraft
   const medicinesRef = useRef<Medicine[]>([])
   medicinesRef.current = medicines
-  const instructionSaved = useRef<string[]>([])
+  const medicineSaved = useRef<string[]>([])
+  const medicineGeneration = useRef(0)
+  const medicineFlush = useRef<Promise<void> | null>(null)
   const visitHeaderRef = useRef<HTMLDivElement>(null)
   const visitPageRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -327,7 +330,7 @@ export default function VisitPage() {
       const docs = Array.isArray(data.documents) ? data.documents : []
       setMedicines(meds)
       medicinesRef.current = meds
-      instructionSaved.current = meds.map((row) => row.instruction || "")
+      medicineSaved.current = meds.map((row) => visitMedicineSignature(row))
       setDocuments(docs)
       documentsRef.current = docs
       const chart = (data.clinicalAssessment as ClinicalAssessment) ?? null
@@ -428,7 +431,11 @@ export default function VisitPage() {
   async function persistVisit(
     nextMedicines: Medicine[],
     nextDocuments: VisitDoc[] = documents,
-    opts?: { status?: string; successMessage?: string },
+    opts?: {
+      status?: string
+      successMessage?: string
+      medicineGeneration?: number
+    },
   ) {
     if (!bookingId || String(booking?.status || "").toUpperCase() === "COMPLETED")
       return false
@@ -464,7 +471,19 @@ export default function VisitPage() {
       return false
     }
     const saved = res.data as VisitBooking
+    const localMeds = medicinesRef.current
+    const localSaved = medicineSaved.current
+    const dirty = formDirty.current
     applyVisitData(saved, "hydrate")
+    const stale =
+      opts?.medicineGeneration != null &&
+      opts.medicineGeneration !== medicineGeneration.current
+    if (stale) {
+      medicinesRef.current = localMeds
+      setMedicines(localMeds)
+      medicineSaved.current = localSaved
+      formDirty.current = dirty
+    }
     patchSharedBooking(bookingId, saved as Partial<ProctoBooking>)
     if (opts?.successMessage) toast.success(opts.successMessage)
     return true
@@ -495,26 +514,31 @@ export default function VisitPage() {
     await persistVisit(next, documents, { successMessage: "Medicine removed." })
   }
 
-  async function changeMedicineStart(idx: number, startDate: string) {
-    if (
-      !bookingId ||
-      String(booking?.status || "").toUpperCase() === "COMPLETED"
+  function medicinesDiffer(rows: Medicine[]) {
+    return rows.some(
+      (row, i) => visitMedicineSignature(row) !== (medicineSaved.current[i] || ""),
     )
-      return
-    const current = medicinesRef.current[idx]
-    if (!current || !startDate.trim()) return
-    const next = medicinesRef.current.map((row, i) =>
-      i === idx ? medicineWithStartDate(row, startDate) : row,
-    )
-    medicinesRef.current = next
-    setMedicines(next)
-    formDirty.current = true
-    await persistVisit(next, documents, { successMessage: "End date updated." })
   }
 
-  async function changeMedicineInstruction(
+  async function flushMedicineEdits() {
+    let savedAny = false
+    for (;;) {
+      const generation = medicineGeneration.current
+      const snapshot = medicinesRef.current.map((row) => ({ ...row }))
+      if (!medicinesDiffer(snapshot)) break
+      const ok = await persistVisit(snapshot, documentsRef.current, {
+        medicineGeneration: generation,
+      })
+      if (!ok) return
+      savedAny = true
+      if (medicineGeneration.current === generation) break
+    }
+    if (savedAny) toast.success("Medicine updated.")
+  }
+
+  async function editMedicine(
     idx: number,
-    instruction: string,
+    patch: Partial<Medicine>,
     commit: boolean,
   ) {
     if (
@@ -524,27 +548,18 @@ export default function VisitPage() {
       return
     const current = medicinesRef.current[idx]
     if (!current) return
-    const value = commit ? instruction.trim() : instruction
-    if (commit && (instructionSaved.current[idx] || "") === value) {
-      if ((current.instruction || "") !== value) {
-        const trimmed = medicinesRef.current.map((row, i) =>
-          i === idx ? { ...row, instruction: value || undefined } : row,
-        )
-        medicinesRef.current = trimmed
-        setMedicines(trimmed)
-      }
-      return
-    }
-    const next = medicinesRef.current.map((row, i) =>
-      i === idx ? { ...row, instruction: value || undefined } : row,
-    )
+    const edited = editedVisitMedicine(current, patch, commit)
+    const next = medicinesRef.current.map((row, i) => (i === idx ? edited : row))
+    medicineGeneration.current += 1
     medicinesRef.current = next
     setMedicines(next)
+    if (!commit || !medicinesDiffer(next)) return
     formDirty.current = true
-    if (!commit) return
-    await persistVisit(next, documents, {
-      successMessage: "Special instruction updated.",
-    })
+    if (!medicineFlush.current) {
+      medicineFlush.current = flushMedicineEdits().finally(() => {
+        medicineFlush.current = null
+      })
+    }
   }
 
   async function onUploadGeneral(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1052,10 +1067,7 @@ export default function VisitPage() {
               }}
               onAdd={() => void addMedicine()}
               onRemove={(idx) => void removeMedicine(idx)}
-              onStartDate={(idx, startDate) => void changeMedicineStart(idx, startDate)}
-              onInstruction={(idx, instruction, commit) =>
-                void changeMedicineInstruction(idx, instruction, commit)
-              }
+              onEdit={(idx, patch, commit) => void editMedicine(idx, patch, commit)}
             />
           )
         }
