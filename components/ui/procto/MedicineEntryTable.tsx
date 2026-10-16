@@ -138,6 +138,7 @@ export default function MedicineEntryTable({
   onAdd,
   onRemove,
   onStartDate,
+  onInstruction,
 }: {
   rows: VisitMedicine[]
   draft: VisitMedicine
@@ -147,6 +148,8 @@ export default function MedicineEntryTable({
   onRemove: (index: number) => void
   /** Saved row: a new start date keeps the duration and moves the end date. */
   onStartDate?: (index: number, startDate: string) => void
+  /** Saved row: edit special instruction without removing the medicine. */
+  onInstruction?: (index: number, instruction: string, commit: boolean) => void
 }) {
   function set<K extends keyof VisitMedicine>(key: K, value: string) {
     const next: VisitMedicine = { ...draft, [key]: value }
@@ -221,7 +224,19 @@ export default function MedicineEntryTable({
                 )}
               </td>
               <td className={td}>{shownDate(m.endDate)}</td>
-              <td className={td}>{m.instruction || ""}</td>
+              <td className={td}>
+                {locked || !onInstruction ? (
+                  m.instruction || ""
+                ) : (
+                  <input
+                    value={m.instruction || ""}
+                    aria-label={`Special instruction for ${m.name}`}
+                    className={`${field} min-w-[8rem]`}
+                    onChange={(e) => onInstruction(idx, e.target.value, false)}
+                    onBlur={(e) => onInstruction(idx, e.target.value, true)}
+                  />
+                )}
+              </td>
             </tr>
           ))}
           {locked ? null : (
