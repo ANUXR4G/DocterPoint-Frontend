@@ -2043,7 +2043,7 @@ function SchedulePanel({
                 className="mt-1 w-full rounded-lg border px-3 py-2.5 text-sm dark:bg-neutral-900 dark:border-neutral-700"
               />
               <span className="mt-1 block text-xs opacity-50">
-                How far ahead patients can book (1–90 days).
+                Find clinics lets patients book any open day in the next 90 days.
               </span>
             </label>
           </div>

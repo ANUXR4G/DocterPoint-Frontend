@@ -71,6 +71,8 @@ type Availability = {
 }
 
 const STEPS = ["Book", "Confirm"]
+/** Same horizon as the booking API. Not the clinic's old 7-day default. */
+const PATIENT_BOOKING_HORIZON_DAYS = 90
 
 function toDateInputValue(d: Date) {
   const y = d.getFullYear()
@@ -136,11 +138,6 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
     }
   }, [requestedDoctor, clinicDoctors])
   const provider = clinicDoctors.find((d) => d.id === providerId) ?? clinicDoctors[0]
-  const validityFromProfile =
-    provider &&
-    practice.members.find((m) => m.user.id === provider.id)?.user.doctor
-      ?.appointmentValidityDays
-
   const scheduleModes = useMemo(() => {
     const fromSchedules = (practice.schedules ?? [])
       .filter((s) => !provider || s.providerId === provider.id)
@@ -154,13 +151,11 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
   const [mode, setMode] = useState<"TIME_BASED" | "TOKEN_BASED">(
     providerModeFromProfile ?? "TIME_BASED",
   )
-  const [validityDays, setValidityDays] = useState(
-    () => Math.max(1, validityFromProfile ?? 7),
+  const [date, setDate] = useState(() =>
+    defaultBookableDate(
+      toDateInputValue(addDays(new Date(), PATIENT_BOOKING_HORIZON_DAYS - 1)),
+    ),
   )
-  const [bookableUntil, setBookableUntil] = useState(() =>
-    toDateInputValue(addDays(new Date(), Math.max(1, validityFromProfile ?? 7) - 1)),
-  )
-  const [date, setDate] = useState(() => defaultBookableDate(bookableUntil))
   const [availability, setAvailability] = useState<Availability | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
   const [name, setName] = useState("")
@@ -240,15 +235,6 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
         if (res.status === "successful") {
           const data = res.data as Availability
           setAvailability(data)
-          if (data.appointmentValidityDays) {
-            setValidityDays(data.appointmentValidityDays)
-          }
-          if (data.bookableUntil) {
-            setBookableUntil(data.bookableUntil)
-            if (date > data.bookableUntil) {
-              setDate(data.bookableUntil)
-            }
-          }
           if (data.configuredMode) {
             setMode(data.configuredMode)
           } else if (data.configuredModes?.length === 1) {
@@ -385,7 +371,9 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
   }
 
   const minDate = practiceTodayIso()
-  const maxDate = bookableUntil
+  const maxDate = toDateInputValue(
+    addDays(new Date(), PATIENT_BOOKING_HORIZON_DAYS - 1),
+  )
 
   return (
     <div className="dashboard-panel p-5 sm:p-6">
@@ -469,8 +457,7 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
 
           {availability?.outsideValidity && (
             <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
-              This date is outside the doctor&apos;s {validityDays}-day booking
-              window. Pick a date on or before {maxDate}.
+              Pick a date on or before {maxDate}.
             </p>
           )}
 

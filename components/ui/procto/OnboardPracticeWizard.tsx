@@ -342,7 +342,7 @@ export default function OnboardPracticeWizard() {
                 <Field
                   label="Appointment validity (days)"
                   required
-                  hint="How far ahead patients can book (1–90)."
+                  hint="Find clinics lets patients book any open day in the next 90 days."
                 >
                   <input
                     type="number"
