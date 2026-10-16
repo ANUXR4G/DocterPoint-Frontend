@@ -852,7 +852,7 @@ function DoctorAccountForm({
   const [slotDurationMins, setSlotDurationMins] = useState("15")
   const [patientsPerSlot, setPatientsPerSlot] = useState("1")
   const [appointmentValidityDays, setAppointmentValidityDays] = useState(
-    String(provider?.doctor?.appointmentValidityDays ?? 7),
+    String(provider?.doctor?.appointmentValidityDays ?? 90),
   )
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
@@ -952,7 +952,7 @@ function DoctorAccountForm({
     setName(provider?.name ?? "")
     setLicenseNo(provider?.doctor?.licenseNo ?? "")
     setAppointmentValidityDays(
-      String(provider?.doctor?.appointmentValidityDays ?? 7),
+      String(provider?.doctor?.appointmentValidityDays ?? 90),
     )
     setConsultationFee(
       membership.practice.consultationFee != null
@@ -1109,7 +1109,7 @@ function DoctorAccountForm({
           licenseNo.trim() || provider?.doctor?.licenseNo || undefined,
         appointmentValidityDays: (() => {
           const days = Number(appointmentValidityDays)
-          return Number.isFinite(days) && days >= 1 && days <= 90 ? days : 7
+          return Number.isFinite(days) && days >= 1 && days <= 90 ? days : 90
         })(),
       },
     )
@@ -1411,18 +1411,18 @@ function DoctorAccountForm({
         </label>
         <label className="block text-base font-semibold sm:col-span-2">
           <span className="gg-muted text-sm font-bold">
-            Appointment validity (days) *
+            Patients can book any open day in the next
           </span>
-          <input
-            type="number"
-            min={1}
-            max={90}
-            value={appointmentValidityDays}
-            onChange={(e) => setAppointmentValidityDays(e.target.value)}
-            className="form-input mt-1 h-14 w-full px-4 text-base font-semibold"
-          />
-          <span className="gg-faint mt-1 block text-sm font-medium">
-            Find clinics lets patients book any open day in the next 90 days.
+          <span className="mt-1 flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={appointmentValidityDays}
+              onChange={(e) => setAppointmentValidityDays(e.target.value)}
+              className="form-input h-14 w-28 px-4 text-base font-semibold"
+            />
+            <span className="text-base font-semibold">days</span>
           </span>
         </label>
       </div>

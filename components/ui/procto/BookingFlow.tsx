@@ -71,8 +71,13 @@ type Availability = {
 }
 
 const STEPS = ["Book", "Confirm"]
-/** Same horizon as the booking API. Not the clinic's old 7-day default. */
 const PATIENT_BOOKING_HORIZON_DAYS = 90
+
+function bookingHorizonDays(value?: number | null) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 1) return PATIENT_BOOKING_HORIZON_DAYS
+  return Math.min(PATIENT_BOOKING_HORIZON_DAYS, Math.floor(n))
+}
 
 function toDateInputValue(d: Date) {
   const y = d.getFullYear()
@@ -151,9 +156,13 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
   const [mode, setMode] = useState<"TIME_BASED" | "TOKEN_BASED">(
     providerModeFromProfile ?? "TIME_BASED",
   )
+  const horizonDays = bookingHorizonDays(
+    (provider?.doctor as { appointmentValidityDays?: number } | null | undefined)
+      ?.appointmentValidityDays,
+  )
   const [date, setDate] = useState(() =>
     defaultBookableDate(
-      toDateInputValue(addDays(new Date(), PATIENT_BOOKING_HORIZON_DAYS - 1)),
+      toDateInputValue(addDays(new Date(), horizonDays - 1)),
     ),
   )
   const [availability, setAvailability] = useState<Availability | null>(null)
@@ -371,9 +380,9 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
   }
 
   const minDate = practiceTodayIso()
-  const maxDate = toDateInputValue(
-    addDays(new Date(), PATIENT_BOOKING_HORIZON_DAYS - 1),
-  )
+  const maxDate =
+    availability?.bookableUntil ||
+    toDateInputValue(addDays(new Date(), horizonDays - 1))
 
   return (
     <div className="dashboard-panel p-5 sm:p-6">
@@ -440,6 +449,10 @@ export default function BookingFlow({ practice }: { practice: Practice }) {
             </p>
           ) : null}
 
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            You can book any open day in the next{" "}
+            {availability?.appointmentValidityDays ?? horizonDays} days.
+          </p>
           <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
             Date
             <input
