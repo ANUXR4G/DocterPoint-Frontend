@@ -10,6 +10,8 @@ export type GlobalHijack =
   | "register"
   | "book"
   | "exit"
+  | "cancel"
+  | "reschedule"
   | "attach"
   | "callback"
   /** Reset to Main Interactive Menu */
@@ -72,11 +74,12 @@ export function parseGlobalKeywordHijack(text: string): GlobalHijack | null {
   const t = normalizeHijackText(raw);
   if (!t) return null;
 
-  // Exit / Cancel → end session (exact only; "cancel booking" stays Branch B).
-  if (
-    /^(exit|quit|end|end session|stop chat|bye)$/i.test(t) ||
-    /^cancel$/i.test(t)
-  ) {
+  // Appointment message: reply CANCEL / RESCHEDULE. Exact only.
+  if (/^(cancel|cancle|cancell)$/i.test(t)) return "cancel";
+  if (/^(reschedule|reshedule)$/i.test(t)) return "reschedule";
+
+  // Exit ends the chat. Cancel is an appointment action, not an exit.
+  if (/^(exit|quit|end|end session|stop chat|bye)$/i.test(t)) {
     return "exit";
   }
 

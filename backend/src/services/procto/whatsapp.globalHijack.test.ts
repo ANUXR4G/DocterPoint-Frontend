@@ -31,10 +31,13 @@ describe("Global keyword hijacks", () => {
     assert.equal(parseGlobalKeywordHijack("Agent"), "agent");
   });
 
-  it("maps Exit and Cancel to session end", () => {
+  it("maps Exit to session end and Cancel / Reschedule to the appointment", () => {
     assert.equal(parseGlobalKeywordHijack("Exit"), "exit");
-    assert.equal(parseGlobalKeywordHijack("Cancel"), "exit");
     assert.equal(parseGlobalKeywordHijack("quit"), "exit");
+    assert.equal(parseGlobalKeywordHijack("Cancel"), "cancel");
+    assert.equal(parseGlobalKeywordHijack("CANCEL"), "cancel");
+    assert.equal(parseGlobalKeywordHijack("Reschedule"), "reschedule");
+    assert.equal(parseGlobalKeywordHijack("RESCHEDULE"), "reschedule");
   });
 
   it("does not treat cancel booking as Exit hijack", () => {
