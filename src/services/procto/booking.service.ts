@@ -1589,6 +1589,17 @@ export const BookingService = {
       },
     });
 
+    if (medicines && medicines.length > 0 && existing.practiceId) {
+      const { InstructionService } = await import("./instruction.service.js");
+      const instructionTexts = medicines.map((m) => m.instruction);
+      await InstructionService.recordCustomInstructions(
+        existing.practiceId,
+        instructionTexts,
+      ).catch((err) => {
+        console.error("Auto-save custom instructions error:", err);
+      });
+    }
+
     if (clinicalChanged) {
       const actor = await prisma.user.findUnique({
         where: { id: actorUserId },

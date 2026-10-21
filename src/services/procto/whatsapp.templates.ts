@@ -869,18 +869,18 @@ export const BotPrompts = {
       lang,
       `${who ? `What is *${who}*'s` : "What is your"} main problem for this visit (chief complaint)?\n` +
         `For example: _fever for 3 days_, _knee pain_, _diabetes follow-up_.\n\n` +
-        `You can *type* it or send a *voice note* 🎤.`,
+        `You can *type* it or send a *voice note* 🎤. This is required.`,
       `इस विज़िट की मुख्य समस्या ${who ? `(*${who}* के लिए) ` : ""}क्या है?\n` +
         `जैसे: _3 दिन से बुखार_, _घुटने में दर्द_, _डायबिटीज़ फ़ॉलो-अप_।\n\n` +
-        `आप *लिखकर* या *वॉइस नोट* 🎤 भेज सकते हैं।`,
+        `आप *लिखकर* या *वॉइस नोट* 🎤 भेज सकते हैं। यह ज़रूरी है।`,
     ).replace(/ {2,}/g, " ");
   },
 
   chiefComplaintTooShort(lang?: WaLang): string {
     return L(
       lang,
-      "Please describe the problem in a few words (or send a voice note 🎤), or tap *Skip*.",
-      "कृपया समस्या कुछ शब्दों में बताएँ (या वॉइस नोट 🎤 भेजें), या *छोड़ें* दबाएँ।",
+      "Chief complaint is required. Please describe the problem in a few words, or send a voice note 🎤.",
+      "मुख्य समस्या ज़रूरी है। कृपया समस्या कुछ शब्दों में बताएँ, या वॉइस नोट 🎤 भेजें।",
     );
   },
 

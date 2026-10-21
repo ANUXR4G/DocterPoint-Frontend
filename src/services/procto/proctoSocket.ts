@@ -43,6 +43,9 @@ export function serializeBooking(booking: {
   doctorRemarks?: string | null;
   medicines?: unknown;
   documents?: unknown;
+  clinicalAssessment?: unknown;
+  disease?: string | null;
+  notes?: string | null;
   arrivedAt?: Date | null;
   paymentStatus?: string | null;
   paymentAmount?: number | null;
@@ -70,8 +73,13 @@ export function serializeBooking(booking: {
     session_date: booking.sessionDate?.toISOString().slice(0, 10) ?? null,
     consultation_type: booking.consultationType,
     doctor_remarks: booking.doctorRemarks ?? null,
+    doctorRemarks: booking.doctorRemarks ?? null,
     medicines: booking.medicines ?? null,
     documents: booking.documents ?? null,
+    clinical_assessment: booking.clinicalAssessment ?? null,
+    clinicalAssessment: booking.clinicalAssessment ?? null,
+    disease: booking.disease ?? null,
+    notes: booking.notes ?? null,
     arrived_at: booking.arrivedAt?.toISOString() ?? null,
     ...(booking.paymentStatus !== undefined
       ? {

@@ -656,7 +656,8 @@ export const PracticeService = {
                 isActive: true,
                 OR: [
                   { role: "DOCTOR" },
-                  { role: "PRACTICE_OWNER", doctorId: { not: null } },
+                  // Owner is listed only after they have their own doctor profile.
+                  { role: "PRACTICE_OWNER", user: { doctor: { isNot: null } } },
                 ],
                 user: {
                   doctor: {
@@ -754,7 +755,9 @@ export const PracticeService = {
             isActive: true,
             OR: [
               { role: "DOCTOR" },
-              { role: "PRACTICE_OWNER", doctorId: { not: null } },
+              // A clinic owner is not a default doctor. They appear once
+              // their own doctor dashboard (doctor profile) exists.
+              { role: "PRACTICE_OWNER", user: { doctor: { isNot: null } } },
             ],
           },
           select: {
@@ -811,11 +814,21 @@ export const PracticeService = {
             ),
           ),
         ].sort((a, b) => a.localeCompare(b));
-        const members = p.members.map((m) => ({
-          userId: m.userId,
-          role: m.role,
-          user: { id: m.user.id, name: m.user.name, imgSrc: m.user.imgSrc },
-        }));
+        const members = p.members
+          .map((m) => ({
+            userId: m.userId,
+            role: m.role,
+            user: {
+              id: m.user.id,
+              name: m.user.name,
+              imgSrc: m.user.imgSrc,
+              ...(m.user.doctor ? { doctor: { id: m.user.id } } : {}),
+            },
+          }))
+          .sort(
+            (a, b) =>
+              Number(a.role !== "DOCTOR") - Number(b.role !== "DOCTOR"),
+          );
         const { subscription: _sub, _count, members: _rawMembers, ...rest } = p;
         return {
           ...rest,

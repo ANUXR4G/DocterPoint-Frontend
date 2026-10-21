@@ -142,10 +142,7 @@ export type ConversationState = {
   slotStart?: string;
   sessionDate?: string;
   tokenPreview?: number;
-  /**
-   * Chief complaint for the in-progress booking. `""` = asked and skipped;
-   * undefined = not asked yet.
-   */
+  /** Chief complaint for the in-progress booking. Required before confirm. */
   chiefComplaint?: string;
   /** Slot/token details to show on the summary after the complaint step. */
   pendingConfirmOpts?: BookingConfirmOpts;
@@ -455,7 +452,6 @@ function repromptHintForStep(state: ConversationState, lang: WaLang): string {
       );
     }
     case "awaiting_chief_complaint_opt":
-      return BotPrompts.askChiefComplaintOpt(state.bookPatientName, lang);
     case "awaiting_chief_complaint":
       return BotPrompts.askChiefComplaint(state.bookPatientName, lang);
     case "awaiting_pay_offer":
@@ -649,7 +645,6 @@ async function continueFlowPrompt(
     case "awaiting_mode":
       return withModeButtons(BotPrompts.askMode(true, true, lang), true, true);
     case "awaiting_chief_complaint_opt":
-      return withChiefComplaintOptButtons(state, lang);
     case "awaiting_chief_complaint":
       return withChiefComplaintPrompt(state, lang);
     case "awaiting_confirm":
@@ -1201,28 +1196,12 @@ export type BookingConfirmOpts = {
 
 const CHIEF_COMPLAINT_MAX = 500;
 
-function withChiefComplaintOptButtons(
-  state: ConversationState,
-  lang: WaLang,
-): OrchestratorResult {
-  return {
-    reply: BotPrompts.askChiefComplaintOpt(state.bookPatientName, lang),
-    replyButtons: [
-      { id: "complaint:yes", title: lang === "hi" ? "हाँ" : "Yes" },
-      { id: "complaint:no", title: lang === "hi" ? "नहीं" : "No" },
-    ],
-  };
-}
-
 function withChiefComplaintPrompt(
   state: ConversationState,
   lang: WaLang,
 ): OrchestratorResult {
   return {
     reply: BotPrompts.askChiefComplaint(state.bookPatientName, lang),
-    replyButtons: [
-      { id: "complaint:skip", title: lang === "hi" ? "छोड़ें" : "Skip" },
-    ],
   };
 }
 
@@ -1233,16 +1212,17 @@ async function presentBookingConfirm(
   opts: BookingConfirmOpts,
 ): Promise<OrchestratorResult> {
   const lang = resolveLang(state.preferredLanguage);
-  // Offer the chief complaint once per booking, right after the slot/token.
-  if (state.chiefComplaint === undefined) {
+  // Chief complaint is required before the summary.
+  if (!state.chiefComplaint?.trim()) {
     const next: ConversationState = {
       ...state,
-      step: "awaiting_chief_complaint_opt",
+      step: "awaiting_chief_complaint",
+      chiefComplaint: undefined,
       pendingConfirmOpts: opts,
       failedTurns: 0,
     };
     await saveState(convId, next);
-    return withChiefComplaintOptButtons(next, lang);
+    return withChiefComplaintPrompt(next, lang);
   }
   const patient =
     state.bookPatientName?.trim() ||
@@ -3869,6 +3849,14 @@ async function confirmBooking(
       ),
     };
   }
+  if (!state.chiefComplaint?.trim()) {
+    const opts: BookingConfirmOpts = state.pendingConfirmOpts ?? {
+      date: (state.date ?? state.sessionDate ?? "").slice(0, 10),
+      slotStart: state.slotStart ?? null,
+      token: state.tokenPreview ?? null,
+    };
+    return presentBookingConfirm(convId, practice, state, opts);
+  }
 
   try {
     const existing = state.bookPatientId
@@ -5516,44 +5504,28 @@ async function runOrchestratorCore(input: {
       };
     }
     const skipped =
-      /^(complaint:skip|complaint:no|skip|no|n|nope|nah|none|nothing|na|n\/a|later|nahi|nahin|छोड़ें|छोडें|नहीं|कुछ नहीं)$/i.test(
+      /^(complaint:skip|complaint:no|complaint:yes|skip|no|n|nope|nah|none|nothing|na|n\/a|later|nahi|nahin|yes|y|yeah|yep|ok|okay|छोड़ें|छोडें|नहीं|कुछ नहीं|हाँ|हां)$/i.test(
         raw,
       );
     const isOtherTap = /^[a-z_]+:/i.test(raw);
     const hasRealContent = /[A-Za-z\u0900-\u097F]/.test(raw);
-    const bareAck =
-      /^(ok|okay|k|yes|y|yeah|yep|sure|add|haan|han|hi|hello|hey|thanks|thank you|confirm|हाँ|हां|जी|ठीक है)$/i.test(
-        raw,
-      );
     const looksLikeComplaint =
-      !skipped && !isOtherTap && hasRealContent && !bareAck && raw.length >= 2;
+      !skipped && !isOtherTap && hasRealContent && raw.length >= 2;
 
-    if (state.step === "awaiting_chief_complaint_opt" && !skipped) {
-      const wantsToAdd = /^complaint:yes$/i.test(raw) || bareAck;
-      if (wantsToAdd) {
-        const next: ConversationState = {
-          ...state,
-          step: "awaiting_chief_complaint",
-          pendingConfirmOpts: opts,
-          failedTurns: 0,
-        };
-        await saveState(convId, next);
-        return withChiefComplaintPrompt(next, lang);
-      }
-      // Typed / spoken the problem straight away (2+ words) — take it as the complaint.
-      const unsure = /^(maybe|not sure|dont know|don't know|idk|pata nahi|पता नहीं)$/i.test(raw);
-      if (!looksLikeComplaint || unsure || raw.split(/\s+/).length < 2) {
-        return withChiefComplaintOptButtons(state, lang);
-      }
-    } else if (!skipped && !looksLikeComplaint) {
+    if (!looksLikeComplaint) {
+      const next: ConversationState = {
+        ...state,
+        step: "awaiting_chief_complaint",
+        chiefComplaint: undefined,
+        pendingConfirmOpts: opts,
+      };
+      await saveState(convId, next);
       return {
-        ...withChiefComplaintPrompt(state, lang),
+        ...withChiefComplaintPrompt(next, lang),
         reply: BotPrompts.chiefComplaintTooShort(lang),
       };
     }
-    const chiefComplaint = skipped
-      ? ""
-      : raw.replace(/\s+/g, " ").slice(0, CHIEF_COMPLAINT_MAX);
+    const chiefComplaint = raw.replace(/\s+/g, " ").slice(0, CHIEF_COMPLAINT_MAX);
     return presentBookingConfirm(
       convId,
       practice,
