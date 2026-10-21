@@ -1,5 +1,9 @@
 import { cookies } from "@/utils/cookies";
 import { ensureAccessToken } from "@/lib/accessToken";
+import {
+  searchMedicineMaster,
+  type MedicineMasterItem,
+} from "@/lib/medicineMaster";
 
 /** Same-origin in the browser — avoids localhost vs 127.0.0.1 cookie/WS splits. */
 function apiBase() {
@@ -103,6 +107,125 @@ async function proctoFetch(path: string, init?: RequestInit) {
 }
 
 export const proctoService = {
+  /** Centralized Medicine Master inventory search & list. */
+  searchMedicines: async (q: string, limit = 25): Promise<MedicineMasterItem[]> => {
+    try {
+      const res = await proctoFetch(
+        `/procto/medicines?q=${encodeURIComponent(q)}&limit=${limit}`,
+      );
+      if (res && res.status === "successful" && Array.isArray((res as any).data)) {
+        return (res as any).data as MedicineMasterItem[];
+      }
+    } catch {
+      // fallback to centralized inventory
+    }
+    return searchMedicineMaster(q, limit);
+  },
+
+  listMedicines: async (params?: { q?: string; favourite?: boolean }) => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.favourite) qs.set("favourite", "true");
+    const query = qs.toString();
+    return proctoFetch(`/procto/medicines${query ? `?${query}` : ""}`);
+  },
+
+  createMedicine: (body: Record<string, unknown>) =>
+    proctoFetch("/procto/medicines", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateMedicine: (id: string, body: Record<string, unknown>) =>
+    proctoFetch(`/procto/medicines/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deleteMedicine: (id: string) =>
+    proctoFetch(`/procto/medicines/${id}`, {
+      method: "DELETE",
+    }),
+
+  toggleMedicineFavourite: (id: string, favourite?: boolean) =>
+    proctoFetch(`/procto/medicines/${id}/favourite`, {
+      method: "PATCH",
+      body: JSON.stringify({ favourite }),
+    }),
+
+  listInstructions: async (params?: { practiceId?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.practiceId) search.set("practiceId", params.practiceId);
+    const qs = search.toString();
+    return proctoFetch(`/procto/instructions${qs ? `?${qs}` : ""}`);
+  },
+
+  saveCustomInstruction: (instruction: string, practiceId?: string) =>
+    proctoFetch("/procto/instructions", {
+      method: "POST",
+      body: JSON.stringify({ instruction, practiceId }),
+    }),
+
+  listTemplates: async (params?: { practiceId?: string; specialty?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.practiceId) search.set("practiceId", params.practiceId);
+    if (params?.specialty) search.set("specialty", params.specialty);
+    const qs = search.toString();
+    return proctoFetch(`/procto/templates${qs ? `?${qs}` : ""}`);
+  },
+
+  saveTemplate: (body: {
+    name: string;
+    title?: string;
+    content: string;
+    advice?: string;
+    category?: "condition" | "medication" | "general";
+    scope: "clinic" | "specialty" | "doctor";
+    scopeValue?: string;
+    practiceId?: string;
+  }) =>
+    proctoFetch("/procto/templates", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteTemplate: (id: string, practiceId?: string) => {
+    const search = new URLSearchParams();
+    if (practiceId) search.set("practiceId", practiceId);
+    const qs = search.toString();
+    return proctoFetch(`/procto/templates/${id}${qs ? `?${qs}` : ""}`, {
+      method: "DELETE",
+    });
+  },
+
+  listOrderSets: async (params?: { practiceId?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.practiceId) search.set("practiceId", params.practiceId);
+    const qs = search.toString();
+    return proctoFetch(`/procto/order-sets${qs ? `?${qs}` : ""}`);
+  },
+
+  createOrderSet: (body: {
+    name: string;
+    description?: string;
+    category?: string;
+    medicines: Array<Record<string, unknown>>;
+    practiceId?: string;
+  }) =>
+    proctoFetch("/procto/order-sets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteOrderSet: (id: string, practiceId?: string) => {
+    const search = new URLSearchParams();
+    if (practiceId) search.set("practiceId", practiceId);
+    const qs = search.toString();
+    return proctoFetch(`/procto/order-sets/${id}${qs ? `?${qs}` : ""}`, {
+      method: "DELETE",
+    });
+  },
+
   listPractices: (params?: { q?: string; city?: string; specialty?: string }) => {
     const search = new URLSearchParams();
     if (params?.q) search.set("q", params.q);

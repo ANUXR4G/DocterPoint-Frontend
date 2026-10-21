@@ -69,9 +69,9 @@ export default function ConsultationSheet({ booking }: { booking: ConsultBooking
         <p className="print-dx">{model.diagnosis || "—"}</p>
       </section>
       <section className="mt-4">
-        <h2 className="font-bold">Clinical Remarks and Notes:</h2>
+        <h2 className="font-bold">Doctor Notes:</h2>
         <div className="mt-1 min-h-16 whitespace-pre-wrap rounded-md border border-neutral-400 px-3 py-2">
-          {model.remarks || "No clinical remarks recorded."}
+          {model.remarks || "No doctor notes recorded."}
         </div>
       </section>
       <section className="mt-4">

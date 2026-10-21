@@ -21,6 +21,7 @@ function identifyRole(tokenScopes: string[]): string | null {
 }
 
 function roleFromPathname(pathname: string): string | null {
+  if (pathname.startsWith("/clinic")) return "clinic"
   if (pathname.startsWith("/doctor")) return "doctor"
   if (pathname.startsWith("/patient")) return "user"
   if (pathname.startsWith("/admin")) return "admin"

@@ -121,8 +121,8 @@ export default function Sidebar({ role, logout }: Props) {
         </div>
       </div>
 
-      <div className="relative z-[1] flex h-full min-h-0 w-full flex-col overflow-hidden py-4">
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto no-scrollbar xl:gap-1 xl:show-scrollbar xl:custom-scroll">
+      <div className="relative z-[1] flex h-full min-h-0 w-full flex-col overflow-hidden py-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto custom-scroll show-scrollbar xl:gap-0.5">
           <span className="mb-1 hidden px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-400 xl:block">
             Overview
           </span>
@@ -135,7 +135,7 @@ export default function Sidebar({ role, logout }: Props) {
                 className={navLinkClass(active)}
                 key={`sidebar_upper_link_${idx}`}
               >
-                <div className="relative flex size-12 shrink-0 items-center justify-center xl:size-10">
+                <div className="relative flex size-10 shrink-0 items-center justify-center xl:size-9">
                   <Icon
                     name={icon}
                     pathClassName={`transition duration-200 ${
@@ -192,7 +192,7 @@ export default function Sidebar({ role, logout }: Props) {
                   }
                 }}
               >
-                <div className="relative flex size-12 shrink-0 items-center justify-center xl:size-10">
+                <div className="relative flex size-10 shrink-0 items-center justify-center xl:size-9">
                   <Icon
                     name={icon}
                     pathClassName={

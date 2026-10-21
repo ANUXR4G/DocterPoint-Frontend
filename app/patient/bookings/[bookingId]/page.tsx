@@ -46,7 +46,21 @@ import {
   prescriptionFileName,
 } from "@/lib/prescriptionPdf"
 
-type Medicine = { name: string; amount?: string; times?: string[] }
+type Medicine = {
+  name: string
+  strength?: string
+  route?: string
+  dose?: string
+  doseUnit?: string
+  frequency?: string
+  duration?: string
+  durationUnit?: string
+  instruction?: string
+  startDate?: string
+  endDate?: string
+  amount?: string
+  times?: string[]
+}
 type VisitDoc = { name: string; url: string; uploadedAt?: string }
 
 type VisitBooking = {
@@ -97,6 +111,8 @@ function dash(v: string | number | null | undefined) {
 
 type Chart = {
   savedAt?: string | null
+  diagnosis?: string | null
+  advice?: string | null
   noKnownAllergies?: boolean
   vitals?: {
     recordedAt?: string | null
@@ -388,8 +404,24 @@ export default function PatientVisitPage() {
     .join("; ")
   const recordedAt = chart?.savedAt || chart?.vitals?.recordedAt || ""
   const recorded = recordedAt ? formatPracticeDateTime(recordedAt) : ""
+  function formatMedicineLine(m: Medicine): string {
+    const parts: string[] = []
+    if (m.strength) parts.push(m.strength)
+    const dose = m.dose ? `${m.dose}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : m.amount
+    if (dose) parts.push(dose)
+    if (m.route && m.route !== "Oral") parts.push(`via ${m.route}`)
+    const freq = m.frequency || (Array.isArray(m.times) ? m.times.join(", ") : "")
+    if (freq) parts.push(freq)
+    if (m.duration) parts.push(`for ${m.duration} ${m.durationUnit || "days"}`)
+    if (m.instruction) parts.push(`[${m.instruction}]`)
+    return parts.length ? `${m.name} — ${parts.join(" · ")}` : m.name
+  }
+
   const recordRows: Array<[string, string]> = [
     ["Chief complaint", dash(chiefComplaintOf(booking))],
+    ["Diagnosis", dash(chart?.diagnosis || booking.disease)],
+    ["Doctor Advice", dash(chart?.advice)],
+    ["Doctor Notes", dash(doctorRemarks)],
     ["Mode", dash(formatLabel(booking.mode || ""))],
     ["Channel", dash(formatLabel(booking.channel || ""))],
     ["Token", booking.tokenNumber != null ? `#${booking.tokenNumber}` : "—"],
@@ -405,17 +437,11 @@ export default function PatientVisitPage() {
     ["RBS", dash(vitalValues.rbs)],
     ["Allergies", dash(allergyText)],
     ["Pain", dash(painText)],
-    ["Remarks", dash(doctorRemarks)],
     [
       "Medicines",
       medicines.length
         ? medicines
-            .map((m, i) => {
-              const how = [m.amount, m.times?.length ? m.times.join(", ") : ""]
-                .filter(Boolean)
-                .join(" · ")
-              return `${i + 1}. ${m.name}${how ? ` — ${how}` : ""}`
-            })
+            .map((m, i) => `${i + 1}. ${formatMedicineLine(m)}`)
             .join("\n")
         : "—",
     ],
@@ -593,6 +619,111 @@ export default function PatientVisitPage() {
               />
             </div>
           </SectionCard>
+
+          {/* Prescribed Medicines (Rx) */}
+          {medicines.length > 0 ? (
+            <SectionCard title="Prescribed Medicines (Rx)" icon={IconNotes}>
+              <div className="space-y-3">
+                <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-700">
+                  <table className="w-full min-w-[500px] border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800/60 font-semibold text-neutral-700 dark:text-neutral-300">
+                        <th className="p-2.5">#</th>
+                        <th className="p-2.5">Medicine</th>
+                        <th className="p-2.5">Dosage &amp; Route</th>
+                        <th className="p-2.5">Frequency</th>
+                        <th className="p-2.5">Duration</th>
+                        <th className="p-2.5">Instructions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                      {medicines.map((m, idx) => (
+                        <tr key={idx} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30">
+                          <td className="p-2.5 text-neutral-400 font-medium">{idx + 1}</td>
+                          <td className="p-2.5 font-bold text-neutral-900 dark:text-white">
+                            {m.name}
+                            {m.strength ? (
+                              <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.2 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                                {m.strength}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="p-2.5 text-neutral-600 dark:text-neutral-300">
+                            {m.dose ? `${m.dose} ${m.doseUnit || "tablet"}` : m.amount || "1"} · {m.route || "Oral"}
+                          </td>
+                          <td className="p-2.5 font-medium text-neutral-700 dark:text-neutral-300">
+                            {m.frequency || (Array.isArray(m.times) ? m.times.join(", ") : "Once daily")}
+                          </td>
+                          <td className="p-2.5 text-neutral-600 dark:text-neutral-400">
+                            {m.duration ? `${m.duration} ${m.durationUnit || "days"}` : "5 days"}
+                          </td>
+                          <td className="p-2.5">
+                            {m.instruction ? (
+                              <span className="inline-block rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                {m.instruction}
+                              </span>
+                            ) : (
+                              <span className="text-neutral-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => void downloadPrint("prescription")}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3.5 text-xs font-semibold text-sky-900 shadow-xs hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-950/40 dark:text-sky-200 cursor-pointer"
+                  >
+                    <span>📄</span>
+                    <span>Download Prescription (PDF)</span>
+                  </button>
+                </div>
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {/* Doctor Advice & Clinical Notes */}
+          {chart?.advice || doctorRemarks || chart?.diagnosis ? (
+            <SectionCard title="Doctor Advice &amp; Clinical Notes" icon={IconStethoscope}>
+              <div className="space-y-3">
+                {chart?.diagnosis ? (
+                  <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">
+                      Diagnosis
+                    </p>
+                    <p className="mt-0.5 text-sm font-bold text-neutral-900 dark:text-white">
+                      {chart.diagnosis}
+                    </p>
+                  </div>
+                ) : null}
+
+                {chart?.advice ? (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      Doctor Advice for Patient
+                    </p>
+                    <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-800 dark:text-neutral-200">
+                      {chart.advice}
+                    </p>
+                  </div>
+                ) : null}
+
+                {doctorRemarks ? (
+                  <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                      Doctor Notes
+                    </p>
+                    <p className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-800 dark:text-neutral-200">
+                      {doctorRemarks}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </SectionCard>
+          ) : null}
 
           <SectionCard title="Visit record" icon={IconNotes}>
             <div className="grid gap-3 sm:grid-cols-2">

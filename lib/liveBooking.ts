@@ -52,6 +52,12 @@ export function patchBookingFields<T extends { id: string }>(
     incoming.documents !== undefined ? incoming.documents : undefined
   const disease = optionalStr(incoming.disease)
   const notes = optionalStr(incoming.notes)
+  const clinicalAssessment =
+    incoming.clinical_assessment !== undefined
+      ? incoming.clinical_assessment
+      : incoming.clinicalAssessment !== undefined
+        ? incoming.clinicalAssessment
+        : undefined
   const consultationType = optionalStr(
     incoming.consultation_type,
     incoming.consultationType,
@@ -92,6 +98,9 @@ export function patchBookingFields<T extends { id: string }>(
     ...(documents !== undefined ? { documents } : {}),
     ...(disease !== undefined ? { disease } : {}),
     ...(notes !== undefined ? { notes } : {}),
+    ...(clinicalAssessment !== undefined
+      ? { clinicalAssessment, clinical_assessment: clinicalAssessment }
+      : {}),
     ...(consultationType !== undefined
       ? { consultationType, consultation_type: consultationType }
       : {}),

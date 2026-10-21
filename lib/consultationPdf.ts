@@ -581,10 +581,10 @@ export async function buildConsultationPdf(booking: ConsultBooking): Promise<Uin
   paragraph(model.diagnosis || "—", GREEN)
   y -= 8
 
-  heading("Clinical Remarks and Notes:")
+  heading("Doctor Notes:")
   const remarkLines = model.remarks
     ? model.remarks.split("\n").flatMap((block) => wrap(block || " ", font, 9, width - 16))
-    : ["No clinical remarks recorded."]
+    : ["No doctor notes recorded."]
   const boxHeight = Math.max(48, remarkLines.length * 12 + 12)
   ensure(boxHeight + 8)
   const remarksTop = y

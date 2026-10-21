@@ -246,6 +246,29 @@ export default function MyBookings() {
                     <p className="truncate text-xs text-neutral-500">
                       {doctorLabel(b)}
                     </p>
+                    {/* Clinical data reflection badges */}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {Array.isArray(b.medicines) && b.medicines.length > 0 ? (
+                        <span className="rounded bg-teal-50 px-1.5 py-0.2 text-[10px] font-semibold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
+                          💊 {b.medicines.length} {b.medicines.length === 1 ? "med" : "meds"}
+                        </span>
+                      ) : null}
+                      {b.doctorRemarks || (b as any).doctor_remarks ? (
+                        <span className="rounded bg-blue-50 px-1.5 py-0.2 text-[10px] font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                          📋 Doctor notes
+                        </span>
+                      ) : null}
+                      {(b.clinicalAssessment as any)?.diagnosis || b.disease ? (
+                        <span className="rounded bg-sky-50 px-1.5 py-0.2 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                          🩺 {(b.clinicalAssessment as any)?.diagnosis || b.disease}
+                        </span>
+                      ) : null}
+                      {Array.isArray(b.documents) && b.documents.length > 0 ? (
+                        <span className="rounded bg-purple-50 px-1.5 py-0.2 text-[10px] font-semibold text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                          📄 {b.documents.length} docs
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                   <div
                     className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5"
@@ -331,12 +354,35 @@ export default function MyBookings() {
                         {formatWhen(b)}
                       </td>
                       <td className="px-3 py-3">
-                        <p className="font-medium">
+                        <p className="font-semibold text-slate-900 dark:text-white">
                           {b.practice?.name ?? "Practice"}
                         </p>
                         <p className="text-xs opacity-60">
                           {dash(b.practice?.specialty)}
                         </p>
+                        {/* Clinical data reflection badges */}
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {Array.isArray(b.medicines) && b.medicines.length > 0 ? (
+                            <span className="rounded bg-teal-50 px-1.5 py-0.2 text-[10px] font-semibold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
+                              💊 {b.medicines.length} {b.medicines.length === 1 ? "med" : "meds"}
+                            </span>
+                          ) : null}
+                          {b.doctorRemarks || (b as any).doctor_remarks ? (
+                            <span className="rounded bg-blue-50 px-1.5 py-0.2 text-[10px] font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                              📋 Notes
+                            </span>
+                          ) : null}
+                          {(b.clinicalAssessment as any)?.diagnosis || b.disease ? (
+                            <span className="rounded bg-sky-50 px-1.5 py-0.2 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                              🩺 {(b.clinicalAssessment as any)?.diagnosis || b.disease}
+                            </span>
+                          ) : null}
+                          {Array.isArray(b.documents) && b.documents.length > 0 ? (
+                            <span className="rounded bg-purple-50 px-1.5 py-0.2 text-[10px] font-semibold text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                              📄 {b.documents.length} docs
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <p className="font-medium">{doctorLabel(b)}</p>

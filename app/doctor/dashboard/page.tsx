@@ -79,14 +79,28 @@ export default function DoctorDashboard() {
                 >
                   Subscription
                 </Link>
+                <Link
+                  href="/doctor/medicine"
+                  className="dashboard-btn-secondary"
+                >
+                  Medicine
+                </Link>
               </>
             ) : (
-              <Link
-                href="/settings?tab=practice"
-                className="dashboard-btn-secondary"
-              >
-                My hours
-              </Link>
+              <>
+                <Link
+                  href="/settings?tab=practice"
+                  className="dashboard-btn-secondary"
+                >
+                  My hours
+                </Link>
+                <Link
+                  href="/doctor/medicine"
+                  className="dashboard-btn-secondary"
+                >
+                  Medicine
+                </Link>
+              </>
             )}
           </>
         }
