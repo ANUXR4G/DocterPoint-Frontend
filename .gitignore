@@ -29,6 +29,8 @@ backend/uploads/
 
 # Local / IDE junk
 .cursor/
+.agents/
+.codex/
 .expo/
 dump.rdb
 *.bak

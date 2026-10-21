@@ -83,6 +83,11 @@ const OPS_LINKS = [
     title: "Subscription",
     body: "Plans, trial, WhatsApp line",
   },
+  {
+    href: "/clinic/medicine",
+    title: "Medicine",
+    body: "Centralized catalog, generic names, routes & favourites",
+  },
 ] as const
 
 function ClinicOpsHub() {
@@ -317,7 +322,9 @@ function ClinicOpsHub() {
           (l) =>
             canManage ||
             l.href === "/clinic/queue" ||
-            l.href === "/doctor/patients",
+            l.href === "/doctor/patients" ||
+            l.href === "/clinic/medicine" ||
+            l.href === "/clinic/subscription",
         ).map((l) => (
           <Link
             key={l.href}
@@ -541,10 +548,31 @@ export default function ClinicDashboard() {
               {liveConnected ? "Live" : "Connecting…"}
             </span>
             <a href="#add-doctor" className="dashboard-btn-primary">
-              Add doctor
+              + Add doctor
             </a>
+            <Link href="/clinic/queue" className="dashboard-btn-secondary">
+              Queue
+            </Link>
+            <Link href="/clinic/appointments" className="dashboard-btn-secondary">
+              Appointments
+            </Link>
+            <Link href="/clinic/doctors" className="dashboard-btn-secondary">
+              Doctors
+            </Link>
+            <Link href="/doctor/patients" className="dashboard-btn-secondary">
+              Patients
+            </Link>
+            <Link href="/clinic/analytics" className="dashboard-btn-secondary">
+              Analytics
+            </Link>
+            <Link href="/clinic/payments" className="dashboard-btn-secondary">
+              Payments
+            </Link>
             <Link href={CLINIC_SUBSCRIPTION_HREF} className="dashboard-btn-secondary">
               Subscription
+            </Link>
+            <Link href="/clinic/medicine" className="dashboard-btn-secondary font-semibold text-sky-600 dark:text-sky-400">
+              Medicine
             </Link>
           </>
         }

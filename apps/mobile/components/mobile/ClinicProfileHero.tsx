@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
+import { useCareTheme } from "@/lib/careTheme";
 import { colors, shadows, space } from "@/lib/theme";
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export function ClinicProfileHero({ name, specialty, detail, photoUri, stats }: Props) {
+  const { theme } = useCareTheme();
   return (
     <View style={styles.wrap}>
       <View>
@@ -22,24 +24,26 @@ export function ClinicProfileHero({ name, specialty, detail, photoUri, stats }: 
           uri={photoUri}
           size={112}
           radius={32}
-          style={styles.avatar}
+          backgroundColor={theme.visit}
+          textColor={theme.visitInk}
+          style={[styles.avatar, { borderColor: theme.card }]}
         />
-        <View style={styles.verified}>
+        <View style={[styles.verified, { backgroundColor: theme.taskInk, borderColor: theme.card }]}>
           <SvgIcon name="checkDone" size={13} color={colors.white} />
         </View>
       </View>
-      <Text style={styles.name}>{name}</Text>
-      <Text style={styles.specialty}>{specialty}</Text>
-      {detail ? <Text style={styles.detail}>{detail}</Text> : null}
+      <Text style={[styles.name, { color: theme.ink }]}>{name}</Text>
+      <Text style={[styles.specialty, { color: theme.visitInk }]}>{specialty}</Text>
+      {detail ? <Text style={[styles.detail, { color: theme.muted }]}>{detail}</Text> : null}
 
       {stats.length ? (
         <View style={styles.stats}>
           {stats.map((s, i) => (
             <Fragment key={s.label}>
-              {i > 0 ? <View style={styles.divider} /> : null}
+              {i > 0 ? <View style={[styles.divider, { backgroundColor: theme.line }]} /> : null}
               <View style={styles.stat}>
-                <Text style={styles.statLabel}>{s.label}</Text>
-                <Text style={styles.statValue}>{s.value}</Text>
+                <Text style={[styles.statLabel, { color: theme.muted }]}>{s.label}</Text>
+                <Text style={[styles.statValue, { color: theme.ink }]}>{s.value}</Text>
               </View>
             </Fragment>
           ))}
@@ -57,7 +61,6 @@ const styles = StyleSheet.create({
   },
   avatar: {
     borderWidth: 4,
-    borderColor: colors.white,
   },
   verified: {
     position: "absolute",
@@ -66,9 +69,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 10,
-    backgroundColor: colors.success,
     borderWidth: 3,
-    borderColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
     ...shadows.soft,
@@ -77,7 +78,6 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
     fontSize: 22,
     fontWeight: "700",
-    color: colors.ink,
     letterSpacing: -0.5,
     textAlign: "center",
   },
@@ -85,13 +85,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 14,
     fontWeight: "600",
-    color: colors.brand,
     textAlign: "center",
   },
   detail: {
     marginTop: 4,
     fontSize: 13,
-    color: colors.inkSoft,
     textAlign: "center",
     paddingHorizontal: space.lg,
   },
@@ -107,19 +105,16 @@ const styles = StyleSheet.create({
   divider: {
     width: StyleSheet.hairlineWidth,
     height: 30,
-    backgroundColor: colors.lineStrong,
   },
   statLabel: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 1,
     textTransform: "uppercase",
-    color: colors.inkFaint,
   },
   statValue: {
     marginTop: 4,
     fontSize: 15,
     fontWeight: "700",
-    color: colors.ink,
   },
 });

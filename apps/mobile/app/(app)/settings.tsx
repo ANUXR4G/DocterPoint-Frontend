@@ -13,7 +13,7 @@ export default function SettingsScreen() {
 
   return (
     <Screen style={{ backgroundColor: theme.paper }}>
-      <ScreenHeader title="Settings" back alignLeft />
+      <ScreenHeader title="Theme" back alignLeft />
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -25,7 +25,7 @@ export default function SettingsScreen() {
         </Text>
         <ThemeSwatches />
         <Text style={[styles.note, { color: theme.muted }]}>
-          Peach, Mint, Sky, Lavender, and Slate stay on this phone.
+          Presets and a custom colour stay on this phone.
         </Text>
       </ScrollView>
     </Screen>

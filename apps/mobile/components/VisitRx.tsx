@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useCareTheme } from "@/lib/careTheme";
 import { chiefComplaintOf } from "@/lib/bookingStats";
-import { sharePrescriptionPdf } from "@/lib/sharePrescription";
+import { shareConsultationPdf, sharePrescriptionPdf } from "@/lib/sharePrescription";
 import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { colors, shadows, space } from "@/lib/theme";
 import type { BookingDetail } from "@/lib/types";
@@ -26,6 +26,8 @@ type Allergy = {
 type Assessment = {
   savedAt?: string | null;
   noKnownAllergies?: boolean;
+  diagnosis?: string | null;
+  advice?: string | null;
   vitals?: {
     breakfast?: boolean | null;
     recordedAt?: string | null;
@@ -123,12 +125,17 @@ export function VisitRx({ booking }: { booking: BookingDetail }) {
     ["RBS", withUnit(values.rbs, "mg/dl")],
   ];
 
-  async function download() {
+  async function download(kind: "consultation" | "prescription") {
     setDownloadError("");
     try {
-      await sharePrescriptionPdf(booking);
+      if (kind === "consultation") await shareConsultationPdf(booking);
+      else await sharePrescriptionPdf(booking);
     } catch {
-      setDownloadError("Could not download the prescription.");
+      setDownloadError(
+        kind === "consultation"
+          ? "Could not download the consultation."
+          : "Could not download the prescription.",
+      );
     }
   }
 
@@ -146,7 +153,9 @@ export function VisitRx({ booking }: { booking: BookingDetail }) {
       {recordOpen ? (
       <>
       <Field label="Chief complaint" value={dash(chiefComplaintOf(booking))} ink={theme.ink} muted={theme.muted} />
-      <Field label="Remarks" value={dash(booking.doctorRemarks)} ink={theme.ink} muted={theme.muted} />
+      <Field label="Diagnosis" value={dash(assessment?.diagnosis || booking.disease)} ink={theme.ink} muted={theme.muted} />
+      <Field label="Doctor Advice" value={dash(assessment?.advice)} ink={theme.ink} muted={theme.muted} />
+      <Field label="Doctor Notes" value={dash(booking.doctorRemarks)} ink={theme.ink} muted={theme.muted} />
       <Field label="Recorded" value={dash(recorded)} ink={theme.ink} muted={theme.muted} />
 
       <View
@@ -271,10 +280,17 @@ export function VisitRx({ booking }: { booking: BookingDetail }) {
 
       <Pressable
         accessibilityRole="button"
-        onPress={() => void download()}
+        onPress={() => void download("consultation")}
         style={[styles.download, { backgroundColor: theme.ink }]}
       >
-        <Text style={styles.downloadText}>Download prescription</Text>
+        <Text style={styles.downloadText}>Download consultation</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => void download("prescription")}
+        style={[styles.download, styles.downloadAlt, { borderColor: theme.ink }]}
+      >
+        <Text style={[styles.downloadAltText, { color: theme.ink }]}>Download prescription</Text>
       </Pressable>
       {downloadError ? <Text style={styles.error}>{downloadError}</Text> : null}
       </>
@@ -373,6 +389,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 16,
   },
+  downloadAlt: {
+    marginTop: space.sm,
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+  },
+  downloadAltText: { fontSize: 15, fontWeight: "700" },
   downloadText: { color: colors.white, fontSize: 15, fontWeight: "700" },
   error: { marginTop: space.sm, color: "#b91c1c", fontSize: 13 },
 });

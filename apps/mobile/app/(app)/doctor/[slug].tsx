@@ -1,24 +1,17 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgIcon } from "@/components/icons/SvgIcon";
-import { StarRating } from "@/components/StarRating";
 import { ClinicProfileHero } from "@/components/mobile/ClinicProfileHero";
 import { ScreenHeader } from "@/components/mobile/ScreenHeader";
-import {
-  Chip,
-  EmptyState,
-  ErrorText,
-  HintText,
-  Loading,
-  Screen,
-} from "@/components/ui";
+import { ErrorText, Loading, Screen } from "@/components/ui";
 import { VoiceField } from "@/components/VoiceField";
 import { api } from "@/lib/api";
 import { withDrTitle } from "@/lib/doctorName";
 import { practicePhotoUrl } from "@/lib/media";
 import { PressableScale } from "@/lib/motion";
+import { useCareTheme } from "@/lib/careTheme";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import { formatPracticeTime } from "@/lib/practiceTime";
 import type { PatientProfile, PracticeReview, ReviewSummary } from "@/lib/types";
@@ -60,11 +53,27 @@ type TokenSession = {
   sessionEnd?: string;
 };
 
+function bookingHorizonDays(value?: number | null) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1) return 90;
+  return Math.min(90, Math.floor(n));
+}
+
 function ymd(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** Staff doctors first. The clinic owner is included only with their own doctor profile. */
+function listedDoctors(members: PracticeDetail["members"] | undefined) {
+  const rows = members ?? [];
+  const staff = rows.filter((m) => m.role === "DOCTOR");
+  const owners = rows.filter(
+    (m) => m.role === "PRACTICE_OWNER" && Boolean(m.user?.doctor),
+  );
+  return [...staff, ...owners];
 }
 
 export default function PracticeBookScreen() {
@@ -77,6 +86,7 @@ export default function PracticeBookScreen() {
     : requestedProvider;
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
   const { width: windowWidth } = useWindowDimensions();
   const slotWidth = Math.floor((windowWidth - space.xl * 2 - 20) / 3);
   const [practice, setPractice] = useState<PracticeDetail | null>(null);
@@ -99,19 +109,19 @@ export default function PracticeBookScreen() {
   const [weekPage, setWeekPage] = useState(0);
 
   const doctors = useMemo(() => {
-    if (!practice?.members) return [];
-    const docs = practice.members.filter((m) => m.role === "DOCTOR");
-    const list = docs.length ? docs : practice.members;
-    return list.map((m) => ({
+    return listedDoctors(practice?.members).map((m) => ({
       id: m.userId,
       name: m.user?.name?.trim() || "Doctor",
+      horizon: bookingHorizonDays(m.user?.doctor?.appointmentValidityDays),
     }));
   }, [practice]);
+  const horizonDays =
+    doctors.find((d) => d.id === providerId)?.horizon ?? 90;
 
   const location = practice?.locations?.[0];
 
   const days = useMemo(() => {
-    return Array.from({ length: 14 }, (_, i) => {
+    return Array.from({ length: horizonDays }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() + i);
       return {
@@ -121,7 +131,8 @@ export default function PracticeBookScreen() {
         month: d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
       };
     });
-  }, []);
+  }, [horizonDays]);
+  const lastWeekPage = Math.max(0, Math.ceil(days.length / 7) - 1);
   const visibleDays = days.slice(weekPage * 7, weekPage * 7 + 7);
   const monthLabel =
     (visibleDays.find((d) => d.value === date) ?? visibleDays[0])?.month ?? "";
@@ -148,8 +159,7 @@ export default function PracticeBookScreen() {
       }
       const p = pracRes.data;
       setPractice(p);
-      const docs = (p.members || []).filter((m) => m.role === "DOCTOR");
-      const list = docs.length ? docs : p.members || [];
+      const list = listedDoctors(p.members);
       const preferred = list.find((m) => m.userId === requestedId) ?? list[0];
       if (preferred) setProviderId(preferred.userId);
 
@@ -256,7 +266,7 @@ export default function PracticeBookScreen() {
   if (loading) return <Loading />;
   if (!practice) {
     return (
-      <Screen>
+      <Screen style={{ backgroundColor: theme.paper }}>
         <ScreenHeader title="Appointment" back />
         <View style={styles.content}>
           <ErrorText text={error || "Not found"} />
@@ -267,16 +277,10 @@ export default function PracticeBookScreen() {
 
   const primaryDoctor = doctors.find((d) => d.id === providerId)?.name ?? doctors[0]?.name;
   const heroName = withDrTitle(primaryDoctor) || practice.name;
-  const reviewCount = practice.reviewSummary?.count ?? 0;
-  const reviewAverage = practice.reviewSummary?.average;
   const stats = [
     practice.consultationFee != null
       ? { label: "Fee", value: `₹${practice.consultationFee}` }
       : null,
-    reviewCount > 0 && reviewAverage != null
-      ? { label: "Rating", value: reviewAverage.toFixed(1) }
-      : null,
-    reviewCount > 0 ? { label: "Reviews", value: String(reviewCount) } : null,
   ].filter(Boolean) as { label: string; value: string }[];
   const cannotBook =
     booking ||
@@ -285,7 +289,7 @@ export default function PracticeBookScreen() {
     (mode === "TOKEN_BASED" && !tokens.length);
 
   return (
-    <Screen style={styles.screen}>
+    <Screen style={[styles.screen, { backgroundColor: theme.paper }]}>
       <ScreenHeader title="Appointment" back />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: 150 + insets.bottom }]}
@@ -304,17 +308,29 @@ export default function PracticeBookScreen() {
 
         {doctors.length > 1 ? (
           <View style={styles.block}>
-            <Text style={styles.blockTitle}>Doctor</Text>
+            <Text style={[styles.blockTitle, { color: theme.ink }]}>Doctor</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.row}>
-                {doctors.map((d) => (
-                  <Chip
-                    key={d.id}
-                    label={withDrTitle(d.name) || d.name}
-                    active={providerId === d.id}
-                    onPress={() => setProviderId(d.id)}
-                  />
-                ))}
+                {doctors.map((d) => {
+                  const active = providerId === d.id;
+                  const label = withDrTitle(d.name) || d.name;
+                  return (
+                    <Pressable
+                      key={d.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => setProviderId(d.id)}
+                      style={[
+                        styles.choice,
+                        { backgroundColor: active ? theme.ink : theme.card },
+                      ]}
+                    >
+                      <Text style={[styles.choiceText, { color: active ? colors.white : theme.ink }]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             </ScrollView>
           </View>
@@ -322,25 +338,30 @@ export default function PracticeBookScreen() {
 
         <View style={styles.block}>
           <View style={styles.monthRow}>
-            <Text style={styles.blockTitle}>{monthLabel}</Text>
+            <View>
+              <Text style={[styles.blockTitle, { color: theme.ink }]}>{monthLabel}</Text>
+              <Text style={[styles.empty, { color: theme.muted }]}>
+                You can book any open day in the next {horizonDays} days.
+              </Text>
+            </View>
             <View style={styles.row}>
               <PressableScale
-                style={[styles.arrow, weekPage === 0 && styles.arrowOff]}
+                style={[styles.arrow, { backgroundColor: theme.card }, weekPage === 0 && styles.arrowOff]}
                 disabled={weekPage === 0}
-                onPress={() => showWeek(0)}
+                onPress={() => showWeek(Math.max(0, weekPage - 1))}
                 accessibilityRole="button"
                 accessibilityLabel="Previous week"
               >
-                <SvgIcon name="chevronLeft" size={16} color={colors.inkSoft} />
+                <SvgIcon name="chevronLeft" size={16} color={theme.ink} />
               </PressableScale>
               <PressableScale
-                style={[styles.arrow, weekPage === 1 && styles.arrowOff]}
-                disabled={weekPage === 1}
-                onPress={() => showWeek(1)}
+                style={[styles.arrow, { backgroundColor: theme.card }, weekPage >= lastWeekPage && styles.arrowOff]}
+                disabled={weekPage >= lastWeekPage}
+                onPress={() => showWeek(Math.min(lastWeekPage, weekPage + 1))}
                 accessibilityRole="button"
                 accessibilityLabel="Next week"
               >
-                <SvgIcon name="chevronRight" size={16} color={colors.inkSoft} />
+                <SvgIcon name="chevronRight" size={16} color={theme.ink} />
               </PressableScale>
             </View>
           </View>
@@ -351,14 +372,17 @@ export default function PracticeBookScreen() {
                 <PressableScale
                   key={d.value}
                   wrapStyle={styles.grow}
-                  style={[styles.day, active && styles.dayActive]}
+                  style={[
+                    styles.day,
+                    { backgroundColor: active ? theme.ink : theme.card },
+                  ]}
                   onPress={() => setDate(d.value)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={`${d.dow} ${d.day}`}
                 >
-                  <Text style={[styles.dayDow, active && styles.dayTextActive]}>{d.dow}</Text>
-                  <Text style={[styles.dayNum, active && styles.dayTextActive]}>{d.day}</Text>
+                  <Text style={[styles.dayDow, { color: active ? colors.white : theme.muted }]}>{d.dow}</Text>
+                  <Text style={[styles.dayNum, { color: active ? colors.white : theme.ink }]}>{d.day}</Text>
                 </PressableScale>
               );
             })}
@@ -367,9 +391,9 @@ export default function PracticeBookScreen() {
 
         {mode === "TIME_BASED" ? (
           <View style={styles.block}>
-            <Text style={styles.blockTitle}>Available slots</Text>
+            <Text style={[styles.blockTitle, { color: theme.ink }]}>Available slots</Text>
             {slots.length === 0 ? (
-              <EmptyState text="No open slots this day." />
+              <Text style={[styles.empty, { color: theme.muted }]}>No open slots this day.</Text>
             ) : (
               <View style={styles.slots}>
                 {slots.map((s) => {
@@ -380,7 +404,10 @@ export default function PracticeBookScreen() {
                     <PressableScale
                       key={start}
                       wrapStyle={{ width: slotWidth }}
-                      style={[styles.slot, active && styles.slotActive]}
+                      style={[
+                        styles.slot,
+                        { backgroundColor: active ? theme.ink : theme.card },
+                      ]}
                       onPress={() => {
                         setMode("TIME_BASED");
                         setSelectedSlot(start);
@@ -388,7 +415,7 @@ export default function PracticeBookScreen() {
                       accessibilityRole="button"
                       accessibilityState={{ selected: active }}
                     >
-                      <Text style={[styles.slotText, active && styles.slotTextActive]}>
+                      <Text style={[styles.slotText, { color: active ? colors.white : theme.ink }]}>
                         {formatPracticeTime(start)}
                       </Text>
                     </PressableScale>
@@ -399,17 +426,17 @@ export default function PracticeBookScreen() {
           </View>
         ) : mode === "TOKEN_BASED" ? (
           <View style={styles.block}>
-            <Text style={styles.blockTitle}>Token for the day</Text>
-            <View style={styles.tokenCard}>
-              <View style={styles.tokenIcon}>
-                <SvgIcon name="ticket" size={20} color={colors.brand} />
+            <Text style={[styles.blockTitle, { color: theme.ink }]}>Token for the day</Text>
+            <View style={[styles.tokenCard, { backgroundColor: theme.card }]}>
+              <View style={[styles.tokenIcon, { backgroundColor: theme.visit }]}>
+                <SvgIcon name="ticket" size={20} color={theme.visitInk} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.tokenTitle}>
+                <Text style={[styles.tokenTitle, { color: theme.ink }]}>
                   {tokens.length ? `Next token #${tokens[0]?.nextToken ?? "—"}` : "No tokens left"}
                 </Text>
                 {tokens[0] ? (
-                  <Text style={styles.meta}>
+                  <Text style={[styles.meta, { color: theme.muted }]}>
                     {tokens[0].sessionStart}–{tokens[0].sessionEnd}
                   </Text>
                 ) : null}
@@ -418,24 +445,30 @@ export default function PracticeBookScreen() {
           </View>
         ) : (
           <View style={styles.block}>
-            <EmptyState text="No bookings open on this day. Try another date." />
+            <Text style={[styles.empty, { color: theme.muted }]}>
+              No bookings open on this day. Try another date.
+            </Text>
           </View>
         )}
 
         <View style={styles.block}>
           <VoiceField
-            label="Reason for visit"
+            label="Chief complaint *"
             value={disease}
             onChangeText={setDisease}
             placeholder="Describe symptoms, how long, and what you need help with"
             micAriaLabel="Describe your problem by voice"
+            style={{ backgroundColor: colors.white }}
+            micBackground={colors.white}
           />
-          <HintText text="Required for the doctor. AI turns this into a short visit brief in their remarks." />
+          <Text style={[styles.hint, { color: theme.muted }]}>
+            Required for the doctor.
+          </Text>
         </View>
 
-        <View style={styles.aboutCard}>
-          <Text style={styles.aboutTitle}>About the clinic</Text>
-          <Text style={styles.aboutBody}>
+        <View style={[styles.aboutCard, { backgroundColor: theme.card }]}>
+          <Text style={[styles.aboutTitle, { color: theme.ink }]}>About the clinic</Text>
+          <Text style={[styles.aboutBody, { color: theme.muted }]}>
             {location?.address
               ? `${practice.name} at ${location.address}, ${location.city}.`
               : practice.name}
@@ -444,29 +477,28 @@ export default function PracticeBookScreen() {
 
         {practice.reviewsEnabled !== false && (practice.reviews?.length ?? 0) > 0 ? (
           <View style={styles.block}>
-            <View style={styles.monthRow}>
-              <Text style={styles.blockTitle}>Patient reviews</Text>
-              {reviewCount > 0 ? (
-                <StarRating average={practice.reviewSummary?.average ?? null} count={reviewCount} compact />
-              ) : null}
-            </View>
+            <Text style={[styles.blockTitle, { color: theme.ink }]}>Patient reviews</Text>
             {(practice.reviews ?? []).slice(0, 5).map((r) => (
-              <View key={r.id} style={styles.reviewCard}>
-                <Text style={styles.reviewStars}>
-                  {"★".repeat(r.rating)} <Text style={styles.reviewAuthor}>{r.authorName}</Text>
-                </Text>
-                {r.body ? <Text style={styles.reviewBody}>{r.body}</Text> : null}
+              <View key={r.id} style={[styles.reviewCard, { backgroundColor: theme.card }]}>
+                <Text style={[styles.reviewAuthor, { color: theme.ink }]}>{r.authorName}</Text>
+                {r.body ? <Text style={[styles.reviewBody, { color: theme.muted }]}>{r.body}</Text> : null}
               </View>
             ))}
           </View>
         ) : null}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + space.md, backgroundColor: theme.paper }]}>
         <ErrorText text={error} />
-        {message ? <HintText text={message} /> : null}
+        {message ? (
+          <Text style={[styles.saved, { color: theme.taskInk }]}>{message}</Text>
+        ) : null}
         <PressableScale
-          style={styles.bookCta}
+          style={[
+            styles.bookCta,
+            { backgroundColor: theme.ink },
+            cannotBook && styles.bookCtaOff,
+          ]}
           onPress={book}
           disabled={cannotBook}
           accessibilityRole="button"
@@ -487,10 +519,18 @@ const styles = StyleSheet.create({
   blockTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: colors.ink,
     letterSpacing: -0.3,
     marginBottom: space.md,
   },
+  choice: {
+    borderRadius: radii.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  choiceText: { fontSize: 14, fontWeight: "600" },
+  empty: { fontSize: 14, lineHeight: 20 },
+  hint: { marginTop: -4, fontSize: 13, lineHeight: 18 },
+  saved: { marginBottom: space.sm, fontSize: 14, fontWeight: "600" },
   row: { flexDirection: "row", gap: space.sm },
   monthRow: {
     flexDirection: "row",
@@ -501,7 +541,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: space.md,
@@ -514,76 +553,58 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderRadius: radii.pill,
-    backgroundColor: colors.white,
-  },
-  dayActive: {
-    backgroundColor: colors.brand,
-    paddingVertical: 18,
-    marginVertical: -6,
-    ...shadows.brand,
   },
   dayDow: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.4,
-    color: colors.inkFaint,
   },
   dayNum: {
     marginTop: 4,
     fontSize: 16,
     fontWeight: "700",
-    color: colors.ink,
   },
-  dayTextActive: { color: colors.white },
   slots: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   slot: {
     alignItems: "center",
     paddingVertical: 14,
     borderRadius: radii.pill,
-    backgroundColor: colors.white,
     ...shadows.soft,
   },
-  slotActive: { backgroundColor: colors.brand, ...shadows.brand },
-  slotText: { fontSize: 13, fontWeight: "700", color: colors.ink },
-  slotTextActive: { color: colors.white },
+  slotText: { fontSize: 13, fontWeight: "700" },
   tokenCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
+    borderRadius: 26,
     padding: space.lg,
     ...shadows.soft,
   },
   tokenIcon: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.brandLight,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  tokenTitle: { fontWeight: "700", fontSize: 16, color: colors.ink },
-  meta: { marginTop: 3, color: colors.inkSoft, fontSize: 13 },
+  tokenTitle: { fontWeight: "700", fontSize: 16 },
+  meta: { marginTop: 3, fontSize: 13 },
   aboutCard: {
     marginTop: space.xl,
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
+    borderRadius: 26,
     padding: space.lg,
     ...shadows.soft,
   },
-  aboutTitle: { fontSize: 15, fontWeight: "700", color: colors.ink, marginBottom: 6 },
-  aboutBody: { fontSize: 14, lineHeight: 21, color: colors.inkSoft },
+  aboutTitle: { fontSize: 15, fontWeight: "700", marginBottom: 6 },
+  aboutBody: { fontSize: 14, lineHeight: 21 },
   reviewCard: {
-    backgroundColor: colors.white,
     padding: space.lg,
     marginBottom: space.sm,
-    borderRadius: radii.lg,
+    borderRadius: 20,
     ...shadows.soft,
   },
-  reviewStars: { fontSize: 14, color: "#b45309", fontWeight: "700" },
-  reviewAuthor: { color: colors.ink, fontWeight: "600" },
-  reviewBody: { marginTop: 6, fontSize: 13, lineHeight: 19, color: colors.inkSoft },
+  reviewAuthor: { fontWeight: "600" },
+  reviewBody: { marginTop: 6, fontSize: 13, lineHeight: 19 },
   footer: {
     position: "absolute",
     left: 0,
@@ -591,17 +612,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: space.xl,
     paddingTop: space.md,
-    backgroundColor: colors.paper,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    ...shadows.card,
   },
   bookCta: {
-    backgroundColor: colors.brand,
     borderRadius: radii.pill,
-    paddingVertical: 18,
+    paddingVertical: 16,
     alignItems: "center",
-    ...shadows.brand,
   },
+  bookCtaOff: { opacity: 0.4 },
   bookCtaText: { color: colors.white, fontSize: 16, fontWeight: "700" },
 });

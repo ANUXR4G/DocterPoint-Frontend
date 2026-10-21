@@ -288,7 +288,7 @@ export function StatusBadge({ status }: { status: string }) {
       : s === "CANCELED" || s === "CANCELLED"
         ? colors.danger
         : s === "NO_SHOW"
-          ? "#7C3AED"
+          ? colors.noShowInk
           : s === "IN_PROGRESS"
             ? "#b45309"
             : s === "WAITING" || s === "CHECKED_IN"
@@ -306,7 +306,7 @@ export function StatusBadge({ status }: { status: string }) {
       : s === "CANCELED" || s === "CANCELLED"
         ? colors.roseLight
         : s === "NO_SHOW"
-          ? "#F3E8FF"
+          ? colors.noShowBg
           : s === "IN_PROGRESS"
             ? colors.amberLight
             : s === "WAITING" || s === "CHECKED_IN"

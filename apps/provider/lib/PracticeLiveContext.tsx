@@ -19,7 +19,11 @@ import {
   takeBootstrapSeed,
   waitForBootstrapSeed,
 } from "@/lib/dataCache";
-import { applyLiveBookingEvent, patchBookingFields } from "@/lib/liveBooking";
+import {
+  applyLiveBookingEvent,
+  patchBookingFields,
+  patchPatientsFromBooking,
+} from "@/lib/liveBooking";
 import { selfProviderScope, usePractice } from "@/lib/practiceContext";
 import {
   fetchPracticeBookings,
@@ -321,6 +325,11 @@ export function PracticeLiveProvider({ children }: { children: ReactNode }) {
         }
         if (practiceId) setCachedBookings(practiceId, filtered);
         return filtered;
+      });
+      setPatients((prev) => {
+        const next = patchPatientsFromBooking(prev, incoming);
+        if (practiceId && next !== prev) setCachedPatients(practiceId, next);
+        return next;
       });
     },
     scheduleSoftRefresh,

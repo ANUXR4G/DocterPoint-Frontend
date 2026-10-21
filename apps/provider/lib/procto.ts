@@ -117,7 +117,7 @@ export async function addGeneralDocument(
   });
 }
 
-/** Finished visit: clinic log and Rx summary on the patient's WhatsApp. */
+/** Send to customer: saved prescription on an open visit, clinic log after finish. */
 export async function sendClinicLogWhatsApp(bookingId: string) {
   return api(`/procto/bookings/${bookingId}/send-clinic-log`, {
     method: "POST",
@@ -156,6 +156,7 @@ export async function updateVisit(
   bookingId: string,
   body: {
     doctorRemarks?: string;
+    disease?: string | null;
     medicines?: Array<{ name: string; amount?: string; times?: string[] }>;
     documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
     clinicalAssessment?: unknown;

@@ -38,9 +38,52 @@ export function PatientDashboard({ bookings, loading }: Props) {
   const clinics = useMemo(() => getClinicCount(bookings), [bookings]);
   const prescription = useMemo(() => latestPrescription(bookings), [bookings]);
   const latest = useMemo(() => sortBookingsByWhen(bookings, "desc")[0], [bookings]);
+  const latestConsultation = useMemo(() => {
+    const sorted = sortBookingsByWhen(bookings, "desc");
+    return (
+      sorted.find((b) => {
+        const chart = b.clinicalAssessment as Record<string, unknown> | null | undefined;
+        const vitals = chart?.vitals as { values?: Record<string, number | null> } | undefined;
+        const hasVitals =
+          vitals?.values &&
+          Object.values(vitals.values).some((v) => v != null && Number.isFinite(Number(v)));
+        return (
+          Boolean(b.doctorRemarks?.trim()) ||
+          Boolean(typeof chart?.diagnosis === "string" && chart.diagnosis.trim()) ||
+          Boolean(typeof chart?.advice === "string" && chart.advice.trim()) ||
+          hasVitals
+        );
+      }) ?? null
+    );
+  }, [bookings]);
   const nextVisit = upcoming[0];
   const later = upcoming.slice(1, 4);
   const placeholder = loading && bookings.length === 0;
+
+  const consultChart = latestConsultation?.clinicalAssessment as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  const consultDiagnosis =
+    (typeof consultChart?.diagnosis === "string" && consultChart.diagnosis.trim()) ||
+    latestConsultation?.disease?.trim() ||
+    "";
+  const consultAdvice =
+    (typeof consultChart?.advice === "string" && consultChart.advice.trim()) || "";
+  const consultNotes = latestConsultation?.doctorRemarks?.trim() || "";
+  const consultVitals =
+    ((consultChart?.vitals as { values?: Record<string, number | null> } | undefined)
+      ?.values) ?? {};
+
+  const vitalBits: Array<[string, string]> = [];
+  if (consultVitals.bp_sys != null || consultVitals.bp_dia != null) {
+    vitalBits.push(["BP", `${consultVitals.bp_sys ?? "—"}/${consultVitals.bp_dia ?? "—"}`]);
+  }
+  if (consultVitals.pr != null) vitalBits.push(["Pulse", `${consultVitals.pr} bpm`]);
+  if (consultVitals.spo2 != null) vitalBits.push(["SpO2", `${consultVitals.spo2}%`]);
+  if (consultVitals.rbs != null) vitalBits.push(["RBS", `${consultVitals.rbs} mg/dL`]);
+  if (consultVitals.temp != null) vitalBits.push(["Temp", `${consultVitals.temp}°C`]);
+  if (consultVitals.wt != null) vitalBits.push(["Weight", `${consultVitals.wt} kg`]);
 
   const openVisit = (id: string) => router.push(`/(app)/bookings/${id}` as Href);
   const openVisits = () => router.push("/(app)/appointments");
@@ -182,6 +225,66 @@ export function PatientDashboard({ bookings, loading }: Props) {
         </AnimatedView>
       ) : null}
 
+      {latestConsultation ? (
+        <AnimatedView from="up" delay={180} style={styles.section}>
+          <SectionHead
+            title="Clinical notes & advice"
+            action="View visit"
+            onAction={() => openVisit(latestConsultation.id)}
+          />
+          <PressableScale
+            style={styles.card}
+            onPress={() => openVisit(latestConsultation.id)}
+            accessibilityRole="button"
+            accessibilityLabel="Open the visit with clinical notes"
+          >
+            <Text style={styles.medFrom} numberOfLines={1}>
+              {doctorLine(latestConsultation)} ·{" "}
+              {latestConsultation.practice?.name || "Clinic"} ·{" "}
+              {bookingWhen(latestConsultation)}
+            </Text>
+
+            {consultDiagnosis ? (
+              <View style={styles.consultRow}>
+                <Text style={styles.consultLabel}>Diagnosis</Text>
+                <Text style={styles.consultText} numberOfLines={2}>
+                  {consultDiagnosis}
+                </Text>
+              </View>
+            ) : null}
+
+            {consultAdvice ? (
+              <View style={styles.consultRow}>
+                <Text style={styles.consultLabel}>Doctor's Advice</Text>
+                <Text style={styles.consultText} numberOfLines={3}>
+                  {consultAdvice}
+                </Text>
+              </View>
+            ) : null}
+
+            {consultNotes ? (
+              <View style={styles.consultRow}>
+                <Text style={styles.consultLabel}>Doctor Notes</Text>
+                <Text style={styles.consultText} numberOfLines={3}>
+                  {consultNotes}
+                </Text>
+              </View>
+            ) : null}
+
+            {vitalBits.length ? (
+              <View style={styles.vitalsRow}>
+                {vitalBits.map(([lbl, val]) => (
+                  <View key={lbl} style={styles.vitalPill}>
+                    <Text style={styles.vitalPillLabel}>{lbl}</Text>
+                    <Text style={styles.vitalPillValue}>{val}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </PressableScale>
+        </AnimatedView>
+      ) : null}
+
       {prescription ? (
         <AnimatedView from="up" delay={200} style={styles.section}>
           <SectionHead
@@ -201,26 +304,44 @@ export function PatientDashboard({ bookings, loading }: Props) {
               {bookingWhen(prescription.booking)}
             </Text>
             <View style={styles.medList}>
-              {prescription.medicines.slice(0, 4).map((m, i) => (
-                <View key={`${m.name}-${i}`} style={styles.medRow}>
-                  <View style={styles.medDot}>
-                    <SvgIcon name="medkitOutline" size={14} color={colors.brand} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.medName} numberOfLines={1}>
-                      {m.name.trim()}
-                      {m.amount?.trim() ? (
-                        <Text style={styles.medAmount}> · {m.amount.trim()}</Text>
-                      ) : null}
-                    </Text>
-                    {m.times?.length ? (
-                      <Text style={styles.medTimes} numberOfLines={1}>
-                        {m.times.join(" · ")}
+              {prescription.medicines.slice(0, 4).map((m, i) => {
+                const doseText = m.dose?.trim()
+                  ? `${m.dose.trim()}${m.doseUnit ? ` ${m.doseUnit.trim()}` : ""}`
+                  : m.amount?.trim() || "";
+                const freqText =
+                  m.frequency?.trim() || (m.times?.length ? m.times.join(" · ") : "");
+                const durationText = m.duration?.trim()
+                  ? `${m.duration.trim()} ${m.durationUnit?.trim() || "days"}`
+                  : "";
+                const timingLine = [freqText, durationText].filter(Boolean).join(" · ");
+
+                return (
+                  <View key={`${m.name}-${i}`} style={styles.medRow}>
+                    <View style={styles.medDot}>
+                      <SvgIcon name="medkitOutline" size={14} color={colors.brand} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.medName} numberOfLines={1}>
+                        {m.name.trim()}
+                        {m.strength?.trim() ? (
+                          <Text style={styles.medStrength}> ({m.strength.trim()})</Text>
+                        ) : null}
+                        {doseText ? <Text style={styles.medAmount}> · {doseText}</Text> : null}
                       </Text>
-                    ) : null}
+                      {timingLine ? (
+                        <Text style={styles.medTimes} numberOfLines={1}>
+                          {timingLine}
+                        </Text>
+                      ) : null}
+                      {m.instruction?.trim() ? (
+                        <Text style={styles.medInstruction} numberOfLines={1}>
+                          📌 {m.instruction.trim()}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
             {prescription.medicines.length > 4 ? (
               <Text style={styles.medMore}>
@@ -339,6 +460,11 @@ function VisitRow({ booking, onPress }: { booking: ProctoBooking; onPress: () =>
   const displayStatus = effectiveBookingStatus(booking);
   const tone = bookingStatusTone(displayStatus);
   const clinic = booking.practice?.name || "Clinic visit";
+  const medCount = Array.isArray(booking.medicines)
+    ? booking.medicines.filter((m) => m?.name?.trim()).length
+    : 0;
+  const hasNotes = Boolean(booking.doctorRemarks?.trim());
+
   return (
     <PressableScale
       style={[styles.visit, { borderLeftColor: tone.fg, borderLeftWidth: 4 }]}
@@ -355,6 +481,8 @@ function VisitRow({ booking, onPress }: { booking: ProctoBooking; onPress: () =>
         </Text>
         <Text style={styles.visitMeta} numberOfLines={1}>
           {visitDayTime(booking)} · {doctorLine(booking)}
+          {medCount > 0 ? ` · 💊 ${medCount} meds` : ""}
+          {hasNotes ? " · 📋 Notes" : ""}
         </Text>
       </View>
       <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
@@ -633,5 +761,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: colors.brand,
+  },
+  medStrength: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.brand,
+  },
+  medInstruction: {
+    marginTop: 2,
+    fontSize: 11,
+    color: colors.rose,
+    fontWeight: "500",
+  },
+  consultRow: {
+    marginTop: space.sm,
+    paddingTop: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  consultLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: colors.brand,
+    marginBottom: 2,
+  },
+  consultText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.ink,
+  },
+  vitalsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.xs,
+    marginTop: space.md,
+  },
+  vitalPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.sky100,
+    borderRadius: radii.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  vitalPillLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.inkSoft,
+    textTransform: "uppercase",
+  },
+  vitalPillValue: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.ink,
   },
 });

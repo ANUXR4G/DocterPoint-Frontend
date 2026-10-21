@@ -238,8 +238,9 @@ export default function QueueScreen() {
               </View>
               <Text style={styles.meta}>
                 {whenLabel(b)} · {b.mode === "TOKEN_BASED" ? "Token" : "Time"}
-                {b.disease ? ` · ${b.disease}` : ""}
                 {b.provider?.name ? ` · ${withDrTitle(b.provider.name)}` : ""}
+                {"\n"}
+                {b.disease?.trim() || "No chief complaint"}
               </Text>
               {b.notes ? <Text style={styles.notes}>{b.notes}</Text> : null}
               <View style={styles.actions}>

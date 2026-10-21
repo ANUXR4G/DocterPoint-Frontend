@@ -1,7 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { GlucoBotFab } from "@/components/GlucoBotFab";
 import {
   FloatingDock,
   type FloatingDockProps,
@@ -38,7 +37,7 @@ export default function AppLayout() {
   }
 
   if (!authed) {
-    return <Redirect href="/(auth)/login" />;
+    return <Redirect href="/(auth)/welcome" />;
   }
 
   return (
@@ -109,7 +108,7 @@ export default function AppLayout() {
           name="settings"
           options={{
             href: null,
-            title: "Settings",
+            title: "Theme",
             headerShown: false,
           }}
         />
@@ -133,6 +132,7 @@ export default function AppLayout() {
           options={{
             href: null,
             title: "Visit details",
+            headerShown: false,
           }}
         />
         <Tabs.Screen
@@ -143,7 +143,6 @@ export default function AppLayout() {
           }}
         />
       </Tabs>
-      <GlucoBotFab />
       </PatientLiveProvider>
     </View>
   );

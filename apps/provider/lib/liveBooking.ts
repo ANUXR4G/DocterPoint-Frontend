@@ -14,6 +14,17 @@ function num(v: unknown): number | null | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function optionalStr(
+  ...candidates: unknown[]
+): string | null | undefined {
+  for (const v of candidates) {
+    if (v === undefined) continue;
+    if (v === null) return null;
+    return String(v);
+  }
+  return undefined;
+}
+
 export function patchBookingFields<T extends { id: string }>(
   existing: T,
   incoming: LiveBookingPayload,
@@ -31,6 +42,36 @@ export function patchBookingFields<T extends { id: string }>(
     str(incoming.patient_phone) ?? str(incoming.patientPhone);
   const mode = str(incoming.mode);
   const channel = str(incoming.channel);
+  const consultationType = optionalStr(
+    incoming.consultation_type,
+    incoming.consultationType,
+  );
+  const doctorRemarks = optionalStr(
+    incoming.doctor_remarks,
+    incoming.doctorRemarks,
+  );
+  const medicines =
+    incoming.medicines !== undefined ? incoming.medicines : undefined;
+  const documents =
+    incoming.documents !== undefined ? incoming.documents : undefined;
+  const disease = optionalStr(incoming.disease);
+  const notes = optionalStr(incoming.notes);
+  const clinicalAssessment =
+    incoming.clinical_assessment !== undefined
+      ? incoming.clinical_assessment
+      : incoming.clinicalAssessment !== undefined
+        ? incoming.clinicalAssessment
+        : undefined;
+  const paymentStatus = optionalStr(
+    incoming.payment_status,
+    incoming.paymentStatus,
+  );
+  const paymentAmount =
+    incoming.payment_amount !== undefined
+      ? incoming.payment_amount
+      : incoming.paymentAmount;
+  const paidAt = optionalStr(incoming.paid_at, incoming.paidAt);
+  const arrivedAt = optionalStr(incoming.arrived_at, incoming.arrivedAt);
 
   return {
     ...existing,
@@ -52,6 +93,27 @@ export function patchBookingFields<T extends { id: string }>(
       : {}),
     ...(mode ? { mode } : {}),
     ...(channel ? { channel } : {}),
+    ...(consultationType !== undefined
+      ? { consultationType, consultation_type: consultationType }
+      : {}),
+    ...(doctorRemarks !== undefined
+      ? { doctorRemarks, doctor_remarks: doctorRemarks }
+      : {}),
+    ...(medicines !== undefined ? { medicines } : {}),
+    ...(documents !== undefined ? { documents } : {}),
+    ...(disease !== undefined ? { disease } : {}),
+    ...(notes !== undefined ? { notes } : {}),
+    ...(clinicalAssessment !== undefined
+      ? { clinicalAssessment, clinical_assessment: clinicalAssessment }
+      : {}),
+    ...(arrivedAt !== undefined ? { arrivedAt, arrived_at: arrivedAt } : {}),
+    ...(paymentStatus !== undefined
+      ? { paymentStatus, payment_status: paymentStatus }
+      : {}),
+    ...(paymentAmount !== undefined
+      ? { paymentAmount, payment_amount: paymentAmount }
+      : {}),
+    ...(paidAt !== undefined ? { paidAt, paid_at: paidAt } : {}),
   } as T;
 }
 
@@ -74,4 +136,61 @@ export function applyLiveBookingEvent<T extends { id: string }>(
   const next = [...prev];
   next[idx] = patchBookingFields(next[idx]!, incoming);
   return { next, needsRefresh: false };
+}
+
+type PatientRowWithVisits = {
+  phone: string;
+  patientId?: string | null;
+  lastStatus?: string | null;
+  lastVisitAt?: string | Date | null;
+  recentBookings?: Array<{ id: string } & Record<string, unknown>>;
+};
+
+/**
+ * Keep clinic Patients roster in sync with live booking patches
+ * (remarks / status / meds), not only the queue list.
+ */
+export function patchPatientsFromBooking<T extends PatientRowWithVisits>(
+  patients: T[],
+  incoming: LiveBookingPayload | undefined,
+): T[] {
+  if (!incoming?.id) return patients;
+  const id = String(incoming.id);
+  const phone =
+    str(incoming.patient_phone) ?? str(incoming.patientPhone) ?? undefined;
+  const patientId =
+    str(incoming.patient_id) ?? str(incoming.patientId) ?? undefined;
+
+  let touched = false;
+  const next = patients.map((patient) => {
+    const recent = patient.recentBookings;
+    if (!Array.isArray(recent) || !recent.length) return patient;
+    const idx = recent.findIndex((b) => b.id === id);
+    if (idx < 0) {
+      const samePerson =
+        (patientId && patient.patientId && patient.patientId === patientId) ||
+        (phone && patient.phone === phone);
+      if (samePerson) touched = true;
+      return patient;
+    }
+    touched = true;
+    const updatedRecent = [...recent];
+    updatedRecent[idx] = patchBookingFields(recent[idx]!, incoming);
+    const patched = updatedRecent[idx]!;
+    const status = str(patched.status) ?? patient.lastStatus;
+    const visitAt =
+      str(patched.slotStart) ??
+      str(patched.slot_start) ??
+      str(patched.sessionDate) ??
+      str(patched.session_date) ??
+      patient.lastVisitAt;
+    return {
+      ...patient,
+      recentBookings: updatedRecent,
+      lastStatus: status ?? patient.lastStatus,
+      lastVisitAt: visitAt ?? patient.lastVisitAt,
+    };
+  });
+
+  return touched ? next : patients;
 }

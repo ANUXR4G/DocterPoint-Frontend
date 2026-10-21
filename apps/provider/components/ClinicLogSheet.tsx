@@ -19,7 +19,7 @@ import {
   fetchBooking,
   sendClinicLogWhatsApp,
 } from "@/lib/procto";
-import { sharePrescriptionPdf } from "@/lib/sharePrescription";
+import { shareConsultationPdf, sharePrescriptionPdf } from "@/lib/sharePrescription";
 import {
   formatPracticeDate,
   formatPracticeDateTime,
@@ -255,8 +255,8 @@ export function ClinicLogSheet({
             <Text style={styles.body}>{allergyText}</Text>
             <Text style={styles.h}>Diagnosis</Text>
             <Text style={styles.body}>{diagnosis || "No diagnosis recorded."}</Text>
-            <Text style={styles.h}>Clinical remarks</Text>
-            <Text style={styles.body}>{remarks || "No clinical remarks recorded."}</Text>
+            <Text style={styles.h}>Doctor Notes</Text>
+            <Text style={styles.body}>{remarks || "No doctor notes recorded."}</Text>
             </>
             ) : null}
 
@@ -346,16 +346,22 @@ export function RxButton({ bookingId, status }: { bookingId: string; status?: st
     });
   }
 
-  function preview() {
+  function preview(kind: "consultation" | "prescription") {
     void fetchBooking(bookingId).then(async (res) => {
       if (res.status !== "successful" || !res.data) {
-        Alert.alert("Prescription", res.message || "Could not load the prescription.");
+        Alert.alert("Print", res.message || "Could not load this visit.");
         return;
       }
       try {
-        await sharePrescriptionPdf(res.data);
+        if (kind === "consultation") await shareConsultationPdf(res.data);
+        else await sharePrescriptionPdf(res.data);
       } catch {
-        Alert.alert("Prescription", "Could not create the prescription PDF.");
+        Alert.alert(
+          kind === "consultation" ? "Consultation" : "Prescription",
+          kind === "consultation"
+            ? "Could not create the consultation PDF."
+            : "Could not create the prescription PDF.",
+        );
       }
     });
   }
@@ -364,8 +370,9 @@ export function RxButton({ bookingId, status }: { bookingId: string; status?: st
     <Chip
       label="Rx"
       onPress={() =>
-        Alert.alert("Prescription", undefined, [
-          { text: "Preview Rx", onPress: preview },
+        Alert.alert("Print", undefined, [
+          { text: "Consultation", onPress: () => preview("consultation") },
+          { text: "Prescription", onPress: () => preview("prescription") },
           { text: "Send to customer", onPress: sendNow },
           { text: "Keep", style: "cancel" },
         ])

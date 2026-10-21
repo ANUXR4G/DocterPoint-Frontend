@@ -166,9 +166,9 @@ export default function PatientDetailScreen() {
                           .filter(Boolean)
                           .join(" · ")}
                       </Text>
-                      {b.disease ? (
-                        <Text style={styles.meta}>{b.disease}</Text>
-                      ) : null}
+                      <Text style={styles.meta}>
+                        {b.disease?.trim() || "No chief complaint"}
+                      </Text>
                     </View>
                   </View>
                   <VisitChartSummary

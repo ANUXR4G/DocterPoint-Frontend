@@ -73,6 +73,7 @@ export function Panel({
 
 export function Field({
   label,
+  style,
   ...props
 }: TextInputProps & { label: string }) {
   return (
@@ -80,7 +81,7 @@ export function Field({
       <Text style={styles.label}>{label}</Text>
       <TextInput
         placeholderTextColor={colors.inkFaint}
-        style={[styles.input, props.editable === false && styles.inputDisabled]}
+        style={[styles.input, props.editable === false && styles.inputDisabled, style]}
         {...props}
       />
     </View>

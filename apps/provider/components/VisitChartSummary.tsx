@@ -30,6 +30,15 @@ export function VisitChartSummary({
       <Line label="Allergies" value={lines.allergies} />
       <Line label="Pain" value={lines.pain} />
       <Line label="Prescription" value={lines.prescription} />
+      {lines.diagnosis && lines.diagnosis !== "Not recorded" ? (
+        <Line label="Diagnosis" value={lines.diagnosis} />
+      ) : null}
+      {lines.advice && lines.advice !== "Not recorded" ? (
+        <Line label="Advice" value={lines.advice} />
+      ) : null}
+      {booking.doctorRemarks?.trim() ? (
+        <Line label="Doctor Notes" value={booking.doctorRemarks.trim()} />
+      ) : null}
     </View>
   );
 }

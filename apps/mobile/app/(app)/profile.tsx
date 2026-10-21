@@ -6,32 +6,23 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
+  type TextInputProps,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import { HouseholdPicker } from "@/components/mobile/HouseholdPicker";
-import {
-  PremiumAtmosphere,
-  PremiumCard,
-} from "@/components/mobile/PremiumChrome";
-import {
-  ErrorText,
-  Field,
-  HintText,
-  Chip,
-  Loading,
-  PageTitle,
-  PrimaryButton,
-  Screen,
-} from "@/components/ui";
+import { useCareTheme, type CarePalette } from "@/lib/careTheme";
+import { ErrorText, Loading, Screen } from "@/components/ui";
 import { api, clearSession } from "@/lib/api";
 import { pickProfilePhoto, uploadPhoto } from "@/lib/cloudinary";
 import { setCachedPatientName, setCachedPatientPhoto } from "@/lib/dataCache";
-import { contentBottomPad } from "@/lib/dockLayout";
+import { contentBottomPad, safeTopInset } from "@/lib/dockLayout";
 import { resolveMediaUrl } from "@/lib/media";
-import { colors, space } from "@/lib/theme";
+import { PressableScale } from "@/lib/motion";
+import { colors, radii, shadows, space } from "@/lib/theme";
 import type { PatientProfile } from "@/lib/types";
 
 const GENDER_OPTIONS = [
@@ -41,22 +32,73 @@ const GENDER_OPTIONS = [
 ] as const;
 
 /** Normalize DOB from DD/MM/YYYY or ISO into YYYY-MM-DD for the form. */
-function normalizeDob(raw: string): string {
+function ProfileField({
+  label,
+  theme,
+  style,
+  ...props
+}: TextInputProps & { label: string; theme: CarePalette }) {
+  const locked = props.editable === false;
+  return (
+    <View style={styles.field}>
+      <Text style={[styles.fieldLabel, { color: theme.muted }]}>{label}</Text>
+      <TextInput
+        placeholderTextColor={theme.muted}
+        style={[
+          styles.input,
+          {
+            backgroundColor: theme.paper,
+            color: theme.ink,
+            borderColor: theme.line,
+          },
+          locked && styles.inputLocked,
+          style,
+        ]}
+        {...props}
+      />
+    </View>
+  );
+}
+
+/** Digits only, shown as DD-MM-YYYY while the patient types. */
+function formatDobDisplay(raw: string): string {
   const value = raw.trim();
-  if (!value) return "";
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-  const dmy = value.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (iso) return `${iso[3]}-${iso[2]}-${iso[1]}`;
+  const dmy = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/.exec(value);
   if (dmy) {
-    const dd = dmy[1].padStart(2, "0");
-    const mm = dmy[2].padStart(2, "0");
-    return `${dmy[3]}-${mm}-${dd}`;
+    return `${dmy[1].padStart(2, "0")}-${dmy[2].padStart(2, "0")}-${dmy[3]}`;
   }
-  return value.slice(0, 10);
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+}
+
+/** DD-MM-YYYY to the YYYY-MM-DD the profile API stores. */
+function dobToIso(display: string): string | null {
+  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(display.trim());
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    year < 1900 ||
+    date > new Date()
+  ) {
+    return null;
+  }
+  return `${match[3]}-${match[2]}-${match[1]}`;
 }
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -127,7 +169,7 @@ export default function ProfileScreen() {
         email: p.email ?? "",
         gender: (p.gender ?? "").toLowerCase(),
         contactNumber: String(p.contact_number || p.contactNumber || p.phone || ""),
-        dateOfBirth: normalizeDob(
+        dateOfBirth: formatDobDisplay(
           String(p.date_of_birth || p.dateOfBirth || ""),
         ),
         address: p.address ?? "",
@@ -145,6 +187,16 @@ export default function ProfileScreen() {
       setError("Gender is required. Choose male, female, or others.");
       return;
     }
+    let dateOfBirth: string | undefined;
+    if (form.dateOfBirth.trim()) {
+      const iso = dobToIso(form.dateOfBirth);
+      if (!iso) {
+        setSaving(false);
+        setError("Enter date of birth as DD-MM-YYYY.");
+        return;
+      }
+      dateOfBirth = iso;
+    }
     const res = await api("/patient/profile", {
       method: "PUT",
       body: JSON.stringify({
@@ -152,7 +204,7 @@ export default function ProfileScreen() {
         gender: form.gender,
         address: form.address,
         contact_number: form.contactNumber,
-        date_of_birth: form.dateOfBirth || undefined,
+        date_of_birth: dateOfBirth,
       }),
     });
     setSaving(false);
@@ -171,29 +223,30 @@ export default function ProfileScreen() {
       /* ignore */
     }
     await clearSession();
-    router.replace("/(auth)/login");
+    router.replace("/(auth)/welcome");
   }
 
   if (loading) return <Loading />;
 
   return (
-    <Screen>
-      <PremiumAtmosphere />
+    <Screen style={{ backgroundColor: theme.paper }}>
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: contentBottomPad(insets.bottom) },
+          {
+            paddingTop: safeTopInset(insets.top) + 8,
+            paddingBottom: contentBottomPad(insets.bottom),
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <PageTitle
-          eyebrow="Account"
-          title="Profile"
-          subtitle="Keep your phone updated so WhatsApp bookings link to this account."
-        />
+        <Text style={[styles.pageTitle, { color: theme.ink }]}>Profile</Text>
+        <Text style={[styles.pageSub, { color: theme.muted }]}>
+          Keep your phone updated so WhatsApp bookings link to this account.
+        </Text>
         <HouseholdPicker onSwitched={() => setProfileGen((n) => n + 1)} />
 
-        <PremiumCard style={styles.formCard}>
+        <View style={[styles.formCard, { backgroundColor: theme.card }]}>
           <View style={styles.photoRow}>
             <Pressable
               accessibilityRole="button"
@@ -206,9 +259,9 @@ export default function ProfileScreen() {
                 uri={photo}
                 size={76}
                 radius={38}
-                backgroundColor={colors.brandLight}
+                backgroundColor={theme.visit}
               />
-              <View style={styles.photoBadge}>
+              <View style={[styles.photoBadge, { backgroundColor: theme.ink, borderColor: theme.card }]}>
                 {photoBusy ? (
                   <ActivityIndicator size="small" color={colors.white} />
                 ) : (
@@ -217,8 +270,10 @@ export default function ProfileScreen() {
               </View>
             </Pressable>
             <View style={{ flex: 1 }}>
-              <Text style={styles.photoTitle}>Profile photo</Text>
-              <Text style={styles.menuHint}>Helps your clinic recognise you at the desk.</Text>
+              <Text style={[styles.photoTitle, { color: theme.ink }]}>Profile photo</Text>
+              <Text style={[styles.menuHint, { color: theme.muted }]}>
+                Helps your clinic recognise you at the desk.
+              </Text>
               <View style={styles.photoActions}>
                 <Pressable
                   accessibilityRole="button"
@@ -226,7 +281,7 @@ export default function ProfileScreen() {
                   disabled={photoBusy}
                   hitSlop={8}
                 >
-                  <Text style={styles.photoLink}>{photo ? "Change" : "Add photo"}</Text>
+                  <Text style={[styles.photoLink, { color: theme.visitInk }]}>{photo ? "Change" : "Add photo"}</Text>
                 </Pressable>
                 {photo ? (
                   <Pressable
@@ -242,13 +297,15 @@ export default function ProfileScreen() {
             </View>
           </View>
           <ErrorText text={photoError} />
-          <Field
+          <ProfileField
+            theme={theme}
             label="Full name"
             value={form.name}
             onChangeText={(name) => setForm((f) => ({ ...f, name }))}
           />
-          <Field label="Email" value={form.email} editable={false} />
-          <Field
+          <ProfileField theme={theme} label="Email" value={form.email} editable={false} />
+          <ProfileField
+            theme={theme}
             label="Contact number"
             value={form.contactNumber}
             onChangeText={(contactNumber) =>
@@ -256,79 +313,111 @@ export default function ProfileScreen() {
             }
             keyboardType="phone-pad"
           />
-          <Text style={styles.genderLabel}>Gender</Text>
+          <Text style={[styles.genderLabel, { color: theme.muted }]}>Gender</Text>
           <View style={styles.genderRow}>
-            {GENDER_OPTIONS.map((opt) => (
-              <Chip
-                key={opt.id}
-                label={opt.label}
-                active={form.gender === opt.id}
-                onPress={() => setForm((f) => ({ ...f, gender: opt.id }))}
-              />
-            ))}
+            {GENDER_OPTIONS.map((opt) => {
+              const active = form.gender === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => setForm((f) => ({ ...f, gender: opt.id }))}
+                  style={[
+                    styles.genderChip,
+                    { backgroundColor: active ? theme.ink : theme.paper },
+                  ]}
+                >
+                  <Text style={[styles.genderText, { color: active ? colors.white : theme.ink }]}>
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
-          <Field
-            label="Date of birth (YYYY-MM-DD)"
+          <ProfileField
+            theme={theme}
+            label="Date of birth"
             value={form.dateOfBirth}
-            onChangeText={(dateOfBirth) => setForm((f) => ({ ...f, dateOfBirth }))}
+            onChangeText={(text) =>
+              setForm((f) => ({ ...f, dateOfBirth: formatDobDisplay(text) }))
+            }
+            keyboardType="number-pad"
+            placeholder="DD-MM-YYYY"
+            maxLength={10}
           />
-          <Field
+          <ProfileField
+            theme={theme}
             label="Address"
             value={form.address}
             onChangeText={(address) => setForm((f) => ({ ...f, address }))}
           />
 
           <ErrorText text={error} />
-          {message ? <HintText text={message} /> : null}
+          {message ? (
+            <Text style={[styles.saved, { color: theme.taskInk }]}>{message}</Text>
+          ) : null}
 
-          <PrimaryButton label="Save changes" onPress={save} busy={saving} />
-        </PremiumCard>
+          <PressableScale
+            onPress={save}
+            disabled={saving}
+            accessibilityRole="button"
+            accessibilityLabel="Save changes"
+            style={[styles.save, { backgroundColor: theme.ink }]}
+          >
+            {saving ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.saveText}>Save changes</Text>
+            )}
+          </PressableScale>
+        </View>
 
-        <View style={styles.menu}>
+        <View style={[styles.menu, { backgroundColor: theme.card, borderColor: theme.line }]}>
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push("/(app)/settings" as never)}
             style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
           >
-            <View style={styles.menuIcon}>
-              <SvgIcon name="settings" size={20} color={colors.brand} />
+            <View style={[styles.menuIcon, { backgroundColor: theme.visit }]}>
+              <SvgIcon name="settings" size={20} color={theme.visitInk} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.menuLabel}>Settings</Text>
-              <Text style={styles.menuHint}>Colour theme for Home and the tab bar</Text>
+              <Text style={[styles.menuLabel, { color: theme.ink }]}>Theme</Text>
+              <Text style={[styles.menuHint, { color: theme.muted }]}>Colour theme for the whole app</Text>
             </View>
-            <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />
+            <SvgIcon name="chevronRight" size={18} color={theme.muted} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push("/(app)/queries")}
-            style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+            style={({ pressed }) => [styles.menuRow, { borderTopColor: theme.line, borderTopWidth: StyleSheet.hairlineWidth }, pressed && styles.menuRowPressed]}
           >
-            <View style={styles.menuIcon}>
-              <SvgIcon name="help" size={20} color={colors.brand} />
+            <View style={[styles.menuIcon, { backgroundColor: theme.people }]}>
+              <SvgIcon name="help" size={20} color={theme.peopleInk} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.menuLabel}>Help & Support</Text>
-              <Text style={styles.menuHint}>Messages from your clinic and Mira</Text>
+              <Text style={[styles.menuLabel, { color: theme.ink }]}>Help & Support</Text>
+              <Text style={[styles.menuHint, { color: theme.muted }]}>Messages from your clinic and Mira</Text>
             </View>
-            <SvgIcon name="chevronRight" size={18} color={colors.inkSoft} />
+            <SvgIcon name="chevronRight" size={18} color={theme.muted} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
             onPress={() => void logout()}
             style={({ pressed }) => [
               styles.menuRow,
-              styles.menuDivider,
+              { borderTopColor: theme.line, borderTopWidth: StyleSheet.hairlineWidth },
               pressed && styles.menuRowPressed,
             ]}
           >
-            <View style={[styles.menuIcon, { backgroundColor: "#fdecec" }]}>
+            <View style={[styles.menuIcon, { backgroundColor: theme.alert }]}>
               <SvgIcon name="logout" size={20} color={colors.danger} />
             </View>
-            <Text style={[styles.menuLabel, { flex: 1, color: colors.danger }]}>Sign out</Text>
+            <Text style={[styles.menuLabel, { flex: 1, color: theme.alertInk }]}>Sign out</Text>
           </Pressable>
         </View>
-        <Text style={styles.note}>
+        <Text style={[styles.note, { color: theme.muted }]}>
           Doctors and clinics use the GlucoGuide Provider app or website.
         </Text>
       </ScrollView>
@@ -337,14 +426,18 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.xl },
+  content: { paddingHorizontal: 20 },
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: "700",
+    letterSpacing: -0.8,
+  },
+  pageSub: { marginTop: 6, marginBottom: 16, fontSize: 14, lineHeight: 20 },
   menu: {
     marginTop: space.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.white,
-    borderRadius: 20,
+    borderRadius: 26,
     overflow: "hidden",
+    ...shadows.soft,
   },
   menuRow: {
     flexDirection: "row",
@@ -354,11 +447,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     minHeight: 56,
   },
-  menuDivider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.lineStrong,
-  },
-  menuRowPressed: { backgroundColor: colors.paper },
+  menuRowPressed: { opacity: 0.72 },
   menuIcon: {
     width: 36,
     height: 36,
@@ -367,11 +456,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.paper,
   },
-  menuLabel: { fontSize: 15, fontWeight: "600", color: colors.ink },
-  menuHint: { marginTop: 2, fontSize: 12, color: colors.inkSoft },
+  menuLabel: { fontSize: 15, fontWeight: "600" },
+  menuHint: { marginTop: 2, fontSize: 12, lineHeight: 16 },
   formCard: {
-    paddingTop: space.lg,
+    marginTop: space.md,
+    borderRadius: 26,
+    padding: space.lg,
+    ...shadows.soft,
   },
+  field: { marginBottom: space.md },
+  fieldLabel: { marginBottom: 6, fontSize: 13, fontWeight: "600" },
+  input: {
+    height: 48,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    fontSize: 16,
+  },
+  inputLocked: { opacity: 0.72 },
   photoRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -396,9 +498,8 @@ const styles = StyleSheet.create({
   photoLink: { fontSize: 14, fontWeight: "700", color: colors.brand },
   genderLabel: {
     marginBottom: 8,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    color: colors.ink,
   },
   genderRow: {
     flexDirection: "row",
@@ -406,11 +507,24 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: space.md,
   },
+  genderChip: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  genderText: { fontSize: 14, fontWeight: "600" },
+  saved: { marginBottom: space.md, fontSize: 14, fontWeight: "600" },
+  save: {
+    minHeight: 48,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveText: { color: colors.white, fontSize: 15, fontWeight: "700" },
   note: {
     marginTop: space.lg,
     fontSize: 13,
     lineHeight: 19,
-    color: colors.inkFaint,
     textAlign: "center",
   },
 });

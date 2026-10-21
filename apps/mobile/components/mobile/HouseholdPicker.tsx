@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
-import { Chip } from "@/components/ui";
 import { api, setRefreshToken, setToken } from "@/lib/api";
+import { useCareTheme } from "@/lib/careTheme";
 import { clearDataCache } from "@/lib/dataCache";
 import { colors, space } from "@/lib/theme";
 
@@ -33,6 +33,7 @@ export function HouseholdPicker({ onSwitched }: { onSwitched?: () => void }) {
     }, [load]),
   );
 
+  const { theme } = useCareTheme();
   const current = people.find((p) => p.id === currentId);
   if (people.length < 2 && !current?.withName) return null;
 
@@ -61,24 +62,36 @@ export function HouseholdPicker({ onSwitched }: { onSwitched?: () => void }) {
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>People on this number</Text>
+      <Text style={[styles.label, { color: theme.muted }]}>People on this number</Text>
       {current?.kind === "child" && current.withName ? (
-        <Text style={styles.with}>Child · with {current.withName}</Text>
+        <Text style={[styles.with, { color: theme.ink }]}>Child · with {current.withName}</Text>
       ) : (
-        <Text style={styles.hint}>
+        <Text style={[styles.hint, { color: theme.muted }]}>
           A child on this number opens here. Another adult keeps their own record.
         </Text>
       )}
       <View style={styles.row}>
-        {people.map((p) => (
-          <Chip
-            key={p.id}
-            label={p.kind === "child" ? `${p.name} · child` : p.name}
-            active={p.id === currentId}
-            disabled={busy}
-            onPress={() => void open(p.id)}
-          />
-        ))}
+        {people.map((p) => {
+          const active = p.id === currentId;
+          const label = p.kind === "child" ? `${p.name} · child` : p.name;
+          return (
+            <Pressable
+              key={p.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active, disabled: busy }}
+              disabled={busy}
+              onPress={() => void open(p.id)}
+              style={[
+                styles.chip,
+                { backgroundColor: active ? theme.ink : theme.card },
+              ]}
+            >
+              <Text style={[styles.chipText, { color: active ? colors.white : theme.ink }]}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
@@ -91,25 +104,31 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color: colors.inkFaint,
+    fontSize: 13,
+    fontWeight: "600",
   },
   with: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.ink,
   },
   hint: {
-    fontSize: 12,
-    color: colors.inkSoft,
+    fontSize: 13,
+    lineHeight: 18,
   },
   row: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+    marginTop: 4,
+  },
+  chip: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   error: {
     color: colors.danger,

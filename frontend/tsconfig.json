@@ -21,9 +21,23 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
+      "@/types": [
+        "./types.ts"
+      ],
+      "@/scopes": [
+        "./scopes.ts"
+      ],
+      "@/components": [
+        "./components/index.tsx"
+      ],
+      "@/utils": [
+        "./utils/index.ts"
+      ],
       "@/*": [
-        "./*"
+        "./*",
+        "./*/index"
       ]
     },
     "target": "ES2017"

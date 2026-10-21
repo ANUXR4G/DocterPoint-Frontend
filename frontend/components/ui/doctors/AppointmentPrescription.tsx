@@ -210,12 +210,12 @@ export default function AppointmentPrescription({
 
       <div className="mt-3">
         <label htmlFor="notes" className="text-sm font-semibold opacity-90">
-          Doctor Note
+          Doctor Notes
         </label>
         <textarea
-          rows={4}
-          className="mt-1 p-2 w-full text-sm text-gray-900 dark:text-neutral-400 bg-gray-50 dark:bg-neutral-700 rounded-md border border-gray-300 dark:border-neutral-600 focus:ring-blue-500 focus:border-blue-500 resize-none"
-          placeholder="Write inportant notes..."
+          rows={6}
+          className="mt-1 p-2.5 w-full min-h-[160px] text-sm text-gray-900 dark:text-neutral-400 bg-gray-50 dark:bg-neutral-700 rounded-md border border-gray-300 dark:border-neutral-600 focus:ring-blue-500 focus:border-blue-500 resize-y"
+          placeholder="Write important notes..."
           value={values.note}
           onChange={(e) =>
             setValues((prev) => ({ ...prev, note: e.target.value }))

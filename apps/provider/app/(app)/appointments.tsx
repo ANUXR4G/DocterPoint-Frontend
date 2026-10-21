@@ -28,7 +28,6 @@ import { useBookingStatusActions } from "@/lib/useBookingStatusActions";
 import { colors, radii, shadows, space } from "@/lib/theme";
 import {
   bookingPatientLabel,
-  consultationTypeLabel,
   nextActions,
   whenLabel,
   type BookingRow,
@@ -47,7 +46,7 @@ function statusAccent(status: string) {
       : s === "CANCELED" || s === "CANCELLED"
         ? colors.danger
         : s === "NO_SHOW"
-          ? "#7C3AED"
+          ? colors.noShow
           : s === "IN_PROGRESS"
             ? "#b45309"
             : s === "WAITING" || s === "CHECKED_IN"
@@ -255,10 +254,7 @@ export default function AppointmentsScreen() {
                           b.provider?.name
                             ? `Dr. ${b.provider.name.replace(/^Dr\.?\s*/i, "")}`
                             : null,
-                          b.disease ||
-                            consultationTypeLabel(b.consultationType) ||
-                            b.mode?.replace(/_/g, " ") ||
-                            null,
+                          b.disease?.trim() || "No chief complaint",
                         ]
                           .filter(Boolean)
                           .join(" · ")}

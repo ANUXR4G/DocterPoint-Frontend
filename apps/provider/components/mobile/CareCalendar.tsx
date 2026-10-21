@@ -71,7 +71,8 @@ function statusTone(status: string) {
     return { bg: colors.brandLight, fg: colors.brand };
   if (s === "ACCEPTED" || s === "CONFIRMED")
     return { bg: colors.brandMist, fg: colors.brand };
-  if (s === "CANCELED" || s === "CANCELLED" || s === "NO_SHOW")
+  if (s === "NO_SHOW") return { bg: colors.noShowBg, fg: colors.noShow };
+  if (s === "CANCELED" || s === "CANCELLED")
     return { bg: colors.roseLight, fg: colors.danger };
   return { bg: colors.amberLight, fg: "#CA8A04" };
 }

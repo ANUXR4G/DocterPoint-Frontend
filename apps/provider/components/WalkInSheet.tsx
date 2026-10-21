@@ -299,6 +299,10 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
       setMessage("Find the patient or register them first.");
       return;
     }
+    if (!disease.trim()) {
+      setMessage("Chief complaint is required.");
+      return;
+    }
     setSubmitting(true);
     setMessage("");
     try {
@@ -307,7 +311,7 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
         providerId,
         patientId: patient.patientId,
         patientPhone: patient.phone,
-        ...(disease.trim() ? { disease: disease.trim() } : {}),
+        disease: disease.trim(),
       });
       if (res.status !== "successful") {
         setMessage(res.message || "Could not add the walk-in. Try again.");
@@ -512,7 +516,7 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
                 </View>
               )}
 
-              <Text style={styles.label}>Chief complaint</Text>
+              <Text style={styles.label}>Chief Complaint *</Text>
               <TextInput
                 style={styles.input}
                 value={disease}
@@ -541,7 +545,14 @@ export function WalkInSheet({ visible, onClose, onAdded }: Props) {
               label={submitting ? "Adding to waiting list…" : "Add to waiting list"}
               onPress={() => void submit()}
               busy={submitting}
-              disabled={recordWait || searching || !practiceId || !doctors.length || !patient}
+              disabled={
+                recordWait ||
+                searching ||
+                !practiceId ||
+                !doctors.length ||
+                !patient ||
+                !disease.trim()
+              }
             />
           </View>
         </View>

@@ -37,6 +37,7 @@ import {
   fetchBooking,
   fetchGeneralDocuments,
   updateBookingStatus,
+  sendClinicLogWhatsApp,
   updateVisit,
 } from "@/lib/procto";
 import { usePractice } from "@/lib/practiceContext";
@@ -67,7 +68,22 @@ function isDayPart(t: string) {
   return (TIMES as readonly string[]).includes(t);
 }
 
-type Med = { name: string; amount?: string; times?: string[] };
+type Med = {
+  name: string;
+  amount?: string;
+  times?: string[];
+  strength?: string;
+  route?: string;
+  dose?: string;
+  doseUnit?: string;
+  frequency?: string;
+  duration?: string;
+  durationUnit?: string;
+  instruction?: string;
+  startDate?: string;
+  endDate?: string;
+  favourite?: boolean;
+};
 
 function dash(v: string | null | undefined) {
   return v?.trim() ? v : "—";
@@ -118,8 +134,14 @@ export default function VisitScreen() {
   const [booking, setBooking] = useState<BookingRow | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sendingWa, setSendingWa] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [remarks, setRemarks] = useState("");
+  const [complaint, setComplaint] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [advice, setAdvice] = useState("");
+  const diagnosisRef = useRef("");
+  const adviceRef = useRef("");
   const [medicines, setMedicines] = useState<Med[]>([]);
   const [documents, setDocuments] = useState<VisitDocument[]>([]);
   const [clinicalAssessment, setClinicalAssessment] =
@@ -172,6 +194,7 @@ export default function VisitScreen() {
     if (replaceForm) {
       if (!opts?.silent || !clinicalReady.current) {
         setRemarks(doctorRemarksForEdit(b.doctorRemarks));
+        setComplaint(String(b.disease || "").trim());
       }
       if (!uploadingRef.current) {
         const docs = Array.isArray(b.documents) ? b.documents : [];
@@ -180,6 +203,12 @@ export default function VisitScreen() {
       }
       setMedicines(Array.isArray(b.medicines) ? b.medicines : []);
       const chart = normalizeClinicalAssessment(b.clinicalAssessment);
+      const storedDiagnosis = String(chart?.diagnosis || "").trim();
+      diagnosisRef.current = storedDiagnosis;
+      setDiagnosis(storedDiagnosis);
+      const storedAdvice = String(chart?.advice || "").trim();
+      adviceRef.current = storedAdvice;
+      setAdvice(storedAdvice);
       clinicalRef.current = chart;
       setClinicalAssessment(chart);
       if (!opts?.silent) clinicalDirty.current = false;
@@ -248,6 +277,21 @@ export default function VisitScreen() {
     "Patient";
   const p = booking?.patient;
 
+  function chartWithDiagnosis(
+    chart: ClinicalAssessment | null,
+  ): ClinicalAssessment {
+    return {
+      ...(chart ?? {
+        vitals: { breakfast: null, values: {} },
+        pain: [],
+        allergies: [],
+        noKnownAllergies: false,
+      }),
+      diagnosis: diagnosisRef.current.trim().slice(0, 500),
+      advice: adviceRef.current.trim().slice(0, 1000),
+    };
+  }
+
   async function persistMedicines(next: Med[]) {
     if (!bookingId || booking?.status === "COMPLETED" || futureDay) return
     setBusy(true)
@@ -264,12 +308,13 @@ export default function VisitScreen() {
         setDocuments(serverDocs)
       }
     }
+    const chart = chartWithDiagnosis(clinicalRef.current);
     const res = await updateVisit(bookingId, {
       doctorRemarks: remarks,
       medicines: next,
       documents: docsToSave,
-      ...(clinicalReady.current
-        ? { clinicalAssessment: clinicalRef.current }
+      ...(clinicalReady.current || chart.diagnosis || chart.advice
+        ? { clinicalAssessment: chart }
         : {}),
     })
     setBusy(false)
@@ -336,7 +381,7 @@ export default function VisitScreen() {
   }
 
   async function saveVisit(alsoStatus?: string) {
-    if (!bookingId || futureDay) return;
+    if (!bookingId || futureDay) return false;
     setBusy(true);
     setError("");
     const draftName = medName.trim();
@@ -350,21 +395,112 @@ export default function VisitScreen() {
           },
         ]
       : medicines;
+    const disease = complaint.trim()
     const res = await updateVisit(bookingId, {
       doctorRemarks: remarks,
+      ...(disease ? { disease } : {}),
       medicines: nextMedicines,
       documents: documentsRef.current,
-      ...(clinicalReady.current
-        ? { clinicalAssessment: clinicalRef.current }
+      ...(clinicalReady.current || diagnosisRef.current.trim() || adviceRef.current.trim()
+        ? { clinicalAssessment: chartWithDiagnosis(clinicalRef.current) }
         : {}),
       ...(alsoStatus ? { status: alsoStatus } : {}),
     });
     setBusy(false);
     if (res.status !== "successful") {
       setError(res.message || "Save failed");
-      return;
+      return false;
     }
     await load();
+    return true;
+  }
+
+  async function saveComplaint(nextRaw: string) {
+    if (!bookingId || futureDay) return;
+    const next = nextRaw.trim().slice(0, 500);
+    const previous = String(booking?.disease || "").trim();
+    if (next === previous) return;
+    if (!next) {
+      setError("Chief complaint is required.");
+      setComplaint(previous);
+      return;
+    }
+    setError("");
+    const res = await updateVisit(bookingId, { disease: next });
+    if (res.status !== "successful") {
+      setError(res.message || "Could not save the chief complaint.");
+      setComplaint(previous);
+      return;
+    }
+    setComplaint(next);
+    await load({ silent: true });
+  }
+
+  async function saveDiagnosis(nextRaw: string) {
+    if (!bookingId || futureDay || booking?.status === "COMPLETED") return;
+    const next = nextRaw.trim().slice(0, 500);
+    const previous = String(
+      normalizeClinicalAssessment(booking?.clinicalAssessment)?.diagnosis || "",
+    ).trim();
+    if (next === previous) return;
+    diagnosisRef.current = next;
+    const chart = chartWithDiagnosis(clinicalRef.current);
+    clinicalRef.current = chart;
+    clinicalReady.current = true;
+    clinicalDirty.current = true;
+    setClinicalAssessment(chart);
+    setError("");
+    const res = await updateVisit(bookingId, { clinicalAssessment: chart });
+    if (res.status !== "successful") {
+      setError(res.message || "Could not save the diagnosis.");
+      diagnosisRef.current = previous;
+      setDiagnosis(previous);
+      return;
+    }
+    setDiagnosis(next);
+    await load({ silent: true });
+  }
+
+  async function saveAdvice(nextRaw: string) {
+    if (!bookingId || futureDay || booking?.status === "COMPLETED") return;
+    const next = nextRaw.trim().slice(0, 1000);
+    const previous = String(
+      normalizeClinicalAssessment(booking?.clinicalAssessment)?.advice || "",
+    ).trim();
+    if (next === previous) return;
+    adviceRef.current = next;
+    const chart = chartWithDiagnosis(clinicalRef.current);
+    clinicalRef.current = chart;
+    clinicalReady.current = true;
+    clinicalDirty.current = true;
+    setClinicalAssessment(chart);
+    setError("");
+    const res = await updateVisit(bookingId, { clinicalAssessment: chart });
+    if (res.status !== "successful") {
+      setError(res.message || "Could not save the advice.");
+      adviceRef.current = previous;
+      setAdvice(previous);
+      return;
+    }
+    setAdvice(next);
+    await load({ silent: true });
+  }
+
+  async function sendToCustomer() {
+    if (!bookingId || sendingWa) return;
+    if (booking?.status !== "COMPLETED" && !futureDay) {
+      const saved = await saveVisit();
+      if (!saved) return;
+    }
+    setSendingWa(true);
+    setError("");
+    const res = await sendClinicLogWhatsApp(bookingId);
+    setSendingWa(false);
+    if (res.status !== "successful") {
+      setError(res.message || "Could not send via WhatsApp.");
+      return;
+    }
+    Alert.alert("Sent", "Prescription PDF sent to the customer on WhatsApp.");
   }
 
   async function applyStatus(status: string, reason?: string) {
@@ -593,6 +729,9 @@ export default function VisitScreen() {
               </Text>
               <Text style={styles.bannerName}>{patientName}</Text>
               <Text style={styles.bannerSub}>
+                {complaint.trim() || "No chief complaint"}
+              </Text>
+              <Text style={styles.bannerSub}>
                 {formatPhoneDisplay(
                   p?.contactNumber || p?.phone || booking.patientPhone,
                 )}
@@ -695,7 +834,7 @@ export default function VisitScreen() {
           ) : null}
         </View>
 
-        <Text style={styles.section}>Vitals · Pain · Allergies</Text>
+        <Text style={styles.section}>Vitals · Pain · Allergies · Medicines</Text>
         {futureDay ? (
           <Text style={styles.lockedHint}>
             Documentation opens on the appointment day. Any time later today
@@ -703,7 +842,7 @@ export default function VisitScreen() {
           </Text>
         ) : (
           <Text style={styles.lockedHint}>
-            Capture vitals with color bands, pain rows, and allergies. Tap Save
+            Capture vitals, pain, allergies, and medicines from the tabs. Tap Save
             clinical below (or Save visit notes at the bottom).
           </Text>
         )}
@@ -716,114 +855,207 @@ export default function VisitScreen() {
             value={clinicalAssessment}
             readOnly={chartLocked}
             onChange={(next) => {
+              const merged = chartWithDiagnosis(next);
               clinicalDirty.current = true;
               clinicalReady.current = true;
-              clinicalRef.current = next;
-              setClinicalAssessment(next);
+              clinicalRef.current = merged;
+              setClinicalAssessment(merged);
             }}
+            medicines={
+              <>
+                {!chartLocked ? (
+                  <View style={styles.card}>
+                    <TextInput
+                      value={medName}
+                      onChangeText={setMedName}
+                      placeholder="Medicine name"
+                      placeholderTextColor={colors.inkFaint}
+                      style={styles.input}
+                    />
+                    <TextInput
+                      value={medAmount}
+                      onChangeText={setMedAmount}
+                      placeholder="Dose"
+                      placeholderTextColor={colors.inkFaint}
+                      style={[styles.input, { marginTop: space.sm }]}
+                    />
+                    <View style={styles.actions}>
+                      {TIMES.map((t) => (
+                        <Chip
+                          key={t}
+                          label={t}
+                          active={medTimes.includes(t)}
+                          onPress={() => toggleTime(t)}
+                        />
+                      ))}
+                    </View>
+                    <Text style={[styles.meta, { marginTop: space.sm }]}>Or every</Text>
+                    <View style={styles.actions}>
+                      {INTERVAL_HOURS.map((h) => (
+                        <Chip
+                          key={h}
+                          label={`${h} h`}
+                          active={!customHours && medTimes[0] === everyHoursLabel(h)}
+                          onPress={() => pickInterval(h)}
+                        />
+                      ))}
+                      <TextInput
+                        value={customHours}
+                        onChangeText={onCustomHours}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                        placeholder="Custom h"
+                        placeholderTextColor={colors.inkFaint}
+                        accessibilityLabel={`Custom interval in hours (1–${MAX_INTERVAL_HOURS})`}
+                        style={[styles.input, { width: 96, paddingVertical: 6, textAlign: "center" }]}
+                      />
+                    </View>
+                    {medTimes.length ? (
+                      <Text style={styles.meta}>Timing: {medTimes.join(", ")}</Text>
+                    ) : null}
+                    <PrimaryButton label="Add medicine" onPress={addMedicine} />
+                  </View>
+                ) : null}
+                {medicines.length === 0 ? (
+                  <Text style={styles.hint}>No medicines yet.</Text>
+                ) : (
+                  medicines.map((m, idx) => {
+                    const dosePart = m.dose?.trim()
+                      ? `${m.dose.trim()}${m.doseUnit ? ` ${m.doseUnit.trim()}` : ""}`
+                      : m.amount?.trim() || "—";
+                    const metaParts = [
+                      dosePart,
+                      m.route?.trim() ? `via ${m.route.trim()}` : null,
+                      m.frequency?.trim() || (m.times?.length ? m.times.join(", ") : null),
+                      m.duration?.trim()
+                        ? `for ${m.duration.trim()} ${m.durationUnit?.trim() || "days"}`
+                        : null,
+                    ].filter(Boolean);
+
+                    return (
+                      <View key={`${m.name}-${idx}`} style={styles.medRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.medName}>
+                            {m.name}
+                            {m.strength?.trim() ? ` (${m.strength.trim()})` : ""}
+                          </Text>
+                          <Text style={styles.meta}>
+                            {metaParts.length ? metaParts.join(" · ") : "—"}
+                          </Text>
+                          {m.instruction?.trim() ? (
+                            <Text
+                              style={[
+                                styles.metaQuiet,
+                                { color: colors.brand, marginTop: 2, fontWeight: "600" },
+                              ]}
+                            >
+                              📌 {m.instruction.trim()}
+                            </Text>
+                          ) : null}
+                        </View>
+                        {!chartLocked ? (
+                          <Chip
+                            label="Remove"
+                            onPress={() => removeMedicine(idx)}
+                          />
+                        ) : null}
+                      </View>
+                    );
+                  })
+                )}
+                <Text style={[styles.section, { marginTop: space.md }]}>Advice</Text>
+                <Text style={styles.lockedHint}>
+                  Printed under the medicines. This is not the clinical remarks.
+                </Text>
+                <TextInput
+                  value={advice}
+                  onChangeText={(text) => {
+                    adviceRef.current = text;
+                    clinicalDirty.current = true;
+                    setAdvice(text);
+                  }}
+                  onBlur={() => void saveAdvice(advice)}
+                  editable={!chartLocked}
+                  multiline
+                  maxLength={1000}
+                  placeholder="Advice for the patient"
+                  placeholderTextColor={colors.inkFaint}
+                  style={[styles.area, chartLocked && styles.readonly]}
+                />
+              </>
+            }
           />
         ) : (
           <Text style={styles.hint}>Loading chart…</Text>
         )}
         {!chartLocked ? (
-          <PrimaryButton
-            label={busy ? "Saving…" : "Save clinical"}
-            onPress={() => void saveVisit()}
-            busy={busy}
-            disabled={busy}
-          />
+          <View style={{ gap: space.sm }}>
+            <PrimaryButton
+              label={busy ? "Saving…" : "Save clinical"}
+              onPress={() => void saveVisit()}
+              busy={busy}
+              disabled={busy}
+            />
+            <PrimaryButton
+              label={sendingWa ? "Sending…" : "Send to customer"}
+              onPress={() => void sendToCustomer()}
+              busy={sendingWa}
+              disabled={busy || sendingWa}
+            />
+          </View>
         ) : null}
 
-        <Text style={styles.section}>Remarks</Text>
+        <Text style={styles.section}>Chief complaint</Text>
         <Text style={styles.lockedHint}>
-          Clinical remarks, advice, and follow-up for this visit.
+          Enter a new complaint or replace the one saved at booking.
+        </Text>
+        <TextInput
+          value={complaint}
+          onChangeText={setComplaint}
+          onBlur={() => void saveComplaint(complaint)}
+          editable={!futureDay}
+          multiline
+          maxLength={500}
+          placeholder="Chief complaint"
+          placeholderTextColor={colors.inkFaint}
+          style={[styles.area, futureDay && styles.readonly]}
+        />
+
+        <Text style={styles.section}>Diagnosis</Text>
+        <Text style={styles.lockedHint}>
+          This is printed on the prescription sent to the patient.
+        </Text>
+        <TextInput
+          value={diagnosis}
+          onChangeText={(text) => {
+            diagnosisRef.current = text;
+            setDiagnosis(text);
+          }}
+          onBlur={() => void saveDiagnosis(diagnosis)}
+          editable={!futureDay && booking?.status !== "COMPLETED"}
+          multiline
+          maxLength={500}
+          placeholder="Diagnosis"
+          placeholderTextColor={colors.inkFaint}
+          style={[
+            styles.area,
+            (futureDay || booking?.status === "COMPLETED") && styles.readonly,
+          ]}
+        />
+
+        <Text style={styles.section}>Doctor Notes</Text>
+        <Text style={styles.lockedHint}>
+          Clinical doctor notes for this visit. These are not printed as prescription advice.
         </Text>
         <TextInput
           value={remarks}
           onChangeText={setRemarks}
           editable={!chartLocked}
           multiline
-          placeholder="Clinical remarks, advice, follow-up…"
+          placeholder="Doctor notes, clinical observations, follow-up…"
           placeholderTextColor={colors.inkFaint}
-          style={[styles.area, chartLocked && styles.readonly]}
+          style={[styles.area, styles.doctorNotesArea, chartLocked && styles.readonly]}
         />
-
-        <Text style={styles.section}>Medicines</Text>
-        {!chartLocked ? (
-          <View style={styles.card}>
-            <TextInput
-              value={medName}
-              onChangeText={setMedName}
-              placeholder="Medicine name"
-              placeholderTextColor={colors.inkFaint}
-              style={styles.input}
-            />
-            <TextInput
-              value={medAmount}
-              onChangeText={setMedAmount}
-              placeholder="Dose"
-              placeholderTextColor={colors.inkFaint}
-              style={[styles.input, { marginTop: space.sm }]}
-            />
-            <View style={styles.actions}>
-              {TIMES.map((t) => (
-                <Chip
-                  key={t}
-                  label={t}
-                  active={medTimes.includes(t)}
-                  onPress={() => toggleTime(t)}
-                />
-              ))}
-            </View>
-            <Text style={[styles.meta, { marginTop: space.sm }]}>Or every</Text>
-            <View style={styles.actions}>
-              {INTERVAL_HOURS.map((h) => (
-                <Chip
-                  key={h}
-                  label={`${h} h`}
-                  active={!customHours && medTimes[0] === everyHoursLabel(h)}
-                  onPress={() => pickInterval(h)}
-                />
-              ))}
-              <TextInput
-                value={customHours}
-                onChangeText={onCustomHours}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="Custom h"
-                placeholderTextColor={colors.inkFaint}
-                accessibilityLabel={`Custom interval in hours (1–${MAX_INTERVAL_HOURS})`}
-                style={[styles.input, { width: 96, paddingVertical: 6, textAlign: "center" }]}
-              />
-            </View>
-            {medTimes.length ? (
-              <Text style={styles.meta}>Timing: {medTimes.join(", ")}</Text>
-            ) : null}
-            <PrimaryButton label="Add medicine" onPress={addMedicine} />
-          </View>
-        ) : null}
-
-        {medicines.length === 0 ? (
-          <Text style={styles.hint}>No medicines yet.</Text>
-        ) : (
-          medicines.map((m, idx) => (
-            <View key={`${m.name}-${idx}`} style={styles.medRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.medName}>{m.name}</Text>
-                <Text style={styles.meta}>
-                  {m.amount || "—"}
-                  {m.times?.length ? ` · ${m.times.join(", ")}` : ""}
-                </Text>
-              </View>
-              {!chartLocked ? (
-                <Chip
-                  label="Remove"
-                  onPress={() => removeMedicine(idx)}
-                />
-              ) : null}
-            </View>
-          ))
-        )}
 
         <View style={styles.tabRow}>
           <Chip
@@ -1147,6 +1379,9 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     marginBottom: space.md,
     borderRadius: radii.md,
+  },
+  doctorNotesArea: {
+    minHeight: 180,
   },
   input: {
     borderWidth: StyleSheet.hairlineWidth,

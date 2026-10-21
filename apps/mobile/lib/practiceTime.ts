@@ -49,6 +49,7 @@ export function formatPracticeDate(
   return `${pad2(p.day)}/${pad2(p.month)}/${p.year}`;
 }
 
+/** 12-hour clinic clock. Asia/Kolkata is UTC+5:30 with no daylight saving. */
 export function formatPracticeTime(
   input: Date | string | null | undefined,
   empty = "—",
@@ -56,8 +57,12 @@ export function formatPracticeTime(
   if (input == null || input === "") return empty;
   const d = input instanceof Date ? input : new Date(input);
   if (Number.isNaN(d.getTime())) return empty;
-  const p = zonedParts(d);
-  return `${pad2(p.hour)}:${pad2(p.minute)}`;
+  const shifted = new Date(d.getTime() + (5 * 60 + 30) * 60 * 1000);
+  const hour24 = shifted.getUTCHours();
+  const minute = shifted.getUTCMinutes();
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${pad2(minute)} ${period}`;
 }
 
 export function formatPracticeDateTime(

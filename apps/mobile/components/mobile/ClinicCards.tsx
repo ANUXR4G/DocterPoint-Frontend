@@ -4,8 +4,9 @@ import { SvgIcon } from "@/components/icons/SvgIcon";
 import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
 import { withDrTitle } from "@/lib/doctorName";
 import { practicePhotoUrl } from "@/lib/media";
+import { useCareTheme } from "@/lib/careTheme";
 import { PressableScale } from "@/lib/motion";
-import { colors, radii, shadows, space } from "@/lib/theme";
+import { radii, shadows, space } from "@/lib/theme";
 import type { PracticeListItem } from "@/lib/types";
 
 export type ClinicDoctorCard = {
@@ -19,9 +20,9 @@ export type ClinicDoctorCard = {
 export function clinicDoctorCards(list: PracticeListItem[]): ClinicDoctorCard[] {
   const cards: ClinicDoctorCard[] = [];
   for (const item of list) {
-    const docs = (item.members ?? []).filter(
-      (m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER",
-    );
+    const docs = (item.members ?? [])
+      .filter((m) => m.role === "DOCTOR" || m.role === "PRACTICE_OWNER")
+      .sort((a, b) => Number(a.role !== "DOCTOR") - Number(b.role !== "DOCTOR"));
     if (!docs.length) {
       cards.push({ key: item.id, item });
       continue;
@@ -38,7 +39,7 @@ export function clinicDoctorCards(list: PracticeListItem[]): ClinicDoctorCard[] 
   return cards;
 }
 
-/** Doctor / clinic card — photo, rating, specialty, city and a Book visit action. */
+/** Doctor / clinic card — photo, specialty, city and a Book visit action. */
 export function ClinicCard({
   item,
   doctorUserId,
@@ -49,13 +50,13 @@ export function ClinicCard({
   doctorName?: string;
 }) {
   const router = useRouter();
+  const { theme } = useCareTheme();
   const doc = doctorName?.trim() || item.name;
   const title = withDrTitle(doc) || item.name;
   const specialty = item.specialties?.length
     ? item.specialties.join(" · ")
     : item.specialty?.trim() || "General physician";
   const city = item.locations?.[0]?.city;
-  const rating = item.reviewSummary?.count ? item.reviewSummary.average : null;
   const open = () =>
     router.push({
       pathname: "/(app)/doctor/[slug]",
@@ -67,37 +68,36 @@ export function ClinicCard({
 
   return (
     <PressableScale
-      style={styles.card}
+      style={[styles.card, { backgroundColor: theme.card }]}
       onPress={open}
       accessibilityRole="button"
       accessibilityLabel={`${title}, ${specialty}${city ? `, ${city}` : ""}. Book visit`}
     >
       <View style={styles.row}>
-        <ClinicAvatar name={doc} uri={practicePhotoUrl(item)} size={84} radius={20} />
+        <ClinicAvatar
+          name={doc}
+          uri={practicePhotoUrl(item)}
+          size={84}
+          radius={20}
+          backgroundColor={theme.visit}
+          textColor={theme.visitInk}
+        />
         <View style={styles.body}>
-          <View style={styles.topLine}>
-            <Text style={styles.name} numberOfLines={2}>
-              {title}
-            </Text>
-            {rating != null ? (
-              <View style={styles.rating}>
-                <SvgIcon name="star" size={11} color={colors.brand} />
-                <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
-              </View>
-            ) : null}
-          </View>
-          <Text style={styles.specialty} numberOfLines={2}>
+          <Text style={[styles.name, { color: theme.ink }]} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={[styles.specialty, { color: theme.visitInk }]} numberOfLines={2}>
             {specialty}
           </Text>
           {title !== item.name ? (
-            <Text style={styles.clinic} numberOfLines={1}>
+            <Text style={[styles.clinic, { color: theme.muted }]} numberOfLines={1}>
               {item.name}
             </Text>
           ) : null}
           {city ? (
             <View style={styles.meta}>
-              <SvgIcon name="location" size={12} color={colors.inkFaint} />
-              <Text style={styles.metaText} numberOfLines={1}>
+              <SvgIcon name="location" size={12} color={theme.muted} />
+              <Text style={[styles.metaText, { color: theme.muted }]} numberOfLines={1}>
                 {city}
                 {item.consultationFee != null ? ` · ₹${item.consultationFee}` : ""}
               </Text>
@@ -105,8 +105,8 @@ export function ClinicCard({
           ) : null}
         </View>
       </View>
-      <View style={styles.bookBtn}>
-        <Text style={styles.bookText}>Book Visit</Text>
+      <View style={[styles.bookBtn, { backgroundColor: theme.visit }]}>
+        <Text style={[styles.bookText, { color: theme.visitInk }]}>Book Visit</Text>
       </View>
     </PressableScale>
   );
@@ -114,8 +114,7 @@ export function ClinicCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
+    borderRadius: 26,
     padding: space.lg,
     ...shadows.soft,
   },
@@ -128,43 +127,20 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: "center",
   },
-  topLine: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-  },
   name: {
-    flex: 1,
     fontSize: 16,
     fontWeight: "700",
-    color: colors.ink,
     lineHeight: 21,
     letterSpacing: -0.3,
-  },
-  rating: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: colors.brandLight,
-    borderRadius: radii.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  ratingText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.brand,
   },
   specialty: {
     marginTop: 4,
     fontSize: 13,
     fontWeight: "600",
-    color: colors.brand,
   },
   clinic: {
     marginTop: 2,
     fontSize: 12,
-    color: colors.inkSoft,
   },
   meta: {
     marginTop: 8,
@@ -175,13 +151,11 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 11,
     fontWeight: "600",
-    color: colors.inkFaint,
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   bookBtn: {
     marginTop: space.md,
-    backgroundColor: colors.brandLight,
     borderRadius: radii.pill,
     paddingVertical: 11,
     alignItems: "center",
@@ -189,6 +163,5 @@ const styles = StyleSheet.create({
   bookText: {
     fontSize: 13,
     fontWeight: "700",
-    color: colors.brand,
   },
 });

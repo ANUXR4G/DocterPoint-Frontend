@@ -20,14 +20,15 @@ describe("booking chief complaint step", () => {
     assert.match(hi, /वॉइस नोट/);
   });
 
-  it("first asks Yes / No whether to add a chief complaint", () => {
-    const en = BotPrompts.askChiefComplaintOpt("Roopa Satheesh", "en");
-    assert.match(en, /^Would you like to add the \*chief complaint\*/);
-    assert.match(en, /\*Roopa Satheesh\*'s visit/);
-    assert.match(en, /Tap \*Yes\* or \*No\*/);
-    assert.match(BotPrompts.askChiefComplaintOpt(null, "en"), /for your visit/);
-    assert.match(BotPrompts.askChiefComplaintOpt("Roopa", "hi"), /मुख्य समस्या/);
-    assert.equal(stepUsesLlm("awaiting_chief_complaint_opt"), false);
+  it("asks for a chief complaint and does not offer skip", () => {
+    const en = BotPrompts.askChiefComplaint("Roopa Satheesh", "en");
+    assert.match(en, /required/i);
+    assert.doesNotMatch(en, /skip/i);
+    const retry = BotPrompts.chiefComplaintTooShort("en");
+    assert.match(retry, /required/i);
+    assert.doesNotMatch(retry, /skip/i);
+    assert.doesNotMatch(BotPrompts.chiefComplaintTooShort("hi"), /छोड़ें/);
+    assert.equal(stepUsesLlm("awaiting_chief_complaint"), false);
   });
 
   it("shows the complaint on the booking summary only when given", () => {

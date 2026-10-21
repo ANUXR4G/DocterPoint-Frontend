@@ -1,5 +1,17 @@
-import { Platform } from "react-native";
+import { Platform, StatusBar } from "react-native";
 import { radii, space } from "@/lib/theme";
+
+/** Status-bar / camera cutout. Android can report 0 inside Expo Go. */
+export function safeTopInset(inset = 0) {
+  const bar = Platform.OS === "android" ? StatusBar.currentHeight ?? 24 : 0;
+  return Math.max(inset, bar);
+}
+
+/** Home-indicator / gesture bar. */
+export function safeBottomInset(inset = 0) {
+  const nav = Platform.OS === "android" ? 16 : 0;
+  return Math.max(inset, nav);
+}
 
 /**
  * Floating labelled tab bar metrics.
@@ -17,7 +29,7 @@ export const dockLayout = {
 
 /** Lift the floating dock above the system gesture / nav bar. */
 export function dockLift(insetsBottom = 0) {
-  return dockLayout.bottom + Math.max(insetsBottom, 0);
+  return dockLayout.bottom + safeBottomInset(insetsBottom);
 }
 
 /**

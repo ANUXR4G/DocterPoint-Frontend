@@ -238,7 +238,11 @@ export function CareCalendar({ bookings, onOpenBooking }: Props) {
                               key={b.id}
                               style={[
                                 styles.eventDot,
-                                { backgroundColor: colors.brand },
+                                {
+                                  backgroundColor: bookingStatusTone(
+                                    effectiveBookingStatus(b),
+                                  ).fg,
+                                },
                               ]}
                             />
                           ))}

@@ -249,10 +249,10 @@ export default function ClinicLogDocument({
 
       <section className="mt-5">
         <h2 className="text-sm font-bold uppercase tracking-wide">
-          Clinical Remarks and Notes
+          Doctor Notes
         </h2>
         <div className="mt-2 min-h-[4.5rem] rounded-xl border border-neutral-300 px-4 py-3 text-sm whitespace-pre-wrap">
-          {remarks || "No clinical remarks recorded."}
+          {remarks || "No doctor notes recorded."}
         </div>
       </section>
 

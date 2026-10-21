@@ -5,6 +5,11 @@ import {
   prescriptionFileName,
   type RxBooking,
 } from "@/lib/prescriptionPdf";
+import {
+  buildConsultationPdf,
+  consultationFileName,
+  type ConsultBooking,
+} from "@/lib/consultationPdf";
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -22,4 +27,13 @@ export async function sharePrescriptionPdf(booking: RxBooking) {
     encoding: FileSystem.EncodingType.Base64,
   });
   await Share.share({ url: uri, title: "Prescription", message: "Prescription" });
+}
+
+export async function shareConsultationPdf(booking: ConsultBooking) {
+  const bytes = await buildConsultationPdf(booking);
+  const uri = `${FileSystem.cacheDirectory}${consultationFileName(booking)}`;
+  await FileSystem.writeAsStringAsync(uri, bytesToBase64(bytes), {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  await Share.share({ url: uri, title: "Consultation", message: "Consultation" });
 }

@@ -50,6 +50,7 @@ import { patchBookingFields } from "@/lib/liveBooking"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import ClinicalAssessmentPanel from "@/components/ui/procto/ClinicalAssessmentPanel"
+import TemplateSelector from "@/components/ui/procto/TemplateSelector"
 import type { ClinicalAssessment } from "@/lib/clinicalMasters"
 import { toast } from "sonner"
 
@@ -260,7 +261,7 @@ export default function VisitPage() {
     const el = remarksBox.current
     if (!el) return
     el.style.height = "auto"
-    el.style.height = `${Math.max(40, el.scrollHeight)}px`
+    el.style.height = `${Math.max(160, el.scrollHeight)}px`
   }, [remarks])
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [documents, setDocuments] = useState<VisitDoc[]>([])
@@ -511,6 +512,21 @@ export default function VisitPage() {
     formDirty.current = true
     medicinesRef.current = next
     setMedicines(next)
+  }
+
+  function addMedicinesBulk(newMeds: VisitMedicine[]) {
+    if (!newMeds.length || !bookingId) return
+    if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
+    const next = [...medicinesRef.current, ...newMeds]
+    formDirty.current = true
+    medicinesRef.current = next
+    setMedicines(next)
+  }
+
+  function toggleMedicineFavourite(idx: number, fav: boolean) {
+    const med = medicinesRef.current[idx]
+    if (!med) return
+    editMedicine(idx, { favourite: fav }, true)
   }
 
   function editMedicine(
@@ -944,22 +960,40 @@ export default function VisitPage() {
               rows={medicines}
               draft={medDraft}
               locked={chartLocked}
+              practiceId={booking.practiceId}
               onDraft={(next) => {
                 formDirty.current = true
                 medDraftRef.current = next
                 setMedDraft(next)
               }}
               onAdd={() => addMedicine()}
+              onAddMedicines={addMedicinesBulk}
               onRemove={(idx) => removeMedicine(idx)}
               onEdit={(idx, patch, commit) => editMedicine(idx, patch, commit)}
+              onToggleFavourite={toggleMedicineFavourite}
             />
           )
         }
         advice={
           <div>
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
-              Advice
-            </h3>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
+                Advice
+              </h3>
+              <TemplateSelector
+                target="advice"
+                currentContent={advice}
+                practiceId={booking.practiceId}
+                specialty={booking.practice?.specialty || "General Medicine"}
+                disabled={chartLocked}
+                onSelect={(templateText) => {
+                  clinicalDirty.current = true
+                  setAdvice(templateText)
+                  adviceRef.current = templateText
+                  toast.success("Advice template applied. Text is fully editable.")
+                }}
+              />
+            </div>
             <textarea
               value={advice}
               onChange={(e) => {
@@ -973,19 +1007,41 @@ export default function VisitPage() {
               rows={2}
               placeholder="Advice for the patient"
               aria-label="Advice"
-              className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+              className="mt-1 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
             />
           </div>
         }
       />
 
       <section className="dashboard-panel !h-auto !min-h-0 !p-5">
-        <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
-          Remarks
-        </h2>
-        <p className="mt-1 text-xs opacity-60">
-          Clinical remarks for this visit. These are not printed as prescription advice.
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-1.5">
+          <div>
+            <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
+              Doctor Notes
+            </h2>
+            <p className="mt-0.5 text-xs opacity-60">
+              Clinical doctor notes for this visit. These are not printed as prescription advice.
+            </p>
+          </div>
+          <TemplateSelector
+            target="doctorNotes"
+            currentContent={remarks}
+            practiceId={booking.practiceId}
+            specialty={booking.practice?.specialty || "General Medicine"}
+            disabled={chartLocked}
+            onSelect={(templateText) => {
+              formDirty.current = true
+              setRemarks(templateText)
+              setTimeout(() => {
+                if (remarksBox.current) {
+                  remarksBox.current.style.height = "auto"
+                  remarksBox.current.style.height = `${Math.max(160, remarksBox.current.scrollHeight)}px`
+                }
+              }, 0)
+              toast.success("Doctor Notes template applied. Text is fully editable.")
+            }}
+          />
+        </div>
         <textarea
           ref={remarksBox}
           value={remarks}
@@ -994,14 +1050,14 @@ export default function VisitPage() {
             setRemarks(e.target.value)
             const el = e.currentTarget
             el.style.height = "auto"
-            el.style.height = `${Math.max(40, el.scrollHeight)}px`
+            el.style.height = `${Math.max(160, el.scrollHeight)}px`
           }}
           readOnly={chartLocked}
           disabled={chartLocked}
-          rows={2}
-          placeholder="Clinical remarks"
-          aria-label="Clinical remarks"
-          className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+          rows={6}
+          placeholder="Doctor notes..."
+          aria-label="Doctor notes"
+          className="mt-1 min-h-[160px] w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-2.5 text-sm leading-relaxed disabled:opacity-80 dark:border-neutral-600"
         />
       </section>
 

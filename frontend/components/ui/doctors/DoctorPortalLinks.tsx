@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/doctor/analytics", label: "Analytics" },
   { href: "/doctor/payments", label: "Payments" },
   { href: "/doctor/subscription", label: "Subscription" },
+  { href: "/doctor/medicine", label: "Medicine" },
 ] as const
 
 function pathOnly(href: string): string {
@@ -126,6 +127,15 @@ export function isDoctorNavActive(
 
   if (destPath === "/doctor/subscription") {
     return pathname === "/doctor/subscription"
+  }
+
+  if (destPath === "/doctor/medicine") {
+    return (
+      pathname === "/doctor/medicine" ||
+      pathname.startsWith("/doctor/medicine/") ||
+      pathname === "/doctor/medicines" ||
+      pathname.startsWith("/doctor/medicines/")
+    )
   }
 
   if (pathname === destPath) return true

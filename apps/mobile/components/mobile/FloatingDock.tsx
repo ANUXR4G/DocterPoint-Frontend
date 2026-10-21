@@ -1,12 +1,10 @@
 import { useState, type ReactNode } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  CareGlyph,
-  RainbowSparkle,
-  type CareGlyphName,
-} from "@/components/mobile/careArt";
+import { MiraSheet } from "@/components/GlucoBotFab";
+import { CareGlyph, type CareGlyphName } from "@/components/mobile/careArt";
 import { useCareTheme } from "@/lib/careTheme";
+import { safeBottomInset } from "@/lib/dockLayout";
 
 type TabRoute = {
   key: string;
@@ -47,8 +45,9 @@ const TAB_ICONS: Record<string, { label: string; icon: CareGlyphName }> = {
 };
 
 const MORE: { label: string; route: string; icon: CareGlyphName }[] = [
-  { label: "Settings", route: "settings", icon: "settings" },
-  { label: "Calendar", route: "record", icon: "calendar" },
+  { label: "Mira", route: "mira", icon: "sparkle" },
+  { label: "Theme", route: "settings", icon: "settings" },
+  { label: "Calendar", route: "calendar", icon: "calendar" },
   { label: "Help", route: "queries", icon: "note" },
 ];
 
@@ -59,6 +58,7 @@ export function FloatingDock({ state, descriptors, navigation }: FloatingDockPro
   const insets = useSafeAreaInsets();
   const { theme } = useCareTheme();
   const [more, setMore] = useState(false);
+  const [mira, setMira] = useState(false);
   const current = state.routes[state.index];
   if (current && HIDE_ON.has(current.name)) return null;
 
@@ -76,9 +76,19 @@ export function FloatingDock({ state, descriptors, navigation }: FloatingDockPro
       target: route.key,
       canPreventDefault: true,
     });
-    if (current?.key !== route.key && !event.defaultPrevented) {
+    if (event.defaultPrevented) return;
+    if (route.name === "appointments") {
+      navigation.navigate(route.name, { view: "visits", at: String(Date.now()) });
+      return;
+    }
+    if (current?.key !== route.key) {
       navigation.navigate(route.name, route.params);
     }
+  }
+
+  function openCalendar() {
+    setMore(false);
+    navigation.navigate("appointments", { view: "calendar", at: String(Date.now()) });
   }
 
   function item(route: TabRoute) {
@@ -103,7 +113,16 @@ export function FloatingDock({ state, descriptors, navigation }: FloatingDockPro
 
   return (
     <>
-      <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      <View
+        style={[
+          styles.wrap,
+          {
+            paddingBottom: safeBottomInset(insets.bottom),
+            left: 12 + insets.left,
+            right: 12 + insets.right,
+          },
+        ]}
+      >
         <View style={[styles.bar, { backgroundColor: theme.card, borderColor: theme.line }]}>
           {left.map(item)}
           <Pressable
@@ -112,7 +131,7 @@ export function FloatingDock({ state, descriptors, navigation }: FloatingDockPro
             onPress={() => setMore(true)}
             style={styles.spark}
           >
-            <RainbowSparkle />
+            <Image source={require("@/assets/care/spark.png")} style={styles.sparkImage} />
           </Pressable>
           {right.map(item)}
         </View>
@@ -124,7 +143,15 @@ export function FloatingDock({ state, descriptors, navigation }: FloatingDockPro
               <Pressable
                 key={row.route}
                 onPress={() => {
+                  if (row.route === "calendar") {
+                    openCalendar();
+                    return;
+                  }
                   setMore(false);
+                  if (row.route === "mira") {
+                    setMira(true);
+                    return;
+                  }
                   navigation.navigate(row.route);
                 }}
                 style={styles.moreRow}
@@ -136,6 +163,7 @@ export function FloatingDock({ state, descriptors, navigation }: FloatingDockPro
           </View>
         </Pressable>
       </Modal>
+      <MiraSheet visible={mira} onClose={() => setMira(false)} />
     </>
   );
 }
@@ -171,14 +199,12 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: 10, fontWeight: "600" },
   spark: {
-    width: 54,
-    height: 54,
-    marginTop: -22,
-    borderRadius: 27,
+    width: 52,
+    height: 52,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
   },
+  sparkImage: { width: 52, height: 52 },
   scrim: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.28)",

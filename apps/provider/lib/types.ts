@@ -95,7 +95,22 @@ export type BookingRow = {
   disease?: string | null;
   consultationType?: string | null;
   doctorRemarks?: string | null;
-  medicines?: Array<{ name: string; amount?: string; times?: string[] }> | null;
+  medicines?: Array<{
+    name: string;
+    amount?: string;
+    times?: string[];
+    strength?: string;
+    route?: string;
+    dose?: string;
+    doseUnit?: string;
+    frequency?: string;
+    duration?: string;
+    durationUnit?: string;
+    instruction?: string;
+    startDate?: string;
+    endDate?: string;
+    favourite?: boolean;
+  }> | null;
   documents?: VisitDocument[] | null;
   clinicalAssessment?: unknown;
   provider?: { id?: string; name?: string | null; stampSrc?: string | null } | null;

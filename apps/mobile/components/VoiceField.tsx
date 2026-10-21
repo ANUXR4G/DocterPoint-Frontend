@@ -9,21 +9,23 @@ import {
 } from "react-native";
 import { SvgIcon } from "@/components/icons/SvgIcon";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
-import { colors, space } from "@/lib/theme";
+import { useCareTheme } from "@/lib/careTheme";
+import { space } from "@/lib/theme";
 
 type VoiceFieldProps = TextInputProps & {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
   micAriaLabel?: string;
+  micBackground?: string;
 };
 
-function MicIcon({ active }: { active: boolean }) {
+function MicIcon({ active, color }: { active: boolean; color: string }) {
   return (
     <SvgIcon
       name={active ? "stop" : "mic"}
       size={18}
-      color={active ? "#dc2626" : colors.ink}
+      color={active ? "#dc2626" : color}
     />
   );
 }
@@ -33,9 +35,12 @@ export function VoiceField({
   value,
   onChangeText,
   micAriaLabel = "Record by voice",
+  micBackground,
   editable = true,
+  style,
   ...props
 }: VoiceFieldProps) {
+  const { theme } = useCareTheme();
   const baseRef = useRef("");
 
   const {
@@ -75,14 +80,20 @@ export function VoiceField({
 
   return (
     <View style={{ marginBottom: space.md }}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: theme.muted }]}>{label}</Text>
       <View style={styles.row}>
         <TextInput
-          placeholderTextColor={colors.inkFaint}
+          placeholderTextColor={theme.muted}
           style={[
             styles.input,
             styles.inputFlex,
+            {
+              borderColor: theme.line,
+              color: theme.ink,
+              backgroundColor: theme.paper,
+            },
             editable === false && styles.inputDisabled,
+            style,
           ]}
           value={value}
           onChangeText={handleChangeText}
@@ -97,12 +108,15 @@ export function VoiceField({
           disabled={!editable || processing}
           style={({ pressed }) => [
             styles.micButton,
-            listening && styles.micButtonActive,
+            {
+              borderColor: theme.line,
+              backgroundColor: listening ? theme.alert : micBackground ?? theme.paper,
+            },
             pressed && styles.micButtonPressed,
             !editable && styles.micButtonDisabled,
           ]}
         >
-          <MicIcon active={listening} />
+          <MicIcon active={listening} color={theme.ink} />
         </Pressable>
       </View>
       {listening ? (
@@ -110,7 +124,9 @@ export function VoiceField({
       ) : null}
       {voiceError ? <Text style={styles.voiceError}>{voiceError}</Text> : null}
       {!listening && !voiceError ? (
-        <Text style={styles.hint}>Tap the mic — words appear live. Tap again to stop.</Text>
+        <Text style={[styles.hint, { color: theme.muted }]}>
+          Tap the mic — words appear live. Tap again to stop.
+        </Text>
       ) : null}
     </View>
   );
@@ -118,12 +134,9 @@ export function VoiceField({
 
 const styles = StyleSheet.create({
   label: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.inkSoft,
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 6,
   },
   row: {
     flexDirection: "row",
@@ -131,14 +144,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   input: {
-    borderWidth: 1,
-  borderColor: colors.line,
-  borderRadius: 12,
-  paddingHorizontal: 14,
-  paddingVertical: 12,
-  fontSize: 15,
-  color: colors.ink,
-  backgroundColor: colors.paperRaised,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
     minHeight: 48,
   },
   inputFlex: {
@@ -150,16 +160,10 @@ const styles = StyleSheet.create({
   micButton: {
     minWidth: 48,
     minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.paperRaised,
-  },
-  micButtonActive: {
-    borderColor: "#f87171",
-    backgroundColor: "#fef2f2",
   },
   micButtonPressed: {
     opacity: 0.85,
@@ -181,7 +185,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     marginTop: 6,
-    fontSize: 11,
-    color: colors.inkFaint,
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

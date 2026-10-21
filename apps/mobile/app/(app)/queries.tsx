@@ -10,6 +10,7 @@ import {
 import { MiraChat } from "@/components/MiraChat";
 import { ErrorText, Screen } from "@/components/ui";
 import { listCareThreads, type CareChatThread } from "@/lib/chat";
+import { useCareTheme } from "@/lib/careTheme";
 import { colors, radii, space } from "@/lib/theme";
 import { useLiveSocket } from "@/hooks/useLiveSocket";
 import { getSessionUserId } from "@/lib/sessionUser";
@@ -17,6 +18,7 @@ import { getSessionUserId } from "@/lib/sessionUser";
 /** Help — doctor threads + Mira assistant. */
 export default function HelpScreen() {
   const router = useRouter();
+  const { theme } = useCareTheme();
   const [threads, setThreads] = useState<CareChatThread[]>([]);
   const [error, setError] = useState("");
   const [showMira, setShowMira] = useState(false);
@@ -45,9 +47,9 @@ export default function HelpScreen() {
 
   if (showMira) {
     return (
-      <Screen>
+      <Screen style={{ backgroundColor: theme.paper }}>
         <Pressable style={styles.back} onPress={() => setShowMira(false)}>
-          <Text style={styles.backText}>← Messages</Text>
+          <Text style={[styles.backText, { color: theme.ink }]}>← Messages</Text>
         </Pressable>
         <MiraChat />
       </Screen>
@@ -55,11 +57,10 @@ export default function HelpScreen() {
   }
 
   return (
-    <Screen>
+    <Screen style={{ backgroundColor: theme.paper }}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.eyebrow}>Inbox</Text>
-        <Text style={styles.title}>Messages</Text>
-        <Text style={styles.sub}>
+        <Text style={[styles.title, { color: theme.ink }]}>Help</Text>
+        <Text style={[styles.sub, { color: theme.muted }]}>
           Doctor chats sync with the patient portal. Clinic texts also go to
           WhatsApp.
         </Text>
@@ -67,8 +68,8 @@ export default function HelpScreen() {
         <ErrorText text={error} />
 
         {threads.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No doctor chats yet</Text>
+          <View style={[styles.empty, { backgroundColor: theme.card }]}>
+            <Text style={[styles.emptyTitle, { color: theme.ink }]}>No doctor chats yet</Text>
             <Text style={styles.emptyBody}>
               Open a visit and message your doctor — replies show here, on the
               web, and WhatsApp (replies from WhatsApp show up here too).
@@ -78,19 +79,19 @@ export default function HelpScreen() {
           threads.map((t) => (
             <Pressable
               key={t.peerId}
-              style={styles.thread}
+              style={[styles.thread, { backgroundColor: theme.card }]}
               onPress={() =>
                 router.push(`/(app)/messages/${t.peerId}` as Href)
               }
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.threadName}>{t.name}</Text>
+                <Text style={[styles.threadName, { color: theme.ink }]}>{t.name}</Text>
                 <Text style={styles.threadPreview} numberOfLines={1}>
                   {t.lastMessage}
                 </Text>
               </View>
               {t.unread > 0 ? (
-                <View style={styles.badge}>
+                <View style={[styles.badge, { backgroundColor: theme.ink }]}>
                   <Text style={styles.badgeText}>{t.unread}</Text>
                 </View>
               ) : null}
@@ -98,7 +99,7 @@ export default function HelpScreen() {
           ))
         )}
 
-        <Pressable style={styles.miraBtn} onPress={() => setShowMira(true)}>
+        <Pressable style={[styles.miraBtn, { backgroundColor: theme.ink }]} onPress={() => setShowMira(true)}>
           <Text style={styles.miraBtnText}>Ask Mira (booking help)</Text>
         </Pressable>
       </ScrollView>

@@ -2,8 +2,9 @@ import { useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgIcon } from "@/components/icons/SvgIcon";
+import { useCareTheme } from "@/lib/careTheme";
 import { PressableScale } from "@/lib/motion";
-import { colors, shadows, space } from "@/lib/theme";
+import { space } from "@/lib/theme";
 
 type Props = {
   title: string;
@@ -18,22 +19,24 @@ const BTN = 42;
 export function ScreenHeader({ title, back = false, alignLeft = false }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + 8 }]}>
       {back ? (
         <PressableScale
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: theme.card }]}
           onPress={() => (router.canGoBack() ? router.back() : router.replace("/(app)/home"))}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <SvgIcon name="chevronLeft" size={20} color={colors.ink} />
+          <SvgIcon name="chevronLeft" size={20} color={theme.ink} />
         </PressableScale>
       ) : null}
       <Text
         style={[
           styles.title,
+          { color: theme.ink },
           alignLeft || !back ? styles.titleLeft : styles.titleCenter,
           back && alignLeft && { marginLeft: space.lg },
         ]}
@@ -57,16 +60,13 @@ const styles = StyleSheet.create({
     width: BTN,
     height: BTN,
     borderRadius: BTN / 2,
-    backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
-    ...shadows.soft,
   },
   title: {
     flex: 1,
     fontSize: 22,
     fontWeight: "700",
-    color: colors.ink,
     letterSpacing: -0.5,
   },
   titleCenter: {

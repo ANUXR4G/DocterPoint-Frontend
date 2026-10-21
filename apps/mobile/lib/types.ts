@@ -16,6 +16,8 @@ export type ProctoBooking = {
   tokenNumber?: number | null;
   token_number?: number | null;
   disease?: string | null;
+  notes?: string | null;
+  doctorRemarks?: string | null;
   practice?: {
     id?: string;
     name?: string;
@@ -34,8 +36,24 @@ export type ProctoBooking = {
     experience?: number | null;
   };
   providerName?: string | null;
-  /** Times are labels such as "Morning" or "Every 4 hours". */
-  medicines?: { name: string; amount?: string; times?: string[] }[] | null;
+  clinicalAssessment?: unknown;
+  /** Prescribed medicines with dosage, frequency, and instructions. */
+  medicines?: {
+    name: string;
+    amount?: string;
+    times?: string[];
+    strength?: string;
+    route?: string;
+    dose?: string;
+    doseUnit?: string;
+    frequency?: string;
+    duration?: string;
+    durationUnit?: string;
+    instruction?: string;
+    startDate?: string;
+    endDate?: string;
+    favourite?: boolean;
+  }[] | null;
 };
 
 export type ReviewSummary = {

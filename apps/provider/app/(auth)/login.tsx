@@ -10,24 +10,17 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  BrandMark,
-  Atmosphere,
-  Chip,
-  ErrorText,
-  Field,
-  PageTitle,
-  Panel,
-  PrimaryButton,
-} from "@/components/ui";
+import { ErrorText, Field } from "@/components/ui";
 import { api, setRefreshToken, setToken } from "@/lib/api";
-import { colors, radii, space } from "@/lib/theme";
+import { useCareTheme } from "@/lib/careTheme";
+import { space } from "@/lib/theme";
 
 type Portal = "doctor" | "clinic";
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
   const [portal, setPortal] = useState<Portal>("doctor");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -86,10 +79,9 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.root}
+      style={[styles.root, { backgroundColor: theme.paper }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Atmosphere />
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -100,33 +92,26 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="automatic"
       >
-        <BrandMark />
-        <View style={{ height: space.lg }} />
-        <PageTitle
-          eyebrow="Provider"
-          title="Your day on the go"
-          subtitle="Same Doctor and Clinic portals as the web — queue, calendar, patients, analytics, and plans."
-        />
+        <Text style={[styles.title, { color: theme.ink }]}>Sign in</Text>
+        <Text style={[styles.sub, { color: theme.muted }]}>Doctor or clinic</Text>
 
-        <Panel style={styles.formCard}>
-          <Text style={styles.portalLabel}>Sign in as</Text>
+        <View style={[styles.formCard, { backgroundColor: theme.card }]}>
           <View style={styles.portalRow}>
-            <Chip
-              label="Doctor"
-              active={portal === "doctor"}
-              onPress={() => setPortal("doctor")}
-            />
-            <Chip
-              label="Clinic"
-              active={portal === "clinic"}
-              onPress={() => setPortal("clinic")}
-            />
+            {(["doctor", "clinic"] as const).map((item) => {
+              const on = portal === item;
+              return (
+                <Pressable
+                  key={item}
+                  onPress={() => setPortal(item)}
+                  style={[styles.chip, { backgroundColor: on ? theme.ink : theme.paper }]}
+                >
+                  <Text style={{ color: on ? "#fff" : theme.ink, fontWeight: "600" }}>
+                    {item === "doctor" ? "Doctor" : "Clinic"}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
-          <Text style={styles.portalHint}>
-            {portal === "clinic"
-              ? "Clinic owners and admins — full practice ops."
-              : "Providers and staff — day queue and visits."}
-          </Text>
 
           <Field
             label="Email"
@@ -134,11 +119,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
-            placeholder={
-              portal === "clinic"
-                ? "dr.demo@glucoguide.com"
-                : "dr.solo@glucoguide.com"
-            }
+            placeholder="Email"
           />
           <Field
             label="Password"
@@ -148,86 +129,64 @@ export default function LoginScreen() {
             placeholder="Password"
           />
           <ErrorText text={error} />
-          <PrimaryButton
-            label={portal === "clinic" ? "Clinic sign in" : "Doctor sign in"}
+          <Pressable
             onPress={login}
-            busy={busy}
-            disabled={!email.trim() || !password}
-          />
-        </Panel>
-
-        <View style={styles.registerBox}>
-          <Pressable onPress={() => router.push("/(auth)/register")}>
-            <Text style={styles.link}>
-              New independent doctor? Create account
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => router.push("/(auth)/register-clinic")}>
-            <Text style={styles.link}>
-              New clinic? Register your practice
-            </Text>
+            disabled={busy || !email.trim() || !password}
+            style={[
+              styles.button,
+              {
+                backgroundColor: theme.ink,
+                opacity: busy || !email.trim() || !password ? 0.45 : 1,
+              },
+            ]}
+          >
+            <Text style={styles.buttonText}>{busy ? "Signing in…" : "Continue"}</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.note}>
-          Demo · Clinic/owner: dr.demo@glucoguide.com · Staff:
-          dr.staff@glucoguide.com · Solo: dr.solo@glucoguide.com · Password:
-          Demo@12345
-        </Text>
+        <Pressable onPress={() => router.push("/(auth)/register")} style={styles.linkWrap}>
+          <Text style={[styles.link, { color: theme.ink }]}>Create a doctor account</Text>
+        </Pressable>
+        <Pressable onPress={() => router.push("/(auth)/register-clinic")} style={styles.linkWrap}>
+          <Text style={[styles.link, { color: theme.ink }]}>Register a clinic</Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.paper },
+  root: { flex: 1 },
   content: {
     flexGrow: 1,
     justifyContent: "flex-start",
     paddingHorizontal: space.xl,
   },
+  title: { fontSize: 28, fontWeight: "800", letterSpacing: -0.6 },
+  sub: { marginTop: 6, marginBottom: 20, fontSize: 15 },
   formCard: {
+    borderRadius: 22,
+    padding: space.xl,
     marginBottom: space.lg,
-  },
-  portalLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.inkSoft,
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
   },
   portalRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.sm,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: space.lg,
   },
-  portalHint: {
-    fontSize: 13,
-    color: colors.inkFaint,
-    marginBottom: space.md,
-    lineHeight: 18,
+  chip: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  registerBox: {
-    marginTop: space.md,
-    gap: space.md,
-    padding: space.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.paperRaised,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+  button: {
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
   },
-  note: {
-    marginTop: space.lg,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.inkFaint,
-  },
-  link: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.navy,
-    textAlign: "center",
-  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  linkWrap: { marginTop: space.md, alignItems: "center" },
+  link: { fontSize: 14, fontWeight: "600" },
 });

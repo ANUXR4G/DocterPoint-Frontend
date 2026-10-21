@@ -340,6 +340,10 @@ export type ClinicalAssessment = {
     description?: string;
   }>;
   noKnownAllergies?: boolean;
+  /** Diagnosis written on this visit. Printed on the prescription. */
+  diagnosis?: string;
+  /** Advice printed under the medicines. Not clinical remarks. */
+  advice?: string;
   savedAt?: string | null;
 };
 
@@ -398,6 +402,8 @@ export function normalizeClinicalAssessment(
     pain,
     allergies,
     noKnownAllergies: Boolean(o.noKnownAllergies),
+    diagnosis: String(o.diagnosis ?? "").trim().slice(0, 500),
+    advice: String(o.advice ?? "").trim().slice(0, 1000),
     savedAt: o.savedAt ? String(o.savedAt) : null,
   };
 }
@@ -419,11 +425,18 @@ function numText(v: number | null | undefined): string {
   return String(v);
 }
 
-/** Short lines for the patient record: vitals, allergies, pain, prescription. */
+/** Short lines for the patient record: vitals, allergies, pain, prescription, diagnosis, advice. */
 export function chartSummaryLines(
   raw: unknown,
   medicines?: unknown,
-): { vitals: string; allergies: string; pain: string; prescription: string } {
+): {
+  vitals: string;
+  allergies: string;
+  pain: string;
+  prescription: string;
+  diagnosis: string;
+  advice: string;
+} {
   const chart = normalizeClinicalAssessment(raw);
   const values = chart?.vitals?.values ?? {};
   const vitalBits = VITAL_LABELS.map(([key, label]) => {
@@ -459,8 +472,13 @@ export function chartSummaryLines(
         .map((row) => {
           if (!row || typeof row !== "object") return "";
           const name = String((row as { name?: string }).name || "").trim();
-          const amount = String((row as { amount?: string }).amount || "").trim();
-          return [name, amount].filter(Boolean).join(" ");
+          const dose = String(
+            (row as { dose?: string }).dose || (row as { amount?: string }).amount || "",
+          ).trim();
+          const doseUnit = String((row as { doseUnit?: string }).doseUnit || "").trim();
+          const doseFull = [dose, doseUnit].filter(Boolean).join(" ");
+          const freq = String((row as { frequency?: string }).frequency || "").trim();
+          return [name, doseFull, freq].filter(Boolean).join(" · ");
         })
         .filter(Boolean)
     : [];
@@ -470,5 +488,7 @@ export function chartSummaryLines(
     allergies,
     pain,
     prescription: meds.length ? meds.join(", ") : "None yet",
+    diagnosis: chart?.diagnosis?.trim() || "Not recorded",
+    advice: chart?.advice?.trim() || "Not recorded",
   };
 }

@@ -14,6 +14,7 @@ import {
   countryLabel,
   type CountryDial,
 } from "@/lib/countries";
+import { useCareTheme } from "@/lib/careTheme";
 import { colors, radii, space } from "@/lib/theme";
 
 type Props = {
@@ -34,6 +35,7 @@ export function CountryPhoneField({
   placeholder = "Mobile number",
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
 
@@ -51,22 +53,19 @@ export function CountryPhoneField({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: theme.muted }]}>{label}</Text>
       <View style={styles.row}>
         <Pressable
           onPress={() => {
             setQ("");
             setOpen(true);
           }}
-          style={styles.countryBtn}
+          style={[styles.countryBtn, { backgroundColor: theme.paper, borderColor: theme.line }]}
           accessibilityRole="button"
           accessibilityLabel={`Country ${countryLabel(country)}`}
         >
-          <Text style={styles.countryCode}>+{country.dial}</Text>
-          <Text style={styles.countryName} numberOfLines={1}>
-            {country.name}
-          </Text>
-          <Text style={styles.chevron}>▾</Text>
+          <Text style={[styles.countryCode, { color: theme.ink }]}>+{country.dial}</Text>
+          <Text style={[styles.chevron, { color: theme.muted }]}>▾</Text>
         </Pressable>
         <TextInput
           value={national}
@@ -75,8 +74,8 @@ export function CountryPhoneField({
           autoCapitalize="none"
           autoCorrect={false}
           placeholder={placeholder}
-          placeholderTextColor={colors.inkFaint}
-          style={styles.input}
+          placeholderTextColor={theme.muted}
+          style={[styles.input, { color: theme.ink, backgroundColor: theme.paper, borderColor: theme.line }]}
         />
       </View>
 
@@ -148,52 +147,39 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.inkSoft,
     marginBottom: 8,
   },
   row: {
     flexDirection: "row",
-    alignItems: "stretch",
+    alignItems: "center",
     gap: 8,
   },
   countryBtn: {
-    maxWidth: "46%",
+    height: 52,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderRadius: radii.md,
-    backgroundColor: colors.brandMist,
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
   },
   countryCode: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
-    color: colors.ink,
-  },
-  countryName: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: "500",
-    color: colors.inkSoft,
   },
   chevron: {
     fontSize: 12,
-    color: colors.inkFaint,
-    marginLeft: 2,
   },
   input: {
     flex: 1,
+    height: 52,
     fontSize: 16,
-    color: colors.ink,
     paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: radii.md,
-    backgroundColor: colors.sky50,
+    paddingVertical: 0,
+    textAlignVertical: "center",
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
   },
   modal: {
     flex: 1,

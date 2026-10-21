@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -20,17 +20,26 @@ import { useCareTheme } from "@/lib/careTheme";
 export type CareGlyphName =
   | "home"
   | "calendar"
+  | "calendarSolid"
+  | "noteSolid"
   | "checklist"
   | "person"
   | "people"
   | "bell"
+  | "chat"
   | "bolt"
   | "note"
   | "heart"
   | "video"
   | "expand"
   | "search"
-  | "settings";
+  | "settings"
+  | "clock"
+  | "pin"
+  | "sparkle"
+  | "stethoscope"
+  | "personPlus"
+  | "alert";
 
 export function CareGlyph({
   name,
@@ -63,15 +72,41 @@ export function CareGlyph({
     case "calendar":
       return (
         <Svg {...p}>
-          <Rect x="3.5" y="5" width="17" height="15.5" rx="3" {...stroke} />
-          <Path d="M3.5 10h17M8 3.5v3.5M16 3.5v3.5" {...stroke} />
+          <Rect x="4" y="5.5" width="16" height="14" rx="2.5" {...stroke} />
+          <Path d="M4 10h16" {...stroke} />
+          <Path d="M8 3.5v3M16 3.5v3" {...stroke} />
+          <Path d="M8 14h3" {...stroke} />
+        </Svg>
+      );
+    case "calendarSolid":
+      return (
+        <Svg {...p}>
+          <Rect x="6.6" y="2.2" width="3.4" height="4.6" rx="1.5" stroke={color} strokeWidth={1.7} />
+          <Rect x="14" y="2.2" width="3.4" height="4.6" rx="1.5" stroke={color} strokeWidth={1.7} />
+          <Path
+            fill={color}
+            fillRule="evenodd"
+            d="M4.4 7.2h15.2a2 2 0 0 1 2 2v9.4a2 2 0 0 1-2 2H4.4a2 2 0 0 1-2-2V9.2a2 2 0 0 1 2-2zM5.9 10.6h12.2v1.6H5.9v-1.6zM18.7 14.7a2.9 2.9 0 1 0 .02 0z"
+          />
+          <Circle cx="18.7" cy="17.6" r="2.05" stroke={color} strokeWidth={1.7} fill="none" />
+        </Svg>
+      );
+    case "noteSolid":
+      return (
+        <Svg {...p}>
+          <Path
+            fill={color}
+            fillRule="evenodd"
+            d="M5.2 3.4h13.6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5.2a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2zM7.2 7h5.2v1.45H7.2V7zm0 3.7h8.2v1.45H7.2v-1.45zm0 3.7h6.2v1.45H7.2V14.4zM18.4 14.6a2.9 2.9 0 1 0 .02 0z"
+          />
+          <Circle cx="18.4" cy="17.5" r="2.05" stroke={color} strokeWidth={1.7} fill="none" />
         </Svg>
       );
     case "checklist":
       return (
         <Svg {...p}>
-          <Rect x="4" y="3.5" width="16" height="17" rx="3" {...stroke} />
-          <Path d="M8 9.5l1.6 1.6L13 8M8 15h8" {...stroke} />
+          <Rect x="6" y="3.5" width="12" height="16" rx="2" {...stroke} />
+          <Path d="M9 8.5h6M9 12h6M9 15.5h4" {...stroke} />
         </Svg>
       );
     case "person":
@@ -97,6 +132,12 @@ export function CareGlyph({
           <Path d="M10 18.5a2 2 0 0 0 4 0" {...stroke} />
         </Svg>
       );
+    case "chat":
+      return (
+        <Svg {...p}>
+          <Path d="M7 16.2 4.8 19.2l2.6-1.2A7.2 7.2 0 1 0 7 16.2Z" {...stroke} />
+        </Svg>
+      );
     case "bolt":
       return (
         <Svg {...p}>
@@ -106,15 +147,16 @@ export function CareGlyph({
     case "note":
       return (
         <Svg {...p}>
-          <Path d="M7 4.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V6A1.5 1.5 0 0 1 7 4.5Z" {...stroke} />
-          <Path d="M14 4.8V9h4.2M8.5 13h7M8.5 16.5h5" {...stroke} />
+          <Rect x="7" y="6" width="11" height="13" rx="2" {...stroke} />
+          <Path d="M6 16.5V6.5A2 2 0 0 1 8 4.5h8" {...stroke} />
         </Svg>
       );
     case "heart":
       return (
         <Svg {...p}>
+          <Circle cx="12" cy="12" r="8" {...stroke} />
           <Path
-            d="M12 19s-6.5-3.8-6.5-8.2A3.4 3.4 0 0 1 12 8a3.4 3.4 0 0 1 6.5 2.8C18.5 15.2 12 19 12 19Z"
+            d="M12 15.6s-3.2-1.8-3.2-4a1.7 1.7 0 0 1 3.2-1 1.7 1.7 0 0 1 3.2 1c0 2.2-3.2 4-3.2 4Z"
             {...stroke}
           />
         </Svg>
@@ -146,6 +188,52 @@ export function CareGlyph({
           <Path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18" {...stroke} />
         </Svg>
       );
+    case "clock":
+      return (
+        <Svg {...p}>
+          <Circle cx="12" cy="12" r="8" {...stroke} />
+          <Path d="M12 8v4.2l2.6 1.6" {...stroke} />
+        </Svg>
+      );
+    case "pin":
+      return (
+        <Svg {...p}>
+          <Path d="M12 21s6-5.4 6-10a6 6 0 1 0-12 0c0 4.6 6 10 6 10Z" {...stroke} />
+          <Circle cx="12" cy="11" r="2" {...stroke} />
+        </Svg>
+      );
+    case "sparkle":
+      return (
+        <Svg {...p}>
+          <Path d="M12 3.2 13.4 8 18.2 9.4 13.4 10.8 12 15.6 10.6 10.8 5.8 9.4 10.6 8 12 3.2Z" fill={color} />
+          <Path d="M17.2 14.2 17.8 16.2 19.8 16.8 17.8 17.4 17.2 19.4 16.6 17.4 14.6 16.8 16.6 16.2 17.2 14.2Z" fill={color} />
+        </Svg>
+      );
+    case "stethoscope":
+      return (
+        <Svg {...p}>
+          <Path d="M7 4.5v5a3.2 3.2 0 0 0 6.4 0" {...stroke} />
+          <Path d="M7 4.5v1.2M13.4 4.5v1.2" {...stroke} />
+          <Path d="M13.4 12.2v.6a3.2 3.2 0 1 0 6.4 0v-1" {...stroke} />
+          <Circle cx="19.6" cy="10.2" r="1.3" {...stroke} />
+        </Svg>
+      );
+    case "personPlus":
+      return (
+        <Svg {...p}>
+          <Circle cx="10" cy="8" r="2.6" {...stroke} />
+          <Path d="M5.2 18.2c.9-2.8 2.6-4.2 4.8-4.2 2.3 0 4 1.4 4.8 4.2" {...stroke} />
+          <Path d="M17 8.5v5M14.5 11h5" {...stroke} />
+        </Svg>
+      );
+    case "alert":
+      return (
+        <Svg {...p}>
+          <Circle cx="12" cy="12" r="8" {...stroke} />
+          <Path d="M12 8v5" {...stroke} />
+          <Circle cx="12" cy="16" r="0.9" fill={color} />
+        </Svg>
+      );
   }
 }
 
@@ -154,11 +242,13 @@ export function CareIconTile({
   background,
   color,
   size = 36,
+  scale = 0.52,
 }: {
   name: CareGlyphName;
   background: string;
   color: string;
   size?: number;
+  scale?: number;
 }) {
   return (
     <View
@@ -171,7 +261,7 @@ export function CareIconTile({
         justifyContent: "center",
       }}
     >
-      <CareGlyph name={name} size={size * 0.52} color={color} />
+      <CareGlyph name={name} size={size * scale} color={color} />
     </View>
   );
 }
@@ -281,24 +371,35 @@ export function CareBar({
   color,
   track,
   ratio,
+  variant = "solid",
 }: {
   color: string;
   track: string;
   ratio: number;
+  variant?: "solid" | "dashes" | "dots";
 }) {
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    const next = Math.max(0, Math.min(1, ratio));
-    progress.value = withTiming(next, { duration: 700, easing: Easing.out(Easing.cubic) });
-  }, [progress, ratio]);
-  const fill = useAnimatedStyle(() => ({
-    transform: [{ scaleX: progress.value }],
-  }));
+  const clamped = Math.max(0, Math.min(1, ratio));
+  const count = variant === "dots" ? 26 : 9;
+  const filled = Math.round(clamped * count);
+  if (variant === "dashes" || variant === "dots") {
+    return (
+      <View style={[styles.segments, variant === "dots" ? styles.dotRow : styles.dashRow]}>
+        {Array.from({ length: count }, (_, i) => (
+          <View
+            key={i}
+            style={
+              variant === "dots"
+                ? [styles.dot, { backgroundColor: i < filled ? color : track }]
+                : [styles.dash, { backgroundColor: i < filled ? color : track }]
+            }
+          />
+        ))}
+      </View>
+    );
+  }
   return (
     <View style={[styles.track, { backgroundColor: track }]}>
-      <Animated.View
-        style={[styles.fill, { backgroundColor: color }, fill]}
-      />
+      <View style={[styles.fill, { backgroundColor: color, width: `${clamped * 100}%` }]} />
     </View>
   );
 }
@@ -312,6 +413,12 @@ export function CareStatCard({
   glyph,
   ratio,
   onPress,
+  barColor,
+  track,
+  variant = "solid",
+  fullWidth = false,
+  glyphScale = 0.52,
+  icon,
 }: {
   label: string;
   value: string;
@@ -321,19 +428,49 @@ export function CareStatCard({
   glyph: CareGlyphName;
   ratio: number;
   onPress: () => void;
+  barColor?: string;
+  track?: string;
+  variant?: "solid" | "dashes" | "dots";
+  fullWidth?: boolean;
+  glyphScale?: number;
+  icon?: ImageSourcePropType;
 }) {
   const { theme } = useCareTheme();
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.stat, { backgroundColor: theme.card }]}
+      style={[styles.stat, fullWidth && styles.statFull, { backgroundColor: theme.card }]}
     >
       <View style={styles.statTop}>
-        <CareIconTile name={glyph} background={background} color={ink} size={28} />
-        <Text style={[styles.statLabel, { color: theme.muted }]}>{label}</Text>
+        {icon ? (
+          <Image source={icon} style={styles.statIcon} resizeMode="contain" />
+        ) : (
+          <CareIconTile name={glyph} background={background} color={ink} size={34} scale={glyphScale} />
+        )}
+        <Text
+          style={[
+            styles.statLabel,
+            fullWidth
+              ? { color: "#000000", fontWeight: "400" }
+              : { color: theme.muted },
+          ]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        {fullWidth ? (
+          <Text style={[styles.statAside, { color: theme.ink }]}>{value}</Text>
+        ) : null}
       </View>
-      <Text style={[styles.statValue, { color: theme.ink }]}>{value}</Text>
-      <CareBar color={ink} track={background} ratio={ratio} />
+      {fullWidth ? null : (
+        <Text style={[styles.statValue, { color: theme.ink }]}>{value}</Text>
+      )}
+      <CareBar
+        color={barColor || ink}
+        track={track || background}
+        ratio={ratio}
+        variant={variant}
+      />
       <Text style={[styles.statHint, { color: theme.muted }]}>{hint}</Text>
     </Pressable>
   );
@@ -350,11 +487,9 @@ export function CareQuickAction({
 }) {
   const { theme } = useCareTheme();
   return (
-    <Pressable onPress={onPress} style={styles.action}>
-      <View style={[styles.actionIcon, { backgroundColor: theme.card }]}>
-        <CareGlyph name={glyph} size={20} color={theme.ink} />
-      </View>
-      <Text style={[styles.actionLabel, { color: theme.muted }]}>{label}</Text>
+    <Pressable onPress={onPress} style={[styles.action, { backgroundColor: theme.card }]}>
+      <CareGlyph name={glyph} size={16} color={theme.muted} />
+      <Text style={[styles.actionLabel, { color: theme.ink }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -372,17 +507,22 @@ const styles = StyleSheet.create({
   },
   pillText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   track: {
-    marginTop: 8,
-    height: 4,
-    borderRadius: 4,
+    marginTop: 10,
+    height: 6,
+    borderRadius: 6,
     overflow: "hidden",
   },
-  fill: {
-    height: 4,
-    width: "100%",
-    borderRadius: 4,
-    transformOrigin: "left",
+  segments: {
+    marginTop: 10,
+    height: 6,
+    flexDirection: "row",
+    alignItems: "center",
   },
+  dashRow: { gap: 3 },
+  dotRow: { justifyContent: "space-between" },
+  dash: { flex: 1, height: 4, borderRadius: 2 },
+  dot: { width: 3.5, height: 3.5, borderRadius: 2 },
+  fill: { height: 6, borderRadius: 6 },
   stat: {
     width: "48%",
     borderRadius: 22,
@@ -390,17 +530,20 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexGrow: 1,
   },
+  statFull: { width: "100%" },
+  statIcon: { width: 38, height: 38 },
   statTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  statLabel: { flex: 1, fontSize: 13, fontWeight: "600" },
+  statLabel: { flex: 1, fontSize: 15, fontWeight: "600" },
+  statAside: { fontSize: 22, fontWeight: "700", letterSpacing: -0.6 },
   statValue: { marginTop: 4, fontSize: 32, fontWeight: "700", letterSpacing: -1 },
-  statHint: { marginTop: 6, fontSize: 12 },
-  action: { alignItems: "center", width: 72 },
-  actionIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+  statHint: { marginTop: 8, fontSize: 12, textAlign: "right" },
+  action: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    height: 42,
   },
-  actionLabel: { marginTop: 6, fontSize: 11, fontWeight: "600", textAlign: "center" },
+  actionLabel: { fontSize: 13, fontWeight: "600" },
 });

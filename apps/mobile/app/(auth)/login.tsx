@@ -11,15 +11,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CountryPhoneField } from "@/components/CountryPhoneField";
-import {
-  Atmosphere,
-  BrandMark,
-  ErrorText,
-  Field,
-  PageTitle,
-  PrimaryButton,
-} from "@/components/ui";
-import { AnimatedView } from "@/lib/motion";
+import { ErrorText, Field } from "@/components/ui";
+import { useCareTheme } from "@/lib/careTheme";
 import { api, setRefreshToken, setToken } from "@/lib/api";
 import {
   composeLoginPhone,
@@ -29,13 +22,14 @@ import {
 } from "@/lib/countries";
 import { registerForPush } from "@/lib/push";
 import { friendlyWhatsAppError } from "@/lib/whatsappErrors";
-import { colors, shadows, radii, space } from "@/lib/theme";
+import { space } from "@/lib/theme";
 
 type Step = "phone" | "otp";
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
   const [step, setStep] = useState<Step>("phone");
   const [country, setCountry] = useState<CountryDial>(DEFAULT_COUNTRY);
   const [national, setNational] = useState("");
@@ -43,7 +37,6 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
   const [busy, setBusy] = useState(false);
-  const [debugOtp, setDebugOtp] = useState("");
 
   const fullPhone = composeLoginPhone(country, national);
 
@@ -74,7 +67,6 @@ export default function LoginScreen() {
     setBusy(true);
     setError("");
     setHint("");
-    setDebugOtp("");
     try {
       const res = await api<{
         phone?: string;
@@ -89,9 +81,7 @@ export default function LoginScreen() {
         setError(friendlyWhatsAppError(res.message));
         return;
       }
-      const from = res.data?.from || "9990052082";
-      setHint(`Code sent on WhatsApp from +91 ${from}`);
-      if (res.data?.debugOtp) setDebugOtp(res.data.debugOtp);
+      setHint("Code sent on WhatsApp");
       setStep("otp");
     } catch (err) {
       setError(
@@ -137,181 +127,147 @@ export default function LoginScreen() {
     }
   }
 
-  const topPad = Math.max(insets.top, 20) + space.md;
-  const bottomPad = Math.max(insets.bottom, 24) + space.lg;
+  const canContinue =
+    step === "phone" ? nationalDigitsReady(national) : otp.replace(/\D/g, "").length >= 6;
 
   return (
     <KeyboardAvoidingView
-      style={styles.root}
+      style={[styles.root, { backgroundColor: theme.paper }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Atmosphere />
       <ScrollView
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topPad,
-            paddingBottom: bottomPad,
+            paddingTop: insets.top + 28,
+            paddingBottom: Math.max(insets.bottom, 16),
           },
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
         automaticallyAdjustKeyboardInsets
-        contentInsetAdjustmentBehavior="automatic"
       >
-        <AnimatedView from="down" delay={40}>
-          <BrandMark size="lg" />
-        </AnimatedView>
+        <Text style={[styles.title, { color: theme.ink }]}>Sign in</Text>
+        <Text style={[styles.sub, { color: theme.muted }]}>
+          {step === "phone" ? "Enter your mobile number." : "Enter the code from WhatsApp."}
+        </Text>
 
-        <View style={{ height: space.xl }} />
-
-        <PageTitle
-          eyebrow="Patient care"
-          title="Sign in with mobile"
-          subtitle="Choose your country, enter your mobile number, then verify with WhatsApp OTP from +91 99900 52082."
-        />
-
-        <AnimatedView from="up" delay={120} style={styles.card}>
+        <View style={[styles.card, { backgroundColor: theme.card }]}>
           {step === "phone" ? (
-            <>
-              <CountryPhoneField
-                country={country}
-                onCountryChange={setCountry}
-                national={national}
-                onNationalChange={setNational}
-                placeholder={
-                  country.dial === "91" ? "10-digit mobile" : "Mobile number"
-                }
-              />
-              <ErrorText text={error} />
-              <PrimaryButton
-                label="Send WhatsApp OTP"
-                onPress={requestOtp}
-                busy={busy}
-                disabled={!nationalDigitsReady(national)}
-              />
-            </>
+            <CountryPhoneField
+              country={country}
+              onCountryChange={setCountry}
+              national={national}
+              onNationalChange={setNational}
+              placeholder={country.dial === "91" ? "10-digit mobile" : "Mobile number"}
+            />
           ) : (
             <>
-              <Text style={styles.hint}>
-                {hint || "Enter the 6-digit code from WhatsApp"}
+              <Text style={[styles.hint, { color: theme.muted }]}>
+                {hint || "Enter the 6-digit code"}
               </Text>
-              <Text style={styles.toNumber}>
-                To +{country.dial} {national.replace(/\D/g, "")}
+              <Text style={[styles.toNumber, { color: theme.ink }]}>
+                +{country.dial} {national.replace(/\D/g, "")}
               </Text>
-              {debugOtp ? (
-                <Text style={styles.debug}>Dev code: {debugOtp}</Text>
-              ) : null}
               <Field
                 label="OTP"
                 value={otp}
                 onChangeText={setOtp}
                 keyboardType="number-pad"
                 placeholder="6-digit code"
+                style={styles.otp}
               />
-              <ErrorText text={error} />
-              <PrimaryButton
-                label="Verify & continue"
-                onPress={verifyOtp}
-                busy={busy}
-                disabled={otp.replace(/\D/g, "").length < 6}
-              />
-              <Pressable
-                onPress={() => {
-                  setStep("phone");
-                  setOtp("");
-                  setError("");
-                }}
-                style={styles.secondaryLink}
-              >
-                <Text style={styles.secondaryText}>Change number</Text>
-              </Pressable>
-              <Pressable onPress={requestOtp} style={styles.secondaryLink}>
-                <Text style={styles.secondaryText}>Resend code</Text>
-              </Pressable>
+              <View style={styles.otpLinks}>
+                <Pressable
+                  onPress={() => {
+                    setStep("phone");
+                    setOtp("");
+                    setError("");
+                  }}
+                >
+                  <Text style={[styles.secondaryText, { color: theme.muted }]}>Change number</Text>
+                </Pressable>
+                <Pressable onPress={requestOtp}>
+                  <Text style={[styles.secondaryText, { color: theme.ink }]}>Resend code</Text>
+                </Pressable>
+              </View>
             </>
           )}
-        </AnimatedView>
+          <ErrorText text={error} />
+        </View>
 
-        <AnimatedView from="fade" delay={220}>
-          <Pressable
-            onPress={() => router.push("/(auth)/register")}
-            style={styles.registerLink}
-          >
-            <Text style={styles.registerText}>
-              New here?{" "}
-              <Text style={styles.registerAction}>
-                Create account with WhatsApp OTP
-              </Text>
-            </Text>
-          </Pressable>
-          <Text style={styles.note}>
-            Patient login is mobile number + WhatsApp OTP only.
+        <View style={styles.spacer} />
+
+        <Pressable onPress={() => router.push("/(auth)/register")} style={styles.registerLink}>
+          <Text style={[styles.registerText, { color: theme.muted }]}>
+            New here? <Text style={{ color: theme.ink, fontWeight: "700" }}>Create account</Text>
           </Text>
-        </AnimatedView>
+        </Pressable>
+        <Pressable
+          onPress={step === "phone" ? requestOtp : verifyOtp}
+          disabled={busy || !canContinue}
+          style={[
+            styles.button,
+            { backgroundColor: theme.ink, opacity: busy || !canContinue ? 0.45 : 1 },
+          ]}
+        >
+          <Text style={styles.buttonText}>
+            {busy ? (step === "phone" ? "Sending…" : "Checking…") : "Continue"}
+          </Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.paper },
+  root: { flex: 1 },
   content: {
     flexGrow: 1,
-    justifyContent: "flex-start",
-    paddingHorizontal: space.xl,
+    paddingHorizontal: 18,
   },
+  title: { fontSize: 28, fontWeight: "800", letterSpacing: -0.6, textAlign: "center" },
+  sub: { marginTop: 6, marginBottom: 24, fontSize: 15, textAlign: "center" },
   card: {
-    backgroundColor: colors.white,
-    borderRadius: radii.xxl,
-    padding: space.xl,
-    ...shadows.card,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
+  spacer: { flex: 1, minHeight: 24 },
+  otp: {
+    height: 52,
+    paddingVertical: 0,
+    textAlignVertical: "center",
+  },
+  otpLinks: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  button: {
+    height: 54,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   hint: {
     fontSize: 13,
-    color: colors.inkSoft,
     marginBottom: space.sm,
     lineHeight: 19,
-  },
-  toNumber: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.ink,
-    marginBottom: space.md,
-  },
-  debug: {
-    fontSize: 12,
-    color: colors.brand,
-    fontWeight: "600",
-    marginBottom: space.sm,
-  },
-  note: {
-    marginTop: space.lg,
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.inkFaint,
     textAlign: "center",
   },
-  registerLink: {
-    marginTop: space.lg,
-    alignItems: "center",
+  toNumber: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: space.md,
+    textAlign: "center",
   },
-  registerText: {
-    fontSize: 14,
-    color: colors.inkSoft,
-  },
-  registerAction: {
-    color: colors.brand,
-    fontWeight: "600",
-  },
-  secondaryLink: {
-    marginTop: space.md,
-    alignItems: "center",
-  },
-  secondaryText: {
-    fontSize: 13,
-    color: colors.brand,
-    fontWeight: "600",
-  },
+  registerLink: { alignItems: "center" },
+  registerText: { fontSize: 14, textAlign: "center" },
+  secondaryText: { fontSize: 13, fontWeight: "600" },
 });

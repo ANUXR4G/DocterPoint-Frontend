@@ -96,7 +96,6 @@ export default function RegisterScreen() {
   const [national, setNational] = useState("");
   const [otp, setOtp] = useState("");
   const [hint, setHint] = useState("");
-  const [debugOtp, setDebugOtp] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [profile, setProfile] = useState<ProfileDraft>(emptyProfile);
   const [aadharNumber, setAadharNumber] = useState("");
@@ -132,7 +131,6 @@ export default function RegisterScreen() {
     setBusy(true);
     setError("");
     setHint("");
-    setDebugOtp("");
     try {
       const res = await api<{
         phone?: string;
@@ -146,9 +144,7 @@ export default function RegisterScreen() {
         setError(friendlyWhatsAppError(res.message));
         return;
       }
-      const from = res.data?.from || "9990052082";
-      setHint(`Code sent on WhatsApp from +91 ${from}`);
-      if (res.data?.debugOtp) setDebugOtp(res.data.debugOtp);
+      setHint("Code sent on WhatsApp");
       setProfile((prev) => ({
         ...prev,
         contactNumber: fullPhone || prev.contactNumber,
@@ -321,15 +317,9 @@ export default function RegisterScreen() {
         <View style={{ height: space.lg }} />
         <PageTitle
           eyebrow="Patient"
-          title={
-            step === "profile"
-              ? "Complete your profile"
-              : "Create account with mobile"
-          }
+          title={step === "profile" ? "Your details" : "Create account"}
           subtitle={
-            step === "profile"
-              ? "Optional ID scan and email, then finish your details. Sign-in stays WhatsApp OTP."
-              : "Choose your country (default India +91). We verify with a WhatsApp code from +91 99900 52082."
+            step === "profile" ? "Add your details to finish." : "Enter your mobile number."
           }
         />
 
@@ -364,12 +354,7 @@ export default function RegisterScreen() {
 
         {step === "otp" ? (
           <>
-            <Text style={styles.hint}>
-              {hint || "Enter the 6-digit code from WhatsApp"}
-            </Text>
-            {debugOtp ? (
-              <Text style={styles.debug}>Dev code: {debugOtp}</Text>
-            ) : null}
+            <Text style={styles.hint}>{hint || "Enter the 6-digit code"}</Text>
             <Field
               label="OTP"
               value={otp}

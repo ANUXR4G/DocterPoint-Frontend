@@ -1,5 +1,4 @@
 import { SvgIcon } from "@/components/icons/SvgIcon";
-import { usePathname } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Keyboard,
@@ -13,27 +12,25 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MiraChat } from "@/components/MiraChat";
-import { contentBottomPad } from "@/lib/dockLayout";
 import { colors, space } from "@/lib/theme";
 
-const HIDDEN_ON = [
-  "/record",
-  "/(app)/record",
-];
-
 /**
- * Mira floating sheet — pins sheet bottom to the keyboard top so the composer
+ * Mira sheet — pins the sheet bottom to the keyboard top so the composer
  * stays visible. Avoids KeyboardAvoidingView inside Modals (unreliable on iOS).
  */
-export function GlucoBotFab() {
-  const pathname = usePathname();
+export function MiraSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const [open, setOpen] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
-    if (!open) {
+    if (!visible) {
       setKeyboardHeight(0);
       return;
     }
@@ -61,7 +58,7 @@ export function GlucoBotFab() {
       onShow.remove();
       onHide.remove();
     };
-  }, [open, windowHeight]);
+  }, [visible, windowHeight]);
 
   const sheetLayout = useMemo(() => {
     const keyboardOpen = keyboardHeight > 40;
@@ -77,40 +74,14 @@ export function GlucoBotFab() {
     };
   }, [keyboardHeight, windowHeight, insets.top]);
 
-  if (
-    HIDDEN_ON.some((p) => pathname === p || pathname.endsWith("/queries")) ||
-    pathname.includes("/doctor/")
-  ) {
-    return null;
-  }
-
   function close() {
     Keyboard.dismiss();
-    setOpen(false);
+    onClose();
   }
 
   return (
-    <>
-      {/* Hide FAB while the sheet is open so it cannot cover the composer. */}
-      {!open ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open help chat"
-          onPress={() => setOpen(true)}
-          style={[
-            styles.fab,
-            {
-              bottom: contentBottomPad(insets.bottom) + 8,
-              right: Math.max(insets.right, 22),
-            },
-          ]}
-        >
-          <SvgIcon name="chat" size={24} color={colors.white} />
-        </Pressable>
-      ) : null}
-
-      <Modal
-        visible={open}
+    <Modal
+        visible={visible}
         animationType="slide"
         transparent
         statusBarTranslucent
@@ -162,27 +133,11 @@ export function GlucoBotFab() {
             <MiraChat compact style={styles.chat} />
           </View>
         </View>
-      </Modal>
-    </>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  fab: {
-    position: "absolute",
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.navy,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: colors.shadowDeep,
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-    zIndex: 50,
-  },
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(11, 18, 32, 0.45)",

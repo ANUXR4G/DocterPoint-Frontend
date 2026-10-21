@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClinicCard, clinicDoctorCards } from "@/components/mobile/ClinicCards";
-import { ScreenHeader } from "@/components/mobile/ScreenHeader";
 import { SearchBar } from "@/components/mobile/SearchBar";
 import { SpecialtyChips } from "@/components/mobile/SpecialtyRow";
 import {
@@ -18,12 +17,14 @@ import {
   getCachedPractices,
   setCachedPractices,
 } from "@/lib/dataCache";
-import { contentBottomPad } from "@/lib/dockLayout";
-import { colors, space } from "@/lib/theme";
+import { useCareTheme } from "@/lib/careTheme";
+import { contentBottomPad, safeTopInset } from "@/lib/dockLayout";
+import { space } from "@/lib/theme";
 import type { PracticeListItem } from "@/lib/types";
 
 export default function DoctorsScreen() {
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
   const params = useLocalSearchParams<{ q?: string; specialty?: string }>();
   const paramText = Array.isArray(params.q) ? params.q[0] : params.q;
   const paramSpecialty = Array.isArray(params.specialty)
@@ -84,20 +85,23 @@ export default function DoctorsScreen() {
   }, [query, specialty, text, load]);
 
   return (
-    <Screen style={styles.screen}>
-      <ScreenHeader title="Find a clinic" />
+    <Screen style={{ backgroundColor: theme.paper }}>
       <FlatList
         data={clinicDoctorCards(practices)}
         keyExtractor={(d) => d.key}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: contentBottomPad(insets.bottom) },
+          {
+            paddingTop: safeTopInset(insets.top) + 8,
+            paddingBottom: contentBottomPad(insets.bottom),
+          },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={
           <View style={styles.header}>
+            <Text style={[styles.title, { color: theme.ink }]}>Clinics</Text>
             <SearchBar
               value={text}
               onChangeText={(t) => {
@@ -142,7 +146,7 @@ export default function DoctorsScreen() {
         )}
         ListFooterComponent={
           !loading && !error && practices.length > 0 ? (
-            <Text style={styles.count}>
+            <Text style={[styles.count, { color: theme.muted }]}>
               {clinicDoctorCards(practices).length} doctor
               {clinicDoctorCards(practices).length === 1 ? "" : "s"}
             </Text>
@@ -154,18 +158,20 @@ export default function DoctorsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: colors.paper,
-  },
   content: {
-    paddingHorizontal: space.xl,
-    paddingTop: space.xs,
+    paddingHorizontal: 20,
   },
   header: {
-    marginBottom: space.lg,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "700",
+    letterSpacing: -0.8,
+    marginBottom: 16,
   },
   chips: {
-    marginTop: space.lg,
+    marginTop: 14,
   },
   separator: {
     height: space.lg,
@@ -174,7 +180,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: space.xl,
     fontSize: 12,
-    color: colors.inkFaint,
     fontWeight: "500",
     letterSpacing: 0.2,
   },

@@ -432,7 +432,7 @@ export default function DoctorPatientsList() {
                             !/^Chief complaint:/i.test(b.doctorRemarks) &&
                             !/AI brief for doctor:/i.test(b.doctorRemarks) ? (
                               <p className="mt-1 whitespace-pre-wrap text-sm opacity-90">
-                                <span className="font-semibold">Remarks: </span>
+                                <span className="font-semibold">Doctor Notes: </span>
                                 {b.doctorRemarks}
                               </p>
                             ) : null}
@@ -635,7 +635,7 @@ export default function DoctorPatientsList() {
                                   ) ? (
                                     <p className="mt-1 whitespace-pre-wrap text-sm opacity-90">
                                       <span className="font-semibold">
-                                        Remarks:{" "}
+                                        Doctor Notes:{" "}
                                       </span>
                                       {b.doctorRemarks}
                                     </p>

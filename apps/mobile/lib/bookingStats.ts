@@ -31,7 +31,7 @@ export function bookingStatusTone(status: string) {
     return { bg: colors.brandLight, fg: colors.brand };
   if (s === "ACCEPTED" || s === "CONFIRMED")
     return { bg: colors.brandMist, fg: colors.brand };
-  if (s === "NO_SHOW") return { bg: colors.purpleLight, fg: colors.purple };
+  if (s === "NO_SHOW") return { bg: colors.noShowBg, fg: colors.noShow };
   if (s === "CANCELED" || s === "CANCELLED")
     return { bg: colors.roseLight, fg: colors.danger };
   // Scheduled / upcoming — amber (was calendar day fill)
@@ -156,6 +156,21 @@ export function nextVisitLabel(booking: ProctoBooking | undefined) {
   return `In ${diffDays} days`;
 }
 
+function isBookingMarker(text: string) {
+  return /^e2e web book\b/i.test(text.trim());
+}
+
+/** The complaint the patient gave. Empty when the visit has none. */
+export function chiefComplaintOf(booking: {
+  disease?: string | null;
+}): string {
+  const disease = booking.disease?.trim() || "";
+  if (!disease || isBookingMarker(disease) || /^general\s+consultation$/i.test(disease)) {
+    return "";
+  }
+  return disease;
+}
+
 /** "Today, 10:30 AM" · "Tomorrow · Token #4" · "Fri, 3 Oct, 9:00 AM" (clinic time zone). */
 export function visitDayTime(booking: ProctoBooking): string {
   const whenMs = bookingWhenMs(booking);
@@ -165,12 +180,13 @@ export function visitDayTime(booking: ProctoBooking): string {
     day === "Today" || day === "Tomorrow"
       ? day
       : formatPracticeDate(new Date(whenMs));
+  const slot = booking.slotStart ?? booking.slot_start;
+  const clock = slot ? formatPracticeTime(slot) : "";
   const token = booking.tokenNumber ?? booking.token_number;
   if (booking.mode === "TOKEN_BASED" && token != null) {
-    return `${dayText} · Token #${token}`;
+    return clock ? `${dayText}, ${clock} · Token #${token}` : `${dayText} · Token #${token}`;
   }
-  const slot = booking.slotStart ?? booking.slot_start;
-  return slot ? `${dayText}, ${formatPracticeTime(slot)}` : dayText;
+  return clock ? `${dayText}, ${clock}` : dayText;
 }
 
 /** Relative start for timed visits: "in 45 minutes", "in 3 hours", "in 2 days". */

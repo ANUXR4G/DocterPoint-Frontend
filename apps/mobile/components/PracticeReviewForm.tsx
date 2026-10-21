@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   ErrorText,
   Field,
@@ -17,41 +17,13 @@ type Props = {
   onSubmitted?: () => void;
 };
 
-function StarRow({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <View style={styles.starBlock}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.stars}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <Pressable key={n} onPress={() => onChange(n)} hitSlop={6}>
-            <Text style={[styles.starBtn, value >= n && styles.starActive]}>
-              ★
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 export function PracticeReviewForm({
   practiceId,
   bookingId,
   defaultAuthorName = "",
-  providerName,
   onSubmitted,
 }: Props) {
   const [authorName, setAuthorName] = useState(defaultAuthorName);
-  const [rating, setRating] = useState(5);
-  const [providerRating, setProviderRating] = useState(5);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -66,8 +38,8 @@ export function PracticeReviewForm({
       body: JSON.stringify({
         bookingId,
         authorName: authorName.trim() || undefined,
-        rating,
-        providerRating,
+        rating: 5,
+        providerRating: 5,
         body: body.trim() || undefined,
       }),
     });
@@ -82,18 +54,12 @@ export function PracticeReviewForm({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>Rate your visit</Text>
+      <Text style={styles.label}>Your review</Text>
       <Field
         label="Your name (optional)"
         value={authorName}
         onChangeText={setAuthorName}
         placeholder="How should we show your name?"
-      />
-      <StarRow label="Clinic" value={rating} onChange={setRating} />
-      <StarRow
-        label={providerName ? `Doctor · ${providerName}` : "Doctor"}
-        value={providerRating}
-        onChange={setProviderRating}
       />
       <Field
         label="Comment (optional)"
@@ -125,23 +91,5 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.4,
     marginBottom: space.md,
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.inkSoft,
-    marginBottom: 6,
-  },
-  starBlock: { marginBottom: space.md },
-  stars: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  starBtn: {
-    fontSize: 28,
-    color: colors.line,
-  },
-  starActive: {
-    color: "#b45309",
   },
 });

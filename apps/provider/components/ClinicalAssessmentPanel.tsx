@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Pressable,
   ScrollView,
@@ -61,11 +61,21 @@ const BAND_LEGEND: Array<{ key: VitalBand; label: string; bg: string }> = [
 type PainRow = NonNullable<ClinicalAssessment["pain"]>[number];
 type AllergyRow = NonNullable<ClinicalAssessment["allergies"]>[number];
 
+type ChartSection = "vitals" | "pain" | "allergies" | "medicines";
+
+const CHART_TABS: Array<[ChartSection, string]> = [
+  ["vitals", "Vitals"],
+  ["pain", "Pain assessment"],
+  ["allergies", "Allergies"],
+  ["medicines", "Medicines"],
+];
+
 type Props = {
   mastersRaw?: unknown;
   value: ClinicalAssessment | null;
   readOnly?: boolean;
   onChange: (next: ClinicalAssessment) => void;
+  medicines?: ReactNode;
 };
 
 function emptyPain(): PainRow {
@@ -78,6 +88,11 @@ function emptyPain(): PainRow {
     frequency: "",
     radiation: "",
   };
+}
+
+function insertAsSecond<T>(rows: T[], row: T): T[] {
+  if (rows.length === 0) return [row]
+  return [rows[0], row, ...rows.slice(1)]
 }
 
 function emptyAllergy(): AllergyRow {
@@ -104,6 +119,7 @@ export function ClinicalAssessmentPanel({
   value,
   readOnly,
   onChange,
+  medicines,
 }: Props) {
   const masters = useMemo(
     () => mergeClinicalMasters(mastersRaw),
@@ -112,6 +128,7 @@ export function ClinicalAssessmentPanel({
   const [local, setLocal] = useState<ClinicalAssessment>(
     () => normalizeClinicalAssessment(value) ?? emptyAssessment(),
   );
+  const [section, setSection] = useState<ChartSection>("vitals");
   const [painTool, setPainTool] = useState<{
     idx: number;
     tab: PainToolTab;
@@ -219,6 +236,27 @@ export function ClinicalAssessmentPanel({
 
   return (
     <View style={styles.wrap}>
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {CHART_TABS.map(([id, label]) => {
+          const active = section === id;
+          return (
+            <Pressable
+              key={id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              onPress={() => setSection(id)}
+              style={[styles.tab, active && styles.tabOn]}
+            >
+              <Text style={[styles.tabLabel, active && styles.tabLabelOn]}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {section === "vitals" ? (
+      <>
       <Text style={styles.h2}>Vitals</Text>
       {value?.savedAt || value?.vitals?.recordedAt ? (
         <Text style={styles.meta}>
@@ -282,8 +320,12 @@ export function ClinicalAssessmentPanel({
           );
         })}
       </View>
+      </>
+      ) : null}
 
-      <Text style={[styles.h2, { marginTop: space.lg }]}>Pain</Text>
+      {section === "pain" ? (
+      <>
+      <Text style={styles.h2}>Pain assessment</Text>
       {(local.pain ?? []).map((row, idx) => (
         <View key={idx} style={styles.card}>
           <Text style={styles.meta}>#{idx + 1}</Text>
@@ -475,12 +517,16 @@ export function ClinicalAssessmentPanel({
           onPress={() =>
             commit({
               ...local,
-              pain: [...(local.pain ?? []), emptyPain()],
+              pain: insertAsSecond(local.pain ?? [], emptyPain()),
             })
           }
         />
       ) : null}
+      </>
+      ) : null}
 
+      {section === "allergies" ? (
+      <>
       <View style={styles.allergyHead}>
         <Text style={styles.h2}>Allergies</Text>
         {!readOnly ? (
@@ -625,6 +671,15 @@ export function ClinicalAssessmentPanel({
           }
         />
       ) : null}
+      </>
+      ) : null}
+
+      {section === "medicines" ? (
+        <View style={styles.wrap}>
+          <Text style={styles.h2}>Medicines</Text>
+          {medicines}
+        </View>
+      ) : null}
 
       <PainAssessmentToolModal
         open={painTool != null}
@@ -736,8 +791,34 @@ const styles = StyleSheet.create({
     color: colors.inkFaint,
   },
   meta: { fontSize: 12, color: colors.inkFaint, fontWeight: "600" },
+  tabs: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  tab: {
+    flexGrow: 1,
+    flexBasis: "46%",
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.paperRaised,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  tabOn: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.ink,
+    textAlign: "center",
+  },
+  tabLabelOn: { color: colors.white },
   allergyHead: {
-    marginTop: space.lg,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

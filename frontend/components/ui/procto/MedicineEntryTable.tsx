@@ -1,10 +1,15 @@
 "use client"
 
+import { useState } from "react"
 import {
   defaultMedicineStartDate,
   medicineEndDate,
   medicineWithStartDate,
 } from "@/lib/medicineDates"
+import MedicineAutocomplete from "./MedicineAutocomplete"
+import InstructionCombobox from "./InstructionCombobox"
+import FavoriteOrderSetModal from "./FavoriteOrderSetModal"
+import type { MedicineMasterItem } from "@/lib/medicineMaster"
 
 export type VisitMedicine = {
   name: string
@@ -20,6 +25,7 @@ export type VisitMedicine = {
   startDate?: string
   endDate?: string
   instruction?: string
+  favourite?: boolean
 }
 
 export const emptyMedicineDraft = (): VisitMedicine => ({
@@ -34,6 +40,7 @@ export const emptyMedicineDraft = (): VisitMedicine => ({
   startDate: defaultMedicineStartDate(),
   endDate: "",
   instruction: "",
+  favourite: false,
 })
 
 const ROUTES = [
@@ -211,6 +218,9 @@ export default function MedicineEntryTable({
   onAdd,
   onRemove,
   onEdit,
+  onToggleFavourite,
+  onAddMedicines,
+  practiceId,
 }: {
   rows: VisitMedicine[]
   draft: VisitMedicine
@@ -224,8 +234,15 @@ export default function MedicineEntryTable({
     patch: Partial<VisitMedicine>,
     commit: boolean,
   ) => void
+  /** Toggle favourite status of a medicine. */
+  onToggleFavourite?: (index: number, favourite: boolean) => void
+  /** Bulk append multiple medicines, e.g. from favorites or an order set. */
+  onAddMedicines?: (medicines: VisitMedicine[]) => void
+  /** Practice ID for practice-specific order sets and clinical masters. */
+  practiceId?: string
 }) {
-  function set<K extends keyof VisitMedicine>(key: K, value: string) {
+  const [showOrderModal, setShowOrderModal] = useState(false)
+  function set<K extends keyof VisitMedicine>(key: K, value: string | boolean) {
     const next: VisitMedicine = { ...draft, [key]: value }
     if (key === "duration" || key === "durationUnit" || key === "startDate") {
       const scheduled = medicineWithStartDate(next, next.startDate || "")
@@ -236,9 +253,52 @@ export default function MedicineEntryTable({
     onDraft(next)
   }
 
+  function handleMasterSelect(med: MedicineMasterItem) {
+    const next: VisitMedicine = {
+      ...draft,
+      name: med.name,
+      strength: draft.strength || med.strength || "",
+      route: draft.route || med.route || "",
+      dose: draft.dose || med.dose || "",
+      doseUnit: draft.doseUnit || med.doseUnit || "",
+      frequency: draft.frequency || med.frequency || "",
+      duration: draft.duration || med.duration || "",
+      durationUnit: draft.durationUnit || med.durationUnit || "",
+      instruction: draft.instruction || med.instruction || "",
+    }
+    if (next.duration && next.durationUnit && next.startDate) {
+      const scheduled = medicineWithStartDate(next, next.startDate)
+      if (scheduled.endDate) next.endDate = scheduled.endDate
+    }
+    onDraft(next)
+  }
+
   return (
-      <div className="chart-x mt-3 min-w-0 max-w-full overflow-x-auto rounded-lg border border-neutral-200 bg-white p-2 text-neutral-900 dark:border-neutral-600 dark:bg-neutral-950 dark:!text-neutral-100">
-      <table className="w-full min-w-[1180px] border-collapse">
+    <div className="space-y-2">
+      {/* Top toolbar on top of medicine box */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">
+            {rows.length} {rows.length === 1 ? "medicine" : "medicines"} prescribed
+          </span>
+        </div>
+        {!locked && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowOrderModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 shadow-xs hover:bg-amber-100 hover:border-amber-400 active:scale-95 transition-all dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/60 cursor-pointer"
+              title="Order from Favorite medicines or apply complete Order Sets"
+            >
+              <span className="text-amber-500 text-sm">⭐</span>
+              <span>Order from Favorites &amp; Order Sets</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="chart-x min-w-0 max-w-full overflow-x-auto rounded-lg border border-neutral-200 bg-white p-2 pb-32 text-neutral-900 dark:border-neutral-600 dark:bg-neutral-950 dark:!text-neutral-100">
+        <table className="w-full min-w-[1240px] border-collapse">
         <thead>
           <tr>
             {[
@@ -254,9 +314,17 @@ export default function MedicineEntryTable({
               "Start Time",
               "End Time",
               "Special Instruction",
+              "Favourite",
             ].map((label) => (
               <th key={label} className={th}>
-                {label}
+                {label === "Favourite" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <span>Favourite</span>
+                    <span className="text-amber-500">⭐</span>
+                  </span>
+                ) : (
+                  label
+                )}
               </th>
             ))}
           </tr>
@@ -274,12 +342,34 @@ export default function MedicineEntryTable({
               <td className={`${td} text-center tabular-nums`}>{idx + 1}</td>
               <td className={td}>
                 {editable ? (
-                  <input
+                  <MedicineAutocomplete
                     value={m.name}
-                    aria-label={`Medicine name ${idx + 1}`}
-                    className={`${field} min-w-[9rem]`}
-                    onChange={(e) => edit({ name: e.target.value }, false)}
-                    onBlur={(e) => edit({ name: e.target.value }, true)}
+                    ariaLabel={`Medicine name ${idx + 1}`}
+                    className={`${field} min-w-[9.5rem]`}
+                    favourite={m.favourite}
+                    onToggleFavourite={(fav) => {
+                      edit({ favourite: fav }, true)
+                      onToggleFavourite?.(idx, fav)
+                    }}
+                    onChange={(name) => edit({ name }, false)}
+                    onSelect={(med) => {
+                      edit(
+                        {
+                          name: med.name,
+                          strength: m.strength || med.strength,
+                          route: m.route || med.route,
+                          dose: m.dose || med.dose,
+                          doseUnit: m.doseUnit || med.doseUnit,
+                          frequency: m.frequency || med.frequency,
+                          duration: m.duration || med.duration,
+                          durationUnit: m.durationUnit || med.durationUnit,
+                          instruction: m.instruction || med.instruction,
+                          favourite: med.favourite !== undefined ? med.favourite : m.favourite,
+                        },
+                        true,
+                      )
+                    }}
+                    onBlur={() => edit({ name: m.name }, true)}
                   />
                 ) : (
                   <span>{m.name}</span>
@@ -439,16 +529,39 @@ export default function MedicineEntryTable({
               </td>
               <td className={td}>
                 {editable ? (
-                  <input
+                  <InstructionCombobox
                     value={m.instruction || ""}
-                    aria-label={`Special instruction for ${m.name}`}
-                    className={`${field} min-w-[8rem]`}
-                    onChange={(e) => edit({ instruction: e.target.value }, false)}
-                    onBlur={(e) => edit({ instruction: e.target.value }, true)}
+                    ariaLabel={`Special instruction for ${m.name}`}
+                    className={`${field} min-w-[11.5rem]`}
+                    onChange={(instruction) => edit({ instruction }, false)}
+                    onCommit={(instruction) => edit({ instruction }, true)}
                   />
                 ) : (
                   m.instruction || ""
                 )}
+              </td>
+              <td className={`${td} text-center`}>
+                <button
+                  type="button"
+                  aria-label={m.favourite ? "Remove favourite" : "Make favourite"}
+                  title={
+                    m.favourite
+                      ? "In favorite list (green star) - click to remove"
+                      : "Not in favorite list (orange star) - click to add"
+                  }
+                  onClick={() => {
+                    const nextFav = !m.favourite
+                    edit({ favourite: nextFav }, true)
+                    onToggleFavourite?.(idx, nextFav)
+                  }}
+                  className="inline-flex size-7 items-center justify-center rounded hover:bg-neutral-100 transition-transform active:scale-90 dark:hover:bg-neutral-800 cursor-pointer"
+                >
+                  {m.favourite ? (
+                    <span className="text-base text-emerald-500">★</span>
+                  ) : (
+                    <span className="text-base text-orange-500 hover:text-orange-600">★</span>
+                  )}
+                </button>
               </td>
             </tr>
             )
@@ -457,9 +570,17 @@ export default function MedicineEntryTable({
             <tr>
               <td className={`${td} text-center tabular-nums`}>{rows.length + 1}</td>
               <td className={td}>
-                <input
+                <MedicineAutocomplete
                   value={draft.name}
-                  onChange={(e) => set("name", e.target.value)}
+                  favourite={draft.favourite}
+                  onToggleFavourite={(fav) => set("favourite", fav)}
+                  onChange={(name) => set("name", name)}
+                  onSelect={(med) => {
+                    handleMasterSelect(med)
+                    if (med.favourite !== undefined) {
+                      set("favourite", med.favourite)
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
@@ -467,7 +588,7 @@ export default function MedicineEntryTable({
                     }
                   }}
                   placeholder="Type to search med"
-                  className={`${field} min-w-[9rem]`}
+                  className={`${field} min-w-[9.5rem]`}
                 />
               </td>
               <td className={td}>
@@ -566,11 +687,33 @@ export default function MedicineEntryTable({
                 />
               </td>
               <td className={td}>
-                <input
+                <InstructionCombobox
                   value={draft.instruction || ""}
-                  onChange={(e) => set("instruction", e.target.value)}
-                  className={`${field} min-w-[8rem]`}
+                  ariaLabel="Draft special instruction"
+                  placeholder="Select or type..."
+                  className={`${field} min-w-[11.5rem]`}
+                  onChange={(instruction) => set("instruction", instruction)}
+                  onCommit={(instruction) => set("instruction", instruction)}
                 />
+              </td>
+              <td className={`${td} text-center`}>
+                <button
+                  type="button"
+                  aria-label={draft.favourite ? "Remove favourite" : "Make favourite"}
+                  title={
+                    draft.favourite
+                      ? "In favorite list (green star) - click to remove"
+                      : "Not in favorite list (orange star) - click to add"
+                  }
+                  onClick={() => set("favourite", !draft.favourite)}
+                  className="inline-flex size-7 items-center justify-center rounded hover:bg-neutral-100 transition-transform active:scale-90 dark:hover:bg-neutral-800 cursor-pointer"
+                >
+                  {draft.favourite ? (
+                    <span className="text-base text-emerald-500">★</span>
+                  ) : (
+                    <span className="text-base text-orange-500 hover:text-orange-600">★</span>
+                  )}
+                </button>
               </td>
             </tr>
           )}
@@ -587,6 +730,19 @@ export default function MedicineEntryTable({
           </button>
         </div>
       )}
+      </div>
+
+      <FavoriteOrderSetModal
+        isOpen={showOrderModal}
+        onClose={() => setShowOrderModal(false)}
+        practiceId={practiceId}
+        currentPrescriptionRows={rows}
+        onAddMedicines={(newMeds) => {
+          if (onAddMedicines) {
+            onAddMedicines(newMeds)
+          }
+        }}
+      />
     </div>
   )
 }

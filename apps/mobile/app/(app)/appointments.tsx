@@ -1,43 +1,87 @@
-import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { useCallback, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CareCalendar } from "@/components/mobile/CareCalendar";
-import {
-  Chip,
-  EmptyState,
-  ErrorText,
-  Loading,
-  PageTitle,
-  Screen,
-} from "@/components/ui";
+import { CareGlyph } from "@/components/mobile/careArt";
+import { ClinicAvatar } from "@/components/mobile/ClinicAvatar";
+import { EmptyState, ErrorText, Loading, Screen } from "@/components/ui";
 import { AnimatedView, PressableScale } from "@/lib/motion";
-import { api } from "@/lib/api";
 import {
   bookingStatusLabel,
-  bookingStatusTone as statusTone,
+  bookingWhenMs,
+  chiefComplaintOf,
   effectiveBookingStatus,
   isUpcomingBooking,
   sortBookingsByWhen,
 } from "@/lib/bookingStats";
 import { withDrTitle } from "@/lib/doctorName";
-import { contentBottomPad } from "@/lib/dockLayout";
+import { useCareTheme } from "@/lib/careTheme";
+import { colors } from "@/lib/theme";
+import { contentBottomPad, safeTopInset } from "@/lib/dockLayout";
 import { usePatientLive } from "@/lib/PatientLiveContext";
-import { colors, shadows, radii, space } from "@/lib/theme";
-import { bookingWhen } from "@/lib/types";
+import { formatPracticeDate, formatPracticeTime, practiceDayKey } from "@/lib/practiceTime";
+import type { ProctoBooking } from "@/lib/types";
 
-type ViewMode = "list" | "calendar";
+type Scope = "all" | "today" | "upcoming" | "past" | "calendar";
+
+const FILTERS: { value: Scope; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "calendar", label: "Calendar" },
+  { value: "today", label: "Today's Visit" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "past", label: "Past" },
+];
+
+function lineColor(status: string) {
+  const s = (status || "").toUpperCase();
+  if (s === "COMPLETED" || s === "CANCELED" || s === "CANCELLED") return "#3CB87A";
+  if (s === "NO_SHOW") return colors.noShow;
+  if (s === "IN_PROGRESS" || s === "WAITING" || s === "CHECKED_IN") return "#F5B56A";
+  return "#7EB6FF";
+}
+
+function stageOf(status: string) {
+  const s = (status || "").toUpperCase();
+  if (s === "COMPLETED") return { pct: 1, color: "#8FCBB0" };
+  if (s === "IN_PROGRESS") return { pct: 0.72, color: "#F5B56A" };
+  if (s === "WAITING" || s === "CHECKED_IN") return { pct: 0.58, color: "#F5B56A" };
+  if (s === "CONFIRMED" || s === "ACCEPTED") return { pct: 0.42, color: "#F5B56A" };
+  if (s === "NO_SHOW") return { pct: 0.16, color: colors.noShow };
+  if (s === "CANCELED" || s === "CANCELLED") return { pct: 0.16, color: "#3CB87A" };
+  return { pct: 0.28, color: "#F5B56A" };
+}
+
+function matchesQuery(item: ProctoBooking, query: string) {
+  if (!query) return true;
+  const blob = [
+    item.practice?.name,
+    item.practice?.specialty,
+    item.provider?.name,
+    item.providerName,
+    item.location?.city,
+    item.location?.name,
+    chiefComplaintOf(item),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return blob.includes(query);
+}
 
 export default function AppointmentsScreen() {
   const router = useRouter();
+  const { view, at } = useLocalSearchParams<{ view?: string; at?: string }>();
   const insets = useSafeAreaInsets();
+  const { theme } = useCareTheme();
   const {
     bookings: items,
     loading,
@@ -45,12 +89,17 @@ export default function AppointmentsScreen() {
     error: liveError,
     refresh,
   } = usePatientLive();
-  const [view, setView] = useState<ViewMode>("list");
-  const [scope, setScope] = useState<"upcoming" | "past" | "all">("upcoming");
+  const [scope, setScope] = useState<Scope>("all");
+  const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const displayError = error || liveError || "";
+  const displayError = liveError || "";
+
+  useEffect(() => {
+    if (view === "calendar") setScope("calendar");
+    else if (view === "visits") setScope("all");
+    else return;
+    router.setParams({ view: "", at: "" });
+  }, [view, at, router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,205 +108,241 @@ export default function AppointmentsScreen() {
   );
 
   const now = Date.now();
-  const filtered = sortBookingsByWhen(
-    items.filter((b) => {
+  const todayKey = practiceDayKey(now);
+  const needle = query.trim().toLowerCase();
+
+  const filtered = useMemo(() => {
+    const matched = items.filter((b) => matchesQuery(b, needle));
+    if (scope === "calendar") return matched;
+    const scoped = matched.filter((b) => {
+      if (scope === "today") return practiceDayKey(bookingWhenMs(b)) === todayKey;
       if (scope === "upcoming") return isUpcomingBooking(b, now);
       if (scope === "past") return !isUpcomingBooking(b, now);
       return true;
-    }),
-    scope === "upcoming" ? "asc" : "desc",
-  );
-
-  function cancel(id: string) {
-    Alert.alert("Cancel visit?", "This cannot be undone.", [
-      { text: "Keep", style: "cancel" },
-      {
-        text: "Cancel visit",
-        style: "destructive",
-        onPress: async () => {
-          setBusyId(id);
-          const res = await api(`/procto/bookings/${id}/cancel`, {
-            method: "PATCH",
-            body: JSON.stringify({}),
-          });
-          setBusyId(null);
-          if (res.status !== "successful") {
-            setError(res.message || "Cancel failed");
-            return;
-          }
-          await refresh({ soft: true, force: true });
-        },
-      },
-    ]);
-  }
+    });
+    if (scope === "all") {
+      const upcoming = sortBookingsByWhen(
+        scoped.filter((b) => isUpcomingBooking(b, now)),
+        "asc",
+      );
+      const rest = sortBookingsByWhen(
+        scoped.filter((b) => !isUpcomingBooking(b, now)),
+        "desc",
+      );
+      return [...upcoming, ...rest];
+    }
+    return sortBookingsByWhen(scoped, scope === "past" ? "desc" : "asc");
+  }, [items, needle, scope, todayKey, now]);
 
   if (loading && items.length === 0 && !refreshing) return <Loading />;
 
   return (
-    <Screen>
+    <Screen style={{ backgroundColor: theme.paper }}>
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: contentBottomPad(insets.bottom) },
+          {
+            paddingTop: safeTopInset(insets.top) + 8,
+            paddingBottom: contentBottomPad(insets.bottom),
+          },
         ]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              void refresh({ soft: true, force: true }).finally(() =>
-                setRefreshing(false),
-              );
+              void refresh({ soft: true, force: true }).finally(() => setRefreshing(false));
             }}
-            tintColor={colors.brand}
+            tintColor={theme.visitInk}
           />
         }
       >
-        <PageTitle
-          eyebrow="Patient"
-          title="My bookings"
-          subtitle={
-            liveConnected
-              ? "Live updates on · list and calendar stay in sync with the clinic."
-              : "Connecting live… · bookings from web and WhatsApp show here."
-          }
-        />
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.ink }]}>Visits</Text>
+          <PressableScale
+            onPress={() => router.push("/(app)/queries")}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+            style={[styles.bell, { backgroundColor: theme.card }]}
+          >
+            <CareGlyph name="bell" size={18} color={theme.ink} />
+            {liveConnected ? <View style={[styles.liveDot, { backgroundColor: theme.stable }]} /> : null}
+          </PressableScale>
+        </View>
 
-        <View style={styles.viewSwitch}>
-          <Chip
-            label="List"
-            active={view === "list"}
-            onPress={() => setView("list")}
-          />
-          <Chip
-            label="Calendar"
-            active={view === "calendar"}
-            onPress={() => setView("calendar")}
+        <View style={[styles.search, { backgroundColor: theme.card }]}>
+          <CareGlyph name="search" size={18} color={theme.muted} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search visits..."
+            placeholderTextColor={theme.muted}
+            style={[styles.searchInput, { color: theme.ink }]}
+            autoCorrect={false}
+            clearButtonMode="while-editing"
           />
         </View>
 
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+        >
+          {FILTERS.map((filter) => {
+            const on = scope === filter.value;
+            return (
+              <PressableScale
+                key={filter.value}
+                onPress={() => setScope(filter.value)}
+                style={[styles.chip, { backgroundColor: on ? theme.ink : theme.card }]}
+              >
+                <Text style={[styles.chipText, { color: on ? "#fff" : theme.ink }]}>
+                  {filter.label}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </ScrollView>
+
         <ErrorText text={displayError} />
 
-        {view === "calendar" ? (
+        {scope === "calendar" ? (
           <CareCalendar
-            bookings={items}
-            onOpenBooking={(id) =>
-              router.push(`/(app)/bookings/${id}` as Href)
-            }
+            bookings={filtered}
+            onOpenBooking={(id) => router.push(`/(app)/bookings/${id}` as Href)}
           />
+        ) : filtered.length === 0 ? (
+          <EmptyState text="No visits here yet. Find a clinic or book on WhatsApp." />
         ) : (
-          <>
-            <View style={styles.chips}>
-              {(
-                [
-                  ["upcoming", "Upcoming"],
-                  ["past", "Past"],
-                  ["all", "All"],
-                ] as const
-              ).map(([value, label]) => (
-                <Chip
-                  key={value}
-                  label={label}
-                  active={scope === value}
-                  onPress={() => setScope(value)}
-                />
-              ))}
-            </View>
-
-            {filtered.length === 0 ? (
-              <EmptyState text="No visits here yet. Find a clinic or book on WhatsApp." />
-            ) : (
-              filtered.map((item, index) => {
-                const displayStatus = effectiveBookingStatus(item, now);
-                const canCancel =
-                  displayStatus !== "NO_SHOW" &&
-                  [
-                    "SCHEDULED",
-                    "REQUESTED",
-                    "ACCEPTED",
-                    "BOOKED",
-                    "CONFIRMED",
-                  ].includes((item.status || "").toUpperCase());
-                const isCompleted =
-                  (item.status || "").toUpperCase() === "COMPLETED";
-                const provider =
-                  withDrTitle(item.provider?.name || item.providerName) || "Doctor";
-                const tone = statusTone(displayStatus);
-                return (
-                  <AnimatedView
-                    key={item.id}
-                    from="up"
-                    delay={Math.min(index * 50, 200)}
-                  >
-                    <PressableScale
-                      style={[
-                        styles.card,
-                        { borderLeftColor: tone.fg, borderLeftWidth: 4 },
-                      ]}
-                      onPress={() =>
-                        router.push(`/(app)/bookings/${item.id}` as Href)
-                      }
-                    >
+          <View style={styles.list}>
+            {filtered.map((item, index) => {
+              const displayStatus = effectiveBookingStatus(item, now);
+              const noShow = displayStatus === "NO_SHOW";
+              const canceled = displayStatus === "CANCELED" || displayStatus === "CANCELLED";
+              const rawName = (item.provider?.name || item.providerName || "Doctor").replace(
+                /^dr\.?\s+/i,
+                "",
+              );
+              const provider = withDrTitle(rawName) || "Doctor";
+              const when = item.slotStart || item.slot_start;
+              const clock = when ? formatPracticeTime(when, "") : "";
+              const [hm, period] = clock.split(" ");
+              const complaint = chiefComplaintOf(item);
+              const subtitle = complaint || "No chief complaint";
+              const stage = stageOf(displayStatus);
+              const railColor = lineColor(displayStatus);
+              const open = () => router.push(`/(app)/bookings/${item.id}` as Href);
+              return (
+                <AnimatedView
+                  key={item.id}
+                  from="up"
+                  delay={Math.min(index * 40, 200)}
+                  style={styles.personHit}
+                >
+                  <View style={styles.row}>
+                    {index < filtered.length - 1 ? (
+                      <View style={[styles.segment, { backgroundColor: railColor }]} />
+                    ) : null}
+                    <View style={styles.rail}>
+                      <Text style={[styles.railTime, { color: theme.muted }]}>{hm || "—"}</Text>
+                      {period ? (
+                        <Text style={[styles.railPeriod, { color: theme.muted }]}>{period}</Text>
+                      ) : null}
+                      <View style={[styles.dot, { backgroundColor: railColor, borderColor: theme.paper }]} />
+                    </View>
+                    <View style={[styles.card, { backgroundColor: theme.card }]}>
                       <View style={styles.cardTop}>
-                        <Text style={styles.name}>
-                          {item.practice?.name || "Clinic"}
-                        </Text>
                         <View
-                          style={[styles.badge, { backgroundColor: tone.bg }]}
+                          style={[
+                            styles.pill,
+                            {
+                              backgroundColor: noShow
+                                ? colors.noShowBg
+                                : canceled
+                                  ? theme.alert
+                                  : theme.task,
+                            },
+                          ]}
                         >
-                          <Text style={[styles.badgeText, { color: tone.fg }]}>
-                            {bookingStatusLabel(displayStatus)}
+                          <View
+                            style={[
+                              styles.pillDot,
+                              {
+                                backgroundColor: noShow
+                                  ? colors.noShow
+                                  : canceled
+                                    ? theme.attention
+                                    : theme.stable,
+                              },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.pillText,
+                              {
+                                color: noShow
+                                  ? colors.noShowInk
+                                  : canceled
+                                    ? theme.alertInk
+                                    : theme.taskInk,
+                              },
+                            ]}
+                          >
+                            {bookingStatusLabel(displayStatus).toLowerCase()}
                           </Text>
                         </View>
+                        <PressableScale
+                          onPress={open}
+                          accessibilityRole="button"
+                          accessibilityLabel="Message clinic"
+                          style={[styles.chat, { backgroundColor: theme.paper }]}
+                        >
+                          <CareGlyph name="chat" size={16} color={theme.muted} />
+                        </PressableScale>
                       </View>
-                      <Text style={styles.meta}>
-                        {provider}
-                        {item.practice?.specialty
-                          ? ` · ${item.practice.specialty}`
-                          : ""}
-                        {item.location?.city ? ` · ${item.location.city}` : ""}
-                      </Text>
-                      <Text style={styles.when}>{bookingWhen(item)}</Text>
-                      {item.channel === "WHATSAPP_AI" ||
-                      item.practice?.consultationFee != null ? (
-                        <Text style={styles.status}>
-                          {item.channel === "WHATSAPP_AI" ? "WhatsApp" : ""}
-                          {item.channel === "WHATSAPP_AI" &&
-                          item.practice?.consultationFee != null
-                            ? " · "
-                            : ""}
-                          {item.practice?.consultationFee != null
-                            ? `₹${item.practice.consultationFee}`
-                            : ""}
+                      <Pressable
+                        onPress={open}
+                        accessibilityRole="button"
+                        accessibilityLabel={provider}
+                        style={[styles.person, { backgroundColor: theme.paper }]}
+                      >
+                        <ClinicAvatar
+                          name={rawName}
+                          size={44}
+                          radius={12}
+                          backgroundColor={theme.visit}
+                          textColor={theme.ink}
+                        />
+                        <View style={styles.personText}>
+                          <Text style={[styles.name, { color: theme.ink }]}>{provider}</Text>
+                          <Text style={[styles.meta, { color: theme.muted }]}>{subtitle}</Text>
+                        </View>
+                        <Text style={[styles.chevron, { color: theme.muted }]}>›</Text>
+                      </Pressable>
+                      <View style={styles.progressRow}>
+                        <Text style={[styles.progressLabel, { color: theme.muted }]}>
+                          {formatPracticeDate(when || item.sessionDate || item.session_date, "Visit")}
                         </Text>
-                      ) : null}
-                      <View style={styles.actions}>
-                        {isCompleted ? (
-                          <Text style={styles.reviewHint}>
-                            Tap to leave a review →
-                          </Text>
-                        ) : (
-                          <Text style={styles.viewHint}>Tap for details →</Text>
-                        )}
-                        {canCancel ? (
-                          <PressableScale
-                            style={styles.cancelBtn}
-                            disabled={busyId === item.id}
-                            onPress={() => cancel(item.id)}
-                          >
-                            <Text style={styles.cancelText}>
-                              {busyId === item.id ? "…" : "Cancel"}
-                            </Text>
-                          </PressableScale>
-                        ) : null}
+                        <Text style={[styles.progressValue, { color: theme.ink }]}>
+                          {Math.round(stage.pct * 100)}%
+                        </Text>
                       </View>
-                    </PressableScale>
-                  </AnimatedView>
-                );
-              })
-            )}
-          </>
+                      <View style={[styles.track, { backgroundColor: theme.line }]}>
+                        <View
+                          style={[
+                            styles.fill,
+                            { width: `${Math.round(stage.pct * 100)}%`, backgroundColor: stage.color },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  </View>
+                </AnimatedView>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
     </Screen>
@@ -265,89 +350,122 @@ export default function AppointmentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.xl },
-  viewSwitch: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: space.md,
-    gap: 8,
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: space.lg,
-    gap: 8,
-  },
-  card: {
-    backgroundColor: colors.paperRaised,
-    padding: space.xl,
-    marginBottom: space.md,
-    borderRadius: radii.xl,
-    ...shadows.card,
-  },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: space.sm,
-  },
-  name: {
-    flex: 1,
-    fontWeight: "600",
-    fontSize: 17,
-    color: colors.ink,
-    letterSpacing: -0.3,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radii.sm,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  meta: { marginTop: 8, color: colors.inkSoft, fontSize: 13 },
-  when: {
-    marginTop: 12,
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "500",
-    letterSpacing: -0.1,
-  },
-  status: {
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: "500",
-    color: colors.inkFaint,
-  },
-  actions: {
+  content: { paddingHorizontal: 20 },
+  header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  title: { fontSize: 32, fontWeight: "700", letterSpacing: -0.8 },
+  bell: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  liveDot: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
-    marginTop: space.lg,
-    paddingTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.lineStrong,
-  },
-  reviewHint: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#b45309",
-  },
-  viewHint: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.brand,
-  },
-  cancelBtn: {
-    paddingVertical: 8,
+    borderRadius: 16,
     paddingHorizontal: 14,
-    borderRadius: radii.sm,
-    backgroundColor: colors.roseLight,
+    height: 48,
+    marginBottom: 14,
   },
-  cancelText: { color: colors.danger, fontWeight: "600", fontSize: 13 },
+  searchInput: { flex: 1, fontSize: 16, paddingVertical: 0 },
+  chips: { gap: 8, paddingBottom: 16, paddingRight: 8 },
+  chip: { borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10, minWidth: 64, alignItems: "center" },
+  chipText: { fontSize: 14, fontWeight: "600" },
+  list: { position: "relative" },
+  row: { position: "relative", flexDirection: "row", alignItems: "flex-start", marginBottom: 14 },
+  segment: {
+    position: "absolute",
+    left: 52,
+    top: 24,
+    bottom: -38,
+    width: 3,
+    borderRadius: 2,
+  },
+  rail: { width: 62, paddingTop: 14, alignItems: "flex-end", paddingRight: 16, zIndex: 1 },
+  railTime: { fontSize: 12, fontWeight: "500" },
+  railPeriod: { fontSize: 10, fontWeight: "500", marginTop: 1 },
+  dot: {
+    position: "absolute",
+    right: 2,
+    top: 18,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+  },
+  card: {
+    flex: 1,
+    borderRadius: 26,
+    padding: 12,
+    gap: 10,
+    marginLeft: 8,
+  },
+  cardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  pillDot: { width: 7, height: 7, borderRadius: 4 },
+  pillText: { fontSize: 13, fontWeight: "500" },
+  chat: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  personHit: { alignSelf: "stretch", width: "100%" },
+  person: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 16,
+    paddingLeft: 8,
+    paddingRight: 36,
+    paddingVertical: 8,
+    width: "100%",
+    overflow: "hidden",
+  },
+  personText: { flex: 1, minWidth: 0 },
+  name: { fontSize: 16, fontWeight: "700", letterSpacing: -0.3 },
+  meta: { marginTop: 2, fontSize: 13 },
+  chevron: {
+    position: "absolute",
+    right: 12,
+    fontSize: 22,
+    fontWeight: "400",
+  },
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  progressLabel: { fontSize: 13, fontWeight: "400" },
+  progressValue: { fontSize: 13, fontWeight: "600" },
+  track: { height: 6, borderRadius: 999, overflow: "hidden", marginHorizontal: 4, marginBottom: 4 },
+  fill: { height: 6, borderRadius: 999 },
 });

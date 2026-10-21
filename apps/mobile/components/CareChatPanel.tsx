@@ -11,7 +11,6 @@ import {
 import { ErrorText, PrimaryButton } from "@/components/ui";
 import { useLiveSocket } from "@/hooks/useLiveSocket";
 import {
-  attachPatientVisitDocument,
   getCareMessages,
   normalizeMsg,
   sendCareMessage,
@@ -19,11 +18,6 @@ import {
 } from "@/lib/chat";
 import { formatPracticeDateTime } from "@/lib/practiceTime";
 import { colors, radii, space } from "@/lib/theme";
-import {
-  pickVisitDocument,
-  pickVisitPhoto,
-  uploadVisitFile,
-} from "@/lib/visitUpload";
 
 type Props = {
   selfUserId: string;
@@ -36,7 +30,6 @@ type Props = {
   /** Visit chat collapses by default when bookingId is set. */
   collapsible?: boolean;
   defaultOpen?: boolean;
-  onDocumentAttached?: () => void;
 };
 
 function inVisitWindow(createdAt: string, since?: string | null): boolean {
@@ -57,7 +50,6 @@ export function CareChatPanel({
   threadSince,
   collapsible,
   defaultOpen,
-  onDocumentAttached,
 }: Props) {
   const isCollapsible = collapsible ?? Boolean(bookingId);
   const [open, setOpen] = useState(() =>
@@ -68,7 +60,6 @@ export function CareChatPanel({
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [attaching, setAttaching] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(
@@ -116,7 +107,7 @@ export function CareChatPanel({
 
   async function send() {
     const content = draft.trim();
-    if (!content || sending || attaching) return;
+    if (!content || sending) return;
     setSending(true);
     setError("");
     const res = await sendCareMessage(peerUserId, content);
@@ -130,57 +121,6 @@ export function CareChatPanel({
       return [...prev, res.message!];
     });
     setDraft("");
-  }
-
-  async function attachPicked(file: {
-    uri: string;
-    name: string;
-    mimeType: string;
-  }) {
-    if (!bookingId || attaching) return;
-    setAttaching(true);
-    setError("");
-    try {
-      const uploaded = await uploadVisitFile(file);
-      const caption = draft.trim() || undefined;
-      const res = await attachPatientVisitDocument(bookingId, {
-        name: uploaded.name,
-        url: uploaded.url,
-        caption,
-      });
-      if (res.error) {
-        setError(res.error);
-        return;
-      }
-      if (res.message) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === res.message!.id)) return prev;
-          return [...prev, res.message!];
-        });
-      }
-      if (caption) setDraft("");
-      onDocumentAttached?.();
-    } catch {
-      setError("Could not attach that file. Try again.");
-    } finally {
-      setAttaching(false);
-    }
-  }
-
-  async function attachPhoto() {
-    const picked = await pickVisitPhoto();
-    if (picked === "denied") {
-      setError("Photo access was blocked. Allow photos in Settings.");
-      return;
-    }
-    if (!picked) return;
-    await attachPicked(picked);
-  }
-
-  async function attachFile() {
-    const picked = await pickVisitDocument();
-    if (!picked) return;
-    await attachPicked(picked);
   }
 
   if (isCollapsible && !open) {
@@ -212,7 +152,7 @@ export function CareChatPanel({
           <Text style={styles.title}>Chat with {peerName}</Text>
           <Text style={styles.sub}>
             {subtitle ||
-              "Messages sync both ways with WhatsApp when linked to this clinic. Attach reports from the paperclip below."}
+              "Messages sync both ways with WhatsApp when linked to this clinic."}
           </Text>
         </View>
         {isCollapsible ? (
@@ -277,34 +217,10 @@ export function CareChatPanel({
           multiline
           maxLength={4000}
         />
-        {bookingId ? (
-          <View style={styles.attachRow}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Attach photo"
-              disabled={attaching || sending}
-              onPress={() => void attachPhoto()}
-              style={[styles.attachBtn, styles.attachBtnPrimary, attaching && styles.attachBusy]}
-            >
-              <Text style={[styles.attachBtnText, styles.attachBtnTextPrimary]}>
-                {attaching ? "Uploading…" : "Attach photo"}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Attach file"
-              disabled={attaching || sending}
-              onPress={() => void attachFile()}
-              style={[styles.attachBtn, attaching && styles.attachBusy]}
-            >
-              <Text style={styles.attachBtnText}>Attach PDF</Text>
-            </Pressable>
-          </View>
-        ) : null}
         <PrimaryButton
           label="Send"
           onPress={() => void send()}
-          busy={sending || attaching}
+          busy={sending}
         />
       </View>
     </KeyboardAvoidingView>
@@ -419,33 +335,6 @@ const styles = StyleSheet.create({
     gap: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.brandMist,
-  },
-  attachRow: {
-    flexDirection: "row",
-    gap: space.sm,
-  },
-  attachBtn: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.brandMist,
-    backgroundColor: colors.brandLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  attachBtnPrimary: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brand,
-  },
-  attachBusy: { opacity: 0.55 },
-  attachBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.navy,
-  },
-  attachBtnTextPrimary: {
-    color: colors.white,
   },
   input: {
     minHeight: 44,

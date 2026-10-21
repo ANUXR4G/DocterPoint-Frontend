@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Image,
   Pressable,
@@ -10,9 +10,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as SecureStore from "expo-secure-store";
 import { CareGlyph, CareQuickAction, CareStatCard } from "@/components/mobile/careArt";
-import { CareWelcome } from "@/components/mobile/CareWelcome";
 import { useCareTheme } from "@/lib/careTheme";
 import { contentBottomPad } from "@/lib/dockLayout";
 import { resolveMediaUrl } from "@/lib/media";
@@ -25,8 +23,6 @@ import {
   ymd,
   type BookingRow,
 } from "@/lib/types";
-
-const WELCOME_KEY = "gg.careWelcome";
 
 function queueWhen(b: BookingRow) {
   if (b.mode === "TOKEN_BASED") return `Token #${b.tokenNumber ?? "?"}`;
@@ -45,19 +41,8 @@ export default function DashboardScreen() {
   const { membership } = usePractice();
   const { patients, error: liveError, refresh, bookingsOnDate } = usePracticeLive();
   const [refreshing, setRefreshing] = useState(false);
-  const [welcome, setWelcome] = useState<boolean | null>(null);
   const today = ymd(new Date());
   const bookings = bookingsOnDate(today);
-
-  useEffect(() => {
-    void SecureStore.getItemAsync(WELCOME_KEY).then((v) => setWelcome(v !== "1"));
-  }, []);
-
-  async function dismissWelcome(href?: string) {
-    await SecureStore.setItemAsync(WELCOME_KEY, "1");
-    setWelcome(false);
-    if (href) router.push(href as never);
-  }
 
   const me = membership?.practice.members.find(
     (m) => m.userId === membership.userId,
@@ -88,24 +73,6 @@ export default function DashboardScreen() {
     ),
   );
 
-  if (welcome) {
-    return (
-      <CareWelcome
-        name={name.split(" ")[0]}
-        onContinue={() => void dismissWelcome()}
-        onFocus={(title) => {
-          const href =
-            title === "Daily Tasks"
-              ? "/(app)/queue"
-              : title === "Patient Care"
-                ? "/(app)/patients"
-                : "/(app)/appointments";
-          void dismissWelcome(href);
-        }}
-      />
-    );
-  }
-
   const stats = [
     {
       label: "Today's Visits",
@@ -114,26 +81,35 @@ export default function DashboardScreen() {
       background: theme.visit,
       ink: theme.visitInk,
       glyph: "calendar" as const,
+      barColor: theme.visitInk,
+      track: "#F6D7BE",
+      variant: "dashes" as const,
       ratio: bookings.length ? inProgress / bookings.length : 0,
       href: "/(app)/appointments",
     },
     {
       label: "Today's Tasks",
       value: pad(pending),
-      hint: `${pending} pending`,
+      hint: `${pending} Pending`,
       background: theme.task,
       ink: theme.taskInk,
       glyph: "checklist" as const,
+      barColor: theme.taskInk,
+      track: "#D7F3E4",
+      variant: "dots" as const,
       ratio: bookings.length ? pending / bookings.length : 0,
       href: "/(app)/queue",
     },
     {
       label: "Today's Patients",
       value: pad(seen || patients.length),
-      hint: `${seen} on today's list`,
-      background: theme.people,
-      ink: theme.peopleInk,
-      glyph: "people" as const,
+      hint: `${inProgress} in progress`,
+      background: "#FFF4C8",
+      ink: "#E0A31A",
+      barColor: theme.peopleInk,
+      track: "#E3EDF8",
+      glyph: "personPlus" as const,
+      variant: "solid" as const,
       ratio: patients.length ? Math.min(1, seen / patients.length) : 0,
       href: "/(app)/patients",
     },
@@ -141,9 +117,12 @@ export default function DashboardScreen() {
       label: "Today's Alerts",
       value: pad(alerts),
       hint: alerts ? "Need review" : "None waiting",
-      background: theme.alert,
-      ink: theme.alertInk,
-      glyph: "bell" as const,
+      background: theme.people,
+      ink: theme.peopleInk,
+      barColor: theme.accent,
+      track: "#F7F0D4",
+      glyph: "alert" as const,
+      variant: "solid" as const,
       ratio: bookings.length ? alerts / bookings.length : 0,
       href: "/(app)/notifications",
     },
@@ -194,7 +173,7 @@ export default function DashboardScreen() {
         <Pressable
           accessibilityLabel="Notifications"
           onPress={() => router.push("/(app)/notifications" as never)}
-          style={[styles.bell, { backgroundColor: theme.card }]}
+          style={[styles.bell, { backgroundColor: theme.card, borderRadius: 14 }]}
         >
           <CareGlyph name="bell" size={18} color={theme.ink} />
         </Pressable>
@@ -215,18 +194,21 @@ export default function DashboardScreen() {
             ink={s.ink}
             glyph={s.glyph}
             ratio={s.ratio}
+            variant={s.variant}
+            track={s.track}
+            barColor={s.barColor}
             onPress={() => router.push(s.href as never)}
           />
         ))}
       </View>
 
       <Text style={[styles.section, { color: theme.ink }]}>Quick Actions</Text>
-      <View style={styles.actions}>
-        <CareQuickAction label="Start Visit" glyph="bolt" onPress={() => router.push("/(app)/queue" as never)} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled contentContainerStyle={styles.actions}>
+        <CareQuickAction label="Start Visit" glyph="stethoscope" onPress={() => router.push("/(app)/queue" as never)} />
         <CareQuickAction label="Note" glyph="note" onPress={() => router.push("/(app)/inbox" as never)} />
         <CareQuickAction label="Wellness" glyph="heart" onPress={() => router.push("/(app)/calendar" as never)} />
         <CareQuickAction label="Patients" glyph="people" onPress={() => router.push("/(app)/patients" as never)} />
-      </View>
+      </ScrollView>
 
       <View style={styles.sectionRow}>
         <Text style={[styles.section, { color: theme.ink }]}>Today's Schedule</Text>
@@ -252,40 +234,32 @@ export default function DashboardScreen() {
                 {bookingPatientLabel(next)}
               </Text>
               <Text style={[styles.meta, { color: theme.muted }]} numberOfLines={1}>
-                {next.disease?.trim() || next.patient?.mrn || "Clinic visit"}
+                {next.disease?.trim() || "No chief complaint"}
               </Text>
             </View>
             <View style={[styles.badge, { backgroundColor: theme.task }]}>
+              <View style={[styles.badgeDot, { backgroundColor: theme.taskInk }]} />
               <Text style={[styles.badgeText, { color: theme.taskInk }]}>Scheduled</Text>
             </View>
           </View>
           <View style={styles.whenRow}>
-            <CareGlyph name="calendar" size={14} color={theme.muted} />
-            <Text style={[styles.meta, { color: theme.muted, flex: 1 }]} numberOfLines={1}>
-              {queueWhen(next)}
-              {next.location?.address ? `   ${next.location.address}` : ""}
-            </Text>
+            <CareGlyph name="clock" size={14} color={theme.muted} />
+            <Text style={[styles.meta, { color: theme.muted }]}>{queueWhen(next)}</Text>
+            {next.location?.address ? (
+              <>
+                <CareGlyph name="pin" size={14} color={theme.muted} />
+                <Text style={[styles.meta, { color: theme.muted, flex: 1 }]} numberOfLines={1}>
+                  {next.location.address}
+                </Text>
+              </>
+            ) : null}
           </View>
           <View style={styles.scheduleActions}>
-            <Pressable
-              accessibilityLabel="Open visit"
-              onPress={() => router.push(`/(app)/visit/${next.id}` as never)}
-              style={[styles.round, { backgroundColor: theme.paper }]}
-            >
-              <CareGlyph name="video" size={18} color={theme.ink} />
-            </Pressable>
             <Pressable
               onPress={() => router.push(`/(app)/visit/${next.id}` as never)}
               style={[styles.start, { backgroundColor: theme.accent }]}
             >
               <Text style={[styles.startText, { color: theme.ink }]}>Start Visit</Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Open visit"
-              onPress={() => router.push(`/(app)/visit/${next.id}` as never)}
-              style={[styles.round, { backgroundColor: theme.ink }]}
-            >
-              <CareGlyph name="expand" size={16} color="#fff" />
             </Pressable>
           </View>
         </View>
@@ -313,9 +287,9 @@ const styles = StyleSheet.create({
   greet: { fontSize: 13 },
   name: { fontSize: 20, fontWeight: "700", letterSpacing: -0.3 },
   bell: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -341,7 +315,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   link: { fontSize: 13, fontWeight: "600" },
-  actions: { flexDirection: "row", justifyContent: "space-between" },
+  actions: { flexDirection: "row", gap: 8, paddingRight: 8 },
   action: { alignItems: "center", width: 72 },
   actionIcon: {
     width: 52,
@@ -357,19 +331,26 @@ const styles = StyleSheet.create({
   whenRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12 },
   patient: { fontSize: 16, fontWeight: "700" },
   meta: { fontSize: 13 },
-  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  badgeDot: { width: 6, height: 6, borderRadius: 3 },
   badgeText: { fontSize: 12, fontWeight: "700" },
   scheduleActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: 8,
     marginTop: 14,
   },
   start: {
-    height: 40,
+    height: 42,
     paddingHorizontal: 22,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },

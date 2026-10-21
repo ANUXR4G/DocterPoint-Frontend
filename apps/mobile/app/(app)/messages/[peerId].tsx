@@ -5,11 +5,13 @@ import { CareChatPanel } from "@/components/CareChatPanel";
 import { ErrorText, Loading, Screen } from "@/components/ui";
 import { listCareThreads } from "@/lib/chat";
 import { getSessionUserId } from "@/lib/sessionUser";
-import { colors, space } from "@/lib/theme";
+import { useCareTheme } from "@/lib/careTheme";
+import { space } from "@/lib/theme";
 
 export default function MessageThreadScreen() {
   const { peerId } = useLocalSearchParams<{ peerId: string }>();
   const router = useRouter();
+  const { theme } = useCareTheme();
   const [selfUserId, setSelfUserId] = useState<string | null>(null);
   const [peerName, setPeerName] = useState("Doctor");
   const [error, setError] = useState("");
@@ -40,11 +42,11 @@ export default function MessageThreadScreen() {
 
   if (!selfUserId || !peerId) {
     return (
-      <Screen>
+      <Screen style={{ backgroundColor: theme.paper }}>
         <View style={styles.content}>
           <ErrorText text={error || "Chat unavailable."} />
           <Pressable onPress={() => router.back()}>
-            <Text style={styles.back}>← Back</Text>
+            <Text style={[styles.back, { color: theme.ink }]}>← Back</Text>
           </Pressable>
         </View>
       </Screen>
@@ -52,10 +54,10 @@ export default function MessageThreadScreen() {
   }
 
   return (
-    <Screen>
+    <Screen style={{ backgroundColor: theme.paper }}>
       <View style={styles.content}>
         <Pressable onPress={() => router.back()} style={styles.backRow}>
-          <Text style={styles.back}>← Messages</Text>
+          <Text style={[styles.back, { color: theme.ink }]}>← Messages</Text>
         </Pressable>
         <CareChatPanel
           selfUserId={selfUserId}
@@ -76,7 +78,6 @@ const styles = StyleSheet.create({
   },
   backRow: { marginBottom: space.sm },
   back: {
-    color: colors.brand,
     fontWeight: "600",
     fontSize: 14,
   },

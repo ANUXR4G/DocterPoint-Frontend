@@ -8,6 +8,8 @@ import {
 } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { ColorWheel } from "@/components/mobile/ColorWheel";
+import { hexToHsv, hsvToHex, isHexColor } from "@/lib/colorWheel";
 
 const STORE_KEY = "gg.careTheme";
 
@@ -147,35 +149,83 @@ export const CARE_THEMES: CarePalette[] = [
   },
 ];
 
+const CUSTOM_PREFIX = "custom:";
+
+function paletteFromHex(hex: string): CarePalette {
+  const normalized = hex.toLowerCase();
+  const { h, s, v } = hexToHsv(normalized);
+  const lightEnough = v >= 0.62 && s <= 0.75;
+  return {
+    id: `${CUSTOM_PREFIX}${normalized}`,
+    name: "Custom",
+    swatch: normalized,
+    paper: hsvToHex(h, Math.min(s, 0.08), 0.97),
+    card: "#FFFFFF",
+    ink: "#1C1C1E",
+    muted: "#8A8A8E",
+    line: hsvToHex(h, Math.min(s, 0.1), 0.91),
+    accent: lightEnough
+      ? normalized
+      : hsvToHex(h, Math.min(s, 0.55), Math.max(0.72, Math.min(v, 0.9))),
+    welcome: hsvToHex(h, Math.min(Math.max(s, 0.18), 0.38), 0.93),
+    visit: hsvToHex(h, Math.min(Math.max(s, 0.12), 0.22), 0.96),
+    visitInk: hsvToHex(h, Math.min(Math.max(s, 0.45), 0.72), 0.48),
+    task: "#E7F8EE",
+    taskInk: "#3CB87A",
+    people: "#E8F1FF",
+    peopleInk: "#6AA6F5",
+    alert: "#FFECEE",
+    alertInk: "#E07A8A",
+    stable: "#3DDC97",
+    attention: "#F4A6B0",
+  };
+}
+
+function paletteFor(saved: string): CarePalette {
+  if (saved.startsWith(CUSTOM_PREFIX)) {
+    const hex = saved.slice(CUSTOM_PREFIX.length);
+    if (isHexColor(hex)) return paletteFromHex(hex);
+  }
+  return CARE_THEMES.find((item) => item.id === saved) ?? CARE_THEMES[0];
+}
+
 type ThemeValue = {
   theme: CarePalette;
   setThemeId: (id: string) => void;
+  setCustomColor: (hex: string) => void;
 };
 
 const CareThemeContext = createContext<ThemeValue>({
   theme: CARE_THEMES[0],
   setThemeId: () => {},
+  setCustomColor: () => {},
 });
 
 export function CareThemeProvider({ children }: { children: ReactNode }) {
-  const [id, setId] = useState(CARE_THEMES[0].id);
+  const [stored, setStored] = useState(CARE_THEMES[0].id);
 
   useEffect(() => {
     void SecureStore.getItemAsync(STORE_KEY).then((saved) => {
-      if (saved && CARE_THEMES.some((t) => t.id === saved)) setId(saved);
+      if (!saved) return;
+      if (saved.startsWith(CUSTOM_PREFIX) || CARE_THEMES.some((t) => t.id === saved)) {
+        setStored(saved);
+      }
     });
   }, []);
 
-  const value = useMemo<ThemeValue>(
-    () => ({
-      theme: CARE_THEMES.find((t) => t.id === id) ?? CARE_THEMES[0],
-      setThemeId: (next) => {
-        setId(next);
-        void SecureStore.setItemAsync(STORE_KEY, next);
+  const value = useMemo<ThemeValue>(() => {
+    const save = (next: string) => {
+      setStored(next);
+      void SecureStore.setItemAsync(STORE_KEY, next);
+    };
+    return {
+      theme: paletteFor(stored),
+      setThemeId: save,
+      setCustomColor: (hex) => {
+        if (isHexColor(hex)) save(`${CUSTOM_PREFIX}${hex.toLowerCase()}`);
       },
-    }),
-    [id],
-  );
+    };
+  }, [stored]);
 
   return (
     <CareThemeContext.Provider value={value}>
@@ -189,12 +239,13 @@ export function useCareTheme() {
 }
 
 export function ThemeSwatches() {
-  const { theme, setThemeId } = useCareTheme();
+  const { theme, setThemeId, setCustomColor } = useCareTheme();
+  const custom = theme.id.startsWith(CUSTOM_PREFIX);
   return (
     <View style={styles.wrap}>
       <Text style={[styles.title, { color: theme.ink }]}>Colour theme</Text>
       <Text style={[styles.hint, { color: theme.muted }]}>
-        Saved in Settings. Home, Patients, and the tab bar use this colour.
+        Saved on this phone. Home, Patients, and the tab bar use this colour.
       </Text>
       <View style={styles.row}>
         {CARE_THEMES.map((item) => {
@@ -220,6 +271,18 @@ export function ThemeSwatches() {
           );
         })}
       </View>
+      <Text style={[styles.title, styles.customTitle, { color: theme.ink }]}>
+        Custom colour
+      </Text>
+      <Text style={[styles.hint, { color: theme.muted }]}>
+        Drag the ring for the hue, and the square for strength and lightness.
+      </Text>
+      <View style={styles.wheel}>
+        <ColorWheel color={theme.swatch} onChange={setCustomColor} />
+      </View>
+      {custom ? (
+        <Text style={[styles.hex, { color: theme.visitInk }]}>{theme.swatch}</Text>
+      ) : null}
     </View>
   );
 }
@@ -232,4 +295,7 @@ const styles = StyleSheet.create({
   choice: { alignItems: "center", width: 64 },
   dot: { width: 36, height: 36, borderRadius: 18 },
   name: { marginTop: 6, fontSize: 11, fontWeight: "600" },
+  customTitle: { marginTop: 22 },
+  wheel: { marginTop: 14 },
+  hex: { marginTop: 10, fontSize: 13, fontWeight: "700" },
 });
