@@ -107,10 +107,12 @@ export default function MedicineAutocomplete({
   }, [])
 
   function handleSelect(med: MedicineMasterItem) {
-    onChange(med.name)
-    onSelect?.(med)
     setIsOpen(false)
-    inputRef.current?.focus()
+    if (onSelect) {
+      onSelect(med)
+    } else {
+      onChange(med.name || med.brandName)
+    }
   }
 
   function handleToggleInputFav(e: React.MouseEvent) {
@@ -212,11 +214,15 @@ export default function MedicineAutocomplete({
           onFocus={() => {
             setIsOpen(true)
           }}
+          onClick={() => {
+            if (!isOpen) setIsOpen(true)
+          }}
           onBlur={() => {
             // small delay to allow item click
             setTimeout(() => {
+              setIsOpen(false)
               onBlur?.()
-            }, 180)
+            }, 200)
           }}
           onKeyDown={handleKeyDown}
         />
@@ -293,7 +299,7 @@ export default function MedicineAutocomplete({
                 const isFav = Boolean(med.favourite)
                 return (
                   <li
-                    key={med.id || med.name}
+                    key={med.id || med.medicineCode || `${med.name}-${idx}`}
                     role="option"
                     aria-selected={isSelected}
                     onClick={() => handleSelect(med)}
@@ -336,7 +342,7 @@ export default function MedicineAutocomplete({
                           </svg>
                         </button>
                         <span className="font-semibold text-neutral-900 dark:text-white truncate">
-                          {med.name}
+                          {med.name || med.brandName}
                         </span>
                       </div>
                       {med.category ? (

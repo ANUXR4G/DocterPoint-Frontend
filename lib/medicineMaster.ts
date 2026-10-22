@@ -485,7 +485,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "Three times daily",
     duration: "5",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "After food as needed for fever/pain",
     favourite: true,
     isPopular: true,
@@ -505,7 +505,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "Three times daily",
     duration: "3",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "Every 6-8 hours after food",
     favourite: true,
     isPopular: true,
@@ -525,7 +525,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "Twice daily",
     duration: "5",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "Strictly after meals with plenty of water",
     favourite: true,
     isPopular: true,
@@ -547,7 +547,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "Once daily",
     duration: "14",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "30 minutes before breakfast",
     favourite: true,
     isPopular: true,
@@ -567,7 +567,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "capsule",
     frequency: "Once daily",
     duration: "14",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "Empty stomach in the morning",
     favourite: true,
     isPopular: true,
@@ -587,7 +587,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "Twice daily",
     duration: "3",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "Before food for nausea / vomiting",
     favourite: false,
     isPopular: true,
@@ -609,7 +609,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "capsule",
     frequency: "Three times daily",
     duration: "5",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "Complete full course, every 8 hours",
     favourite: true,
     isPopular: true,
@@ -629,7 +629,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "Twice daily",
     duration: "5",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "At start of meal",
     favourite: true,
     isPopular: true,
@@ -649,7 +649,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "Once daily",
     duration: "3",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "1 hour before or 2 hours after meals",
     favourite: true,
     isPopular: true,
@@ -669,7 +669,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "Twice daily",
     duration: "5",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "With or after food",
     favourite: false,
     isPopular: true,
@@ -691,7 +691,7 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     doseUnit: "tablet",
     frequency: "At bedtime",
     duration: "7",
-    durationUnit: "Day",
+    durationUnit: "Days",
     instruction: "May cause mild drowsiness",
     favourite: true,
     isPopular: true,
@@ -779,6 +779,59 @@ export const CENTRAL_MEDICINE_MASTER: MedicineMasterItem[] = [
     isPopular: true,
   },
 ];
+
+export function normalizeMedicineMasterItem(m: any): MedicineMasterItem {
+  if (!m) {
+    return {
+      id: "",
+      medicineCode: "",
+      countryCode: "IN",
+      brandName: "",
+      name: "",
+      genericName: "",
+      category: "General",
+      route: "Oral",
+      dose: "1",
+      doseUnit: "tablet",
+      frequency: "Once daily",
+      duration: "5",
+      durationUnit: "Days",
+      instruction: "",
+      favourite: false,
+    }
+  }
+  const name = String(m.name || m.brandName || m.genericName || "").trim()
+  const brandName = String(m.brandName || m.name || "").trim()
+  const dosageForm = String(m.dosageForm || "").trim()
+  const doseUnit = String(
+    m.doseUnit ||
+      (dosageForm.toLowerCase() === "capsule" ? "capsule" : "tablet"),
+  )
+  return {
+    id: String(m.id || m.medicineCode || name),
+    medicineCode: String(m.medicineCode || m.id || ""),
+    countryCode: String(m.countryCode || "IN"),
+    brandName: brandName || name,
+    name: name || brandName,
+    genericName: String(m.genericName || ""),
+    category: String(m.category || "General"),
+    strength: m.strength ? String(m.strength) : undefined,
+    route: m.route ? String(m.route) : "Oral",
+    dosageForm: dosageForm || undefined,
+    dose: m.dose ? String(m.dose) : "1",
+    doseUnit,
+    frequency: m.frequency ? String(m.frequency) : "Once daily",
+    duration: m.duration ? String(m.duration) : "5",
+    durationUnit: m.durationUnit
+      ? m.durationUnit === "Day"
+        ? "Days"
+        : String(m.durationUnit)
+      : "Days",
+    instruction: m.instruction ? String(m.instruction) : "",
+    favourite: Boolean(m.favourite || m.isPopular),
+    isPopular: Boolean(m.isPopular),
+  }
+}
 
 export function searchMedicineMaster(query: string, limit = 30): MedicineMasterItem[] {
   const q = query.trim().toLowerCase();

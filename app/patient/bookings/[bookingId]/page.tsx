@@ -386,11 +386,21 @@ export default function PatientVisitPage() {
     vitalValues.bp_sys != null || vitalValues.bp_dia != null
       ? `${vitalValues.bp_sys ?? "—"}/${vitalValues.bp_dia ?? "—"}`
       : ""
-  const allergyText = chart?.noKnownAllergies
+  const patientAllergies = (booking as any)?.patient?.allergies
+  const patientNoKnown = (booking as any)?.patient?.noKnownAllergies
+  const effectiveAllergies =
+    chart?.allergies && chart.allergies.length > 0
+      ? chart.allergies
+      : Array.isArray(patientAllergies)
+      ? patientAllergies
+      : []
+  const effectiveNoKnown = Boolean(chart?.noKnownAllergies || patientNoKnown)
+
+  const allergyText = effectiveNoKnown
     ? "No known allergy"
-    : (chart?.allergies ?? [])
-        .filter((row) => row.name?.trim())
-        .map((row) =>
+    : effectiveAllergies
+        .filter((row: any) => row.name?.trim())
+        .map((row: any) =>
           [row.name, row.severity, row.active === "Yes" ? "Active" : null]
             .filter(Boolean)
             .join(" — "),

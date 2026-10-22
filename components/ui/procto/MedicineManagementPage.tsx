@@ -10,6 +10,8 @@ import {
   DOSAGE_FORMS_LIST,
   type MedicineMasterItem,
 } from "@/lib/medicineMaster"
+import { downloadMedicineTemplate } from "@/lib/medicineExcel"
+import BulkUploadMedicineModal from "./BulkUploadMedicineModal"
 
 export type MedicineItem = {
   id: string
@@ -57,6 +59,8 @@ export default function MedicineManagementPage({ portal }: Props) {
 
   // Add / Edit Modal state
   const [modalOpen, setModalOpen] = useState(false)
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false)
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formCode, setFormCode] = useState("")
   const [formCountryCode, setFormCountryCode] = useState("")
@@ -332,14 +336,83 @@ export default function MedicineManagementPage({ portal }: Props) {
         title="Medicine Management"
         subtitle="Manage master inventory, government codes, commercial brand names, dosage routes, and favourite clinic medications."
         action={
-          <button
-            type="button"
-            onClick={handleOpenAdd}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--theme-primary,#0284c7)] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:opacity-95 active:scale-95"
-          >
-            <span>+</span>
-            <span>Add Medicine</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Download Template Dropdown Menu */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setDownloadMenuOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 shadow-2xs hover:bg-neutral-50 active:scale-95 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 cursor-pointer"
+                title="Download sample template for bulk medicine upload"
+              >
+                <span>📥</span>
+                <span>Download Template</span>
+                <span className="text-[10px] opacity-60">▾</span>
+              </button>
+
+              {downloadMenuOpen ? (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setDownloadMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg dark:border-neutral-700 dark:bg-neutral-900 animate-in fade-in zoom-in-95">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDownloadMenuOpen(false)
+                        downloadMedicineTemplate("xlsx")
+                        showMessage("Excel template (.xlsx) downloaded.")
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800 cursor-pointer"
+                    >
+                      <span className="text-emerald-600">📊</span>
+                      <div>
+                        <p className="font-semibold">Excel Template (.xlsx)</p>
+                        <p className="text-[10px] text-neutral-500">Recommended for Microsoft Excel</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDownloadMenuOpen(false)
+                        downloadMedicineTemplate("csv")
+                        showMessage("CSV template (.csv) downloaded.")
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-neutral-800 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800 cursor-pointer"
+                    >
+                      <span className="text-sky-600">📄</span>
+                      <div>
+                        <p className="font-semibold">CSV Template (.csv)</p>
+                        <p className="text-[10px] text-neutral-500">Universal comma-separated text</p>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* Upload Excel Button */}
+            <button
+              type="button"
+              onClick={() => setBulkUploadOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 shadow-2xs hover:bg-neutral-50 active:scale-95 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 cursor-pointer"
+              title="Upload Excel or CSV file to bulk import medicines"
+            >
+              <span>📤</span>
+              <span>Upload Excel</span>
+            </button>
+
+            {/* Add Medicine Button */}
+            <button
+              type="button"
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--theme-primary,#0284c7)] px-4 py-2 text-xs font-semibold text-white shadow-2xs transition hover:opacity-95 active:scale-95 cursor-pointer"
+            >
+              <span>+</span>
+              <span>Add Medicine</span>
+            </button>
+          </div>
         }
       />
 
@@ -445,13 +518,22 @@ export default function MedicineManagementPage({ portal }: Props) {
                         ? "You have not marked any medicines as favourite yet. Click the star icon on any medicine to add it here."
                         : "Your medicine catalog is empty. Click below to add your first medicine record."}
                     </p>
-                    <button
-                      type="button"
-                      onClick={handleOpenAdd}
-                      className="rounded-lg bg-[var(--theme-primary,#0284c7)] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm"
-                    >
-                      + Add Medicine
-                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleOpenAdd}
+                        className="rounded-lg bg-[var(--theme-primary,#0284c7)] px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:opacity-95 cursor-pointer"
+                      >
+                        + Add Medicine
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBulkUploadOpen(true)}
+                        className="rounded-lg border border-neutral-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-neutral-700 shadow-2xs hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 cursor-pointer"
+                      >
+                        📤 Bulk Upload Excel
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -749,6 +831,18 @@ export default function MedicineManagementPage({ portal }: Props) {
           </div>
         </div>
       </PopupModal>
+
+      {/* 3. Bulk Upload Excel/CSV Modal */}
+      <BulkUploadMedicineModal
+        open={bulkUploadOpen}
+        onClose={() => setBulkUploadOpen(false)}
+        existingMedicines={medicines}
+        onSuccess={(updatedList, message) => {
+          setMedicines(updatedList)
+          syncStorage(updatedList)
+          showMessage(message)
+        }}
+      />
     </div>
   )
 }

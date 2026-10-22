@@ -2,6 +2,7 @@ import { cookies } from "@/utils/cookies";
 import { ensureAccessToken } from "@/lib/accessToken";
 import {
   searchMedicineMaster,
+  normalizeMedicineMasterItem,
   type MedicineMasterItem,
 } from "@/lib/medicineMaster";
 
@@ -114,7 +115,7 @@ export const proctoService = {
         `/procto/medicines?q=${encodeURIComponent(q)}&limit=${limit}`,
       );
       if (res && res.status === "successful" && Array.isArray((res as any).data)) {
-        return (res as any).data as MedicineMasterItem[];
+        return (res as any).data.map(normalizeMedicineMasterItem);
       }
     } catch {
       // fallback to centralized inventory
@@ -134,6 +135,12 @@ export const proctoService = {
     proctoFetch("/procto/medicines", {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+
+  bulkUploadMedicines: (medicines: Array<Record<string, unknown>>) =>
+    proctoFetch("/procto/medicines/bulk", {
+      method: "POST",
+      body: JSON.stringify({ medicines }),
     }),
 
   updateMedicine: (id: string, body: Record<string, unknown>) =>
@@ -179,13 +186,46 @@ export const proctoService = {
     title?: string;
     content: string;
     advice?: string;
-    category?: "condition" | "medication" | "general";
+    category?: string;
     scope: "clinic" | "specialty" | "doctor";
     scopeValue?: string;
     practiceId?: string;
   }) =>
     proctoFetch("/procto/templates", {
       method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  createTemplate: (body: {
+    name: string;
+    title?: string;
+    content: string;
+    advice?: string;
+    category?: string;
+    scope: "clinic" | "specialty" | "doctor";
+    scopeValue?: string;
+    practiceId?: string;
+  }) =>
+    proctoFetch("/procto/templates", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateTemplate: (
+    id: string,
+    body: {
+      name?: string;
+      title?: string;
+      content?: string;
+      advice?: string;
+      category?: string;
+      scope?: "clinic" | "specialty" | "doctor";
+      scopeValue?: string;
+      practiceId?: string;
+    },
+  ) =>
+    proctoFetch(`/procto/templates/${id}`, {
+      method: "PUT",
       body: JSON.stringify(body),
     }),
 
@@ -691,11 +731,14 @@ export const proctoService = {
       body: JSON.stringify(doc),
     }),
 
-  /** Send to customer: saved prescription on an open visit, clinic log after finish. */
-  sendClinicLogWhatsApp: (bookingId: string) =>
+  /** Send to customer: prescription and/or consultation PDF on WhatsApp. */
+  sendClinicLogWhatsApp: (
+    bookingId: string,
+    kind?: "prescription" | "consultation" | "both",
+  ) =>
     proctoFetch(`/procto/bookings/${bookingId}/send-clinic-log`, {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify({ kind: kind || "prescription" }),
     }),
 
   /** Patient attaches a file to their own visit and posts it in care chat. */

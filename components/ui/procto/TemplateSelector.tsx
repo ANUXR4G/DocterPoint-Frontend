@@ -12,6 +12,7 @@ export type ClinicalTemplate = {
   name: string // Unique Name
   title: string
   category: TemplateCategory
+  adviceCategory?: string
   scope: TemplateScope
   scopeValue?: string
   advice: string
@@ -331,11 +332,38 @@ export const CLINICAL_TEMPLATES: ClinicalTemplate[] = [
   },
 ]
 
+export function combineTemplatesText(
+  templatesList: ClinicalTemplate[],
+  target: "advice" | "doctorNotes" | "remarks",
+  currentText: string,
+  mode: "append" | "replace" = "append",
+): string {
+  const isDoctorNotesTarget = target === "doctorNotes" || target === "remarks"
+  const pieces = templatesList
+    .map((t) => (isDoctorNotesTarget ? t.doctorNotes || t.remarks || "" : t.advice))
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  if (pieces.length === 0) return currentText
+
+  const newJoined = pieces.join("\n\n")
+
+  if (mode === "replace" || !currentText.trim()) {
+    return newJoined
+  }
+
+  return `${currentText.trim()}\n\n${newJoined}`
+}
+
 type TemplateSelectorProps = {
   /** Target text box to populate: Advice (patient-facing) or Doctor Notes (formerly Remarks) */
   target: "advice" | "doctorNotes" | "remarks"
   /** Callback invoked when a template is chosen to instantly auto-fill the text box */
-  onSelect: (content: string, template: ClinicalTemplate) => void
+  onSelect: (
+    content: string,
+    mode?: "append" | "replace",
+    templates?: ClinicalTemplate[],
+  ) => void
   /** Current content in the text box (for saving as a custom template) */
   currentContent?: string
   practiceId?: string
@@ -343,6 +371,8 @@ type TemplateSelectorProps = {
   disabled?: boolean
   className?: string
   placeholder?: string
+  /** Callback when dropdown open state changes to adapt parent height */
+  onOpenChange?: (open: boolean) => void
 }
 
 export default function TemplateSelector({
@@ -354,12 +384,15 @@ export default function TemplateSelector({
   disabled = false,
   className = "",
   placeholder = "Select template...",
+  onOpenChange,
 }: TemplateSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [scopeFilter, setScopeFilter] = useState<"all" | TemplateScope>("all")
   const [categoryFilter, setCategoryFilter] = useState<"all" | TemplateCategory>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [templates, setTemplates] = useState<ClinicalTemplate[]>(CLINICAL_TEMPLATES)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [insertMode, setInsertMode] = useState<"append" | "replace">("append")
   const [isSavingCustom, setIsSavingCustom] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState("")
   const [newTemplateTitle, setNewTemplateTitle] = useState("")
@@ -372,6 +405,19 @@ export default function TemplateSelector({
   const listboxId = useId()
 
   const isDoctorNotesTarget = target === "doctorNotes" || target === "remarks"
+
+  function handleToggleOpen(valOrFn?: boolean | ((prev: boolean) => boolean)) {
+    setIsOpen((prev) => {
+      const next =
+        typeof valOrFn === "function"
+          ? valOrFn(prev)
+          : typeof valOrFn === "boolean"
+          ? valOrFn
+          : !prev
+      onOpenChange?.(next)
+      return next
+    })
+  }
 
   // Fetch dynamic templates from backend on mount
   useEffect(() => {
@@ -392,10 +438,35 @@ export default function TemplateSelector({
             remarks: t.remarks || t.doctorNotes || t.content || "",
           })
         })
+        try {
+          const localCache = localStorage.getItem("glucoguide_master_templates_custom")
+          if (localCache) {
+            const list = JSON.parse(localCache) as ClinicalTemplate[]
+            if (Array.isArray(list)) {
+              list.forEach((t) => map.set(t.name.toLowerCase(), t))
+            }
+          }
+        } catch {
+          // ignore
+        }
         setTemplates(Array.from(map.values()))
       })
       .catch(() => {
-        // Fall back to baseline templates on network issue
+        // Fall back to baseline templates and local cache on network issue
+        try {
+          const localCache = localStorage.getItem("glucoguide_master_templates_custom")
+          if (localCache) {
+            const list = JSON.parse(localCache) as ClinicalTemplate[]
+            if (Array.isArray(list)) {
+              const map = new Map<string, ClinicalTemplate>()
+              CLINICAL_TEMPLATES.forEach((t) => map.set(t.name.toLowerCase(), t))
+              list.forEach((t) => map.set(t.name.toLowerCase(), t))
+              setTemplates(Array.from(map.values()))
+            }
+          }
+        } catch {
+          // ignore
+        }
       })
     return () => {
       active = false
@@ -406,7 +477,7 @@ export default function TemplateSelector({
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+        handleToggleOpen(false)
         setIsSavingCustom(false)
       }
     }
@@ -428,6 +499,7 @@ export default function TemplateSelector({
       setSearchQuery("")
       setScopeFilter("all")
       setCategoryFilter("all")
+      setSelectedIds(new Set())
       setIsSavingCustom(false)
     }
   }, [isOpen])
@@ -454,12 +526,46 @@ export default function TemplateSelector({
     return inName || inTitle || inKeywords || inText
   })
 
-  function handleSelect(template: ClinicalTemplate) {
-    const content = isDoctorNotesTarget
-      ? template.doctorNotes || template.remarks || ""
-      : template.advice
-    onSelect(content, template)
-    setIsOpen(false)
+  function toggleSelectTemplate(templateId: string, e?: React.MouseEvent | React.ChangeEvent) {
+    e?.stopPropagation()
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(templateId)) {
+        next.delete(templateId)
+      } else {
+        next.add(templateId)
+      }
+      return next
+    })
+  }
+
+  function handleSelectAllFiltered() {
+    setSelectedIds((prev) => {
+      const allSelected = filtered.length > 0 && filtered.every((t) => prev.has(t.id))
+      const next = new Set(prev)
+      if (allSelected) {
+        filtered.forEach((t) => next.delete(t.id))
+      } else {
+        filtered.forEach((t) => next.add(t.id))
+      }
+      return next
+    })
+  }
+
+  function handleApplySelected() {
+    const chosen = templates.filter((t) => selectedIds.has(t.id))
+    if (chosen.length === 0) return
+
+    const combined = combineTemplatesText(chosen, target, currentContent, insertMode)
+    onSelect(combined, insertMode, chosen)
+    setSelectedIds(new Set())
+    handleToggleOpen(false)
+  }
+
+  function handleSingleSelect(template: ClinicalTemplate) {
+    const combined = combineTemplatesText([template], target, currentContent, insertMode)
+    onSelect(combined, insertMode, [template])
+    handleToggleOpen(false)
   }
 
   async function handleSaveNewTemplate() {
@@ -523,7 +629,7 @@ export default function TemplateSelector({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={listboxId}
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => handleToggleOpen()}
         className={`inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 shadow-sm transition-all hover:bg-neutral-50 hover:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700/80`}
       >
         <svg
@@ -554,7 +660,9 @@ export default function TemplateSelector({
       {isOpen && (
         <div
           id={listboxId}
-          className="absolute right-0 top-full z-[99999] mt-1.5 w-84 sm:w-96 rounded-xl border border-neutral-200 bg-white p-2.5 shadow-2xl transition-all dark:border-neutral-700 dark:bg-neutral-900"
+          className={`absolute right-0 top-full z-[99999] mt-1.5 w-84 sm:w-96 rounded-xl border border-neutral-200 bg-white p-2.5 shadow-2xl transition-all duration-200 dark:border-neutral-700 dark:bg-neutral-900 ${
+            isSavingCustom ? "max-h-[580px]" : "max-h-[480px]"
+          } flex flex-col`}
         >
           {/* Header */}
           <div className="border-b border-neutral-100 pb-2 dark:border-neutral-800">
@@ -744,61 +852,104 @@ export default function TemplateSelector({
               </button>
             </div>
 
-            {/* Quick search input */}
-            <div className="mt-2">
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search templates (e.g., diabetes, fever, triage)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-md border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-800 placeholder-neutral-400 focus:border-sky-500 focus:bg-white focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:placeholder-neutral-500"
-              />
+            {/* Quick search input & Select All */}
+            <div className="mt-2 flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search templates (e.g., diabetes, fever)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-md border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-800 placeholder-neutral-400 focus:border-sky-500 focus:bg-white focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:placeholder-neutral-500"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2 top-1.5 text-xs text-neutral-400 hover:text-neutral-600"
+                  >
+                    ✕
+                  </button>
+                ) : null}
+              </div>
+              {filtered.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSelectAllFiltered}
+                  className="rounded-md border border-neutral-200 bg-neutral-100 px-2 py-1.5 text-[11px] font-medium text-neutral-700 hover:bg-neutral-200/80 active:scale-95 transition-all dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700 whitespace-nowrap cursor-pointer"
+                  title="Toggle select all filtered templates"
+                >
+                  {filtered.every((t) => selectedIds.has(t.id)) ? "Deselect All" : "Select All"}
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Templates list with hierarchical scopes */}
-          <div className="max-h-60 overflow-y-auto py-1 text-xs custom-scroll">
+          {/* Templates list with multi-selection support */}
+          <div className="flex-1 overflow-y-auto py-1 text-xs custom-scroll min-h-[140px] max-h-60 sm:max-h-68 space-y-1.5">
             {filtered.length === 0 ? (
               <div className="py-6 text-center text-xs text-neutral-400">
                 No templates found matching &ldquo;{searchQuery}&rdquo;.
               </div>
             ) : (
-              <div className="space-y-1">
-                {filtered.map((template) => {
-                  const text = isDoctorNotesTarget
-                    ? template.doctorNotes || template.remarks || ""
-                    : template.advice
+              filtered.map((template) => {
+                const isSelected = selectedIds.has(template.id)
+                const text = isDoctorNotesTarget
+                  ? template.doctorNotes || template.remarks || ""
+                  : template.advice
 
-                  return (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => handleSelect(template)}
-                      className="w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-sky-50/70 focus:bg-sky-50 focus:outline-none dark:hover:bg-neutral-800/80 dark:focus:bg-neutral-800 cursor-pointer"
+                return (
+                  <div
+                    key={template.id}
+                    onClick={() => {
+                      if (selectedIds.size > 0) {
+                        toggleSelectTemplate(template.id)
+                      } else {
+                        handleSingleSelect(template)
+                      }
+                    }}
+                    className={`group relative flex items-start gap-2.5 rounded-lg border p-2 text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? "border-sky-400 bg-sky-50/80 shadow-2xs dark:border-sky-600 dark:bg-sky-950/40"
+                        : "border-neutral-200/80 bg-white hover:border-sky-300 hover:bg-neutral-50/80 dark:border-neutral-800 dark:bg-neutral-800/40 dark:hover:bg-neutral-800"
+                    }`}
+                  >
+                    {/* Checkbox for selecting multiple */}
+                    <div
+                      className="pt-0.5 shrink-0"
+                      onClick={(e) => toggleSelectTemplate(template.id, e)}
                     >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => toggleSelectTemplate(template.id, e)}
+                        aria-label={`Select ${template.title}`}
+                        className="size-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500 cursor-pointer dark:border-neutral-600 dark:bg-neutral-700"
+                      />
+                    </div>
+
+                    {/* Template details */}
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1.5">
-                        <span className="font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                        <span className="font-semibold text-neutral-900 dark:text-neutral-100 truncate text-xs">
                           {template.title}
                         </span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {/* Scope Badge */}
-                          <span
-                            className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
-                              template.scope === "clinic"
-                                ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300"
-                                : template.scope === "specialty"
-                                ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                            }`}
-                          >
-                            {template.scope === "clinic"
-                              ? "🏥 Clinic"
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[9px] font-semibold shrink-0 ${
+                            template.scope === "clinic"
+                              ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300"
                               : template.scope === "specialty"
-                              ? `🩺 ${template.scopeValue || "Specialty"}`
-                              : "🔒 Private"}
-                          </span>
-                        </div>
+                              ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          }`}
+                        >
+                          {template.scope === "clinic"
+                            ? "🏥 Clinic"
+                            : template.scope === "specialty"
+                            ? `🩺 ${template.scopeValue || "Specialty"}`
+                            : "🔒 Private"}
+                        </span>
                       </div>
 
                       {/* Unique Name Tag */}
@@ -812,12 +963,112 @@ export default function TemplateSelector({
                       <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-neutral-600 dark:text-neutral-400">
                         {text}
                       </p>
-                    </button>
-                  )
-                })}
-              </div>
+                    </div>
+
+                    {/* Quick Single Insert pill button */}
+                    <div className="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleSingleSelect(template)
+                        }}
+                        title="Insert this template now"
+                        className="rounded bg-sky-600 px-2 py-1 text-[10px] font-semibold text-white shadow-2xs hover:bg-sky-700 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                      >
+                        + Insert
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
+
+          {/* Multi-Selection Action Footer */}
+          {selectedIds.size > 0 ? (
+            <div className="mt-2 border-t border-neutral-200 bg-neutral-50 -mx-2.5 -mb-2.5 p-2.5 rounded-b-xl dark:border-neutral-800 dark:bg-neutral-800/90 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-sky-900 dark:text-sky-300">
+                    {selectedIds.size} {selectedIds.size === 1 ? "template" : "templates"} selected
+                  </span>
+                  {currentContent?.trim() ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-neutral-600 dark:text-neutral-300 border-l border-neutral-300 pl-2 dark:border-neutral-700">
+                      <label className="inline-flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`insert-mode-${listboxId}`}
+                          value="append"
+                          checked={insertMode === "append"}
+                          onChange={() => setInsertMode("append")}
+                          className="text-sky-600 size-3"
+                        />
+                        <span>Append</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`insert-mode-${listboxId}`}
+                          value="replace"
+                          checked={insertMode === "replace"}
+                          onChange={() => setInsertMode("replace")}
+                          className="text-sky-600 size-3"
+                        />
+                        <span>Replace</span>
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="rounded px-2 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/60 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-700 cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplySelected}
+                    className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-sky-700 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <span>Insert Selected ({selectedIds.size})</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            currentContent?.trim() ? (
+              <div className="mt-1.5 pt-1.5 border-t border-neutral-100 flex items-center justify-between text-[11px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400 px-1">
+                <span>Select multiple with checkboxes, or click one to insert.</span>
+                <div className="flex items-center gap-1.5">
+                  <label className="inline-flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`insert-mode-${listboxId}`}
+                      value="append"
+                      checked={insertMode === "append"}
+                      onChange={() => setInsertMode("append")}
+                      className="text-sky-600 size-3"
+                    />
+                    <span>Append</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`insert-mode-${listboxId}`}
+                      value="replace"
+                      checked={insertMode === "replace"}
+                      onChange={() => setInsertMode("replace")}
+                      className="text-sky-600 size-3"
+                    />
+                    <span>Replace</span>
+                  </label>
+                </div>
+              </div>
+            ) : null
+          )}
         </div>
       )}
     </div>
