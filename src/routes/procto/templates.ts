@@ -82,6 +82,45 @@ router.post(
 );
 
 /**
+ * PUT /api/v1/procto/templates/:id
+ * Updates an existing template.
+ */
+router.put(
+  "/:id",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const doctorUserId = req.sessionUser!.id;
+      const templateId = String(req.params.id);
+      let practiceId =
+        typeof req.body?.practiceId === "string" ? req.body.practiceId : undefined;
+
+      if (!practiceId) {
+        practiceId = (await TemplateService.getPracticeIdForUser(doctorUserId)) ?? undefined;
+      }
+      if (!practiceId) {
+        return ResponseHandler.unsuccessful(
+          res,
+          400,
+          "No practice associated with current session.",
+        );
+      }
+
+      const updated = await TemplateService.updateTemplate(
+        practiceId,
+        doctorUserId,
+        templateId,
+        req.body,
+      );
+
+      return ResponseHandler.fetchSuccessful(res, "template updated successfully.", updated);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
  * DELETE /api/v1/procto/templates/:id
  * Deletes a template.
  */

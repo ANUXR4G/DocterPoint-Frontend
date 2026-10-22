@@ -97,6 +97,15 @@ export class PatientService {
       ResponseHandler.notFoundError("patient information no found.");
     }
 
+    const docObj =
+      patient!.documents &&
+      typeof patient!.documents === "object" &&
+      !Array.isArray(patient!.documents)
+        ? (patient!.documents as Record<string, unknown>)
+        : null;
+    const allergies = Array.isArray(docObj?.allergies) ? docObj!.allergies : [];
+    const noKnownAllergies = Boolean(docObj?.noKnownAllergies);
+
     const patientInfoData = profileData({
       id: patient!.id,
       email: patient!.user.email,
@@ -116,6 +125,8 @@ export class PatientService {
       panNumber: patient!.panNumber,
       aadharCardSrc: patient!.aadharCardSrc,
       mrn: patient!.mrn,
+      allergies,
+      noKnownAllergies,
     });
 
     await setCachedJson(redisKey, patientInfoData);

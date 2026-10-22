@@ -379,9 +379,14 @@ export async function attachWhatsAppPatientDocument(opts: {
 
   const existing = readDocuments(patient.documents);
   const nextDocs = [...existing, opts.doc];
+  const docObj =
+    patient.documents && typeof patient.documents === "object" && !Array.isArray(patient.documents)
+      ? (patient.documents as Record<string, unknown>)
+      : null;
+  const nextDocsPayload = docObj ? { ...docObj, items: nextDocs } : nextDocs;
   await prisma.patient.update({
     where: { id: patientId },
-    data: { documents: nextDocs as unknown as Prisma.InputJsonValue },
+    data: { documents: nextDocsPayload as unknown as Prisma.InputJsonValue },
   });
 
   if (opts.practiceId) {
