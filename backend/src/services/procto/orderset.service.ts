@@ -43,7 +43,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Twice daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take strictly after food with water",
       },
       {
@@ -54,7 +54,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 30 minutes before breakfast",
       },
       {
@@ -65,7 +65,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "capsule",
         frequency: "Once daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after lunch or dinner",
       },
     ],
@@ -86,7 +86,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take in morning after breakfast",
       },
       {
@@ -97,7 +97,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take in morning with water",
       },
     ],
@@ -118,7 +118,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "3",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Strictly after food, complete full 3-day course",
       },
       {
@@ -129,7 +129,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take at bedtime with water",
       },
       {
@@ -140,7 +140,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Thrice daily",
         duration: "3",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after food as needed for body ache or fever",
       },
       {
@@ -151,7 +151,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "ml",
         frequency: "Thrice daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after meals with lukewarm water",
       },
     ],
@@ -172,7 +172,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Every 6 hours",
         duration: "3",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after meals for fever > 100°F (minimum 6h gap)",
       },
       {
@@ -183,7 +183,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "sachet",
         frequency: "Twice daily",
         duration: "3",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Dissolve entire sachet in 1 liter clean drinking water",
       },
       {
@@ -194,7 +194,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "10",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Chew or take with water after breakfast",
       },
     ],
@@ -215,7 +215,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "14",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 30 minutes before breakfast on empty stomach",
       },
       {
@@ -226,7 +226,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "ml",
         frequency: "Thrice daily",
         duration: "7",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 1 hour after meals and at bedtime",
       },
       {
@@ -237,7 +237,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Twice daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 15-30 minutes before meals",
       },
     ],
@@ -258,7 +258,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Twice daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Always take strictly after food with water",
       },
       {
@@ -269,7 +269,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "capsule",
         frequency: "Twice daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after morning and evening meals",
       },
       {
@@ -280,7 +280,7 @@ export const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 30 minutes before breakfast on empty stomach",
       },
     ],
@@ -372,7 +372,11 @@ export class OrderSetService {
         doseUnit: m.doseUnit ? String(m.doseUnit).trim() : "tablet",
         frequency: m.frequency ? String(m.frequency).trim() : "Once daily",
         duration: m.duration ? String(m.duration).trim() : "5",
-        durationUnit: m.durationUnit ? String(m.durationUnit).trim() : "Day",
+        durationUnit: m.durationUnit
+          ? String(m.durationUnit).trim() === "Day"
+            ? "Days"
+            : String(m.durationUnit).trim()
+          : "Days",
         instruction: m.instruction ? String(m.instruction).trim() : undefined,
       })),
       isCustom: true,

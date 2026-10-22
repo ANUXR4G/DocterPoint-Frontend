@@ -165,5 +165,67 @@ describe("Favorite Medicines & Order Set Quick-Prescription Integration", () => 
     assert.equal(importedItems[0].name, "Metformin 500mg")
     assert.equal(importedItems[1].name, "Glimepiride 1mg")
   })
+
+  it("prevents duplicate medicine addition and detects existing items", () => {
+    const existingMedicines: VisitMedicine[] = [
+      {
+        name: "Paracetamol 650mg",
+        strength: "650mg",
+        route: "Oral",
+        dose: "1",
+        doseUnit: "tablet",
+        frequency: "Twice daily",
+        duration: "5",
+        durationUnit: "Day",
+        instruction: "After food",
+        favourite: true,
+      },
+    ]
+
+    const newMedToAdd: VisitMedicine = {
+      name: "paracetamol 650mg", // Case-insensitive duplicate
+      strength: "650mg",
+      route: "Oral",
+      dose: "1",
+      doseUnit: "tablet",
+      frequency: "Three times daily",
+      duration: "3",
+      durationUnit: "Day",
+      instruction: "After meals",
+      favourite: true,
+    }
+
+    const isDuplicate = existingMedicines.some(
+      (m) => m.name.trim().toLowerCase() === newMedToAdd.name.trim().toLowerCase(),
+    )
+    assert.equal(isDuplicate, true, "Should identify existing medicine as duplicate")
+
+    // Filter duplicates from bulk list
+    const incomingList: VisitMedicine[] = [
+      { name: "Paracetamol 650mg", strength: "650mg" },
+      { name: "Amoxicillin 500mg", strength: "500mg" },
+      { name: "PARACETAMOL 650MG", strength: "650mg" },
+    ]
+
+    const existingSet = new Set(
+      existingMedicines.map((m) => m.name.trim().toLowerCase()),
+    )
+    const validToAdd: VisitMedicine[] = []
+    const duplicateNames: string[] = []
+
+    for (const item of incomingList) {
+      const key = item.name.trim().toLowerCase()
+      if (existingSet.has(key)) {
+        duplicateNames.push(item.name)
+      } else {
+        existingSet.add(key)
+        validToAdd.push(item)
+      }
+    }
+
+    assert.equal(validToAdd.length, 1, "Only non-duplicate medicine should be added")
+    assert.equal(validToAdd[0].name, "Amoxicillin 500mg")
+    assert.equal(duplicateNames.length, 2, "Both duplicates should be detected")
+  })
 })
 

@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef } from "react"
 import { proctoService } from "@/lib/services/procto"
 import { searchMedicineMaster, type MedicineMasterItem } from "@/lib/medicineMaster"
-import type { VisitMedicine } from "./MedicineEntryTable"
+import {
+  defaultMedicineStartDate,
+  medicineEndDate,
+} from "@/lib/medicineDates"
+import { normalizeDurationUnit, type VisitMedicine } from "./MedicineEntryTable"
 import { toast } from "sonner"
 
 export type OrderSetItem = {
@@ -42,7 +46,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Twice daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take strictly after food with water",
       },
       {
@@ -53,7 +57,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 30 minutes before breakfast",
       },
       {
@@ -64,7 +68,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "capsule",
         frequency: "Once daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after lunch or dinner",
       },
     ],
@@ -83,7 +87,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take in morning after breakfast",
       },
       {
@@ -94,7 +98,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "30",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take in morning with water",
       },
     ],
@@ -113,7 +117,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "3",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Strictly after food, complete full 3-day course",
       },
       {
@@ -124,7 +128,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take at bedtime with water",
       },
       {
@@ -135,7 +139,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Thrice daily",
         duration: "3",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after food as needed for body ache or fever",
       },
       {
@@ -146,7 +150,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "ml",
         frequency: "Thrice daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after meals with lukewarm water",
       },
     ],
@@ -165,7 +169,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Every 6 hours",
         duration: "3",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after meals for fever > 100°F (minimum 6h gap)",
       },
       {
@@ -176,7 +180,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "sachet",
         frequency: "Twice daily",
         duration: "3",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Dissolve entire sachet in 1 liter clean drinking water",
       },
       {
@@ -187,7 +191,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "10",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Chew or take with water after breakfast",
       },
     ],
@@ -206,7 +210,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "14",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 30 minutes before breakfast on empty stomach",
       },
       {
@@ -217,7 +221,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "ml",
         frequency: "Thrice daily",
         duration: "7",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 1 hour after meals and at bedtime",
       },
       {
@@ -228,7 +232,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Twice daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 15-30 minutes before meals",
       },
     ],
@@ -247,7 +251,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Twice daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Always take strictly after food with water",
       },
       {
@@ -258,7 +262,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "capsule",
         frequency: "Twice daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take after morning and evening meals",
       },
       {
@@ -269,7 +273,7 @@ const DEFAULT_ORDER_SETS: OrderSet[] = [
         doseUnit: "tablet",
         frequency: "Once daily",
         duration: "5",
-        durationUnit: "Day",
+        durationUnit: "Days",
         instruction: "Take 30 minutes before breakfast on empty stomach",
       },
     ],
@@ -337,7 +341,7 @@ export default function FavoriteOrderSetModal({
               doseUnit: m.doseUnit || "tablet",
               frequency: m.frequency || "Once daily",
               duration: m.duration || "5",
-              durationUnit: m.durationUnit || "Day",
+              durationUnit: normalizeDurationUnit(m.durationUnit) || "Days",
               instruction: m.instruction || "",
               favourite: true,
             })
@@ -393,20 +397,40 @@ export default function FavoriteOrderSetModal({
   }
 
   function handleAddSingleFav(med: MedicineMasterItem) {
+    const isAlreadyAdded = currentPrescriptionRows.some(
+      (r) => r.name.trim().toLowerCase() === med.name.trim().toLowerCase(),
+    )
+    if (isAlreadyAdded) {
+      toast.info(`"${med.name}" is already added to the prescription.`)
+      return
+    }
+
+    const duration = med.duration || "5"
+    const durationUnit = normalizeDurationUnit(med.durationUnit) || "Days"
+    const startDate = defaultMedicineStartDate()
+    const endDate =
+      medicineEndDate(startDate, duration, durationUnit) || undefined
+    const dose = med.dose || "1"
+    const doseUnit = med.doseUnit || "tablet"
+    const frequency = med.frequency || "Once daily"
+
     const row: VisitMedicine = {
       name: med.name,
       strength: med.strength || "",
       route: med.route || "Oral",
-      dose: med.dose || "1",
-      doseUnit: med.doseUnit || "tablet",
-      frequency: med.frequency || "Once daily",
-      duration: med.duration || "5",
-      durationUnit: med.durationUnit || "Day",
+      dose,
+      doseUnit,
+      frequency,
+      duration,
+      durationUnit,
+      startDate,
+      endDate,
       instruction: med.instruction || "After food",
+      amount: [dose, doseUnit].filter(Boolean).join(" "),
+      times: frequency ? [frequency] : undefined,
       favourite: true,
     }
     onAddMedicines([row])
-    toast.success(`Added "${med.name}" to prescription`)
   }
 
   function handleAddSelectedFavs() {
@@ -415,40 +439,112 @@ export default function FavoriteOrderSetModal({
       toast.error("Please select at least one favorite medicine to add.")
       return
     }
-    const rows: VisitMedicine[] = toAdd.map((med) => ({
-      name: med.name,
-      strength: med.strength || "",
-      route: med.route || "Oral",
-      dose: med.dose || "1",
-      doseUnit: med.doseUnit || "tablet",
-      frequency: med.frequency || "Once daily",
-      duration: med.duration || "5",
-      durationUnit: med.durationUnit || "Day",
-      instruction: med.instruction || "After food",
-      favourite: true,
-    }))
+    const existing = new Set(
+      currentPrescriptionRows.map((r) => r.name.trim().toLowerCase()),
+    )
+    const validMeds = toAdd.filter(
+      (m) => !existing.has(m.name.trim().toLowerCase()),
+    )
+    const already = toAdd.filter((m) =>
+      existing.has(m.name.trim().toLowerCase()),
+    )
+
+    if (validMeds.length === 0) {
+      toast.info(
+        already.length === 1
+          ? `"${already[0].name}" is already added to the prescription.`
+          : `${already.length} medicines are already added to the prescription.`,
+      )
+      return
+    }
+
+    const startDate = defaultMedicineStartDate()
+    const rows: VisitMedicine[] = validMeds.map((med) => {
+      const duration = med.duration || "5"
+      const durationUnit = normalizeDurationUnit(med.durationUnit) || "Days"
+      const endDate =
+        medicineEndDate(startDate, duration, durationUnit) || undefined
+      const dose = med.dose || "1"
+      const doseUnit = med.doseUnit || "tablet"
+      const frequency = med.frequency || "Once daily"
+      return {
+        name: med.name,
+        strength: med.strength || "",
+        route: med.route || "Oral",
+        dose,
+        doseUnit,
+        frequency,
+        duration,
+        durationUnit,
+        startDate,
+        endDate,
+        instruction: med.instruction || "After food",
+        amount: [dose, doseUnit].filter(Boolean).join(" "),
+        times: frequency ? [frequency] : undefined,
+        favourite: true,
+      }
+    })
     onAddMedicines(rows)
-    toast.success(`Added ${rows.length} favorite medicines to prescription`)
+    if (already.length > 0) {
+      toast.info(
+        `Skipped ${already.length} already-added medicine(s).`,
+      )
+    }
     setSelectedFavIds(new Set())
     onClose()
   }
 
   function handleApplyOrderSet(os: OrderSet) {
     if (!os.medicines || os.medicines.length === 0) return
-    const rows: VisitMedicine[] = os.medicines.map((m) => ({
-      name: m.name,
-      strength: m.strength || "",
-      route: m.route || "Oral",
-      dose: m.dose || "1",
-      doseUnit: m.doseUnit || "tablet",
-      frequency: m.frequency || "Once daily",
-      duration: m.duration || "5",
-      durationUnit: m.durationUnit || "Day",
-      instruction: m.instruction || "After food",
-      favourite: false,
-    }))
+    const existing = new Set(
+      currentPrescriptionRows.map((r) => r.name.trim().toLowerCase()),
+    )
+    const validMeds = os.medicines.filter(
+      (m) => !existing.has(m.name.trim().toLowerCase()),
+    )
+    const already = os.medicines.filter((m) =>
+      existing.has(m.name.trim().toLowerCase()),
+    )
+
+    if (validMeds.length === 0) {
+      toast.info(
+        `All medicines from "${os.name}" are already added to the prescription.`,
+      )
+      return
+    }
+
+    const startDate = defaultMedicineStartDate()
+    const rows: VisitMedicine[] = validMeds.map((m) => {
+      const duration = m.duration || "5"
+      const durationUnit = normalizeDurationUnit(m.durationUnit) || "Days"
+      const endDate =
+        medicineEndDate(startDate, duration, durationUnit) || undefined
+      const dose = m.dose || "1"
+      const doseUnit = m.doseUnit || "tablet"
+      const frequency = m.frequency || "Once daily"
+      return {
+        name: m.name,
+        strength: m.strength || "",
+        route: m.route || "Oral",
+        dose,
+        doseUnit,
+        frequency,
+        duration,
+        durationUnit,
+        startDate,
+        endDate,
+        instruction: m.instruction || "After food",
+        amount: [dose, doseUnit].filter(Boolean).join(" "),
+        times: frequency ? [frequency] : undefined,
+        favourite: false,
+      }
+    })
     onAddMedicines(rows)
-    toast.success(`⚡ Applied order set: Added all ${rows.length} medicines from "${os.name}" to prescription`)
+    if (already.length > 0) {
+      toast.info(
+        `Skipped ${already.length} already-added medicine(s) from "${os.name}".`,
+      )
+    }
     onClose()
   }
 
@@ -467,7 +563,7 @@ export default function FavoriteOrderSetModal({
         doseUnit: r.doseUnit || "tablet",
         frequency: r.frequency || "Once daily",
         duration: r.duration || "5",
-        durationUnit: r.durationUnit || "Day",
+        durationUnit: normalizeDurationUnit(r.durationUnit) || "Days",
         instruction: r.instruction,
       }))
     setNewSetMedicines(items)
@@ -630,6 +726,8 @@ export default function FavoriteOrderSetModal({
                       <div
                         key={key}
                         onClick={() => toggleSelectFav(key)}
+                        onDoubleClick={() => handleAddSingleFav(med)}
+                        title="Click to select for batch addition, or click '+ Add to Rx' (or double-click) to add immediately to prescription"
                         className={`flex flex-col justify-between rounded-xl border p-3 transition-all cursor-pointer ${
                           isSelected
                             ? "border-emerald-500 bg-emerald-50/50 dark:border-emerald-600 dark:bg-emerald-950/30"
@@ -687,7 +785,7 @@ export default function FavoriteOrderSetModal({
                               e.stopPropagation()
                               handleAddSingleFav(med)
                             }}
-                            className="rounded-md bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-800 hover:bg-emerald-600 hover:text-white transition-colors dark:bg-neutral-700 dark:text-neutral-200 cursor-pointer"
+                            className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 shadow-xs active:scale-95 transition-all cursor-pointer"
                           >
                             + Add to Rx
                           </button>

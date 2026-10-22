@@ -229,8 +229,15 @@ function readPatientGeneralDocuments(raw: unknown): Array<{
   url: string;
   uploadedAt: string;
 }> {
-  if (!Array.isArray(raw)) return [];
-  return raw
+  const list = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && "items" in raw && Array.isArray((raw as any).items)
+    ? (raw as any).items
+    : raw && typeof raw === "object" && "documents" in raw && Array.isArray((raw as any).documents)
+    ? (raw as any).documents
+    : [];
+  if (!Array.isArray(list)) return [];
+  return list
     .map((d) => {
       const row = d as { name?: string; url?: string; uploadedAt?: string };
       return {

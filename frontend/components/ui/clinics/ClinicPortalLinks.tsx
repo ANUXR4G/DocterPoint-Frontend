@@ -20,6 +20,7 @@ const LINKS = [
   { href: "/clinic/access", label: "Role access" },
   { href: "/clinic/subscription", label: "Subscription" },
   { href: "/clinic/medicine", label: "Medicine" },
+  { href: "/clinic/master", label: "Master" },
 ] as const
 
 function pathOnly(href: string): string {
@@ -65,6 +66,15 @@ export function isClinicNavActive(
       pathname.startsWith("/clinic/medicine/") ||
       pathname === "/clinic/medicines" ||
       pathname.startsWith("/clinic/medicines/")
+    )
+  }
+
+  if (destPath === "/clinic/master" || destPath === "/doctor/master") {
+    return (
+      pathname === "/clinic/master" ||
+      pathname.startsWith("/clinic/master/") ||
+      pathname === "/doctor/master" ||
+      pathname.startsWith("/doctor/master/")
     )
   }
 

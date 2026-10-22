@@ -9,6 +9,12 @@ import {
   prescriptionFileName,
   type PrescriptionMedicine,
 } from "./prescriptionPdf.js";
+import {
+  buildConsultationPdf,
+  consultationFileName,
+  type ConsultBooking,
+  type ConsultMedicine,
+} from "./consultationPdf.js";
 import { settings } from "../../config/index.js";
 
 function medicinesOf(value: unknown): PrescriptionMedicine[] {
@@ -194,12 +200,18 @@ async function practicePhoneNumberId(practiceId: string): Promise<string | undef
   return stored || approved || undefined;
 }
 
+export type SendClinicLogKind = "prescription" | "consultation" | "both";
+
 /**
- * Send to customer: a formatted prescription PDF on WhatsApp.
+ * Send to customer: prescription and/or consultation PDF on WhatsApp.
  * Does not send the plain-text prescription or visit-summary templates.
  */
-export async function sendClinicLogPdf(bookingId: string): Promise<{
+export async function sendClinicLogPdf(
+  bookingId: string,
+  kind: SendClinicLogKind = "prescription",
+): Promise<{
   filename: string;
+  filenames?: string[];
   messageId?: string;
   simulated?: boolean;
 }> {
@@ -226,6 +238,8 @@ export async function sendClinicLogPdf(bookingId: string): Promise<{
       ? prisma.user.findUnique({
           where: { id: booking.patientId },
           select: {
+            id: true,
+            email: true,
             phone: true,
             gender: true,
             patient: { select: { mrn: true, contactNumber: true, dateOfBirth: true } },
@@ -270,63 +284,159 @@ export async function sendClinicLogPdf(bookingId: string): Promise<{
     .map((part) => String(part || "").trim())
     .filter(Boolean)
     .join(", ");
-  const filename = prescriptionFileName(patientName);
+  const rxFilename = prescriptionFileName(patientName);
+  const consultFilename = consultationFileName(patientName, booking.id);
   const chart = chartPreview;
   const dob = slashDate(patientUser?.patient?.dateOfBirth);
   const age = ageYears(patientUser?.patient?.dateOfBirth);
   const gender = genderWord(patientUser?.gender);
-  const bytes = await buildPrescriptionPdf({
-    clinicName: booking.practice.name,
-    address: address || booking.location?.name || "",
-    phone: booking.practice.phone || "",
-    email: booking.practice.email || "",
-    patientName,
-    patientPhone: booking.patientPhone || "",
-    mrn: patientUser?.patient?.mrn || "",
-    dob,
-    ageGender: [age, gender].filter(Boolean).join(" / "),
-    visitId: booking.id,
-    shortId:
-      booking.tokenNumber != null
-        ? String(booking.tokenNumber)
-        : booking.id.replace(/-/g, "").slice(0, 8).toUpperCase(),
-    doctorName,
-    license: provider?.doctor?.licenseNo || "",
-    qualification: (provider?.doctor?.description || "").trim().split("\n")[0] || "",
-    appointment: appointmentLabel(booking),
-    chiefComplaint: booking.disease || "",
-    diagnosis: chart.diagnosis,
-    allergies: allergyLines(chart),
-    vitalLine: vitalLine(chart),
-    remarks: advice,
-    printed: formatPracticeDateTime(new Date()),
-    medicines,
-  });
 
   const phoneNumberId = await practicePhoneNumberId(booking.practiceId);
-  const pdf = Buffer.from(bytes);
   const windowOpen = await customerWindowOpen(booking.practiceId, to);
-  // The file message type is approved once. After that, each prescription is
-  // attached and sent. A new PDF is never submitted for review.
-  let result = windowOpen
-    ? { ok: false as const }
-    : await sendPrescriptionPdfTemplate(
+
+  const deliverPdf = async (fileBuffer: Buffer, fname: string) => {
+    let result = windowOpen
+      ? { ok: false as const }
+      : await sendPrescriptionPdfTemplate(
+          to,
+          {
+            filename: fname,
+            buffer: fileBuffer,
+            practiceName: booking.practice.name,
+            doctorName,
+          },
+          phoneNumberId,
+        );
+    if (!result.ok) {
+      result = await sendWhatsAppDocument(
         to,
-        {
-          filename,
-          buffer: pdf,
-          practiceName: booking.practice.name,
-          doctorName,
-        },
+        { filename: fname, mimeType: "application/pdf", buffer: fileBuffer },
         phoneNumberId,
       );
-  if (!result.ok) {
-    result = await sendWhatsAppDocument(
-      to,
-      { filename, mimeType: "application/pdf", buffer: pdf },
-      phoneNumberId,
-    );
+    }
+    return result;
+  };
+
+  const generateRxPdf = async (): Promise<Buffer> => {
+    const bytes = await buildPrescriptionPdf({
+      clinicName: booking.practice.name,
+      address: address || booking.location?.name || "",
+      phone: booking.practice.phone || "",
+      email: booking.practice.email || "",
+      patientName,
+      patientPhone: booking.patientPhone || "",
+      mrn: patientUser?.patient?.mrn || "",
+      dob,
+      ageGender: [age, gender].filter(Boolean).join(" / "),
+      visitId: booking.id,
+      shortId:
+        booking.tokenNumber != null
+          ? String(booking.tokenNumber)
+          : booking.id.replace(/-/g, "").slice(0, 8).toUpperCase(),
+      doctorName,
+      license: provider?.doctor?.licenseNo || "",
+      qualification: (provider?.doctor?.description || "").trim().split("\n")[0] || "",
+      appointment: appointmentLabel(booking),
+      chiefComplaint: booking.disease || "",
+      diagnosis: chart.diagnosis,
+      allergies: allergyLines(chart),
+      vitalLine: vitalLine(chart),
+      remarks: advice,
+      printed: formatPracticeDateTime(new Date()),
+      medicines,
+    });
+    return Buffer.from(bytes);
+  };
+
+  const generateConsultPdf = async (): Promise<Buffer> => {
+    const consultBooking: ConsultBooking = {
+      id: booking.id,
+      tokenNumber: booking.tokenNumber,
+      disease: booking.disease,
+      notes: booking.notes,
+      doctorRemarks: booking.doctorRemarks,
+      consultationType: booking.consultationType,
+      slotStart: booking.slotStart,
+      slotEnd: booking.slotEnd,
+      sessionDate: booking.sessionDate,
+      patientName,
+      patientPhone: booking.patientPhone,
+      medicines: medicines as ConsultMedicine[],
+      clinicalAssessment: booking.clinicalAssessment,
+      practice: {
+        name: booking.practice.name,
+        phone: booking.practice.phone,
+        email: booking.practice.email,
+      },
+      location: booking.location,
+      provider: {
+        name: doctorName,
+        licenseNo: provider?.doctor?.licenseNo,
+        description: provider?.doctor?.description,
+      },
+      patient: {
+        id: patientUser ? booking.patientId : null,
+        name: patientName,
+        email: patientUser?.email ?? null,
+        phone: patientUser?.phone ?? booking.patientPhone,
+        gender: patientUser?.gender ?? null,
+        dateOfBirth: patientUser?.patient?.dateOfBirth ?? null,
+        mrn: patientUser?.patient?.mrn ?? null,
+        contactNumber: patientUser?.patient?.contactNumber ?? null,
+      },
+    };
+    const bytes = await buildConsultationPdf(consultBooking);
+    return Buffer.from(bytes);
+  };
+
+  if (kind === "consultation") {
+    const consultPdf = await generateConsultPdf();
+    const result = await deliverPdf(consultPdf, consultFilename);
+    if (!result.ok && !result.simulated) {
+      throw new AppError(
+        502,
+        result.error || "Could not send the consultation PDF on WhatsApp.",
+      );
+    }
+    return {
+      filename: consultFilename,
+      filenames: [consultFilename],
+      messageId: result.messageId,
+      simulated: result.simulated,
+    };
   }
+
+  if (kind === "both") {
+    const rxPdf = await generateRxPdf();
+    const consultPdf = await generateConsultPdf();
+
+    const rxResult = await deliverPdf(rxPdf, rxFilename);
+    if (!rxResult.ok && !rxResult.simulated) {
+      throw new AppError(
+        502,
+        rxResult.error || "Could not send the prescription PDF on WhatsApp.",
+      );
+    }
+
+    const consultResult = await deliverPdf(consultPdf, consultFilename);
+    if (!consultResult.ok && !consultResult.simulated) {
+      throw new AppError(
+        502,
+        consultResult.error || "Could not send the consultation PDF on WhatsApp.",
+      );
+    }
+
+    return {
+      filename: `${rxFilename}, ${consultFilename}`,
+      filenames: [rxFilename, consultFilename],
+      messageId: consultResult.messageId || rxResult.messageId,
+      simulated: rxResult.simulated || consultResult.simulated,
+    };
+  }
+
+  // Default: prescription
+  const rxPdf = await generateRxPdf();
+  const result = await deliverPdf(rxPdf, rxFilename);
   if (!result.ok && !result.simulated) {
     throw new AppError(
       502,
@@ -334,7 +444,8 @@ export async function sendClinicLogPdf(bookingId: string): Promise<{
     );
   }
   return {
-    filename,
+    filename: rxFilename,
+    filenames: [rxFilename],
     messageId: result.messageId,
     simulated: result.simulated,
   };

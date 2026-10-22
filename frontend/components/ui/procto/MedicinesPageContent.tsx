@@ -9,6 +9,9 @@ import MedicineEntryTable, {
 } from "./MedicineEntryTable"
 import { CENTRAL_MEDICINE_MASTER } from "@/lib/medicineMaster"
 import { defaultMedicineStartDate } from "@/lib/medicineDates"
+import { downloadMedicineTemplate } from "@/lib/medicineExcel"
+import BulkUploadMedicineModal from "./BulkUploadMedicineModal"
+import type { MedicineItem } from "./MedicineManagementPage"
 
 const STORAGE_KEY = "glucoguide_portal_medicines"
 
@@ -36,7 +39,7 @@ const INITIAL_MEDICINES: VisitMedicine[] = [
     doseUnit: "tablet",
     frequency: "Three times daily",
     duration: "3",
-    durationUnit: "Day",
+    durationUnit: "Days",
     startDate: defaultMedicineStartDate(),
     endDate: "",
     instruction: "After meals as needed for fever",
@@ -50,7 +53,7 @@ const INITIAL_MEDICINES: VisitMedicine[] = [
     doseUnit: "tablet",
     frequency: "Once daily",
     duration: "14",
-    durationUnit: "Day",
+    durationUnit: "Days",
     startDate: defaultMedicineStartDate(),
     endDate: "",
     instruction: "30 minutes before breakfast",
@@ -69,6 +72,7 @@ export default function MedicinesPageContent({ portal }: Props) {
   const [search, setSearch] = useState("")
   const [savedNotice, setSavedNotice] = useState("")
   const [isLoaded, setIsLoaded] = useState(false)
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false)
 
   // Load stored medicines on mount
   useEffect(() => {
@@ -102,6 +106,13 @@ export default function MedicinesPageContent({ portal }: Props) {
   function handleAdd() {
     const trimmed = (draft.name || "").trim()
     if (!trimmed) return
+    const isAlready = medicines.some(
+      (m) => m.name.trim().toLowerCase() === trimmed.toLowerCase(),
+    )
+    if (isAlready) {
+      notify(`"${trimmed}" is already added.`)
+      return
+    }
     const next = [...medicines, { ...draft, name: trimmed }]
     setMedicines(next)
     setDraft(emptyMedicineDraft())
@@ -165,6 +176,29 @@ export default function MedicinesPageContent({ portal }: Props) {
         eyebrow={portal === "doctor" ? "Doctor portal" : "Clinic portal"}
         title="Medicines"
         subtitle="Search centralized Medicine Master database, manage prescriptions, and organize favourite medications."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                downloadMedicineTemplate("xlsx")
+                notify("Excel template (.xlsx) downloaded.")
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 shadow-2xs hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 cursor-pointer"
+            >
+              <span>📥</span>
+              <span>Download Template</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkUploadOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 shadow-2xs hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 cursor-pointer"
+            >
+              <span>📤</span>
+              <span>Upload Excel</span>
+            </button>
+          </div>
+        }
       />
 
       {savedNotice ? (
@@ -265,11 +299,70 @@ export default function MedicinesPageContent({ portal }: Props) {
           locked={false}
           onDraft={(next) => setDraft(next)}
           onAdd={handleAdd}
+          onAddMedicines={(newMeds) => {
+            const existing = new Set(
+              medicines.map((m) => m.name.trim().toLowerCase()),
+            )
+            const toAdd = newMeds.filter(
+              (m) => !existing.has(m.name.trim().toLowerCase()),
+            )
+            const already = newMeds.filter((m) =>
+              existing.has(m.name.trim().toLowerCase()),
+            )
+
+            if (toAdd.length === 0) {
+              notify(
+                already.length === 1
+                  ? `"${already[0].name}" is already added.`
+                  : "All selected medicines are already added.",
+              )
+              return
+            }
+
+            setMedicines([...medicines, ...toAdd])
+            notify(
+              `Added ${toAdd.length === 1 ? toAdd[0].name : `${toAdd.length} medicines`}${already.length > 0 ? ` (${already.length} duplicate skipped)` : ""}`,
+            )
+          }}
           onRemove={handleRemove}
           onEdit={handleEdit}
           onToggleFavourite={handleToggleFavourite}
         />
       </div>
+
+      <BulkUploadMedicineModal
+        open={bulkUploadOpen}
+        onClose={() => setBulkUploadOpen(false)}
+        existingMedicines={medicines.map((m, idx) => ({
+          id: `med-${idx}`,
+          medicineCode: `MED-${m.name.slice(0, 6).toUpperCase()}-${idx}`,
+          countryCode: "",
+          brandName: m.name,
+          genericName: m.name,
+          strength: m.strength || "",
+          route: m.route || "Oral",
+          dosageForm: m.doseUnit === "capsule" ? "Capsule" : "Tablet",
+          favourite: Boolean(m.favourite),
+        }))}
+        onSuccess={(updatedList, msg) => {
+          const mapped: VisitMedicine[] = updatedList.map((m) => ({
+            name: m.brandName || m.genericName,
+            strength: m.strength || "",
+            route: m.route || "Oral",
+            dose: "1",
+            doseUnit: m.dosageForm === "Capsule" ? "capsule" : "tablet",
+            frequency: "Once daily",
+            duration: "5",
+            durationUnit: "Days",
+            startDate: defaultMedicineStartDate(),
+            endDate: "",
+            instruction: "",
+            favourite: m.favourite,
+          }))
+          setMedicines(mapped)
+          notify(msg)
+        }}
+      />
     </div>
   )
 }

@@ -50,11 +50,21 @@ export const DEFAULT_PAIN_SCALES = [
   "Linear Pain Scale",
   "Activity Tolerance Scale",
   "Wong-Baker Facial Expression Scale",
-  "FLACC",
-  "Numeric (0–10)",
-  "Wong-Baker Faces",
-  "Verbal descriptor",
 ];
+
+export function isRemovedPainScale(scale: string): boolean {
+  const norm = (scale || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\u2010\u2013\u2014]/g, "-")
+  return (
+    norm === "flacc" ||
+    norm.startsWith("numeric") ||
+    norm.startsWith("numerical") ||
+    norm === "wong-baker faces" ||
+    norm === "verbal descriptor"
+  )
+}
 
 /** Adult default bands — clinics can override in Settings → Clinical. */
 export const DEFAULT_VITAL_MASTERS: VitalMaster[] = [
@@ -272,7 +282,7 @@ export function mergeClinicalMasters(raw: unknown): ClinicalMasters {
         : cloneMasters(base.allergies),
     painScales:
       Array.isArray(o.painScales) && o.painScales.length > 0
-        ? o.painScales.map(String)
+        ? o.painScales.map(String).filter((s) => !isRemovedPainScale(s))
         : [...base.painScales],
   }
 }
@@ -403,7 +413,7 @@ export function normalizeClinicalAssessment(
     allergies,
     noKnownAllergies: Boolean(o.noKnownAllergies),
     diagnosis: String(o.diagnosis ?? "").trim().slice(0, 500),
-    advice: String(o.advice ?? "").trim().slice(0, 1000),
+    advice: String(o.advice ?? "").trim().slice(0, 3000),
     savedAt: o.savedAt ? String(o.savedAt) : null,
   };
 }

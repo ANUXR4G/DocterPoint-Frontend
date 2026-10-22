@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   ALLERGY_SEVERITIES,
   computeBmi,
+  isRemovedPainScale,
   mergeClinicalMasters,
   vitalsBand,
   type ClinicalAssessment,
@@ -17,6 +18,16 @@ import {
   type PainToolTab,
 } from "@/lib/painAssessmentTool"
 import PainAssessmentToolModal from "@/components/ui/procto/PainAssessmentToolModal"
+import {
+  PAIN_DURATION_PRESETS,
+  PAIN_DURATION_UNITS,
+  PAIN_FREQUENCIES,
+  PAIN_LOCATION_GROUPS,
+  PAIN_RADIATIONS,
+  PAIN_TYPES,
+  parseCustomDuration,
+  type PainChoice,
+} from "@/lib/painCatalog"
 
 /** Full-field fill + border (do not mix with a white base bg — Tailwind order fights). */
 const BAND_COLORS: Record<VitalBand, string> = {
@@ -82,6 +93,8 @@ type Props = {
   medicines?: ReactNode
   /** Special advice, shown directly under the medicines table. */
   advice?: ReactNode
+  /** Explicit save for patient allergies across visits. */
+  onSaveAllergies?: (allergies: AllergyRow[], noKnown: boolean) => Promise<void>
 }
 
 function versionSummary(snapshot: ClinicalAssessment): string {
@@ -136,6 +149,46 @@ function emptyAllergy(): AllergyRow {
   }
 }
 
+function withCurrent(current: string, options: string[]) {
+  return current && !options.includes(current) ? [current, ...options] : options
+}
+
+function ChoiceSelect({
+  value,
+  choices,
+  placeholder,
+  disabled,
+  onPick,
+}: {
+  value: string
+  choices: PainChoice[]
+  placeholder: string
+  disabled?: boolean
+  onPick: (next: string) => void
+}) {
+  const labels = choices.map((c) => c.label)
+  return (
+    <select
+      disabled={disabled}
+      value={value}
+      title={choices.find((c) => c.label === value)?.hint}
+      onChange={(e) => onPick(e.target.value)}
+      className={`${FIELD_INPUT} min-w-[10rem]`}
+    >
+      <option value="">{placeholder}</option>
+      {withCurrent(value, labels).map((label) => (
+        <option
+          key={label}
+          value={label}
+          title={choices.find((c) => c.label === label)?.hint}
+        >
+          {label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export default function ClinicalAssessmentPanel({
   mastersRaw,
   value,
@@ -144,6 +197,7 @@ export default function ClinicalAssessmentPanel({
   onChange,
   medicines,
   advice,
+  onSaveAllergies,
 }: Props) {
   const masters: ClinicalMasters = useMemo(
     () => mergeClinicalMasters(mastersRaw),
@@ -164,6 +218,7 @@ export default function ClinicalAssessmentPanel({
     tab: PainToolTab
   } | null>(null)
   const [openVersionId, setOpenVersionId] = useState<string | null>(null)
+  const [savingAllergies, setSavingAllergies] = useState(false)
 
   // Sync only when saved content actually changes — silent reloads / new object
   // references must not wipe rows the doctor just Added.
@@ -176,6 +231,17 @@ export default function ClinicalAssessmentPanel({
   function commit(next: ClinicalAssessment) {
     setLocal(next)
     onChange(next)
+  }
+
+  function setPainField(
+    idx: number,
+    row: PainRow,
+    field: keyof PainRow,
+    next: string,
+  ) {
+    const pain = [...(local.pain ?? [])]
+    pain[idx] = { ...row, [field]: next }
+    commit({ ...local, pain })
   }
 
   const values = local.vitals?.values ?? {}
@@ -250,9 +316,20 @@ export default function ClinicalAssessmentPanel({
   }, [masters.vitals, values, bmiAuto])
 
   const categories = useMemo(() => {
-    const set = new Set(masters.allergies.map((a) => a.category))
+    const set = new Set<string>()
+    ;["Drug", "Food", "Respiratory", "Skin", "Environmental", "Insect", "Others"].forEach((c) =>
+      set.add(c),
+    )
+    for (const a of masters.allergies) {
+      if (a.category?.trim()) set.add(a.category.trim())
+    }
+    if (local.allergies) {
+      for (const a of local.allergies) {
+        if (a.category?.trim()) set.add(a.category.trim())
+      }
+    }
     return Array.from(set)
-  }, [masters.allergies])
+  }, [masters.allergies, local.allergies])
 
   const savedStamp =
     value?.savedAt ||
@@ -263,7 +340,7 @@ export default function ClinicalAssessmentPanel({
 
   return (
     <section
-      className="dashboard-panel min-w-0 max-w-full space-y-6 p-5"
+      className="dashboard-panel min-w-0 max-w-full space-y-6 p-5 !overflow-visible"
       style={{
         height: "auto",
         minHeight: "min-content",
@@ -418,55 +495,166 @@ export default function ClinicalAssessmentPanel({
                       className={`${FIELD_INPUT} min-w-[11rem]`}
                     >
                       <option value="">Select…</option>
-                      {masters.painScales.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
+                      {masters.painScales
+                        .filter((s) => !isRemovedPainScale(s))
+                        .map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                    </select>
+                  </td>
+                  <td className="py-1 pr-2">
+                    {shouldOpenPainAssessmentTool(row.scale || "") &&
+                    !readOnly ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tab =
+                            painToolTabForScale(row.scale || "") ?? "wong-baker"
+                          setPainTool({ idx, tab })
+                        }}
+                        className={`${FIELD_INPUT} min-w-[8rem] cursor-pointer text-left hover:border-teal-400`}
+                        title="Open Pain Assessment Tool"
+                      >
+                        {row.score || "Select with tool…"}
+                      </button>
+                    ) : (
+                      <input
+                        disabled={readOnly}
+                        value={row.score || ""}
+                        placeholder="Score"
+                        onChange={(e) =>
+                          setPainField(idx, row, "score", e.target.value)
+                        }
+                        className={`${FIELD_INPUT} min-w-[6rem]`}
+                      />
+                    )}
+                  </td>
+                  <td className="py-1 pr-2">
+                    <select
+                      disabled={readOnly}
+                      value={row.location || ""}
+                      onChange={(e) =>
+                        setPainField(idx, row, "location", e.target.value)
+                      }
+                      className={`${FIELD_INPUT} min-w-[11rem]`}
+                    >
+                      <option value="">Location…</option>
+                      {row.location &&
+                      !PAIN_LOCATION_GROUPS.some((g) =>
+                        g.options.includes(row.location!),
+                      ) ? (
+                        <option value={row.location}>{row.location}</option>
+                      ) : null}
+                      {PAIN_LOCATION_GROUPS.map((g) => (
+                        <optgroup key={g.group} label={g.group}>
+                          {g.options.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </td>
-                  {(
-                    [
-                      "score",
-                      "location",
-                      "type",
-                      "duration",
-                      "frequency",
-                      "radiation",
-                    ] as const
-                  ).map((field) => (
-                    <td key={field} className="py-1 pr-2">
-                      {field === "score" &&
-                      shouldOpenPainAssessmentTool(row.scale || "") &&
-                      !readOnly ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const tab =
-                              painToolTabForScale(row.scale || "") ??
-                              "wong-baker"
-                            setPainTool({ idx, tab })
-                          }}
-                          className={`${FIELD_INPUT} min-w-[9rem] cursor-pointer text-left hover:border-teal-400`}
-                          title="Open Pain Assessment Tool"
-                        >
-                          {row.score || "Select with tool…"}
-                        </button>
-                      ) : (
-                        <input
-                          disabled={readOnly}
-                          value={row[field] || ""}
-                          placeholder={`Enter ${field}`}
-                          onChange={(e) => {
-                            const pain = [...(local.pain ?? [])]
-                            pain[idx] = { ...row, [field]: e.target.value }
-                            commit({ ...local, pain })
-                          }}
-                          className={`${FIELD_INPUT} min-w-[9rem]`}
-                        />
-                      )}
-                    </td>
-                  ))}
+                  <td className="py-1 pr-2">
+                    <ChoiceSelect
+                      value={row.type || ""}
+                      choices={PAIN_TYPES}
+                      placeholder="Type…"
+                      disabled={readOnly}
+                      onPick={(next) => setPainField(idx, row, "type", next)}
+                    />
+                  </td>
+                  <td className="min-w-[10rem] py-1 pr-2">
+                    <select
+                      disabled={readOnly}
+                      value={
+                        PAIN_DURATION_PRESETS.includes(row.duration || "")
+                          ? row.duration
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setPainField(idx, row, "duration", e.target.value)
+                      }
+                      className={FIELD_INPUT}
+                    >
+                      <option value="">Duration…</option>
+                      {PAIN_DURATION_PRESETS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-1 flex gap-1">
+                      <input
+                        disabled={readOnly}
+                        inputMode="numeric"
+                        value={parseCustomDuration(row.duration || "")?.n ?? ""}
+                        placeholder="No."
+                        onChange={(e) => {
+                          const n = e.target.value.replace(/\D/g, "").slice(0, 3)
+                          const unit =
+                            parseCustomDuration(row.duration || "")?.unit ??
+                            "Days"
+                          setPainField(
+                            idx,
+                            row,
+                            "duration",
+                            n ? `${n} ${unit}` : "",
+                          )
+                        }}
+                        className={`${FIELD_INPUT} w-14`}
+                      />
+                      <select
+                        disabled={readOnly}
+                        value={
+                          parseCustomDuration(row.duration || "")?.unit ?? "Days"
+                        }
+                        onChange={(e) => {
+                          const n =
+                            parseCustomDuration(row.duration || "")?.n ?? ""
+                          if (!n) return
+                          setPainField(
+                            idx,
+                            row,
+                            "duration",
+                            `${n} ${e.target.value}`,
+                          )
+                        }}
+                        className={FIELD_INPUT}
+                      >
+                        {PAIN_DURATION_UNITS.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </td>
+                  <td className="py-1 pr-2">
+                    <ChoiceSelect
+                      value={row.frequency || ""}
+                      choices={PAIN_FREQUENCIES}
+                      placeholder="Frequency…"
+                      disabled={readOnly}
+                      onPick={(next) =>
+                        setPainField(idx, row, "frequency", next)
+                      }
+                    />
+                  </td>
+                  <td className="py-1 pr-2">
+                    <ChoiceSelect
+                      value={row.radiation || ""}
+                      choices={PAIN_RADIATIONS}
+                      placeholder="Radiation…"
+                      disabled={readOnly}
+                      onPick={(next) =>
+                        setPainField(idx, row, "radiation", next)
+                      }
+                    />
+                  </td>
                   <td className="py-1">
                     {!readOnly ? (
                       <button
@@ -541,17 +729,50 @@ export default function ClinicalAssessmentPanel({
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
-            Allergies
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
+              Allergies
+            </h2>
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+              <span className="size-1.5 rounded-full bg-rose-500 animate-pulse" />
+              Patient Profile · Synced to all visits
+            </span>
+          </div>
           {!readOnly ? (
-            <button
-              type="button"
-              onClick={setNoKnownAllergies}
-              className="rounded-md border border-[var(--theme-primary)] px-3 py-1.5 text-xs font-bold text-[var(--theme-primary)]"
-            >
-              No Known Allergies
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={setNoKnownAllergies}
+                className={`rounded-md border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                  local.noKnownAllergies
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    : "border-[var(--theme-primary)] text-[var(--theme-primary)] hover:bg-[var(--theme-primary)]/10"
+                }`}
+              >
+                {local.noKnownAllergies ? "✓ No Known Allergies" : "No Known Allergies"}
+              </button>
+              {onSaveAllergies ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (savingAllergies) return
+                    setSavingAllergies(true)
+                    try {
+                      await onSaveAllergies(
+                        local.allergies ?? [],
+                        Boolean(local.noKnownAllergies),
+                      )
+                    } finally {
+                      setSavingAllergies(false)
+                    }
+                  }}
+                  disabled={savingAllergies}
+                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {savingAllergies ? "Saving to Profile…" : "Save Allergies"}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
         <div className="chart-x mt-3 min-w-0 max-w-full overflow-x-auto">
@@ -568,160 +789,190 @@ export default function ClinicalAssessmentPanel({
               </tr>
             </thead>
             <tbody>
-              {(local.allergies ?? []).map((row, idx) => {
-                const names = masters.allergies.filter(
-                  (a) => a.category === row.category,
-                )
-                return (
-                  <tr key={idx}>
-                    <td className="py-1 pr-2 align-top">{idx + 1}</td>
-                    <td className="py-1 pr-2">
-                      <select
-                        disabled={readOnly}
-                        value={row.category || ""}
-                        onChange={(e) => {
-                          const allergies = [...(local.allergies ?? [])]
-                          allergies[idx] = {
-                            ...row,
-                            category: e.target.value,
-                            name: "",
-                            description: "",
-                          }
-                          commit({
-                            ...local,
-                            allergies,
-                            noKnownAllergies: false,
-                          })
-                        }}
-                        className={`${FIELD_INPUT} min-w-[9rem]`}
-                      >
-                        <option value="">Select…</option>
-                        {categories.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-1 pr-2">
-                      <select
-                        disabled={readOnly}
-                        value={row.name || ""}
-                        onChange={(e) => {
-                          const hit = names.find((n) => n.name === e.target.value)
-                          const allergies = [...(local.allergies ?? [])]
-                          allergies[idx] = {
-                            ...row,
-                            name: e.target.value,
-                            description: hit?.description || row.description || "",
-                          }
-                          commit({
-                            ...local,
-                            allergies,
-                            noKnownAllergies:
-                              e.target.value === "No known allergy",
-                          })
-                        }}
-                        className={`${FIELD_INPUT} min-w-[9rem]`}
-                      >
-                        <option value="">Select allergy…</option>
-                        {names.map((n) => (
-                          <option key={n.name} value={n.name}>
-                            {n.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-1 pr-2">
-                      <select
-                        disabled={readOnly}
-                        value={row.severity || ""}
-                        onChange={(e) => {
-                          const allergies = [...(local.allergies ?? [])]
-                          allergies[idx] = { ...row, severity: e.target.value }
-                          commit({ ...local, allergies })
-                        }}
-                        className={`${FIELD_INPUT} min-w-[9rem]`}
-                      >
-                        <option value="">Select…</option>
-                        {ALLERGY_SEVERITIES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-1 pr-2">
-                      <select
-                        disabled={readOnly}
-                        value={row.active || ""}
-                        onChange={(e) => {
-                          const allergies = [...(local.allergies ?? [])]
-                          allergies[idx] = { ...row, active: e.target.value }
-                          commit({ ...local, allergies })
-                        }}
-                        className={`${FIELD_INPUT} min-w-[9rem]`}
-                      >
-                        <option value="">Select…</option>
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                      </select>
-                    </td>
-                    <td className="py-1 pr-2">
-                      <input
-                        disabled={readOnly}
-                        value={row.description || ""}
-                        onChange={(e) => {
-                          const allergies = [...(local.allergies ?? [])]
-                          allergies[idx] = {
-                            ...row,
-                            description: e.target.value,
-                          }
-                          commit({ ...local, allergies })
-                        }}
-                        className={`${FIELD_INPUT} min-w-[9rem]`}
-                      />
-                    </td>
-                    <td className="py-1">
-                      {!readOnly ? (
-                        <button
-                          type="button"
-                          aria-label="Remove allergy"
-                          onClick={() =>
+              {(local.allergies ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-4 text-center text-xs text-neutral-400">
+                    No allergies recorded for this patient. Click &quot;Add allergy&quot; or &quot;No Known Allergies&quot;.
+                  </td>
+                </tr>
+              ) : (
+                (local.allergies ?? []).map((row, idx) => {
+                  const names = masters.allergies.filter(
+                    (a) => !row.category || a.category === row.category,
+                  )
+                  return (
+                    <tr key={idx}>
+                      <td className="py-1 pr-2 align-top">{idx + 1}</td>
+                      <td className="py-1 pr-2">
+                        <select
+                          disabled={readOnly}
+                          value={row.category || "Drug"}
+                          onChange={(e) => {
+                            const allergies = [...(local.allergies ?? [])]
+                            allergies[idx] = {
+                              ...row,
+                              category: e.target.value,
+                            }
                             commit({
                               ...local,
-                              allergies: (local.allergies ?? []).filter(
-                                (_, i) => i !== idx,
-                              ),
+                              allergies,
                               noKnownAllergies: false,
                             })
-                          }
-                          className="text-red-600"
+                          }}
+                          className={`${FIELD_INPUT} min-w-[8.5rem]`}
                         >
-                          ✕
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                )
-              })}
+                          <option value="">Select category…</option>
+                          {categories.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-1 pr-2">
+                        <div className="relative min-w-[11rem]">
+                          <input
+                            disabled={readOnly}
+                            type="text"
+                            list={`allergy-names-${idx}`}
+                            value={row.name || ""}
+                            placeholder="Select or type allergy…"
+                            onChange={(e) => {
+                              const val = e.target.value
+                              const hit = masters.allergies.find(
+                                (n) =>
+                                  n.name.toLowerCase() ===
+                                  val.trim().toLowerCase(),
+                              )
+                              const allergies = [...(local.allergies ?? [])]
+                              allergies[idx] = {
+                                ...row,
+                                name: val,
+                                description:
+                                  hit?.description || row.description || "",
+                                category:
+                                  row.category || hit?.category || "Drug",
+                              }
+                              commit({
+                                ...local,
+                                allergies,
+                                noKnownAllergies:
+                                  val.trim().toLowerCase() === "no known allergy",
+                              })
+                            }}
+                            className={`${FIELD_INPUT} w-full`}
+                          />
+                          <datalist id={`allergy-names-${idx}`}>
+                            {names.map((n) => (
+                              <option key={n.name} value={n.name}>
+                                {n.name}
+                              </option>
+                            ))}
+                          </datalist>
+                        </div>
+                      </td>
+                      <td className="py-1 pr-2">
+                        <select
+                          disabled={readOnly}
+                          value={row.severity || ""}
+                          onChange={(e) => {
+                            const allergies = [...(local.allergies ?? [])]
+                            allergies[idx] = { ...row, severity: e.target.value }
+                            commit({ ...local, allergies })
+                          }}
+                          className={`${FIELD_INPUT} min-w-[8.5rem]`}
+                        >
+                          <option value="">Select severity…</option>
+                          {Array.from(
+                            new Set([
+                              ...ALLERGY_SEVERITIES,
+                              "Mild",
+                              "Moderate",
+                              "Severe",
+                              ...(row.severity ? [row.severity] : []),
+                            ]),
+                          ).map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-1 pr-2">
+                        <select
+                          disabled={readOnly}
+                          value={row.active || "Yes"}
+                          onChange={(e) => {
+                            const allergies = [...(local.allergies ?? [])]
+                            allergies[idx] = { ...row, active: e.target.value }
+                            commit({ ...local, allergies })
+                          }}
+                          className={`${FIELD_INPUT} min-w-[6.5rem]`}
+                        >
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
+                      </td>
+                      <td className="py-1 pr-2">
+                        <input
+                          disabled={readOnly}
+                          value={row.description || ""}
+                          placeholder="Reactions / notes"
+                          onChange={(e) => {
+                            const allergies = [...(local.allergies ?? [])]
+                            allergies[idx] = {
+                              ...row,
+                              description: e.target.value,
+                            }
+                            commit({ ...local, allergies })
+                          }}
+                          className={`${FIELD_INPUT} min-w-[12rem]`}
+                        />
+                      </td>
+                      <td className="py-1">
+                        {!readOnly ? (
+                          <button
+                            type="button"
+                            aria-label="Remove allergy"
+                            onClick={() =>
+                              commit({
+                                ...local,
+                                allergies: (local.allergies ?? []).filter(
+                                  (_, i) => i !== idx,
+                                ),
+                                noKnownAllergies: false,
+                              })
+                            }
+                            className="text-red-600 hover:text-red-700 p-1 cursor-pointer"
+                            title="Remove this allergy"
+                          >
+                            ✕
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
         {!readOnly ? (
-          <button
-            type="button"
-            onClick={() =>
-              commit({
-                ...local,
-                noKnownAllergies: false,
-                allergies: [...(local.allergies ?? []), emptyAllergy()],
-              })
-            }
-            className="mt-2 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)]"
-          >
-            Add allergy
-          </button>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                commit({
+                  ...local,
+                  noKnownAllergies: false,
+                  allergies: [...(local.allergies ?? []), emptyAllergy()],
+                })
+              }
+              className="rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)] cursor-pointer"
+            >
+              + Add allergy
+            </button>
+          </div>
         ) : null}
       </div>
 

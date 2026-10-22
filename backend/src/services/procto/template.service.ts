@@ -446,5 +446,101 @@ export class TemplateService {
 
     return true;
   }
+
+  /**
+   * Update an existing custom template.
+   */
+  static async updateTemplate(
+    practiceId: string,
+    doctorUserId: string,
+    templateId: string,
+    patch: {
+      name?: string;
+      title?: string;
+      content?: string;
+      advice?: string;
+      category?: string;
+      scope?: TemplateScope;
+      scopeValue?: string;
+    },
+  ): Promise<DoctorNoteTemplate> {
+    const practice = await prisma.practice.findUnique({
+      where: { id: practiceId },
+      select: { clinicalMasters: true, specialty: true },
+    });
+    if (!practice) {
+      throw new AppError(404, "Practice not found.");
+    }
+
+    const rawMasters = (practice.clinicalMasters as Record<string, unknown> | null) ?? {};
+    const existingList: DoctorNoteTemplate[] = Array.isArray(rawMasters.doctorNoteTemplates)
+      ? (rawMasters.doctorNoteTemplates as DoctorNoteTemplate[])
+      : [];
+
+    const index = existingList.findIndex((t) => t.id === templateId);
+    if (index === -1) {
+      // If template was from predefined list, add it to custom overrides
+      const predefined = MASTER_DOCTOR_NOTE_TEMPLATES.find((t) => t.id === templateId);
+      if (!predefined) {
+        throw new AppError(404, "Template not found.");
+      }
+      const overridden: DoctorNoteTemplate = {
+        ...predefined,
+        ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+        ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+        ...(patch.content !== undefined ? { content: patch.content.trim() } : {}),
+        ...(patch.advice !== undefined ? { advice: patch.advice.trim() } : {}),
+        ...(patch.category !== undefined ? { category: patch.category as any } : {}),
+        ...(patch.scope !== undefined ? { scope: patch.scope } : {}),
+        ...(patch.scopeValue !== undefined ? { scopeValue: patch.scopeValue } : {}),
+        isCustom: true,
+        updatedAt: new Date().toISOString(),
+      };
+      existingList.push(overridden);
+      const nextMasters = {
+        ...rawMasters,
+        doctorNoteTemplates: existingList,
+      };
+      await prisma.practice.update({
+        where: { id: practiceId },
+        data: { clinicalMasters: nextMasters as Prisma.InputJsonValue },
+      });
+      return overridden;
+    }
+
+    const target = existingList[index];
+    const member = await prisma.practiceMember.findUnique({
+      where: { practiceId_userId: { practiceId, userId: doctorUserId } },
+    });
+    const isAdmin = member?.role === "PRACTICE_OWNER" || member?.role === "PRACTICE_ADMIN";
+    if (target.createdById && target.createdById !== doctorUserId && !isAdmin) {
+      throw new AppError(403, "You can only edit templates created by you or your clinic.");
+    }
+
+    const updated: DoctorNoteTemplate = {
+      ...target,
+      ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+      ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+      ...(patch.content !== undefined ? { content: patch.content.trim() } : {}),
+      ...(patch.advice !== undefined ? { advice: patch.advice.trim() } : {}),
+      ...(patch.category !== undefined ? { category: patch.category as any } : {}),
+      ...(patch.scope !== undefined ? { scope: patch.scope } : {}),
+      ...(patch.scopeValue !== undefined ? { scopeValue: patch.scopeValue } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+
+    existingList[index] = updated;
+    const nextMasters = {
+      ...rawMasters,
+      doctorNoteTemplates: existingList,
+    };
+
+    await prisma.practice.update({
+      where: { id: practiceId },
+      data: { clinicalMasters: nextMasters as Prisma.InputJsonValue },
+    });
+
+    return updated;
+  }
 }
 

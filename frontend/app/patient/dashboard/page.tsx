@@ -145,6 +145,15 @@ export default function Dashboard() {
   const weight = vitals?.wt != null ? `${vitals.wt} kg` : null
   const diagnosis = clinicalChart?.diagnosis || latestClinicalVisit?.disease || null
   const advice = clinicalChart?.advice || null
+  const patientAllergies = (latestClinicalVisit?.patient as any)?.allergies
+  const patientNoKnown = (latestClinicalVisit?.patient as any)?.noKnownAllergies
+  const allergiesList =
+    clinicalChart?.allergies && clinicalChart.allergies.length > 0
+      ? clinicalChart.allergies
+      : Array.isArray(patientAllergies)
+      ? patientAllergies
+      : []
+  const hasNoKnownAllergies = Boolean(clinicalChart?.noKnownAllergies || patientNoKnown)
   const doctorNotes =
     latestClinicalVisit?.doctorRemarks ||
     (latestClinicalVisit as { doctor_remarks?: string | null })?.doctor_remarks ||
@@ -494,6 +503,27 @@ export default function Dashboard() {
                     </span>
                     <p className="font-bold text-sm text-neutral-900 dark:text-white">
                       {diagnosis}
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* Patient Allergies */}
+                {hasNoKnownAllergies || allergiesList.length > 0 ? (
+                  <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-2.5 dark:border-rose-950/60 dark:bg-rose-950/20">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">
+                      Patient Allergies
+                    </span>
+                    <p className="mt-0.5 text-xs font-semibold text-rose-950 dark:text-rose-200">
+                      {hasNoKnownAllergies
+                        ? "No known allergy"
+                        : allergiesList
+                            .filter((a: any) => a?.name?.trim())
+                            .map((a: any) =>
+                              [a.name, a.severity, a.active === "Yes" ? "Active" : null]
+                                .filter(Boolean)
+                                .join(" — "),
+                            )
+                            .join("; ") || "No known allergy"}
                     </p>
                   </div>
                 ) : null}

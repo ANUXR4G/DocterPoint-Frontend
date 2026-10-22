@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ClipboardPlus, Eye, MessageCircle } from "lucide-react"
 import ClinicLogModal from "@/components/ui/procto/ClinicLogModal"
+import SendToCustomerModal from "@/components/ui/procto/SendToCustomerModal"
 import { proctoService } from "@/lib/services/procto"
 
 type Props = {
@@ -29,8 +30,8 @@ export default function PrescriptionActionsMenu({
 }: Props) {
   const [open, setOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
+  const [sendModalOpen, setSendModalOpen] = useState(false)
   const [printKind, setPrintKind] = useState<"consultation" | "prescription">("consultation")
-  const [sending, setSending] = useState(false)
   const [notice, setNotice] = useState("")
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -52,26 +53,34 @@ export default function PrescriptionActionsMenu({
     setNotice("")
   }
 
-  async function sendWhatsApp() {
-    setSending(true)
-    setNotice("")
-    const res = await proctoService.sendClinicLogWhatsApp(bookingId)
-    setSending(false)
+  function sendWhatsApp() {
     setOpen(false)
-    if (res.status !== "successful") {
-      setNotice(res.message || "Could not send via WhatsApp.")
-      return
-    }
-    setNotice("Clinic log / prescription sent to patient WhatsApp.")
+    setSendModalOpen(true)
   }
 
   const preview = (
-    <ClinicLogModal
-      open={viewOpen}
-      bookingId={viewOpen ? bookingId : null}
-      initialKind={printKind}
-      onClose={() => setViewOpen(false)}
-    />
+    <>
+      <ClinicLogModal
+        open={viewOpen}
+        bookingId={viewOpen ? bookingId : null}
+        initialKind={printKind}
+        onClose={() => setViewOpen(false)}
+      />
+      <SendToCustomerModal
+        open={sendModalOpen}
+        bookingId={bookingId}
+        onClose={() => setSendModalOpen(false)}
+        onSuccess={(kind) => {
+          setNotice(
+            kind === "both"
+              ? "Prescription and Consultation sent to customer on WhatsApp."
+              : kind === "consultation"
+              ? "Consultation summary sent to customer on WhatsApp."
+              : "Prescription sent to customer on WhatsApp.",
+          )
+        }}
+      />
+    </>
   )
 
   if (layout === "buttons") {
@@ -93,11 +102,10 @@ export default function PrescriptionActionsMenu({
         </button>
         <button
           type="button"
-          disabled={sending}
           onClick={() => void sendWhatsApp()}
           className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {sending ? "Sending…" : "Send to customer"}
+          Send to customer
         </button>
         {notice ? (
           <p className="text-xs font-medium text-neutral-600 dark:text-neutral-300" role="status">
@@ -154,7 +162,6 @@ export default function PrescriptionActionsMenu({
           <button
             type="button"
             role="menuitem"
-            disabled={sending}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50 dark:text-neutral-100 dark:hover:bg-neutral-800"
             onClick={() => void sendWhatsApp()}
           >
@@ -162,7 +169,7 @@ export default function PrescriptionActionsMenu({
               className="size-4 shrink-0 text-emerald-600"
               aria-hidden
             />
-            {sending ? "Sending…" : "Send to customer (Via WhatsApp)"}
+            Send to customer (Via WhatsApp)
           </button>
         </div>
       ) : null}

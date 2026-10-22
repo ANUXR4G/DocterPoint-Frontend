@@ -1618,6 +1618,24 @@ export const BookingService = {
       });
     }
 
+    if (clinicalAssessment !== undefined && clinicalAssessment !== null) {
+      const normAssessment = normalizeClinicalAssessment(clinicalAssessment);
+      if (normAssessment) {
+        const safeAllergies = normAssessment.allergies;
+        const safeNoKnown = normAssessment.noKnownAllergies;
+        void this.syncPatientAllergies(
+          existing.patientId,
+          existing.patientPhone,
+          {
+            allergies: safeAllergies,
+            noKnownAllergies: safeNoKnown,
+          },
+          bookingId,
+          actorUserId,
+        ).catch((err) => console.error("syncPatientAllergies in updateVisit error:", err));
+      }
+    }
+
     if (documentsAdded && Array.isArray(documents)) {
       const newest = documents[documents.length - 1] as
         | { name?: string }
@@ -1793,9 +1811,15 @@ export const BookingService = {
       );
     }
     const next = [...existing, item];
+    const rawDocs = patient?.documents;
+    const docObj =
+      rawDocs && typeof rawDocs === "object" && !Array.isArray(rawDocs)
+        ? (rawDocs as Record<string, unknown>)
+        : null;
+    const nextDocsPayload = docObj ? { ...docObj, items: next } : next;
     await prisma.patient.update({
       where: { id: patientId },
-      data: { documents: next as unknown as Prisma.InputJsonValue },
+      data: { documents: nextDocsPayload as unknown as Prisma.InputJsonValue },
     });
     void import("../opsSocket.js")
       .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
@@ -1804,10 +1828,320 @@ export const BookingService = {
   },
 
   /**
-   * Explicit Send to customer. Delivers a prescription PDF on WhatsApp.
+   * Retrieves the master persistent allergy data for a patient.
+   * Checks the patient's record documents first, then falls back to any existing booking.
+   */
+  async getPatientMasterAllergies(
+    rawPatientId: string | null | undefined,
+    rawPhone: string | null | undefined,
+  ): Promise<{
+    allergies: Array<{
+      category?: string;
+      name?: string;
+      severity?: string;
+      active?: string;
+      description?: string;
+    }>;
+    noKnownAllergies: boolean;
+  } | null> {
+    let patientId = rawPatientId ? String(rawPatientId).trim() : null;
+    const phoneDigits = String(rawPhone || "").replace(/\D/g, "").slice(-10);
+
+    if (!patientId && phoneDigits.length === 10) {
+      const user = await prisma.user.findFirst({
+        where: {
+          role: "user",
+          patient: { isNot: null },
+          OR: [
+            { phone: { endsWith: phoneDigits } },
+            { patient: { contactNumber: { endsWith: phoneDigits } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (user) patientId = user.id;
+    }
+
+    if (patientId) {
+      const p = await prisma.patient.findUnique({
+        where: { id: patientId },
+        select: { documents: true },
+      });
+      if (p?.documents && typeof p.documents === "object" && !Array.isArray(p.documents)) {
+        const docObj = p.documents as Record<string, unknown>;
+        if (Array.isArray(docObj.allergies) || docObj.noKnownAllergies !== undefined) {
+          const { normalizeClinicalAssessment } = await import("../../lib/clinicalMasters.js");
+          const norm = normalizeClinicalAssessment({
+            allergies: docObj.allergies,
+            noKnownAllergies: docObj.noKnownAllergies,
+          });
+          return {
+            allergies: norm?.allergies ?? [],
+            noKnownAllergies: Boolean(norm?.noKnownAllergies),
+          };
+        }
+      }
+    }
+
+    // Fall back to checking any prior booking for this patient with recorded allergies
+    if (patientId || phoneDigits.length === 10) {
+      const priorBooking = await prisma.practiceBooking.findFirst({
+        where: {
+          OR: [
+            ...(patientId ? [{ patientId }] : []),
+            ...(phoneDigits.length === 10 ? [{ patientPhone: { endsWith: phoneDigits } }] : []),
+          ],
+          clinicalAssessment: { not: Prisma.DbNull },
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        select: { clinicalAssessment: true },
+      });
+
+      if (priorBooking?.clinicalAssessment) {
+        const { normalizeClinicalAssessment } = await import("../../lib/clinicalMasters.js");
+        const norm = normalizeClinicalAssessment(priorBooking.clinicalAssessment);
+        const hasAllergies =
+          Boolean(norm?.noKnownAllergies) ||
+          (Array.isArray(norm?.allergies) && norm.allergies.some((a) => Boolean(a.name?.trim())));
+        if (hasAllergies) {
+          return {
+            allergies: norm?.allergies ?? [],
+            noKnownAllergies: Boolean(norm?.noKnownAllergies),
+          };
+        }
+      }
+    }
+
+    return null;
+  },
+
+  /**
+   * Persists allergy data to the patient profile and synchronizes it across
+   * ALL appointments of that patient (past, present, and future).
+   */
+  async syncPatientAllergies(
+    patientId: string | null | undefined,
+    patientPhone: string | null | undefined,
+    allergyData: {
+      allergies?: unknown[];
+      noKnownAllergies?: boolean;
+    },
+    currentBookingId?: string,
+    actorUserId?: string,
+  ) {
+    const { normalizeClinicalAssessment } = await import("../../lib/clinicalMasters.js");
+    const norm = normalizeClinicalAssessment({
+      allergies: allergyData.allergies,
+      noKnownAllergies: allergyData.noKnownAllergies,
+    });
+    const cleanAllergies = norm?.allergies ?? [];
+    const noKnownAllergies = Boolean(norm?.noKnownAllergies);
+    const nowIso = new Date().toISOString();
+
+    let resolvedPatientId = patientId ? String(patientId).trim() : null;
+    const phoneDigits = String(patientPhone || "").replace(/\D/g, "").slice(-10);
+
+    if (!resolvedPatientId && phoneDigits.length === 10) {
+      const user = await prisma.user.findFirst({
+        where: {
+          role: "user",
+          patient: { isNot: null },
+          OR: [
+            { phone: { endsWith: phoneDigits } },
+            { patient: { contactNumber: { endsWith: phoneDigits } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (user) resolvedPatientId = user.id;
+    }
+
+    // 1. Persist to Patient Profile
+    if (resolvedPatientId) {
+      try {
+        const p = await prisma.patient.findUnique({
+          where: { id: resolvedPatientId },
+          select: { documents: true },
+        });
+        if (p) {
+          const rawDocs = p.documents;
+          const existingItems = Array.isArray(rawDocs)
+            ? rawDocs
+            : rawDocs && typeof rawDocs === "object" && "items" in rawDocs && Array.isArray((rawDocs as any).items)
+            ? (rawDocs as any).items
+            : rawDocs && typeof rawDocs === "object" && "documents" in rawDocs && Array.isArray((rawDocs as any).documents)
+            ? (rawDocs as any).documents
+            : [];
+
+          await prisma.patient.update({
+            where: { id: resolvedPatientId },
+            data: {
+              documents: {
+                items: existingItems,
+                allergies: cleanAllergies,
+                noKnownAllergies,
+                updatedAt: nowIso,
+              } as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+      } catch (err) {
+        console.error("Failed to update patient profile allergy document:", err);
+      }
+    }
+
+    // 2. Synchronize to ALL bookings of this patient
+    if (resolvedPatientId || phoneDigits.length === 10) {
+      try {
+        const patientBookings = await prisma.practiceBooking.findMany({
+          where: {
+            OR: [
+              ...(resolvedPatientId ? [{ patientId: resolvedPatientId }] : []),
+              ...(phoneDigits.length === 10 ? [{ patientPhone: { endsWith: phoneDigits } }] : []),
+            ],
+          },
+          select: { id: true, clinicalAssessment: true, practiceId: true, patientId: true },
+        });
+
+        await Promise.all(
+          patientBookings.map(async (b) => {
+            const bNorm = normalizeClinicalAssessment(b.clinicalAssessment) ?? {};
+            const nextAssessment = {
+              ...bNorm,
+              allergies: cleanAllergies,
+              noKnownAllergies,
+              savedAt: nowIso,
+            };
+            return prisma.practiceBooking.update({
+              where: { id: b.id },
+              data: {
+                clinicalAssessment: nextAssessment as Prisma.InputJsonValue,
+              },
+            });
+          }),
+        );
+      } catch (err) {
+        console.error("Failed to sync allergies across patient bookings:", err);
+      }
+    }
+
+    // 3. Audit trail version if tied to an active booking
+    if (currentBookingId && actorUserId) {
+      try {
+        const actor = await prisma.user.findUnique({
+          where: { id: actorUserId },
+          select: { name: true },
+        });
+        await prisma.clinicalAssessmentVersion.create({
+          data: {
+            bookingId: currentBookingId,
+            actorUserId,
+            actorName: actor?.name ?? null,
+            snapshot: {
+              allergies: cleanAllergies,
+              noKnownAllergies,
+              savedAt: nowIso,
+            } as Prisma.InputJsonValue,
+            savedAt: new Date(nowIso),
+          },
+        });
+      } catch (err) {
+        console.error("Failed to log clinical assessment version for allergies:", err);
+      }
+    }
+
+    void import("../opsSocket.js")
+      .then(({ broadcastOpsInvalidate }) => broadcastOpsInvalidate("bookings"))
+      .catch(() => undefined);
+
+    return {
+      allergies: cleanAllergies,
+      noKnownAllergies,
+    };
+  },
+
+  async updatePatientAllergies(
+    bookingId: string,
+    data: {
+      allergies?: unknown[];
+      noKnownAllergies?: boolean;
+    },
+    actorUserId: string,
+  ) {
+    const booking = await prisma.practiceBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        practice: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            specialty: true,
+            consultationFee: true,
+            clinicalMasters: true,
+          },
+        },
+        location: { select: { name: true, address: true, city: true } },
+      },
+    });
+    if (!booking) ResponseHandler.notFoundError("booking not found.");
+    const existing = booking!;
+
+    const member = await prisma.practiceMember.findUnique({
+      where: { practiceId_userId: { practiceId: existing.practiceId, userId: actorUserId } },
+    });
+    if (!member?.isActive) ResponseHandler.noPermission("not authorized.");
+
+    const result = await this.syncPatientAllergies(
+      existing.patientId,
+      existing.patientPhone,
+      data,
+      bookingId,
+      actorUserId,
+    );
+
+    const updated = await prisma.practiceBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        practice: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            specialty: true,
+            consultationFee: true,
+            clinicalMasters: true,
+          },
+        },
+        location: { select: { name: true, address: true, city: true } },
+      },
+    });
+
+    void broadcastProctoEvent(
+      existing.practiceId,
+      {
+        event: "booking_updated",
+        booking: serializeBooking(updated ?? existing),
+      },
+      existing.patientId,
+    ).catch(() => undefined);
+
+    return {
+      ...(await this.enrichBooking(updated ?? existing)),
+      allergies: result.allergies,
+      noKnownAllergies: result.noKnownAllergies,
+    };
+  },
+
+  /**
+   * Explicit Send to customer. Delivers a prescription and/or consultation PDF on WhatsApp.
    * Saving medicines or finishing the visit never calls this.
    */
-  async sendClinicLogWhatsApp(bookingId: string, actorUserId: string) {
+  async sendClinicLogWhatsApp(
+    bookingId: string,
+    actorUserId: string,
+    kind: "prescription" | "consultation" | "both" = "prescription",
+  ) {
     const booking = await prisma.practiceBooking.findUnique({
       where: { id: bookingId },
       select: {
@@ -1854,12 +2188,14 @@ export const BookingService = {
     }
 
     const { sendClinicLogPdf } = await import("./clinicLogPdf.js");
-    const sent = await sendClinicLogPdf(bookingId);
+    const sent = await sendClinicLogPdf(bookingId, kind);
     return {
       filename: sent.filename,
+      filenames: sent.filenames,
       messageId: sent.messageId ?? null,
       simulated: Boolean(sent.simulated),
       delivery: "pdf",
+      kind,
     };
   },
 
@@ -2108,6 +2444,29 @@ export const BookingService = {
     });
     if (!booking) ResponseHandler.notFoundError("booking not found.");
     const row = booking!;
+
+    const { normalizeClinicalAssessment } = await import("../../lib/clinicalMasters.js");
+    const currentAssessment = normalizeClinicalAssessment(row.clinicalAssessment);
+    const hasCurrentAllergies =
+      Boolean(currentAssessment?.noKnownAllergies) ||
+      Boolean(currentAssessment?.allergies?.some((a) => Boolean(a.name?.trim())));
+
+    if (!hasCurrentAllergies) {
+      const masterAllergies = await this.getPatientMasterAllergies(row.patientId, row.patientPhone);
+      if (masterAllergies) {
+        const merged = {
+          ...(currentAssessment ?? {}),
+          allergies: masterAllergies.allergies,
+          noKnownAllergies: masterAllergies.noKnownAllergies,
+        };
+        row.clinicalAssessment = merged as Prisma.JsonValue;
+        void prisma.practiceBooking.update({
+          where: { id: row.id },
+          data: { clinicalAssessment: merged as Prisma.InputJsonValue },
+        }).catch(() => undefined);
+      }
+    }
+
     await this.ensureClinicalVersion(row);
     const clinicalVersions = await prisma.clinicalAssessmentVersion.findMany({
       where: { bookingId },
@@ -2236,6 +2595,10 @@ export const BookingService = {
     ]);
 
     const linked = linkedById ?? linkedByPhone;
+    const masterAllergies = await this.getPatientMasterAllergies(
+      booking.patientId ?? linked?.id,
+      booking.patientPhone,
+    );
 
     return {
       ...booking,
@@ -2268,6 +2631,8 @@ export const BookingService = {
             mrn: linked.patient?.mrn ?? null,
             profession: linked.patient?.profession ?? null,
             relationship: linked.patient?.relationship ?? null,
+            allergies: masterAllergies?.allergies ?? [],
+            noKnownAllergies: Boolean(masterAllergies?.noKnownAllergies),
           }
         : {
             id: null,
@@ -2284,6 +2649,8 @@ export const BookingService = {
             mrn: null,
             profession: null,
             relationship: null,
+            allergies: masterAllergies?.allergies ?? [],
+            noKnownAllergies: Boolean(masterAllergies?.noKnownAllergies),
           },
     };
   },

@@ -16,6 +16,7 @@ import {
 } from "@/lib/prescriptionPdf"
 import { dashboardPortalRoot } from "@/lib/portalRoot"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
+import SendToCustomerModal from "@/components/ui/procto/SendToCustomerModal"
 
 type PrintKind = "consultation" | "prescription"
 
@@ -38,6 +39,7 @@ export default function ClinicLogModal({
   const [error, setError] = useState("")
   const [booking, setBooking] = useState<ProctoBooking | null>(null)
   const [sending, setSending] = useState(false)
+  const [sendModalOpen, setSendModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState("")
   const [kind, setKind] = useState<PrintKind>(initialKind)
@@ -66,17 +68,9 @@ export default function ClinicLogModal({
     }
   }, [open, bookingId, initialKind])
 
-  async function sendToCustomer() {
-    if (!bookingId || sending) return
-    setSending(true)
-    setNotice("")
-    const res = await proctoService.sendClinicLogWhatsApp(bookingId)
-    setSending(false)
-    setNotice(
-      res.status === "successful"
-        ? "Sent to the customer on WhatsApp."
-        : res.message || "Could not send via WhatsApp.",
-    )
+  function sendToCustomer() {
+    if (!bookingId) return
+    setSendModalOpen(true)
   }
 
   async function downloadPdf() {
@@ -209,5 +203,26 @@ export default function ClinicLogModal({
     </div>
   )
 
-  return createPortal(body, dashboardPortalRoot())
+  return (
+    <>
+      {createPortal(body, dashboardPortalRoot())}
+      <SendToCustomerModal
+        open={sendModalOpen}
+        bookingId={bookingId}
+        patientName={booking?.patientName}
+        patientPhone={booking?.patientPhone}
+        initialKind={kind}
+        onClose={() => setSendModalOpen(false)}
+        onSuccess={(sentKind) => {
+          setNotice(
+            sentKind === "both"
+              ? "Prescription and Consultation sent to customer on WhatsApp."
+              : sentKind === "consultation"
+              ? "Consultation summary sent to customer on WhatsApp."
+              : "Prescription sent to customer on WhatsApp.",
+          )
+        }}
+      />
+    </>
+  )
 }

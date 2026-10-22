@@ -12,6 +12,7 @@ import PainAssessmentToolModal from "@/components/PainAssessmentToolModal";
 import {
   ALLERGY_SEVERITIES,
   computeBmi,
+  isRemovedPainScale,
   mergeClinicalMasters,
   normalizeClinicalAssessment,
   vitalsBand,
@@ -331,8 +332,10 @@ export function ClinicalAssessmentPanel({
           <Text style={styles.meta}>#{idx + 1}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.row}>
-              {masters.painScales.map((s) => (
-                <Chip
+              {masters.painScales
+                .filter((s) => !isRemovedPainScale(s))
+                .map((s) => (
+                  <Chip
                   key={s}
                   label={s}
                   active={row.scale === s}

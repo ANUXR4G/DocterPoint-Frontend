@@ -11,6 +11,7 @@ export type MedicineRecord = {
   medicineCode: string;
   countryCode: string;
   brandName: string;
+  name?: string;
   strength: string;
   route: string;
   dosageForm: string;
@@ -56,6 +57,7 @@ export function getDefaultMedicineRecords(): MedicineRecord[] {
     medicineCode: m.medicineCode,
     countryCode: m.countryCode,
     brandName: m.brandName || m.name,
+    name: m.name || m.brandName,
     strength: m.strength || "",
     route: m.route || "Oral",
     dosageForm: m.dosageForm || (m.doseUnit === "capsule" ? "Capsule" : "Tablet"),
@@ -375,6 +377,123 @@ export class MedicineService {
     });
 
     return updated;
+  }
+
+  /**
+   * Bulk upload/import medicines for the user's practice.
+   */
+  static async bulkUploadMedicines(
+    userId: string,
+    rawItems: Array<{
+      medicineCode?: string;
+      countryCode?: string;
+      brandName: string;
+      genericName?: string;
+      strength?: string;
+      route?: string;
+      dosageForm?: string;
+      favourite?: boolean;
+    }>,
+  ): Promise<{
+    importedCount: number;
+    updatedCount: number;
+    total: number;
+    items: MedicineRecord[];
+  }> {
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      throw new AppError(400, "No medicine records provided for bulk upload.");
+    }
+
+    const practiceId = await this.getPracticeIdForUser(userId);
+    if (!practiceId) {
+      throw new AppError(403, "You must be associated with a clinic to upload medicines.");
+    }
+
+    const practice = await prisma.practice.findUnique({
+      where: { id: practiceId },
+      select: { clinicalMasters: true },
+    });
+
+    const rawMasters = (practice?.clinicalMasters as Record<string, unknown> | null) ?? {};
+    let existingList: MedicineRecord[] = Array.isArray(rawMasters.medicines)
+      ? (rawMasters.medicines as MedicineRecord[])
+      : getDefaultMedicineRecords();
+
+    let importedCount = 0;
+    let updatedCount = 0;
+
+    for (const raw of rawItems) {
+      const brandName = (raw.brandName || "").trim();
+      if (!brandName) continue; // Skip rows without a brand name
+
+      const genericName = (raw.genericName || "").trim() || brandName;
+      let medicineCode = (raw.medicineCode || "").trim();
+      if (!medicineCode) {
+        // Auto-generate unique code based on brand name
+        const clean = brandName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8) || "MED";
+        medicineCode = `MED-${clean}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      }
+
+      const countryCode = (raw.countryCode || "").trim();
+      const strength = (raw.strength || "").trim();
+      const route = (raw.route || "Oral").trim();
+      const dosageForm = (raw.dosageForm || "Tablet").trim();
+      const favourite = Boolean(raw.favourite);
+
+      const existingIndex = existingList.findIndex(
+        (m) => m.medicineCode.trim().toLowerCase() === medicineCode.toLowerCase(),
+      );
+
+      if (existingIndex !== -1) {
+        // Update existing record
+        existingList[existingIndex] = {
+          ...existingList[existingIndex],
+          brandName,
+          genericName,
+          countryCode: countryCode || existingList[existingIndex].countryCode,
+          strength: strength || existingList[existingIndex].strength,
+          route: route || existingList[existingIndex].route,
+          dosageForm: dosageForm || existingList[existingIndex].dosageForm,
+          favourite: raw.favourite !== undefined ? favourite : existingList[existingIndex].favourite,
+          updatedAt: new Date().toISOString(),
+        };
+        updatedCount++;
+      } else {
+        // Add new record
+        const newRecord: MedicineRecord = {
+          id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          medicineCode,
+          countryCode,
+          brandName,
+          strength,
+          route,
+          dosageForm,
+          genericName,
+          favourite,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        existingList = [newRecord, ...existingList];
+        importedCount++;
+      }
+    }
+
+    await prisma.practice.update({
+      where: { id: practiceId },
+      data: {
+        clinicalMasters: {
+          ...rawMasters,
+          medicines: existingList,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      importedCount,
+      updatedCount,
+      total: existingList.length,
+      items: existingList,
+    };
   }
 }
 

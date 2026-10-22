@@ -59,6 +59,35 @@ router.post(
 );
 
 /**
+ * POST /api/v1/procto/medicines/bulk
+ * Bulk upload medicines from Excel or CSV.
+ */
+router.post(
+  "/bulk",
+  requireAuth("practice:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const items = Array.isArray(req.body?.medicines)
+        ? req.body.medicines
+        : Array.isArray(req.body)
+        ? req.body
+        : [];
+      const result = await MedicineService.bulkUploadMedicines(
+        req.sessionUser!.id,
+        items,
+      );
+      return ResponseHandler.createSuccessful(
+        res,
+        `Bulk upload completed: ${result.importedCount} new, ${result.updatedCount} updated.`,
+        result,
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
  * PUT /api/v1/procto/medicines/:id
  * Updates an existing medicine.
  */

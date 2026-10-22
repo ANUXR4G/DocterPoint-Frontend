@@ -363,6 +363,26 @@ router.patch(
   },
 );
 
+router.patch(
+  "/:id/allergies",
+  requireAuth("booking:update"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = await BookingService.updatePatientAllergies(
+        param(req.params.id),
+        {
+          allergies: req.body.allergies,
+          noKnownAllergies: req.body.noKnownAllergies,
+        },
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "patient allergies updated.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get(
   "/:id/general-documents",
   requireAuth("booking:read"),
@@ -470,15 +490,21 @@ router.post(
   },
 );
 
-/** Explicit Send to customer: prescription PDF on the patient's WhatsApp. */
+/** Explicit Send to customer: prescription and/or consultation PDF on the patient's WhatsApp. */
 router.post(
   "/:id/send-clinic-log",
   requireAuth("booking:update"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const rawKind = req.body?.kind;
+      const kind =
+        rawKind === "consultation" || rawKind === "both"
+          ? rawKind
+          : "prescription";
       const data = await BookingService.sendClinicLogWhatsApp(
         param(req.params.id),
         req.sessionUser!.id,
+        kind,
       );
       return ResponseHandler.fetchSuccessful(
         res,

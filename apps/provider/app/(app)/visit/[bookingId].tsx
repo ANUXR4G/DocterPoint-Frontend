@@ -288,7 +288,7 @@ export default function VisitScreen() {
         noKnownAllergies: false,
       }),
       diagnosis: diagnosisRef.current.trim().slice(0, 500),
-      advice: adviceRef.current.trim().slice(0, 1000),
+      advice: adviceRef.current.trim().slice(0, 3000),
     };
   }
 
@@ -463,7 +463,7 @@ export default function VisitScreen() {
 
   async function saveAdvice(nextRaw: string) {
     if (!bookingId || futureDay || booking?.status === "COMPLETED") return;
-    const next = nextRaw.trim().slice(0, 1000);
+    const next = nextRaw.trim().slice(0, 3000);
     const previous = String(
       normalizeClinicalAssessment(booking?.clinicalAssessment)?.advice || "",
     ).trim();

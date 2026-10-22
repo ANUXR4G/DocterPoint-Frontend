@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { proctoService } from "@/lib/services/procto"
 import {
   ALLERGY_SEVERITIES,
@@ -130,6 +131,23 @@ export default function ClinicalMastersPanel({
       {error ? (
         <p className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p>
       ) : null}
+
+      <div className="flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-sky-900/60 dark:bg-sky-950/20 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-sm font-bold text-slate-900 dark:text-white">
+            Master Templates & Clinical Advice
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            Select advice categories, customize patient instructions, and manage doctor notes templates.
+          </p>
+        </div>
+        <Link
+          href="/doctor/master?tab=templates"
+          className="self-start rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:self-auto"
+        >
+          Manage Templates →
+        </Link>
+      </div>
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">

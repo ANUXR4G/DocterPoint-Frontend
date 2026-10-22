@@ -33,6 +33,7 @@ import {
 import EmergencyWalkInBadge from "@/components/ui/procto/EmergencyWalkInBadge"
 import PaymentStatusButton from "@/components/ui/procto/PaymentStatusButton"
 import PrescriptionActionsMenu from "@/components/ui/procto/PrescriptionActionsMenu"
+import PopupModal from "@/components/modals/Modal"
 import MedicineEntryTable, {
   editedVisitMedicine,
   emptyMedicineDraft,
@@ -51,6 +52,7 @@ import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import PatientAvatar from "@/components/ui/procto/PatientAvatar"
 import ClinicalAssessmentPanel from "@/components/ui/procto/ClinicalAssessmentPanel"
 import TemplateSelector from "@/components/ui/procto/TemplateSelector"
+import SendToCustomerModal from "@/components/ui/procto/SendToCustomerModal"
 import type { ClinicalAssessment } from "@/lib/clinicalMasters"
 import { toast } from "sonner"
 
@@ -244,6 +246,7 @@ export default function VisitPage() {
   const [loadTick, setLoadTick] = useState(0)
   const [saving, setSaving] = useState(false)
   const [sendingWa, setSendingWa] = useState(false)
+  const [sendCustomerModalOpen, setSendCustomerModalOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
 
   const [remarks, setRemarks] = useState("")
@@ -257,12 +260,21 @@ export default function VisitPage() {
   diagnosisRef.current = diagnosis
   adviceRef.current = advice
   const remarksBox = useRef<HTMLTextAreaElement>(null)
+  const adviceBox = useRef<HTMLTextAreaElement>(null)
+  const [isAdviceTemplateOpen, setIsAdviceTemplateOpen] = useState(false)
+  const [isNotesTemplateOpen, setIsNotesTemplateOpen] = useState(false)
   useEffect(() => {
     const el = remarksBox.current
     if (!el) return
     el.style.height = "auto"
     el.style.height = `${Math.max(160, el.scrollHeight)}px`
   }, [remarks])
+  useEffect(() => {
+    const el = adviceBox.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.max(80, el.scrollHeight)}px`
+  }, [advice])
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [documents, setDocuments] = useState<VisitDoc[]>([])
   const [clinicalAssessment, setClinicalAssessment] =
@@ -305,6 +317,129 @@ export default function VisitPage() {
     observer.observe(header)
     return () => observer.disconnect()
   }, [booking?.id])
+
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false)
+  const [pendingNav, setPendingNav] = useState<string | null>(null)
+
+  const hasUnsavedChanges = useCallback((): boolean => {
+    if (!bookingId) return false
+    const isCompleted =
+      String(booking?.status || "").toUpperCase() === "COMPLETED"
+    if (isCompleted) return false
+    return (
+      formDirty.current ||
+      clinicalDirty.current ||
+      Boolean(medDraftRef.current?.name?.trim())
+    )
+  }, [booking?.status, bookingId])
+
+  async function handleSaveAndLeave() {
+    const success = await save()
+    if (!success) return
+    formDirty.current = false
+    clinicalDirty.current = false
+    setShowUnsavedModal(false)
+    const dest = pendingNav
+    setPendingNav(null)
+    if (dest === "BACK") {
+      router.back()
+    } else if (dest) {
+      router.push(dest)
+    } else {
+      router.push("/doctor/queue")
+    }
+  }
+
+  function handleDiscardAndLeave() {
+    formDirty.current = false
+    clinicalDirty.current = false
+    const blank = emptyMedicineDraft()
+    medDraftRef.current = blank
+    setMedDraft(blank)
+    setShowUnsavedModal(false)
+    const dest = pendingNav
+    setPendingNav(null)
+    if (dest === "BACK") {
+      router.back()
+    } else if (dest) {
+      router.push(dest)
+    } else {
+      router.push("/doctor/queue")
+    }
+  }
+
+  function handleNavigateBack() {
+    if (hasUnsavedChanges()) {
+      setPendingNav("/doctor/queue")
+      setShowUnsavedModal(true)
+    } else {
+      router.push("/doctor/queue")
+    }
+  }
+
+  // Intercept navigation clicks across the page (sidebar, top navigation, back links)
+  useEffect(() => {
+    function handleClickCapture(e: MouseEvent) {
+      if (!hasUnsavedChanges()) return
+
+      const target = e.target as HTMLElement | null
+      const anchor = target?.closest("a") as HTMLAnchorElement | null
+      if (!anchor) return
+
+      const href = anchor.getAttribute("href")
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return
+      if (
+        anchor.target === "_blank" ||
+        href.startsWith("mailto:") ||
+        href.startsWith("tel:")
+      )
+        return
+
+      try {
+        const destUrl = new URL(anchor.href, window.location.origin)
+        if (
+          destUrl.origin === window.location.origin &&
+          destUrl.pathname === window.location.pathname &&
+          destUrl.search === window.location.search
+        ) {
+          return
+        }
+      } catch {
+        // Continue
+      }
+
+      e.preventDefault()
+      e.stopPropagation()
+      setPendingNav(href)
+      setShowUnsavedModal(true)
+    }
+
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (hasUnsavedChanges()) {
+        e.preventDefault()
+        e.returnValue = ""
+        return ""
+      }
+    }
+
+    function handlePopState() {
+      if (hasUnsavedChanges()) {
+        window.history.pushState(null, "", window.location.href)
+        setPendingNav("BACK")
+        setShowUnsavedModal(true)
+      }
+    }
+
+    document.addEventListener("click", handleClickCapture, true)
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    window.addEventListener("popstate", handlePopState)
+
+    return () => {
+      document.removeEventListener("click", handleClickCapture, true)
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      window.removeEventListener("popstate", handlePopState)
+    }
+  }, [hasUnsavedChanges])
 
   const applyVisitData = useCallback((data: VisitBooking, mode: "hydrate" | "refresh") => {
     setBooking(data)
@@ -424,7 +559,7 @@ export default function VisitPage() {
         noKnownAllergies: false,
       }),
       diagnosis: diagnosisRef.current.trim().slice(0, 500),
-      advice: adviceRef.current.trim().slice(0, 1000),
+      advice: adviceRef.current.trim().slice(0, 3000),
     }
   }
 
@@ -493,10 +628,20 @@ export default function VisitPage() {
     const row = medicineFromDraft(medDraftRef.current)
     if (!row || !bookingId) return
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
+
+    const alreadyAdded = medicinesRef.current.some(
+      (m) => m.name.trim().toLowerCase() === row.name.trim().toLowerCase(),
+    )
+    if (alreadyAdded) {
+      toast.info(`"${row.name}" is already added to the prescription.`)
+      return
+    }
+
     const next = [...medicinesRef.current, row]
     formDirty.current = true
     medicinesRef.current = next
     setMedicines(next)
+    toast.success(`Added "${row.name}" to prescription`)
     const blank = emptyMedicineDraft()
     medDraftRef.current = blank
     setMedDraft(blank)
@@ -517,10 +662,49 @@ export default function VisitPage() {
   function addMedicinesBulk(newMeds: VisitMedicine[]) {
     if (!newMeds.length || !bookingId) return
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
-    const next = [...medicinesRef.current, ...newMeds]
+
+    const existingNames = new Set(
+      medicinesRef.current.map((m) => m.name.trim().toLowerCase()),
+    )
+    const toAdd: VisitMedicine[] = []
+    const alreadyAdded: string[] = []
+
+    for (const med of newMeds) {
+      const key = med.name.trim().toLowerCase()
+      if (!key) continue
+      if (existingNames.has(key)) {
+        alreadyAdded.push(med.name.trim())
+      } else {
+        existingNames.add(key)
+        toAdd.push(med)
+      }
+    }
+
+    if (toAdd.length === 0) {
+      if (alreadyAdded.length === 1) {
+        toast.info(`"${alreadyAdded[0]}" is already added to the prescription.`)
+      } else if (alreadyAdded.length > 1) {
+        toast.info(`${alreadyAdded.length} medicines are already added.`)
+      }
+      return
+    }
+
+    const next = [...medicinesRef.current, ...toAdd]
     formDirty.current = true
     medicinesRef.current = next
     setMedicines(next)
+
+    if (toAdd.length === 1) {
+      toast.success(`Added "${toAdd[0].name}" to prescription`)
+    } else {
+      toast.success(`Added ${toAdd.length} medicines to prescription`)
+    }
+
+    if (alreadyAdded.length > 0) {
+      toast.info(
+        `Skipped duplicate: ${alreadyAdded.join(", ")} already in prescription.`,
+      )
+    }
   }
 
   function toggleMedicineFavourite(idx: number, fav: boolean) {
@@ -541,6 +725,18 @@ export default function VisitPage() {
       return
     const current = medicinesRef.current[idx]
     if (!current) return
+    if (commit && patch.name && patch.name.trim()) {
+      const newName = patch.name.trim().toLowerCase()
+      const isDuplicate = medicinesRef.current.some(
+        (m, i) => i !== idx && m.name.trim().toLowerCase() === newName,
+      )
+      if (isDuplicate) {
+        toast.info(
+          `"${patch.name.trim()}" is already added to the prescription.`,
+        )
+        return
+      }
+    }
     const edited = editedVisitMedicine(current, patch, commit)
     const next = medicinesRef.current.map((row, i) => (i === idx ? edited : row))
     formDirty.current = true
@@ -614,19 +810,23 @@ export default function VisitPage() {
     const current = medicinesRef.current
     const row = medicineFromDraft(medDraftRef.current)
     if (!row) return current
+    const exists = current.some(
+      (m) => m.name.trim().toLowerCase() === row.name.trim().toLowerCase(),
+    )
+    if (exists) return current
     return [...current, row]
   }
 
-  async function save(nextStatus?: string) {
-    if (!bookingId) return
-    if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
+  async function save(nextStatus?: string): Promise<boolean> {
+    if (!bookingId) return false
+    if (String(booking?.status || "").toUpperCase() === "COMPLETED") return false
     if (
       isAfterClinicToday(booking?.slotStart || booking?.sessionDate || null)
     ) {
       toast.error(
         "You can document this visit on its appointment day, not on a later day.",
       )
-      return
+      return false
     }
     const nextMedicines = medicinesToSave()
     medicinesRef.current = nextMedicines
@@ -652,7 +852,7 @@ export default function VisitPage() {
     setSaving(false)
     if (res.status !== "successful") {
       toast.error(res.message || "Could not save visit.")
-      return
+      return false
     }
     const saved = res.data as VisitBooking
     applyVisitData(saved, "hydrate")
@@ -660,13 +860,14 @@ export default function VisitPage() {
     if (nextStatus === "COMPLETED") {
       toast.success("Visit completed.")
       router.push(practiceTabHref("patients"))
-      return
+      return true
     }
     toast.success("Visit saved.")
+    return true
   }
 
   async function sendToCustomer() {
-    if (!bookingId || sendingWa) return
+    if (!bookingId) return
     const completed = String(booking?.status || "").toUpperCase() === "COMPLETED"
     if (!completed && (formDirty.current || clinicalDirty.current)) {
       const nextMedicines = medicinesToSave()
@@ -675,14 +876,7 @@ export default function VisitPage() {
       const saved = await persistVisit(nextMedicines, documentsRef.current)
       if (!saved) return
     }
-    setSendingWa(true)
-    const res = await proctoService.sendClinicLogWhatsApp(bookingId)
-    setSendingWa(false)
-    if (res.status !== "successful") {
-      toast.error(res.message || "Could not send via WhatsApp.")
-      return
-    }
-    toast.success("Prescription PDF sent on WhatsApp.")
+    setSendCustomerModalOpen(true)
   }
 
   if (!detailLoaded) {
@@ -975,7 +1169,11 @@ export default function VisitPage() {
           )
         }
         advice={
-          <div>
+          <div
+            className={`transition-all duration-200 ${
+              isAdviceTemplateOpen ? "min-h-[480px] pb-6" : ""
+            }`}
+          >
             <div className="flex items-center justify-between gap-2 mb-1.5">
               <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
                 Advice
@@ -986,34 +1184,49 @@ export default function VisitPage() {
                 practiceId={booking.practiceId}
                 specialty={booking.practice?.specialty || "General Medicine"}
                 disabled={chartLocked}
+                onOpenChange={setIsAdviceTemplateOpen}
                 onSelect={(templateText) => {
                   clinicalDirty.current = true
                   setAdvice(templateText)
                   adviceRef.current = templateText
-                  toast.success("Advice template applied. Text is fully editable.")
+                  setTimeout(() => {
+                    if (adviceBox.current) {
+                      adviceBox.current.style.height = "auto"
+                      adviceBox.current.style.height = `${Math.max(80, adviceBox.current.scrollHeight)}px`
+                    }
+                  }, 0)
+                  toast.success("Advice template(s) applied. Text is fully editable.")
                 }}
               />
             </div>
             <textarea
+              ref={adviceBox}
               value={advice}
               onChange={(e) => {
                 clinicalDirty.current = true
                 adviceRef.current = e.target.value
                 setAdvice(e.target.value)
+                const el = e.currentTarget
+                el.style.height = "auto"
+                el.style.height = `${Math.max(80, el.scrollHeight)}px`
               }}
               readOnly={chartLocked}
               disabled={chartLocked}
-              maxLength={1000}
-              rows={2}
+              maxLength={3000}
+              rows={3}
               placeholder="Advice for the patient"
               aria-label="Advice"
-              className="mt-1 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+              className="mt-1 min-h-[80px] w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
             />
           </div>
         }
       />
 
-      <section className="dashboard-panel !h-auto !min-h-0 !p-5">
+      <section
+        className={`dashboard-panel !h-auto !min-h-0 !p-5 !overflow-visible transition-all duration-200 ${
+          isNotesTemplateOpen ? "!min-h-[480px] pb-8" : ""
+        }`}
+      >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-1.5">
           <div>
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
@@ -1029,6 +1242,7 @@ export default function VisitPage() {
             practiceId={booking.practiceId}
             specialty={booking.practice?.specialty || "General Medicine"}
             disabled={chartLocked}
+            onOpenChange={setIsNotesTemplateOpen}
             onSelect={(templateText) => {
               formDirty.current = true
               setRemarks(templateText)
@@ -1038,7 +1252,7 @@ export default function VisitPage() {
                   remarksBox.current.style.height = `${Math.max(160, remarksBox.current.scrollHeight)}px`
                 }
               }, 0)
-              toast.success("Doctor Notes template applied. Text is fully editable.")
+              toast.success("Doctor Notes template(s) applied. Text is fully editable.")
             }}
           />
         </div>
@@ -1220,8 +1434,8 @@ export default function VisitPage() {
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => router.push("/doctor/queue")}
-                className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 disabled:opacity-50 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-elevated)] dark:text-slate-100 dark:hover:bg-[var(--solune-surface-muted)]"
+                onClick={handleNavigateBack}
+                className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 disabled:opacity-50 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-elevated)] dark:text-slate-100 dark:hover:bg-[var(--solune-surface-muted)] cursor-pointer"
               >
                 Back
               </button>
@@ -1265,6 +1479,83 @@ export default function VisitPage() {
           </div>
         </div>
       ) : null}
+
+      {/* Unsaved Changes Confirmation Modal */}
+      <PopupModal
+        open={showUnsavedModal}
+        handler={() => {
+          setShowUnsavedModal(false)
+          setPendingNav(null)
+        }}
+        title="Unsaved Changes"
+        direction="center"
+        className="!max-w-md"
+      >
+        <div className="space-y-4 p-1">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+              <span className="text-lg">⚠️</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-neutral-900 dark:text-white">
+                You have unsaved data
+              </p>
+              <p className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed">
+                You have unsaved changes in this appointment. Do you want to save them before leaving?
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-700">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setShowUnsavedModal(false)
+                setPendingNav(null)
+              }}
+              className="rounded-lg border border-neutral-300 px-3.5 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleDiscardAndLeave}
+              className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/50 transition-colors cursor-pointer"
+            >
+              Discard &amp; Leave
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleSaveAndLeave}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 active:scale-95 transition-all cursor-pointer"
+            >
+              {saving ? "Saving…" : "Save & Continue"}
+            </button>
+          </div>
+        </div>
+      </PopupModal>
+
+      <SendToCustomerModal
+        open={sendCustomerModalOpen}
+        bookingId={bookingId}
+        patientName={booking?.patientName}
+        patientPhone={booking?.patientPhone}
+        onClose={() => setSendCustomerModalOpen(false)}
+        beforeSend={async () => {
+          const completed = String(booking?.status || "").toUpperCase() === "COMPLETED"
+          if (!completed && (formDirty.current || clinicalDirty.current)) {
+            const nextMedicines = medicinesToSave()
+            medicinesRef.current = nextMedicines
+            setMedicines(nextMedicines)
+            const saved = await persistVisit(nextMedicines, documentsRef.current)
+            return Boolean(saved)
+          }
+          return true
+        }}
+      />
     </div>
   )
 }

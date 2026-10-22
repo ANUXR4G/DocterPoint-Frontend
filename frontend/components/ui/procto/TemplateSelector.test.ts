@@ -1,6 +1,6 @@
 import { test, describe } from "node:test"
 import assert from "node:assert"
-import { CLINICAL_TEMPLATES } from "./TemplateSelector"
+import { CLINICAL_TEMPLATES, combineTemplatesText } from "./TemplateSelector"
 
 describe("TemplateSelector & Clinical Templates", () => {
   test("contains templates categorized by condition, medication, and general scopes", () => {
@@ -77,5 +77,34 @@ describe("TemplateSelector & Clinical Templates", () => {
     assert.ok(matched.length >= 2, "Should match diabetes and metformin templates")
     assert.ok(matched.some((t) => t.id === "dm2"))
     assert.ok(matched.some((t) => t.id === "med_metformin"))
+  })
+
+  test("combineTemplatesText allows doctor to select more than one template", () => {
+    const t1 = CLINICAL_TEMPLATES.find((t) => t.id === "dm2")!
+    const t2 = CLINICAL_TEMPLATES.find((t) => t.id === "htn")!
+    assert.ok(t1 && t2, "Templates dm2 and htn must exist")
+
+    // Multiple advice templates combined
+    const multiAdvice = combineTemplatesText([t1, t2], "advice", "", "append")
+    assert.ok(multiAdvice.includes(t1.advice), "Must contain template 1 advice")
+    assert.ok(multiAdvice.includes(t2.advice), "Must contain template 2 advice")
+    assert.ok(multiAdvice.includes("\n\n"), "Templates must be separated cleanly by newlines")
+
+    // Appending to existing advice
+    const existing = "Patient came for routine evaluation."
+    const combinedWithExisting = combineTemplatesText([t1, t2], "advice", existing, "append")
+    assert.ok(combinedWithExisting.startsWith(existing), "Must preserve existing advice at the beginning")
+    assert.ok(combinedWithExisting.includes(t1.advice), "Must append template 1 advice")
+    assert.ok(combinedWithExisting.includes(t2.advice), "Must append template 2 advice")
+
+    // Multiple doctorNotes combined
+    const multiNotes = combineTemplatesText([t1, t2], "doctorNotes", "", "append")
+    assert.ok(multiNotes.includes(t1.doctorNotes), "Must contain template 1 doctorNotes")
+    assert.ok(multiNotes.includes(t2.doctorNotes), "Must contain template 2 doctorNotes")
+
+    // Replace mode replaces existing text
+    const replaced = combineTemplatesText([t1, t2], "advice", existing, "replace")
+    assert.ok(!replaced.includes(existing), "Replace mode must not contain old text")
+    assert.ok(replaced.includes(t1.advice) && replaced.includes(t2.advice), "Must contain both selected templates")
   })
 })

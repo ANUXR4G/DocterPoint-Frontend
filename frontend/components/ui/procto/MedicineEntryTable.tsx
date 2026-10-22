@@ -10,6 +10,7 @@ import MedicineAutocomplete from "./MedicineAutocomplete"
 import InstructionCombobox from "./InstructionCombobox"
 import FavoriteOrderSetModal from "./FavoriteOrderSetModal"
 import type { MedicineMasterItem } from "@/lib/medicineMaster"
+import { toast } from "sonner"
 
 export type VisitMedicine = {
   name: string
@@ -83,7 +84,16 @@ const FREQUENCIES = [
   "Weekly",
 ]
 
-const DURATION_UNITS = ["Day", "Week", "Month"]
+export const DURATION_UNITS = ["Days", "Weeks", "Months"]
+
+export function normalizeDurationUnit(unit?: string): string {
+  if (!unit) return ""
+  const trimmed = unit.trim()
+  if (/^days?$/i.test(trimmed)) return "Days"
+  if (/^weeks?$/i.test(trimmed)) return "Weeks"
+  if (/^months?$/i.test(trimmed)) return "Months"
+  return trimmed
+}
 
 const SCHEDULE_FIELDS = new Set(["duration", "durationUnit", "startDate"])
 
@@ -106,7 +116,9 @@ export function editedVisitMedicine(
     next.doseUnit = next.doseUnit?.trim() || undefined
     next.frequency = next.frequency?.trim() || undefined
     next.duration = next.duration?.trim() || undefined
-    next.durationUnit = next.durationUnit?.trim() || undefined
+    next.durationUnit = next.durationUnit?.trim()
+      ? normalizeDurationUnit(next.durationUnit.trim())
+      : undefined
     next.instruction = next.instruction?.trim() || undefined
     next.startDate = next.startDate?.trim() || row.startDate
     next.endDate = next.endDate?.trim() || undefined
@@ -116,6 +128,9 @@ export function editedVisitMedicine(
     keys.some((key) => SCHEDULE_FIELDS.has(key)) &&
     !(keys.length === 1 && keys[0] === "endDate")
   if (reschedule) {
+    if (next.durationUnit) {
+      next.durationUnit = normalizeDurationUnit(next.durationUnit)
+    }
     const scheduled = medicineWithStartDate(next, next.startDate || "")
     next.startDate = scheduled.startDate
     next.endDate =
@@ -156,27 +171,31 @@ export function visitMedicineSignature(row: VisitMedicine): string {
 export function medicineFromDraft(draft: VisitMedicine): VisitMedicine | null {
   const name = draft.name.trim()
   if (!name) return null
-  const dose = draft.dose?.trim() || ""
-  const doseUnit = draft.doseUnit?.trim() || ""
-  const frequency = draft.frequency?.trim() || ""
+  const route = draft.route?.trim() || "Oral"
+  const dose = draft.dose?.trim() || "1"
+  const doseUnit = draft.doseUnit?.trim() || "tablet"
+  const frequency = draft.frequency?.trim() || "Once daily"
+  const duration = draft.duration?.trim() || "5"
+  const durationUnit = normalizeDurationUnit(draft.durationUnit?.trim()) || "Days"
   const amount = [dose, doseUnit].filter(Boolean).join(" ")
   const startDate = draft.startDate?.trim() || defaultMedicineStartDate()
   const endDate =
-    medicineEndDate(startDate, draft.duration || "", draft.durationUnit || "") ||
+    medicineEndDate(startDate, duration, durationUnit) ||
     draft.endDate?.trim() ||
     undefined
   return {
     name,
     strength: draft.strength?.trim() || undefined,
-    route: draft.route?.trim() || undefined,
-    dose: dose || undefined,
-    doseUnit: doseUnit || undefined,
-    frequency: frequency || undefined,
-    duration: draft.duration?.trim() || undefined,
-    durationUnit: draft.durationUnit?.trim() || undefined,
+    route,
+    dose,
+    doseUnit,
+    frequency,
+    duration,
+    durationUnit,
     startDate,
     endDate,
     instruction: draft.instruction?.trim() || undefined,
+    favourite: Boolean(draft.favourite),
     amount: amount || undefined,
     times: frequency ? [frequency] : undefined,
   }
@@ -244,6 +263,9 @@ export default function MedicineEntryTable({
   const [showOrderModal, setShowOrderModal] = useState(false)
   function set<K extends keyof VisitMedicine>(key: K, value: string | boolean) {
     const next: VisitMedicine = { ...draft, [key]: value }
+    if (key === "durationUnit" && typeof value === "string") {
+      next.durationUnit = normalizeDurationUnit(value)
+    }
     if (key === "duration" || key === "durationUnit" || key === "startDate") {
       const scheduled = medicineWithStartDate(next, next.startDate || "")
       next.startDate = scheduled.startDate
@@ -254,23 +276,72 @@ export default function MedicineEntryTable({
   }
 
   function handleMasterSelect(med: MedicineMasterItem) {
+    const medName = (med.name || med.brandName || "").trim()
+    if (!medName) return
+
+    const isAlreadyAdded = rows.some(
+      (r) => r.name.trim().toLowerCase() === medName.toLowerCase(),
+    )
+    if (isAlreadyAdded) {
+      toast.info(`"${medName}" is already added to the prescription.`)
+      onDraft(emptyMedicineDraft())
+      return
+    }
+
+    const duration = med.duration || draft.duration || "5"
+    const durationUnit =
+      normalizeDurationUnit(med.durationUnit || draft.durationUnit) || "Days"
+    const startDate = draft.startDate || defaultMedicineStartDate()
+    const endDate =
+      medicineEndDate(startDate, duration, durationUnit) ||
+      draft.endDate?.trim() ||
+      undefined
+    const dose = med.dose || draft.dose || "1"
+    const doseUnit = med.doseUnit || draft.doseUnit || "tablet"
+    const frequency = med.frequency || draft.frequency || "Once daily"
+
     const next: VisitMedicine = {
-      ...draft,
-      name: med.name,
-      strength: draft.strength || med.strength || "",
-      route: draft.route || med.route || "",
-      dose: draft.dose || med.dose || "",
-      doseUnit: draft.doseUnit || med.doseUnit || "",
-      frequency: draft.frequency || med.frequency || "",
-      duration: draft.duration || med.duration || "",
-      durationUnit: draft.durationUnit || med.durationUnit || "",
-      instruction: draft.instruction || med.instruction || "",
+      name: medName,
+      strength: med.strength || draft.strength || "",
+      route: med.route || draft.route || "Oral",
+      dose,
+      doseUnit,
+      frequency,
+      duration,
+      durationUnit,
+      instruction: med.instruction || draft.instruction || "",
+      startDate,
+      endDate,
+      amount: [dose, doseUnit].filter(Boolean).join(" "),
+      times: frequency ? [frequency] : undefined,
+      favourite:
+        med.favourite !== undefined
+          ? Boolean(med.favourite)
+          : Boolean(draft.favourite),
     }
-    if (next.duration && next.durationUnit && next.startDate) {
-      const scheduled = medicineWithStartDate(next, next.startDate)
-      if (scheduled.endDate) next.endDate = scheduled.endDate
+
+    if (onAddMedicines) {
+      onAddMedicines([next])
+      onDraft(emptyMedicineDraft())
+    } else {
+      onDraft(next)
     }
-    onDraft(next)
+  }
+
+  function handleAdd() {
+    const name = draft.name.trim()
+    if (!name) {
+      toast.error("Please enter a medicine name.")
+      return
+    }
+    const isAlreadyAdded = rows.some(
+      (r) => r.name.trim().toLowerCase() === name.toLowerCase(),
+    )
+    if (isAlreadyAdded) {
+      toast.info(`"${name}" is already added to the prescription.`)
+      return
+    }
+    onAdd()
   }
 
   return (
@@ -311,15 +382,15 @@ export default function MedicineEntryTable({
               "Frequency",
               "Duration",
               "Duration Unit",
-              "Start Time",
-              "End Time",
+              "Start Date",
+              "End Date",
               "Special Instruction",
-              "Favourite",
+              "Action",
             ].map((label) => (
               <th key={label} className={th}>
-                {label === "Favourite" ? (
+                {label === "Action" ? (
                   <span className="inline-flex items-center gap-1">
-                    <span>Favourite</span>
+                    <span>Action</span>
                     <span className="text-amber-500">⭐</span>
                   </span>
                 ) : (
@@ -355,14 +426,17 @@ export default function MedicineEntryTable({
                     onSelect={(med) => {
                       edit(
                         {
-                          name: med.name,
+                          name: med.name || med.brandName,
                           strength: m.strength || med.strength,
                           route: m.route || med.route,
                           dose: m.dose || med.dose,
                           doseUnit: m.doseUnit || med.doseUnit,
                           frequency: m.frequency || med.frequency,
                           duration: m.duration || med.duration,
-                          durationUnit: m.durationUnit || med.durationUnit,
+                          durationUnit:
+                            normalizeDurationUnit(
+                              m.durationUnit || med.durationUnit,
+                            ) || "Days",
                           instruction: m.instruction || med.instruction,
                           favourite: med.favourite !== undefined ? med.favourite : m.favourite,
                         },
@@ -373,15 +447,6 @@ export default function MedicineEntryTable({
                   />
                 ) : (
                   <span>{m.name}</span>
-                )}
-                {locked ? null : (
-                  <button
-                    type="button"
-                    onClick={() => onRemove(idx)}
-                    className="ml-2 text-[11px] font-medium text-red-600 hover:underline"
-                  >
-                    Remove
-                  </button>
                 )}
               </td>
               <td className={td}>
@@ -483,22 +548,28 @@ export default function MedicineEntryTable({
               <td className={td}>
                 {editable ? (
                   <select
-                    value={m.durationUnit || ""}
+                    value={normalizeDurationUnit(m.durationUnit)}
                     aria-label={`Duration unit for ${m.name}`}
                     className={field}
-                    onChange={(e) => edit({ durationUnit: e.target.value }, true)}
+                    onChange={(e) =>
+                      edit(
+                        { durationUnit: normalizeDurationUnit(e.target.value) },
+                        true,
+                      )
+                    }
                   >
                     <option value="">Select...</option>
-                    {optionsWithCurrent(DURATION_UNITS, m.durationUnit || "").map(
-                      (v) => (
-                        <option key={v} value={v}>
-                          {v}
-                        </option>
-                      ),
-                    )}
+                    {optionsWithCurrent(
+                      DURATION_UNITS,
+                      normalizeDurationUnit(m.durationUnit),
+                    ).map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
                   </select>
                 ) : (
-                  m.durationUnit || ""
+                  normalizeDurationUnit(m.durationUnit) || ""
                 )}
               </td>
               <td className={td}>
@@ -541,27 +612,39 @@ export default function MedicineEntryTable({
                 )}
               </td>
               <td className={`${td} text-center`}>
-                <button
-                  type="button"
-                  aria-label={m.favourite ? "Remove favourite" : "Make favourite"}
-                  title={
-                    m.favourite
-                      ? "In favorite list (green star) - click to remove"
-                      : "Not in favorite list (orange star) - click to add"
-                  }
-                  onClick={() => {
-                    const nextFav = !m.favourite
-                    edit({ favourite: nextFav }, true)
-                    onToggleFavourite?.(idx, nextFav)
-                  }}
-                  className="inline-flex size-7 items-center justify-center rounded hover:bg-neutral-100 transition-transform active:scale-90 dark:hover:bg-neutral-800 cursor-pointer"
-                >
-                  {m.favourite ? (
-                    <span className="text-base text-emerald-500">★</span>
-                  ) : (
-                    <span className="text-base text-orange-500 hover:text-orange-600">★</span>
-                  )}
-                </button>
+                <div className="inline-flex items-center gap-1.5 justify-center">
+                  <button
+                    type="button"
+                    aria-label={m.favourite ? "Remove favourite" : "Make favourite"}
+                    title={
+                      m.favourite
+                        ? "In favorite list (green star) - click to remove"
+                        : "Not in favorite list (orange star) - click to add"
+                    }
+                    onClick={() => {
+                      const nextFav = !m.favourite
+                      edit({ favourite: nextFav }, true)
+                      onToggleFavourite?.(idx, nextFav)
+                    }}
+                    className="inline-flex size-7 items-center justify-center rounded hover:bg-neutral-100 transition-transform active:scale-90 dark:hover:bg-neutral-800 cursor-pointer"
+                  >
+                    {m.favourite ? (
+                      <span className="text-base text-emerald-500">★</span>
+                    ) : (
+                      <span className="text-base text-orange-500 hover:text-orange-600">★</span>
+                    )}
+                  </button>
+                  {!locked ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(idx)}
+                      title={`Remove ${m.name}`}
+                      className="inline-flex items-center justify-center rounded px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/40 cursor-pointer transition-colors"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
               </td>
             </tr>
             )
@@ -577,14 +660,11 @@ export default function MedicineEntryTable({
                   onChange={(name) => set("name", name)}
                   onSelect={(med) => {
                     handleMasterSelect(med)
-                    if (med.favourite !== undefined) {
-                      set("favourite", med.favourite)
-                    }
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
-                      onAdd()
+                      handleAdd()
                     }
                   }}
                   placeholder="Type to search med"
@@ -656,9 +736,10 @@ export default function MedicineEntryTable({
               </td>
               <td className={td}>
                 <select
-                  value={draft.durationUnit || ""}
+                  value={normalizeDurationUnit(draft.durationUnit)}
                   onChange={(e) => set("durationUnit", e.target.value)}
                   className={field}
+                  aria-label="Duration unit"
                 >
                   <option value="">Select...</option>
                   {DURATION_UNITS.map((v) => (
@@ -697,23 +778,33 @@ export default function MedicineEntryTable({
                 />
               </td>
               <td className={`${td} text-center`}>
-                <button
-                  type="button"
-                  aria-label={draft.favourite ? "Remove favourite" : "Make favourite"}
-                  title={
-                    draft.favourite
-                      ? "In favorite list (green star) - click to remove"
-                      : "Not in favorite list (orange star) - click to add"
-                  }
-                  onClick={() => set("favourite", !draft.favourite)}
-                  className="inline-flex size-7 items-center justify-center rounded hover:bg-neutral-100 transition-transform active:scale-90 dark:hover:bg-neutral-800 cursor-pointer"
-                >
-                  {draft.favourite ? (
-                    <span className="text-base text-emerald-500">★</span>
-                  ) : (
-                    <span className="text-base text-orange-500 hover:text-orange-600">★</span>
-                  )}
-                </button>
+                <div className="inline-flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={draft.favourite ? "Remove favourite" : "Make favourite"}
+                    title={
+                      draft.favourite
+                        ? "In favorite list (green star) - click to remove"
+                        : "Not in favorite list (orange star) - click to add"
+                    }
+                    onClick={() => set("favourite", !draft.favourite)}
+                    className="inline-flex size-7 items-center justify-center rounded hover:bg-neutral-100 transition-transform active:scale-90 dark:hover:bg-neutral-800 cursor-pointer"
+                  >
+                    {draft.favourite ? (
+                      <span className="text-base text-emerald-500">★</span>
+                    ) : (
+                      <span className="text-base text-orange-500 hover:text-orange-600">★</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAdd}
+                    title="Add medicine to prescription"
+                    className="inline-flex items-center gap-1 rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <span>+ Add</span>
+                  </button>
+                </div>
               </td>
             </tr>
           )}
@@ -723,7 +814,7 @@ export default function MedicineEntryTable({
         <div className="mt-2 flex justify-end">
           <button
             type="button"
-            onClick={onAdd}
+            onClick={handleAdd}
             className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
           >
             Add
