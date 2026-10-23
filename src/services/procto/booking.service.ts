@@ -21,6 +21,8 @@ import {
   formatLocalDate,
   formatPracticeTime,
   isClinicDayAfterToday,
+  isClinicDayBeforeToday,
+  isClinicDayCurrentOrFuture,
   getTokenSession,
   getValidityBounds,
   hasExtraSlotsForDay,
@@ -1427,17 +1429,33 @@ export const BookingService = {
     return null;
   },
 
-  assertDocumentableToday(booking: {
+  /**
+   * Effective Date-Based Editing Rules:
+   * • Current & Future Entries: Edit and delete actions remain fully active and applicable
+   *   for all prescriptions and entries scheduled from the current date onwards. Clinicians or admin
+   *   can freely modify, update, or remove active orders that have not yet been locked into past clinical records.
+   * • Historical Entries (Old Entries): Any medication orders or records prior to the current date must
+   *   remain immutable and unchanged in the patient's past history to maintain legal compliance, accurate auditing,
+   *   and a reliable medical trail.
+   */
+  assertEntryEditable(booking: {
     slotStart: Date | null;
     sessionDate: Date | null;
   }) {
     const day = this.appointmentDayIso(booking);
-    if (isClinicDayAfterToday(day)) {
+    if (day && isClinicDayBeforeToday(day)) {
       throw new AppError(
-        400,
-        "You can document this visit on its appointment day, not on a later day.",
+        403,
+        "Historical entries prior to the current date are immutable and cannot be modified or deleted to maintain legal compliance, accurate auditing, and a reliable medical trail.",
       );
     }
+  },
+
+  assertDocumentableToday(booking: {
+    slotStart: Date | null;
+    sessionDate: Date | null;
+  }) {
+    this.assertEntryEditable(booking);
   },
 
   async updateVisit(
@@ -2081,7 +2099,7 @@ export const BookingService = {
       }
     }
 
-    // 2. Synchronize to ALL bookings of this patient
+    // 2. Synchronize to bookings of this patient scheduled from current date onwards (historical bookings remain immutable)
     if (resolvedPatientId || phoneDigits.length >= 7) {
       try {
         const patientBookings = await prisma.practiceBooking.findMany({
@@ -2091,11 +2109,19 @@ export const BookingService = {
               ...(phoneDigits.length >= 7 ? [{ patientPhone: { endsWith: phoneDigits } }] : []),
             ],
           },
-          select: { id: true, clinicalAssessment: true, practiceId: true, patientId: true },
+          select: { id: true, slotStart: true, sessionDate: true, clinicalAssessment: true, practiceId: true, patientId: true },
         });
 
+        const today = formatLocalDate(new Date());
         await Promise.all(
           patientBookings.map(async (b) => {
+            const day = b.slotStart
+              ? formatLocalDate(b.slotStart)
+              : (b.sessionDate ? localDayOfSessionDate(b.sessionDate) : null);
+            // Historical entries prior to current date must remain immutable!
+            if (day && day < today) {
+              return;
+            }
             const bNorm = normalizeClinicalAssessment(b.clinicalAssessment) ?? {};
             const nextAssessment = {
               ...bNorm,
