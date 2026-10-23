@@ -26,3 +26,4 @@ describe("ClinicLogModal send logic", () => {
     assert.equal(rxReq.expectedMessage, "Prescription sent to customer on WhatsApp.")
   })
 })
+
