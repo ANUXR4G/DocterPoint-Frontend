@@ -39,6 +39,7 @@ import MedicineEntryTable, {
   emptyMedicineDraft,
   medicineFromDraft,
   visitMedicineSignature,
+  isMedicineLocked,
   type VisitMedicine,
 } from "@/components/ui/procto/MedicineEntryTable"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
@@ -611,10 +612,19 @@ export default function VisitPage() {
     }
     const disease = complaintRef.current.trim()
     const chart = chartWithDiagnosis(clinicalRef.current)
+    const medicinesPayload =
+      opts?.status === "COMPLETED"
+        ? nextMedicines.map((m) => ({
+            ...m,
+            isOrdered: true,
+            status: m.status || "ordered",
+            orderedAt: m.orderedAt || new Date().toISOString(),
+          }))
+        : nextMedicines
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
       ...(disease ? { disease } : {}),
-      medicines: nextMedicines,
+      medicines: medicinesPayload,
       documents: docsToSave,
       ...(clinicalReady.current || chart.diagnosis || chart.advice
         ? { clinicalAssessment: chart }
@@ -674,6 +684,11 @@ export default function VisitPage() {
       String(booking?.status || "").toUpperCase() === "COMPLETED"
     )
       return
+    const target = medicinesRef.current[idx]
+    if (target && isMedicineLocked(target, chartLocked)) {
+      toast.error(`"${target.name}" has already been ordered and is locked to preserve historical audit trails.`)
+      return
+    }
     const next = medicines.filter((_, i) => i !== idx)
     formDirty.current = true
     medicinesRef.current = next
@@ -746,6 +761,12 @@ export default function VisitPage() {
       return
     const current = medicinesRef.current[idx]
     if (!current) return
+    if (isMedicineLocked(current, chartLocked)) {
+      if (commit) {
+        toast.error(`"${current.name}" has already been ordered and cannot be edited.`)
+      }
+      return
+    }
     if (commit && patch.name && patch.name.trim()) {
       const newName = patch.name.trim().toLowerCase()
       const isDuplicate = medicinesRef.current.some(
@@ -860,10 +881,19 @@ export default function VisitPage() {
     setSaving(true)
     const disease = complaintRef.current.trim()
     const chart = chartWithDiagnosis(clinicalRef.current)
+    const medicinesPayload =
+      nextStatus === "COMPLETED"
+        ? nextMedicines.map((m) => ({
+            ...m,
+            isOrdered: true,
+            status: m.status || "ordered",
+            orderedAt: m.orderedAt || new Date().toISOString(),
+          }))
+        : nextMedicines
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
       ...(disease ? { disease } : {}),
-      medicines: nextMedicines,
+      medicines: medicinesPayload,
       documents: documentsRef.current,
       ...(clinicalReady.current || chart.diagnosis || chart.advice
         ? { clinicalAssessment: chart }
