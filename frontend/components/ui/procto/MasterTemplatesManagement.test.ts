@@ -163,4 +163,37 @@ describe("MasterTemplatesManagement & Clinical Advice Categories", () => {
     assert.equal(specDoctor.doctorId, "doc_ananya")
     assert.equal(specDoctor.specialty, "Cardiology")
   })
+
+  test("SPEC-DM2-MGMT Type 2 Diabetes Mellitus Protocol specification", () => {
+    const dm2 = CLINICAL_TEMPLATES.find((t) => t.id === "dm2")
+    assert.ok(dm2, "Must find dm2 master template")
+    assert.strictEqual(dm2.name, "SPEC-DM2-MGMT", "Must have code SPEC-DM2-MGMT")
+    assert.strictEqual(dm2.title, "Type 2 Diabetes Mellitus Protocol", "Must have title Type 2 Diabetes Mellitus Protocol")
+    assert.strictEqual(resolveAdviceCategory(dm2), "Diabetes & Endocrine Care")
+
+    // Content sections validation
+    assert.ok(dm2.advice.includes("Lifestyle & Dietary Precautions"), "Must include lifestyle and dietary advice")
+    assert.ok(dm2.advice.includes("Warning Signs"), "Must include warning signs for hypoglycemia")
+    assert.ok(dm2.doctorNotes.includes("Physical Assessment"), "Doctor notes must include physical assessment")
+    assert.ok(dm2.doctorNotes.includes("Clinical Remarks"), "Doctor notes must include clinical remarks")
+    assert.ok(dm2.doctorNotes.includes("Follow-up Plan"), "Doctor notes must include follow-up plan")
+
+    // Auto-generate identifier logic
+    function autoGenerateCode(title: string, scope: "clinic" | "specialty" | "doctor") {
+      const prefix = scope === "clinic" ? "CLINIC" : scope === "specialty" ? "SPEC" : "DOC"
+      if (/type\s*2\s*diabetes/i.test(title)) {
+        return `${prefix}-DM2-MGMT`
+      }
+      const cleanTitle = title
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 20)
+      return `${prefix}-${cleanTitle || "PROTOCOL"}`
+    }
+
+    assert.equal(autoGenerateCode("Type 2 Diabetes Mellitus Protocol", "specialty"), "SPEC-DM2-MGMT")
+    assert.equal(autoGenerateCode("Type 2 Diabetes Mellitus Protocol", "clinic"), "CLINIC-DM2-MGMT")
+    assert.equal(autoGenerateCode("Type 2 Diabetes Mellitus Protocol", "doctor"), "DOC-DM2-MGMT")
+  })
 })

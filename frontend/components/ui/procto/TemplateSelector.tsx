@@ -108,18 +108,20 @@ export const CLINICAL_TEMPLATES: ClinicalTemplate[] = [
   // ==========================================
   {
     id: "dm2",
-    name: "SPEC-DM2-REVIEW",
-    title: "Type 2 Diabetes Mellitus Comprehensive Review",
+    name: "SPEC-DM2-MGMT",
+    title: "Type 2 Diabetes Mellitus Protocol",
     category: "condition",
+    adviceCategory: "Diabetes & Endocrine Care",
     scope: "specialty",
     scopeValue: "General Medicine",
-    keywords: ["diabetes", "sugar", "glucose", "metformin", "insulin", "dm", "hba1c"],
+    specialty: "Diabetology & Endocrinology",
+    keywords: ["diabetes", "sugar", "glucose", "metformin", "insulin", "dm", "dm2", "hba1c", "mgmt", "protocol"],
     advice:
-      "Follow low glycemic index diabetic diet. Avoid refined sugars, sweets, and sweetened beverages. Engage in moderate aerobic exercise (brisk walking) 30 min daily. Monitor fasting and 2-hr postprandial blood sugar weekly. Keep simple carbohydrates (glucose tabs/fruit juice) accessible for hypoglycemia (sweating, dizziness, trembling). Report foot lesions or numbness promptly.",
+      "Lifestyle & Dietary Precautions: Follow low glycemic index diabetic diet. Avoid refined sugars, sweets, and sweetened beverages. Engage in moderate aerobic exercise (brisk walking) 30 min daily. Monitor fasting and 2-hr postprandial blood sugar weekly. Warning Signs: Keep simple carbohydrates (glucose tabs/fruit juice) accessible for hypoglycemia (sweating, dizziness, trembling). Report foot lesions or numbness promptly.",
     doctorNotes:
-      "Type 2 DM assessment. Reviewed glycemic trends and medication compliance. Foot examination performed - sensation intact, pedal pulses palpable. Target HbA1c < 7.0%. Advised annual dilated retinal exam and urine ACR. Next review in 4-6 weeks with blood glucose log.",
+      "Physical Assessment: Foot examination performed - sensation intact bilaterally, pedal pulses palpable. Target HbA1c < 7.0%. Clinical Remarks: Type 2 DM assessment; reviewed glycemic trends and medication compliance. Follow-up Plan: Advised annual dilated retinal exam and urine ACR. Next review in 4-6 weeks with home blood glucose log.",
     remarks:
-      "Type 2 DM assessment. Reviewed glycemic trends and medication compliance. Foot examination performed - sensation intact, pedal pulses palpable. Target HbA1c < 7.0%. Advised annual dilated retinal exam and urine ACR. Next review in 4-6 weeks with blood glucose log.",
+      "Physical Assessment: Foot examination performed - sensation intact bilaterally, pedal pulses palpable. Target HbA1c < 7.0%. Clinical Remarks: Type 2 DM assessment; reviewed glycemic trends and medication compliance. Follow-up Plan: Advised annual dilated retinal exam and urine ACR. Next review in 4-6 weeks with home blood glucose log.",
   },
   {
     id: "htn",

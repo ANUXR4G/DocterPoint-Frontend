@@ -98,16 +98,17 @@ export const MASTER_DOCTOR_NOTE_TEMPLATES: DoctorNoteTemplate[] = [
   // SPECIALTY LEVEL (Accessible within specialty)
   // ==========================================
   {
-    id: "spec_dm2_review",
-    name: "SPEC-DM2-REVIEW",
-    title: "Type 2 Diabetes Mellitus Comprehensive Review",
+    id: "spec_dm2_mgmt",
+    name: "SPEC-DM2-MGMT",
+    title: "Type 2 Diabetes Mellitus Protocol",
     category: "condition",
     scope: "specialty",
     scopeValue: "General Medicine",
+    specialty: "Diabetology & Endocrinology",
     content:
-      "Type 2 DM assessment. Reviewed glycemic trends and medication compliance. Foot examination performed - sensation intact, pedal pulses palpable. Target HbA1c < 7.0%. Advised annual dilated retinal exam and urine ACR. Next review in 4-6 weeks with blood glucose log.",
+      "Physical Assessment: Foot examination performed - sensation intact bilaterally, pedal pulses palpable. Target HbA1c < 7.0%. Clinical Remarks: Type 2 DM assessment; reviewed glycemic trends and medication compliance. Follow-up Plan: Advised annual dilated retinal exam and urine ACR. Next review in 4-6 weeks with home blood glucose log.",
     advice:
-      "Follow low glycemic index diabetic diet. Avoid refined sugars, sweets, and sweetened beverages. Engage in moderate aerobic exercise (brisk walking) 30 min daily. Monitor fasting and 2-hr postprandial blood sugar weekly. Keep simple carbohydrates (glucose tabs/fruit juice) accessible for hypoglycemia. Report foot lesions promptly.",
+      "Lifestyle & Dietary Precautions: Follow low glycemic index diabetic diet. Avoid refined sugars, sweets, and sweetened beverages. Engage in moderate aerobic exercise (brisk walking) 30 min daily. Monitor fasting and 2-hr postprandial blood sugar weekly. Warning Signs: Keep simple carbohydrates (glucose tabs/fruit juice) accessible for hypoglycemia (sweating, dizziness, trembling). Report foot lesions or numbness promptly.",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
@@ -340,9 +341,19 @@ export class TemplateService {
       doctorName?: string;
     },
   ): Promise<DoctorNoteTemplate> {
-    const name = String(data.name || "").trim();
+    let name = String(data.name || "").trim();
     if (!name) {
-      throw new AppError(400, "Template unique name is required.");
+      const prefix = data.scope === "clinic" ? "CLINIC" : data.scope === "specialty" ? "SPEC" : "DOC";
+      if (/type\s*2\s*diabetes/i.test(data.title || "")) {
+        name = `${prefix}-DM2-MGMT`;
+      } else {
+        const cleanTitle = (data.title || "TEMPLATE")
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 20);
+        name = `${prefix}-${cleanTitle || "PROTOCOL"}-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
     }
     const content = String(data.content || "").trim();
     if (!content) {
@@ -367,13 +378,17 @@ export class TemplateService {
     const targetSpec = data.specialty?.trim() || (data.scope === "specialty" ? data.scopeValue?.trim() : undefined);
 
     // Ensure Name is unique within the practice/doctor scope
-    const existingName = existingList.find(
+    let existingName = existingList.find(
       (t) =>
         t.name.trim().toLowerCase() === name.toLowerCase() &&
         (t.scope === data.scope || (data.scope === "doctor" && (t.doctorId === targetDocId || t.createdById === targetDocId))),
     );
     if (existingName) {
-      throw new AppError(400, `A template with the name "${name}" already exists.`);
+      if (!data.name?.trim()) {
+        name = `${name}-${Math.floor(1000 + Math.random() * 9000)}`;
+      } else {
+        throw new AppError(400, `A template with the name "${name}" already exists.`);
+      }
     }
 
     const id = `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
