@@ -1,5 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../core/response.js";
+import { formatLocalDate } from "./slotEngine.js";
 import {
   CENTRAL_MEDICINE_MASTER,
   type MedicineMasterItem,
@@ -17,6 +18,8 @@ export type MedicineRecord = {
   dosageForm: string;
   genericName: string;
   favourite: boolean;
+  effectiveDate?: string;
+  effectiveFrom?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -315,6 +318,19 @@ export class MedicineService {
     const existingList: MedicineRecord[] = Array.isArray(rawMasters.medicines)
       ? (rawMasters.medicines as MedicineRecord[])
       : getDefaultMedicineRecords();
+
+    const target = existingList.find((m) => m.id === id);
+    if (!target) return false;
+
+    // Historical entries prior to current date must remain immutable!
+    const today = formatLocalDate(new Date());
+    const medicineDate = target.effectiveDate || target.effectiveFrom;
+    if (medicineDate && medicineDate < today) {
+      throw new AppError(
+        403,
+        "Historical medicine records prior to the current date are immutable and cannot be deleted to maintain legal compliance, accurate auditing, and a reliable medical trail.",
+      );
+    }
 
     const filtered = existingList.filter((m) => m.id !== id);
 

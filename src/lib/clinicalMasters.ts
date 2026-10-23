@@ -29,6 +29,8 @@ export type AllergyMaster = {
   category: "Food" | "Drug" | "Respiratory" | "Others" | string;
   name: string;
   description: string;
+  effectiveDate?: string;
+  effectiveFrom?: string;
 };
 
 export type ClinicalMasters = {

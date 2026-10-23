@@ -342,6 +342,8 @@ export class TemplateService {
       specialty?: string;
       doctorId?: string;
       doctorName?: string;
+      effectiveDate?: string;
+      effectiveFrom?: string;
     },
   ): Promise<DoctorNoteTemplate> {
     let name = String(data.name || "").trim();
@@ -466,6 +468,16 @@ export class TemplateService {
       throw new AppError(403, "Standard master templates cannot be deleted to preserve system integrity.");
     }
 
+    // Historical templates prior to the current date must remain immutable!
+    const today = formatLocalDate(new Date());
+    const templateDate = target.effectiveDate || target.effectiveFrom || target.createdAt.slice(0, 10);
+    if (templateDate < today) {
+      throw new AppError(
+        403,
+        "Historical templates prior to the current date are immutable and cannot be deleted to maintain legal compliance, accurate auditing, and a reliable medical trail.",
+      );
+    }
+
     // Doctor can only delete their own templates unless clinic admin
     const member = await prisma.practiceMember.findUnique({
       where: { practiceId_userId: { practiceId, userId: doctorUserId } },
@@ -507,6 +519,8 @@ export class TemplateService {
       specialty?: string;
       doctorId?: string;
       doctorName?: string;
+      effectiveDate?: string;
+      effectiveFrom?: string;
     },
   ): Promise<DoctorNoteTemplate> {
     const practice = await prisma.practice.findUnique({
@@ -529,6 +543,8 @@ export class TemplateService {
       if (!predefined) {
         throw new AppError(404, "Template not found.");
       }
+      const today = formatLocalDate(new Date());
+      const effectiveDate = patch.effectiveDate?.trim() || patch.effectiveFrom?.trim() || today;
       const overridden: DoctorNoteTemplate = {
         ...predefined,
         ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
@@ -541,6 +557,8 @@ export class TemplateService {
         ...(patch.specialty !== undefined ? { specialty: patch.specialty?.trim() || undefined } : {}),
         ...(patch.doctorId !== undefined ? { doctorId: patch.doctorId?.trim() || undefined } : {}),
         ...(patch.doctorName !== undefined ? { doctorName: patch.doctorName?.trim() || undefined } : {}),
+        effectiveDate,
+        effectiveFrom: effectiveDate,
         isCustom: true,
         updatedAt: new Date().toISOString(),
       };
@@ -557,12 +575,59 @@ export class TemplateService {
     }
 
     const target = existingList[index];
+
     const member = await prisma.practiceMember.findUnique({
       where: { practiceId_userId: { practiceId, userId: doctorUserId } },
     });
     const isAdmin = member?.role === "PRACTICE_OWNER" || member?.role === "PRACTICE_ADMIN";
     if (target.createdById && target.createdById !== doctorUserId && !isAdmin) {
       throw new AppError(403, "You can only edit templates created by you or your clinic.");
+    }
+
+    const today = formatLocalDate(new Date());
+    const templateDate = target.effectiveDate || target.effectiveFrom || target.createdAt.slice(0, 10);
+
+    // If template is historical (prior to current date), create a new active version effective from today onwards
+    if (templateDate < today) {
+      const nextEffectiveDate = patch.effectiveDate?.trim() || patch.effectiveFrom?.trim() || today;
+      const newVersionId = `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const newVersion: DoctorNoteTemplate = {
+        ...target,
+        id: newVersionId,
+        ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+        ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+        ...(patch.content !== undefined ? { content: patch.content.trim() } : {}),
+        ...(patch.advice !== undefined ? { advice: patch.advice.trim() } : {}),
+        ...(patch.category !== undefined ? { category: patch.category as any } : {}),
+        ...(patch.scope !== undefined ? { scope: patch.scope } : {}),
+        ...(patch.scopeValue !== undefined ? { scopeValue: patch.scopeValue } : {}),
+        ...(patch.specialty !== undefined ? { specialty: patch.specialty?.trim() || undefined } : {}),
+        ...(patch.doctorId !== undefined ? { doctorId: patch.doctorId?.trim() || undefined } : {}),
+        ...(patch.doctorName !== undefined ? { doctorName: patch.doctorName?.trim() || undefined } : {}),
+        effectiveDate: nextEffectiveDate,
+        effectiveFrom: nextEffectiveDate,
+        isCustom: true,
+        createdById: doctorUserId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (patch.doctorId && patch.scope === "doctor") {
+        newVersion.createdById = patch.doctorId;
+        newVersion.scopeValue = patch.doctorId;
+      }
+      if (patch.doctorName) {
+        newVersion.createdByName = patch.doctorName;
+      }
+      existingList.push(newVersion);
+      const nextMasters = {
+        ...rawMasters,
+        doctorNoteTemplates: existingList,
+      };
+      await prisma.practice.update({
+        where: { id: practiceId },
+        data: { clinicalMasters: nextMasters as Prisma.InputJsonValue },
+      });
+      return newVersion;
     }
 
     const updated: DoctorNoteTemplate = {
@@ -577,6 +642,7 @@ export class TemplateService {
       ...(patch.specialty !== undefined ? { specialty: patch.specialty?.trim() || undefined } : {}),
       ...(patch.doctorId !== undefined ? { doctorId: patch.doctorId?.trim() || undefined } : {}),
       ...(patch.doctorName !== undefined ? { doctorName: patch.doctorName?.trim() || undefined } : {}),
+      ...(patch.effectiveDate !== undefined ? { effectiveDate: patch.effectiveDate.trim(), effectiveFrom: patch.effectiveDate.trim() } : {}),
       updatedAt: new Date().toISOString(),
     };
     if (patch.doctorId && patch.scope === "doctor") {
