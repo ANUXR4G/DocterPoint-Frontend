@@ -2961,6 +2961,7 @@ export const BookingService = {
       from?: string;
       to?: string;
       providerId?: string;
+      status?: string;
     },
   ) {
     const where: Record<string, unknown> = { practiceId };
@@ -2968,9 +2969,14 @@ export const BookingService = {
     const from = opts?.from;
     const to = opts?.to;
     const providerId = opts?.providerId?.trim();
+    const status = opts?.status?.trim();
 
     if (providerId) {
       where.providerId = providerId;
+    }
+
+    if (status && status.toLowerCase() !== "all") {
+      where.status = status as BookingStatus;
     }
 
     if (from || to) {

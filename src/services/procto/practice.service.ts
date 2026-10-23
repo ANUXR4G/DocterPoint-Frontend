@@ -3057,6 +3057,110 @@ export const PracticeService = {
     return [...byProvider.values()].flatMap((list) => pickEffectiveVersion(list, today));
   },
 
+  /** Comprehensive schedule data for doctors across any date range (day/week/month/custom). */
+  async getScheduleReport(
+    practiceId: string,
+    opts?: { providerId?: string; from?: string; to?: string },
+    actorUserId?: string,
+  ) {
+    const rawProviderId = opts?.providerId?.trim();
+    const isAll = !rawProviderId || rawProviderId.toLowerCase() === "all";
+
+    const scoped =
+      actorUserId != null
+        ? await this.resolveDataProviderScope(
+            practiceId,
+            actorUserId,
+            !isAll ? rawProviderId : undefined,
+          )
+        : !isAll
+          ? rawProviderId
+          : undefined;
+
+    const members = await prisma.practiceMember.findMany({
+      where: {
+        practiceId,
+        isActive: true,
+        ...(scoped ? { userId: scoped } : {}),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            doctor: {
+              select: {
+                id: true,
+                specialties: {
+                  include: { specialty: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { user: { name: "asc" } },
+    });
+
+    const doctors = members
+      .filter((m) => m.role === "DOCTOR" || m.doctorId != null || m.user?.doctor != null)
+      .map((m) => ({
+        id: m.userId,
+        name: m.user?.name || "Doctor",
+        email: m.user?.email || null,
+        phone: m.user?.phone || null,
+        role: m.role,
+        specialties:
+          m.user?.doctor?.specialties?.map((s) => s.specialty?.name).filter((n): n is string => Boolean(n)) ?? [],
+      }));
+
+    const doctorIds = doctors.map((d) => d.id);
+    if (doctorIds.length === 0) {
+      return { doctors: [], schedules: [], overrides: [] };
+    }
+
+    const schedules = await prisma.providerSchedule.findMany({
+      where: {
+        practiceId,
+        providerId: { in: doctorIds },
+        ...ACTIVE_VERSION,
+      },
+      include: { location: true },
+      orderBy: [{ effectiveFrom: "asc" }, { dayOfWeek: "asc" }],
+    });
+
+    const fromIso = opts?.from?.slice(0, 10);
+    const toIso = opts?.to?.slice(0, 10);
+
+    const overrides = (fromIso && toIso)
+      ? await prisma.scheduleOverride.findMany({
+          where: {
+            practiceId,
+            providerId: { in: doctorIds },
+            date: {
+              gte: dbDate(fromIso),
+              lte: dbDate(toIso),
+            },
+          },
+          orderBy: { date: "asc" },
+        })
+      : await prisma.scheduleOverride.findMany({
+          where: {
+            practiceId,
+            providerId: { in: doctorIds },
+          },
+          orderBy: { date: "asc" },
+        });
+
+    return {
+      doctors,
+      schedules,
+      overrides,
+    };
+  },
+
   /** Saved schedule versions that start after today (oldest first). */
   async getUpcomingSchedules(practiceId: string, providerId: string) {
     const today = todayIso();

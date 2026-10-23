@@ -197,6 +197,27 @@ router.get(
   },
 );
 
+router.get(
+  "/:practiceId/reports/schedules",
+  requireAuth("schedule:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const practiceId = param(req.params.practiceId);
+      const providerId = req.query.providerId as string | undefined;
+      const from = req.query.from as string | undefined;
+      const to = req.query.to as string | undefined;
+      const data = await PracticeService.getScheduleReport(
+        practiceId,
+        { providerId, from, to },
+        req.sessionUser!.id,
+      );
+      return ResponseHandler.fetchSuccessful(res, "schedule report fetched.", data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.put(
   "/:practiceId/schedules",
   requireAuth("schedule:write"),
