@@ -40,6 +40,23 @@ import {
   type TemplateScope,
 } from "./TemplateSelector"
 
+export const DEFAULT_SPECIALTIES = [
+  "General Medicine",
+  "Cardiology",
+  "Diabetology & Endocrinology",
+  "Pediatrics",
+  "Pulmonology & ENT",
+  "Gastroenterology",
+  "Orthopedics",
+  "Dermatology",
+  "Obstetrics & Gynecology",
+  "Neurology",
+  "Psychiatry",
+  "Nephrology",
+  "General Surgery",
+  "Ophthalmology",
+]
+
 export interface MasterAdviceCategory {
   id: string
   label: string
@@ -275,6 +292,8 @@ export default function MasterTemplatesManagement() {
   const [searchQuery, setSearchQuery] = useState("")
   const [preferredCategories, setPreferredCategories] = useState<string[]>([])
   const [practiceId, setPracticeId] = useState<string | undefined>(undefined)
+  const [specialties, setSpecialties] = useState<string[]>(DEFAULT_SPECIALTIES)
+  const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialties?: string[] }>>([])
   const [loading, setLoading] = useState(false)
 
   // Add / Edit Modal state
@@ -287,8 +306,10 @@ export default function MasterTemplatesManagement() {
     MASTER_ADVICE_CATEGORIES[0].label,
   )
   const [customCategoryInput, setCustomCategoryInput] = useState("")
-  const [modalScope, setModalScope] = useState<TemplateScope>("doctor")
-  const [modalScopeValue, setModalScopeValue] = useState("General Medicine")
+  const [modalSpecialty, setModalSpecialty] = useState<string>("all")
+  const [modalDoctorId, setModalDoctorId] = useState<string>("all")
+  const [modalScope, setModalScope] = useState<TemplateScope>("clinic")
+  const [modalScopeValue, setModalScopeValue] = useState("")
   const [modalAdvice, setModalAdvice] = useState("")
   const [modalDoctorNotes, setModalDoctorNotes] = useState("")
   const [modalSaving, setModalSaving] = useState(false)
@@ -328,7 +349,52 @@ export default function MasterTemplatesManagement() {
           if (active && resolvedPid) {
             setPracticeId(resolvedPid)
           }
+
+          const docMap = new Map<string, { id: string; name: string; specialties?: string[] }>()
+          const specSet = new Set<string>(DEFAULT_SPECIALTIES)
+
+          practicesRes.data.forEach((pRow: any) => {
+            const pr = pRow.practice || pRow
+            if (pr?.specialty) specSet.add(pr.specialty)
+            const mems = pr?.members || []
+            mems.forEach((m: any) => {
+              const isDoc =
+                m.role === "DOCTOR" ||
+                m.role === "PRACTICE_OWNER" ||
+                Boolean(m.doctorId) ||
+                Boolean(m.user?.doctor)
+              if (isDoc && m.isActive !== false) {
+                const id = m.userId || m.doctorId || m.user?.id
+                const rawName = m.user?.name || (m.createdByName ? `Dr. ${m.createdByName}` : "Doctor")
+                const formattedName = rawName.startsWith("Dr.") ? rawName : `Dr. ${rawName}`
+                const docSpecs = (m.user?.doctor?.specialties || [])
+                  .map((s: any) => s.specialty?.name)
+                  .filter(Boolean)
+                docSpecs.forEach((sp: string) => specSet.add(sp))
+                if (id && !docMap.has(id)) {
+                  docMap.set(id, { id, name: formattedName, specialties: docSpecs })
+                }
+              }
+            })
+          })
+
+          if (active) {
+            setDoctors(Array.from(docMap.values()))
+            setSpecialties(Array.from(specSet).sort())
+          }
         }
+
+        proctoService.listSpecialties().then((sRes) => {
+          if (active && sRes?.status === "successful" && Array.isArray(sRes.data)) {
+            setSpecialties((prev) => {
+              const set = new Set(prev)
+              sRes.data.forEach((s: any) => {
+                if (s?.name) set.add(s.name)
+              })
+              return Array.from(set).sort()
+            })
+          }
+        }).catch(() => {})
 
         const res = await proctoService.listTemplates({ practiceId: resolvedPid })
         if (!active) return
@@ -469,8 +535,11 @@ export default function MasterTemplatesManagement() {
       selectedCategory !== "all" ? selectedCategory : MASTER_ADVICE_CATEGORIES[0].label
     setModalAdviceCategory(defaultCat)
     setCustomCategoryInput("")
-    setModalScope("doctor")
-    setModalScopeValue("General Medicine")
+    // By default Specialty will be "All" and Doctor Name also will be "All"
+    setModalSpecialty("all")
+    setModalDoctorId("all")
+    setModalScope("clinic")
+    setModalScopeValue("")
     setModalAdvice("")
     setModalDoctorNotes("")
     setIsModalOpen(true)
@@ -491,11 +560,77 @@ export default function MasterTemplatesManagement() {
       setModalAdviceCategory("__custom__")
       setCustomCategoryInput(cat)
     }
-    setModalScope(template.scope || "doctor")
-    setModalScopeValue(template.scopeValue || "General Medicine")
+
+    const tplSpec = template.specialty || (template.scope === "specialty" ? template.scopeValue : undefined) || "all"
+    const tplDocId = template.doctorId || (template.scope === "doctor" ? template.createdById || template.scopeValue : undefined) || "all"
+
+    setModalSpecialty(tplSpec)
+    setModalDoctorId(tplDocId)
+    setModalScope(template.scope || "clinic")
+    setModalScopeValue(template.scopeValue || (tplSpec !== "all" ? tplSpec : tplDocId !== "all" ? tplDocId : ""))
     setModalAdvice(template.advice || "")
     setModalDoctorNotes(template.doctorNotes || template.remarks || template.content || "")
     setIsModalOpen(true)
+  }
+
+  function handleSpecialtyChange(newSpec: string) {
+    setModalSpecialty(newSpec)
+    if (newSpec !== "all") {
+      // If user selects specialty and doctor name is all -> applicable for that Specialty doctors
+      if (modalDoctorId === "all") {
+        setModalScope("specialty")
+        setModalScopeValue(newSpec)
+      } else {
+        setModalScope("doctor")
+      }
+    } else {
+      if (modalDoctorId === "all") {
+        setModalScope("clinic")
+        setModalScopeValue("")
+      } else {
+        setModalScope("doctor")
+      }
+    }
+  }
+
+  function handleDoctorChange(newDocId: string) {
+    setModalDoctorId(newDocId)
+    if (newDocId !== "all") {
+      // If user selects a doctor -> applicable only for that doctor
+      setModalScope("doctor")
+      setModalScopeValue(newDocId)
+    } else {
+      if (modalSpecialty !== "all") {
+        setModalScope("specialty")
+        setModalScopeValue(modalSpecialty)
+      } else {
+        setModalScope("clinic")
+        setModalScopeValue("")
+      }
+    }
+  }
+
+  function handleScopeChange(newScope: TemplateScope) {
+    setModalScope(newScope)
+    if (newScope === "clinic") {
+      setModalSpecialty("all")
+      setModalDoctorId("all")
+      setModalScopeValue("")
+    } else if (newScope === "specialty") {
+      if (modalSpecialty === "all") {
+        const fallback = specialties[0] || "General Medicine"
+        setModalSpecialty(fallback)
+        setModalScopeValue(fallback)
+      } else {
+        setModalScopeValue(modalSpecialty)
+      }
+      setModalDoctorId("all")
+    } else if (newScope === "doctor") {
+      if (modalDoctorId === "all" && doctors.length > 0) {
+        setModalDoctorId(doctors[0].id)
+        setModalScopeValue(doctors[0].id)
+      }
+    }
   }
 
   // Save / Update Template
@@ -519,10 +654,29 @@ export default function MasterTemplatesManagement() {
       return
     }
 
+    const targetDoc = doctors.find((d) => d.id === modalDoctorId)
+    const finalDoctorId = modalDoctorId !== "all" ? modalDoctorId : undefined
+    const finalDoctorName = targetDoc?.name || (finalDoctorId ? "Doctor" : undefined)
+    const finalSpecialty = modalSpecialty !== "all" ? modalSpecialty : undefined
+
+    let finalScope: TemplateScope = "clinic"
+    let finalScopeValue: string | undefined = undefined
+
+    if (finalDoctorId) {
+      finalScope = "doctor"
+      finalScopeValue = finalDoctorId
+    } else if (finalSpecialty) {
+      finalScope = "specialty"
+      finalScopeValue = finalSpecialty
+    } else {
+      finalScope = "clinic"
+      finalScopeValue = undefined
+    }
+
     let finalName = modalName.trim()
     if (!finalName) {
       // Auto-generate unique identifier
-      const prefix = modalScope === "clinic" ? "CLINIC" : modalScope === "specialty" ? "SPEC" : "DOC"
+      const prefix = finalScope === "clinic" ? "CLINIC" : finalScope === "specialty" ? "SPEC" : "DOC"
       const cleanTitle = finalTitle
         .toUpperCase()
         .replace(/[^A-Z0-9]+/g, "-")
@@ -538,8 +692,11 @@ export default function MasterTemplatesManagement() {
           title: finalTitle,
           name: finalName,
           category: finalCategory,
-          scope: modalScope,
-          scopeValue: modalScopeValue,
+          scope: finalScope,
+          scopeValue: finalScopeValue,
+          specialty: finalSpecialty,
+          doctorId: finalDoctorId,
+          doctorName: finalDoctorName,
           advice: finalAdvice,
           content: finalDoctorNotes,
           practiceId,
@@ -554,8 +711,13 @@ export default function MasterTemplatesManagement() {
                   name: finalName,
                   category: finalCategory as any,
                   adviceCategory: finalCategory,
-                  scope: modalScope,
-                  scopeValue: modalScopeValue,
+                  scope: finalScope,
+                  scopeValue: finalScopeValue,
+                  specialty: finalSpecialty,
+                  doctorId: finalDoctorId,
+                  doctorName: finalDoctorName,
+                  createdById: finalDoctorId || t.createdById,
+                  createdByName: finalDoctorName || t.createdByName,
                   advice: finalAdvice,
                   doctorNotes: finalDoctorNotes,
                   remarks: finalDoctorNotes,
@@ -574,8 +736,11 @@ export default function MasterTemplatesManagement() {
           title: finalTitle,
           name: finalName,
           category: finalCategory,
-          scope: modalScope,
-          scopeValue: modalScopeValue,
+          scope: finalScope,
+          scopeValue: finalScopeValue,
+          specialty: finalSpecialty,
+          doctorId: finalDoctorId,
+          doctorName: finalDoctorName,
           advice: finalAdvice,
           content: finalDoctorNotes,
           practiceId,
@@ -593,8 +758,13 @@ export default function MasterTemplatesManagement() {
           title: finalTitle,
           category: finalCategory as any,
           adviceCategory: finalCategory,
-          scope: modalScope,
-          scopeValue: modalScopeValue,
+          scope: finalScope,
+          scopeValue: finalScopeValue,
+          specialty: finalSpecialty,
+          doctorId: finalDoctorId,
+          doctorName: finalDoctorName,
+          createdById: finalDoctorId,
+          createdByName: finalDoctorName,
           advice: finalAdvice,
           doctorNotes: finalDoctorNotes,
           remarks: finalDoctorNotes,
@@ -1004,14 +1174,22 @@ export default function MasterTemplatesManagement() {
                           }`}
                         >
                           {tpl.scope === "clinic" ? (
-                            <Building className="h-3 w-3" />
+                            <>
+                              <Building className="h-3 w-3" />
+                              <span>All Doctors & Specialties (Clinic)</span>
+                            </>
                           ) : tpl.scope === "specialty" ? (
-                            <Stethoscope className="h-3 w-3" />
+                            <>
+                              <Stethoscope className="h-3 w-3" />
+                              <span>Specialty: {tpl.specialty || tpl.scopeValue || "Specialty"}</span>
+                            </>
                           ) : (
-                            <User className="h-3 w-3" />
+                            <>
+                              <User className="h-3 w-3" />
+                              <span>{tpl.doctorName || (tpl.createdByName ? `Dr. ${tpl.createdByName}` : "Doctor Private")}</span>
+                              {tpl.specialty && <span className="opacity-75">({tpl.specialty})</span>}
+                            </>
                           )}
-                          <span className="capitalize">{tpl.scope}</span>
-                          {tpl.scopeValue && tpl.scope === "specialty" && ` (${tpl.scopeValue})`}
                         </span>
 
                         {/* Advice Category Badge */}
@@ -1216,15 +1394,15 @@ export default function MasterTemplatesManagement() {
                 </div>
               </div>
 
-              {/* Category of Advice Selector */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Category of Advice <span className="text-rose-500">*</span>
-                </label>
-                <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  Select which clinical condition or medication group this advice applies to.
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {/* Category of Advice & Specialty */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Category of Advice <span className="text-rose-500">*</span>
+                  </label>
+                  <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Select which clinical condition or medication group this advice applies to.
+                  </p>
                   <select
                     value={modalAdviceCategory}
                     onChange={(e) => setModalAdviceCategory(e.target.value)}
@@ -1245,43 +1423,73 @@ export default function MasterTemplatesManagement() {
                       value={customCategoryInput}
                       onChange={(e) => setCustomCategoryInput(e.target.value)}
                       placeholder="Enter custom category name..."
-                      className="w-full rounded-xl border border-blue-300 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-blue-700 dark:bg-slate-800 dark:text-white"
+                      className="mt-2 w-full rounded-xl border border-blue-300 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-blue-700 dark:bg-slate-800 dark:text-white"
                     />
                   )}
                 </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Specialty
+                  </label>
+                  <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Target specialty or all departments.
+                  </p>
+                  <select
+                    value={modalSpecialty}
+                    onChange={(e) => handleSpecialtyChange(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="all">All Specialty</option>
+                    {specialties.map((spec) => (
+                      <option key={spec} value={spec}>
+                        {spec}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Scope Selector */}
+              {/* Hierarchical Scope & Doctor Name */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                     Hierarchical Scope
                   </label>
+                  <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Visibility level within your clinical practice.
+                  </p>
                   <select
                     value={modalScope}
-                    onChange={(e) => setModalScope(e.target.value as TemplateScope)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                    onChange={(e) => handleScopeChange(e.target.value as TemplateScope)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
                   >
-                    <option value="doctor">Doctor-Level (Private to your consultations)</option>
-                    <option value="specialty">Specialty-Level (Shared with specialty doctors)</option>
                     <option value="clinic">Clinic-Level (Available to all facility doctors)</option>
+                    <option value="specialty">Specialty-Level (Shared with specialty doctors)</option>
+                    <option value="doctor">Doctor-Level (Private to selected doctor)</option>
                   </select>
                 </div>
 
-                {modalScope === "specialty" && (
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Specialty Department
-                    </label>
-                    <input
-                      type="text"
-                      value={modalScopeValue}
-                      onChange={(e) => setModalScopeValue(e.target.value)}
-                      placeholder="e.g. General Medicine, Cardiology, Pediatrics"
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Doctor Name
+                  </label>
+                  <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Target doctor or all clinic doctors.
+                  </p>
+                  <select
+                    value={modalDoctorId}
+                    onChange={(e) => handleDoctorChange(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="all">All Doctors</option>
+                    {doctors.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} {d.specialties?.length ? `(${d.specialties.join(", ")})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Patient Advice Textarea */}

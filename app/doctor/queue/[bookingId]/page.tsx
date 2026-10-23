@@ -1218,6 +1218,7 @@ export default function VisitPage() {
                 currentContent={advice}
                 practiceId={booking.practiceId}
                 specialty={booking.practice?.specialty || "General Medicine"}
+                doctorId={booking.provider?.id || undefined}
                 disabled={chartLocked}
                 onOpenChange={setIsAdviceTemplateOpen}
                 onSelect={(templateText) => {
@@ -1276,6 +1277,7 @@ export default function VisitPage() {
             currentContent={remarks}
             practiceId={booking.practiceId}
             specialty={booking.practice?.specialty || "General Medicine"}
+            doctorId={booking.provider?.id || undefined}
             disabled={chartLocked}
             onOpenChange={setIsNotesTemplateOpen}
             onSelect={(templateText) => {
