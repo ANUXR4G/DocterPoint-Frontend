@@ -2209,6 +2209,8 @@ export const BookingService = {
     });
     if (!member?.isActive) ResponseHandler.noPermission("not authorized.");
 
+    this.assertEntryEditable(existing);
+
     const result = await this.syncPatientAllergies(
       existing.patientId,
       existing.patientPhone,
@@ -2569,18 +2571,25 @@ export const BookingService = {
       Boolean(currentAssessment?.allergies?.some((a) => Boolean(a.name?.trim())));
 
     if (!hasCurrentAllergies) {
-      const masterAllergies = await this.getPatientMasterAllergies(row.patientId, row.patientPhone);
-      if (masterAllergies) {
-        const merged = {
-          ...(currentAssessment ?? {}),
-          allergies: masterAllergies.allergies,
-          noKnownAllergies: masterAllergies.noKnownAllergies,
-        };
-        row.clinicalAssessment = merged as Prisma.JsonValue;
-        await prisma.practiceBooking.update({
-          where: { id: row.id },
-          data: { clinicalAssessment: merged as Prisma.InputJsonValue },
-        }).catch(() => undefined);
+      const day = row.slotStart
+        ? formatLocalDate(row.slotStart)
+        : (row.sessionDate ? localDayOfSessionDate(row.sessionDate) : null);
+      const today = formatLocalDate(new Date());
+      // Historical entries prior to current date must remain immutable!
+      if (!day || day >= today) {
+        const masterAllergies = await this.getPatientMasterAllergies(row.patientId, row.patientPhone);
+        if (masterAllergies) {
+          const merged = {
+            ...(currentAssessment ?? {}),
+            allergies: masterAllergies.allergies,
+            noKnownAllergies: masterAllergies.noKnownAllergies,
+          };
+          row.clinicalAssessment = merged as Prisma.JsonValue;
+          await prisma.practiceBooking.update({
+            where: { id: row.id },
+            data: { clinicalAssessment: merged as Prisma.InputJsonValue },
+          }).catch(() => undefined);
+        }
       }
     }
 
