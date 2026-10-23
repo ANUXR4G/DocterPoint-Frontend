@@ -25,6 +25,8 @@ export type ClinicalTemplate = {
   keywords?: string[]
   createdById?: string
   createdByName?: string
+  effectiveDate?: string
+  effectiveFrom?: string
   isCustom?: boolean
 }
 

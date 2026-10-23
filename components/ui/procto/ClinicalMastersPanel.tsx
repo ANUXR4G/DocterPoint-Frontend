@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { Lock } from "lucide-react"
 import { proctoService } from "@/lib/services/procto"
+import { practiceTodayIso } from "@/lib/practiceTime"
 import {
   ALLERGY_SEVERITIES,
   DEFAULT_CLINICAL_MASTERS,
@@ -235,7 +237,13 @@ export default function ClinicalMastersPanel({
             type="button"
             onClick={() =>
               setAllergies((prev) => [
-                { category: "Food", name: "", description: "" },
+                {
+                  category: "Food",
+                  name: "",
+                  description: "",
+                  effectiveDate: practiceTodayIso(),
+                  effectiveFrom: practiceTodayIso(),
+                },
                 ...prev,
               ])
             }
@@ -251,65 +259,94 @@ export default function ClinicalMastersPanel({
                 <th className="px-3 py-2">Category</th>
                 <th className="px-3 py-2">Name</th>
                 <th className="px-3 py-2">Description</th>
+                <th className="px-3 py-2">Effective</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-              {allergies.map((a, idx) => (
-                <tr key={`${a.category}-${a.name}-${idx}`}>
-                  <td className="px-3 py-2">
-                    <select
-                      value={a.category}
-                      onChange={(e) => {
-                        const next = [...allergies]
-                        next[idx] = { ...a, category: e.target.value }
-                        setAllergies(next)
-                      }}
-                      className="rounded-md border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-600"
-                    >
-                      {CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      value={a.name}
-                      onChange={(e) => {
-                        const next = [...allergies]
-                        next[idx] = { ...a, name: e.target.value }
-                        setAllergies(next)
-                      }}
-                      className="w-full min-w-[140px] rounded-md border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-600"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      value={a.description}
-                      onChange={(e) => {
-                        const next = [...allergies]
-                        next[idx] = { ...a, description: e.target.value }
-                        setAllergies(next)
-                      }}
-                      className="w-full rounded-md border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-600"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      aria-label="Remove allergy"
-                      onClick={() =>
-                        setAllergies((prev) => prev.filter((_, i) => i !== idx))
-                      }
-                      className="text-red-600 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {allergies.map((a, idx) => {
+                const today = practiceTodayIso()
+                const isHistorical = Boolean(a.effectiveDate && a.effectiveDate < today)
+                return (
+                  <tr key={`${a.category}-${a.name}-${idx}`}>
+                    <td className="px-3 py-2">
+                      <select
+                        value={a.category}
+                        onChange={(e) => {
+                          const next = [...allergies]
+                          next[idx] = { ...a, category: e.target.value }
+                          setAllergies(next)
+                        }}
+                        className="rounded-md border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-600"
+                      >
+                        {CATEGORIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={a.name}
+                        onChange={(e) => {
+                          const next = [...allergies]
+                          next[idx] = { ...a, name: e.target.value }
+                          setAllergies(next)
+                        }}
+                        className="w-full min-w-[140px] rounded-md border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-600"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={a.description}
+                        onChange={(e) => {
+                          const next = [...allergies]
+                          next[idx] = { ...a, description: e.target.value }
+                          setAllergies(next)
+                        }}
+                        className="w-full rounded-md border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-600"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-neutral-500">
+                      {a.effectiveDate ? (
+                        isHistorical ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300">
+                            <Lock className="size-3" /> Historical ({a.effectiveDate})
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                            Active ({a.effectiveDate})
+                          </span>
+                        )
+                      ) : (
+                        "Default"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {isHistorical ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-xs text-neutral-400 select-none cursor-not-allowed"
+                          title="Historical allergy master data prior to the current date is immutable and cannot be removed."
+                        >
+                          <Lock className="size-3" /> Locked
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label="Remove allergy"
+                          onClick={() =>
+                            setAllergies((prev) => prev.filter((_, i) => i !== idx))
+                          }
+                          className="text-red-600 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
