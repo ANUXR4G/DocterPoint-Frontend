@@ -1322,6 +1322,14 @@ export default function MasterTemplatesManagement() {
                 <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px] text-slate-500 dark:border-white/5 dark:text-slate-400">
                   <div className="flex items-center gap-2">
                     <span>{tpl.createdByName ? `By Dr. ${tpl.createdByName}` : "Standard Master"}</span>
+                    {!tpl.isCustom && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                        title="Standard master template locked to preserve clinical baseline integrity"
+                      >
+                        Locked
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -1331,6 +1339,15 @@ export default function MasterTemplatesManagement() {
                     >
                       Edit Template
                     </button>
+                    {tpl.isCustom && (
+                      <button
+                        type="button"
+                        onClick={() => setDeletingTemplate(tpl)}
+                        className="font-semibold text-rose-600 hover:underline dark:text-rose-400"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

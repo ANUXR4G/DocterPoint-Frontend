@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Lock } from "lucide-react"
 import {
   defaultMedicineStartDate,
   medicineEndDate,
@@ -27,6 +28,37 @@ export type VisitMedicine = {
   endDate?: string
   instruction?: string
   favourite?: boolean
+  status?: "active" | "draft" | "ordered" | "dispensed" | "completed" | "historical"
+  isOrdered?: boolean
+  isDispensed?: boolean
+  isHistorical?: boolean
+  orderedAt?: string
+  dispensedAt?: string
+  visitDate?: string
+  visitId?: string
+}
+
+/** Check if a medicine row is locked to preserve medical history and audit trails. */
+export function isMedicineLocked(
+  m?: VisitMedicine | null,
+  tableLocked: boolean = false,
+): boolean {
+  if (tableLocked) return true
+  if (!m) return false
+  if (Boolean(m.isHistorical) || Boolean(m.isOrdered) || Boolean(m.isDispensed)) {
+    return true
+  }
+  const status = String(m.status || "").trim().toLowerCase()
+  if (
+    status === "ordered" ||
+    status === "dispensed" ||
+    status === "completed" ||
+    status === "historical" ||
+    status === "locked"
+  ) {
+    return true
+  }
+  return false
 }
 
 export const emptyMedicineDraft = (): VisitMedicine => ({
@@ -338,6 +370,8 @@ export default function MedicineEntryTable({
     onAdd()
   }
 
+  const lockedCount = rows.filter((r) => isMedicineLocked(r, locked)).length
+
   return (
     <div className="space-y-2">
       {/* Top toolbar on top of medicine box */}
@@ -346,6 +380,15 @@ export default function MedicineEntryTable({
           <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">
             {rows.length} {rows.length === 1 ? "medicine" : "medicines"} prescribed
           </span>
+          {lockedCount > 0 && (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              title="Medications from finalized orders or past visits are locked to preserve medical history and legal audit trails"
+            >
+              <Lock className="size-3 text-slate-400" />
+              <span>{lockedCount} ordered/locked</span>
+            </span>
+          )}
         </div>
         {!locked && (
           <div className="flex items-center gap-2">
@@ -396,7 +439,8 @@ export default function MedicineEntryTable({
         </thead>
         <tbody>
           {rows.map((m, idx) => {
-            const editable = !locked && Boolean(onEdit)
+            const rowLocked = isMedicineLocked(m, locked)
+            const editable = !rowLocked && Boolean(onEdit)
             const edit = (
               patch: Partial<VisitMedicine>,
               commit: boolean,
@@ -619,7 +663,15 @@ export default function MedicineEntryTable({
                       <span className="text-base text-orange-500 hover:text-orange-600">★</span>
                     )}
                   </button>
-                  {!locked ? (
+                  {rowLocked ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 select-none"
+                      title="Ordered in past/finalized visit. Locked to preserve medical history and legal audit trails (View-only)."
+                    >
+                      <Lock className="size-3 text-slate-400" />
+                      <span>{m.isDispensed || m.status === "dispensed" ? "Dispensed" : "Ordered"}</span>
+                    </span>
+                  ) : (
                     <button
                       type="button"
                       onClick={() => onRemove(idx)}
@@ -628,7 +680,7 @@ export default function MedicineEntryTable({
                     >
                       Remove
                     </button>
-                  ) : null}
+                  )}
                 </div>
               </td>
             </tr>
