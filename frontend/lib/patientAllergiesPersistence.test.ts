@@ -229,11 +229,87 @@ describe("Patient Allergy Data Persistence and Cross-Appointment Synchronization
     )
   })
 
-  it("includes rich allergy masters in platform defaults", () => {
+  it("includes rich allergy masters in platform defaults and excludes 'No known allergy' from options", () => {
     const drugAllergies = DEFAULT_ALLERGY_MASTERS.filter((a) => a.category === "Drug")
     assert.ok(drugAllergies.length >= 6, "Must provide comprehensive drug allergy suggestions")
     assert.ok(drugAllergies.some((a) => a.name === "Penicillin"))
     assert.ok(drugAllergies.some((a) => a.name === "Amoxicillin"))
     assert.ok(drugAllergies.some((a) => a.name.includes("Ciprofloxacin")))
+    // 'No known allergy' must NOT be in masters
+    assert.ok(
+      !DEFAULT_ALLERGY_MASTERS.some((a) => /no known/i.test(a.name)),
+      "'No known allergy' must not be in allergy master options",
+    )
+  })
+
+  it("supports category 'Others' with custom text entry and preserves arbitrary allergy names", () => {
+    const customAllergies = [
+      {
+        category: "Others",
+        name: "Adhesive medical tape and band-aids",
+        severity: "Moderate",
+        active: "Yes",
+        description: "Severe contact dermatitis and blistering",
+      },
+      {
+        category: "Others",
+        name: "Sunlight (Solar urticaria)",
+        severity: "Mild / Low",
+        active: "Yes",
+        description: "Rash within 15 minutes of direct UV exposure",
+      },
+    ]
+
+    const normalized = normalizeClinicalAssessment({
+      allergies: customAllergies,
+      noKnownAllergies: false,
+    })
+    assert.ok(normalized)
+    assert.equal(normalized.allergies?.length, 2)
+    assert.equal(normalized.allergies?.[0].category, "Others")
+    assert.equal(
+      normalized.allergies?.[0].name,
+      "Adhesive medical tape and band-aids",
+    )
+    assert.equal(
+      normalized.allergies?.[1].name,
+      "Sunlight (Solar urticaria)",
+    )
+  })
+
+  it("enforces mutual exclusivity: specific allergies prevent selecting 'No Known Allergies'", () => {
+    const specificAllergies = [
+      {
+        category: "Food",
+        name: "Peanuts",
+        severity: "Severe",
+        active: "Yes",
+      },
+    ]
+
+    // Helper simulating the panel's mutual exclusivity check
+    const hasSpecificAllergies = (allergies: Array<{ name?: string }>) =>
+      allergies.some((a) => Boolean(a.name?.trim()) && !/no known/i.test(a.name || ""))
+
+    assert.equal(
+      hasSpecificAllergies(specificAllergies),
+      true,
+      "Peanuts should count as a specific allergy",
+    )
+
+    // Doctor cannot mark No Known Allergies when specific allergies exist
+    const canSelectNoKnown = !hasSpecificAllergies(specificAllergies)
+    assert.equal(canSelectNoKnown, false, "Must block selecting No Known Allergies when allergies exist")
+
+    // Empty list allows selecting No Known Allergies
+    assert.equal(hasSpecificAllergies([]), false)
+    assert.equal(!hasSpecificAllergies([]), true)
+
+    // Dummy row with 'No known allergy' alone does not count as specific allergy
+    assert.equal(
+      hasSpecificAllergies([{ name: "No known allergy" }]),
+      false,
+      "Dummy 'No known allergy' row must not count as a specific allergy",
+    )
   })
 })

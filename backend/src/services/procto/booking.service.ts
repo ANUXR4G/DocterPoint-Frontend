@@ -1623,7 +1623,7 @@ export const BookingService = {
       if (normAssessment) {
         const safeAllergies = normAssessment.allergies;
         const safeNoKnown = normAssessment.noKnownAllergies;
-        void this.syncPatientAllergies(
+        await this.syncPatientAllergies(
           existing.patientId,
           existing.patientPhone,
           {
@@ -1847,10 +1847,9 @@ export const BookingService = {
     let patientId = rawPatientId ? String(rawPatientId).trim() : null;
     const phoneDigits = String(rawPhone || "").replace(/\D/g, "").slice(-10);
 
-    if (!patientId && phoneDigits.length === 10) {
+    if (!patientId && phoneDigits.length >= 7) {
       const user = await prisma.user.findFirst({
         where: {
-          role: "user",
           patient: { isNot: null },
           OR: [
             { phone: { endsWith: phoneDigits } },
@@ -1860,6 +1859,18 @@ export const BookingService = {
         select: { id: true },
       });
       if (user) patientId = user.id;
+      if (!patientId) {
+        const directPatient = await prisma.patient.findFirst({
+          where: {
+            OR: [
+              { contactNumber: { endsWith: phoneDigits } },
+              { emergencyNumber: { endsWith: phoneDigits } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (directPatient) patientId = directPatient.id;
+      }
     }
 
     if (patientId) {
@@ -1875,39 +1886,47 @@ export const BookingService = {
             allergies: docObj.allergies,
             noKnownAllergies: docObj.noKnownAllergies,
           });
-          return {
-            allergies: norm?.allergies ?? [],
-            noKnownAllergies: Boolean(norm?.noKnownAllergies),
-          };
+          const hasData =
+            Boolean(norm?.noKnownAllergies) ||
+            (Array.isArray(norm?.allergies) && norm.allergies.some((a) => Boolean(a.name?.trim())));
+          if (hasData) {
+            return {
+              allergies: norm?.allergies ?? [],
+              noKnownAllergies: Boolean(norm?.noKnownAllergies),
+            };
+          }
         }
       }
     }
 
     // Fall back to checking any prior booking for this patient with recorded allergies
-    if (patientId || phoneDigits.length === 10) {
-      const priorBooking = await prisma.practiceBooking.findFirst({
+    if (patientId || phoneDigits.length >= 7) {
+      const priorBookings = await prisma.practiceBooking.findMany({
         where: {
           OR: [
             ...(patientId ? [{ patientId }] : []),
-            ...(phoneDigits.length === 10 ? [{ patientPhone: { endsWith: phoneDigits } }] : []),
+            ...(phoneDigits.length >= 7 ? [{ patientPhone: { endsWith: phoneDigits } }] : []),
           ],
           clinicalAssessment: { not: Prisma.DbNull },
         },
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        take: 20,
         select: { clinicalAssessment: true },
       });
 
-      if (priorBooking?.clinicalAssessment) {
-        const { normalizeClinicalAssessment } = await import("../../lib/clinicalMasters.js");
-        const norm = normalizeClinicalAssessment(priorBooking.clinicalAssessment);
-        const hasAllergies =
-          Boolean(norm?.noKnownAllergies) ||
-          (Array.isArray(norm?.allergies) && norm.allergies.some((a) => Boolean(a.name?.trim())));
-        if (hasAllergies) {
-          return {
-            allergies: norm?.allergies ?? [],
-            noKnownAllergies: Boolean(norm?.noKnownAllergies),
-          };
+      for (const prior of priorBookings) {
+        if (prior?.clinicalAssessment) {
+          const { normalizeClinicalAssessment } = await import("../../lib/clinicalMasters.js");
+          const norm = normalizeClinicalAssessment(prior.clinicalAssessment);
+          const hasAllergies =
+            Boolean(norm?.noKnownAllergies) ||
+            (Array.isArray(norm?.allergies) && norm.allergies.some((a) => Boolean(a.name?.trim())));
+          if (hasAllergies) {
+            return {
+              allergies: norm?.allergies ?? [],
+              noKnownAllergies: Boolean(norm?.noKnownAllergies),
+            };
+          }
         }
       }
     }
@@ -1941,10 +1960,9 @@ export const BookingService = {
     let resolvedPatientId = patientId ? String(patientId).trim() : null;
     const phoneDigits = String(patientPhone || "").replace(/\D/g, "").slice(-10);
 
-    if (!resolvedPatientId && phoneDigits.length === 10) {
+    if (!resolvedPatientId && phoneDigits.length >= 7) {
       const user = await prisma.user.findFirst({
         where: {
-          role: "user",
           patient: { isNot: null },
           OR: [
             { phone: { endsWith: phoneDigits } },
@@ -1954,6 +1972,18 @@ export const BookingService = {
         select: { id: true },
       });
       if (user) resolvedPatientId = user.id;
+      if (!resolvedPatientId) {
+        const directPatient = await prisma.patient.findFirst({
+          where: {
+            OR: [
+              { contactNumber: { endsWith: phoneDigits } },
+              { emergencyNumber: { endsWith: phoneDigits } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (directPatient) resolvedPatientId = directPatient.id;
+      }
     }
 
     // 1. Persist to Patient Profile
@@ -1991,13 +2021,13 @@ export const BookingService = {
     }
 
     // 2. Synchronize to ALL bookings of this patient
-    if (resolvedPatientId || phoneDigits.length === 10) {
+    if (resolvedPatientId || phoneDigits.length >= 7) {
       try {
         const patientBookings = await prisma.practiceBooking.findMany({
           where: {
             OR: [
               ...(resolvedPatientId ? [{ patientId: resolvedPatientId }] : []),
-              ...(phoneDigits.length === 10 ? [{ patientPhone: { endsWith: phoneDigits } }] : []),
+              ...(phoneDigits.length >= 7 ? [{ patientPhone: { endsWith: phoneDigits } }] : []),
             ],
           },
           select: { id: true, clinicalAssessment: true, practiceId: true, patientId: true },
@@ -2460,7 +2490,7 @@ export const BookingService = {
           noKnownAllergies: masterAllergies.noKnownAllergies,
         };
         row.clinicalAssessment = merged as Prisma.JsonValue;
-        void prisma.practiceBooking.update({
+        await prisma.practiceBooking.update({
           where: { id: row.id },
           data: { clinicalAssessment: merged as Prisma.InputJsonValue },
         }).catch(() => undefined);

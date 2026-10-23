@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { toast } from "sonner"
 import {
   ALLERGY_SEVERITIES,
   computeBmi,
@@ -284,19 +285,45 @@ export default function ClinicalAssessmentPanel({
     })
   }
 
-  function setNoKnownAllergies() {
+  const hasSpecificAllergies = useMemo(() => {
+    return (local.allergies ?? []).some(
+      (a) => Boolean(a.name?.trim()) && !/no known/i.test(a.name || ""),
+    )
+  }, [local.allergies])
+
+  function toggleNoKnownAllergies() {
+    if (hasSpecificAllergies) {
+      toast.error(
+        "Cannot select 'No Known Allergies' when specific allergies are already recorded. Remove them first.",
+      )
+      return
+    }
+    const nextVal = !local.noKnownAllergies
     commit({
       ...local,
-      noKnownAllergies: true,
-      allergies: [
-        {
-          category: "Others",
-          name: "No known allergy",
-          severity: "Not available",
-          active: "No",
-          description: "No known allergy",
-        },
-      ],
+      noKnownAllergies: nextVal,
+      allergies: nextVal
+        ? [
+            {
+              category: "Others",
+              name: "No known allergy",
+              severity: "Not available",
+              active: "No",
+              description: "No known allergies recorded",
+            },
+          ]
+        : [],
+    })
+  }
+
+  function handleAddAllergy() {
+    const existing = (local.allergies ?? []).filter(
+      (a) => !/no known/i.test(a.name ?? ""),
+    )
+    commit({
+      ...local,
+      noKnownAllergies: false,
+      allergies: [...existing, emptyAllergy()],
     })
   }
 
@@ -742,11 +769,21 @@ export default function ClinicalAssessmentPanel({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={setNoKnownAllergies}
-                className={`rounded-md border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                  local.noKnownAllergies
-                    ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-300"
-                    : "border-[var(--theme-primary)] text-[var(--theme-primary)] hover:bg-[var(--theme-primary)]/10"
+                disabled={readOnly || hasSpecificAllergies}
+                onClick={toggleNoKnownAllergies}
+                title={
+                  hasSpecificAllergies
+                    ? "Cannot select 'No Known Allergies' when specific allergies are recorded. Remove them first."
+                    : local.noKnownAllergies
+                    ? "Click to remove No Known Allergies status"
+                    : "Mark patient as having No Known Allergies"
+                }
+                className={`rounded-md border px-3 py-1.5 text-xs font-bold transition-colors ${
+                  hasSpecificAllergies
+                    ? "border-neutral-300 bg-neutral-100 text-neutral-400 cursor-not-allowed dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-600"
+                    : local.noKnownAllergies
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-300 cursor-pointer"
+                    : "border-[var(--theme-primary)] text-[var(--theme-primary)] hover:bg-[var(--theme-primary)]/10 cursor-pointer"
                 }`}
               >
                 {local.noKnownAllergies ? "✓ No Known Allergies" : "No Known Allergies"}
@@ -789,17 +826,37 @@ export default function ClinicalAssessmentPanel({
               </tr>
             </thead>
             <tbody>
-              {(local.allergies ?? []).length === 0 ? (
+              {local.noKnownAllergies && !hasSpecificAllergies ? (
+                <tr>
+                  <td colSpan={7} className="py-4 text-center text-xs">
+                    <div className="flex flex-wrap items-center justify-center gap-2 text-emerald-700 dark:text-emerald-400">
+                      <span className="font-semibold">
+                        ✓ No Known Allergies recorded for this patient.
+                      </span>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={handleAddAllergy}
+                          className="text-xs text-[var(--theme-primary)] underline hover:opacity-80 cursor-pointer ml-2"
+                        >
+                          Switch to recording specific allergies
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (local.allergies ?? []).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-4 text-center text-xs text-neutral-400">
-                    No allergies recorded for this patient. Click &quot;Add allergy&quot; or &quot;No Known Allergies&quot;.
+                    No allergies recorded for this patient. Click &quot;+ Add allergy&quot; or &quot;No Known Allergies&quot;.
                   </td>
                 </tr>
               ) : (
                 (local.allergies ?? []).map((row, idx) => {
-                  const names = masters.allergies.filter(
-                    (a) => !row.category || a.category === row.category,
-                  )
+                  const isOthers = (row.category || "").trim().toLowerCase() === "others"
+                  const names = masters.allergies
+                    .filter((a) => !row.category || a.category === row.category)
+                    .filter((a) => !/no known/i.test(a.name))
                   return (
                     <tr key={idx}>
                       <td className="py-1 pr-2 align-top">{idx + 1}</td>
@@ -808,10 +865,16 @@ export default function ClinicalAssessmentPanel({
                           disabled={readOnly}
                           value={row.category || "Drug"}
                           onChange={(e) => {
+                            const nextCat = e.target.value
                             const allergies = [...(local.allergies ?? [])]
                             allergies[idx] = {
                               ...row,
-                              category: e.target.value,
+                              category: nextCat,
+                              name:
+                                nextCat.toLowerCase() === "others" &&
+                                /no known/i.test(row.name || "")
+                                  ? ""
+                                  : row.name,
                             }
                             commit({
                               ...local,
@@ -831,44 +894,83 @@ export default function ClinicalAssessmentPanel({
                       </td>
                       <td className="py-1 pr-2">
                         <div className="relative min-w-[11rem]">
-                          <input
-                            disabled={readOnly}
-                            type="text"
-                            list={`allergy-names-${idx}`}
-                            value={row.name || ""}
-                            placeholder="Select or type allergy…"
-                            onChange={(e) => {
-                              const val = e.target.value
-                              const hit = masters.allergies.find(
-                                (n) =>
-                                  n.name.toLowerCase() ===
-                                  val.trim().toLowerCase(),
-                              )
-                              const allergies = [...(local.allergies ?? [])]
-                              allergies[idx] = {
-                                ...row,
-                                name: val,
-                                description:
-                                  hit?.description || row.description || "",
-                                category:
-                                  row.category || hit?.category || "Drug",
-                              }
-                              commit({
-                                ...local,
-                                allergies,
-                                noKnownAllergies:
-                                  val.trim().toLowerCase() === "no known allergy",
-                              })
-                            }}
-                            className={`${FIELD_INPUT} w-full`}
-                          />
-                          <datalist id={`allergy-names-${idx}`}>
-                            {names.map((n) => (
-                              <option key={n.name} value={n.name}>
-                                {n.name}
-                              </option>
-                            ))}
-                          </datalist>
+                          {isOthers ? (
+                            <input
+                              disabled={readOnly}
+                              type="text"
+                              value={row.name || ""}
+                              placeholder="Type allergy name…"
+                              onChange={(e) => {
+                                const val = e.target.value
+                                if (/no known/i.test(val) && hasSpecificAllergies) {
+                                  toast.error(
+                                    "Cannot add 'No known allergy' when specific allergies are already recorded.",
+                                  )
+                                  return
+                                }
+                                const allergies = [...(local.allergies ?? [])]
+                                allergies[idx] = {
+                                  ...row,
+                                  category: "Others",
+                                  name: val,
+                                }
+                                commit({
+                                  ...local,
+                                  allergies,
+                                  noKnownAllergies:
+                                    val.trim().toLowerCase() === "no known allergy",
+                                })
+                              }}
+                              className={`${FIELD_INPUT} w-full`}
+                            />
+                          ) : (
+                            <>
+                              <input
+                                disabled={readOnly}
+                                type="text"
+                                list={`allergy-names-${idx}`}
+                                value={row.name || ""}
+                                placeholder="Select or type allergy…"
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  if (/no known/i.test(val) && hasSpecificAllergies) {
+                                    toast.error(
+                                      "Cannot add 'No known allergy' when specific allergies are already recorded.",
+                                    )
+                                    return
+                                  }
+                                  const hit = masters.allergies.find(
+                                    (n) =>
+                                      n.name.toLowerCase() ===
+                                      val.trim().toLowerCase(),
+                                  )
+                                  const allergies = [...(local.allergies ?? [])]
+                                  allergies[idx] = {
+                                    ...row,
+                                    name: val,
+                                    description:
+                                      hit?.description || row.description || "",
+                                    category:
+                                      row.category || hit?.category || "Drug",
+                                  }
+                                  commit({
+                                    ...local,
+                                    allergies,
+                                    noKnownAllergies:
+                                      val.trim().toLowerCase() === "no known allergy",
+                                  })
+                                }}
+                                className={`${FIELD_INPUT} w-full`}
+                              />
+                              <datalist id={`allergy-names-${idx}`}>
+                                {names.map((n) => (
+                                  <option key={n.name} value={n.name}>
+                                    {n.name}
+                                  </option>
+                                ))}
+                              </datalist>
+                            </>
+                          )}
                         </div>
                       </td>
                       <td className="py-1 pr-2">
@@ -961,13 +1063,7 @@ export default function ClinicalAssessmentPanel({
           <div className="mt-2 flex items-center gap-2">
             <button
               type="button"
-              onClick={() =>
-                commit({
-                  ...local,
-                  noKnownAllergies: false,
-                  allergies: [...(local.allergies ?? []), emptyAllergy()],
-                })
-              }
+              onClick={handleAddAllergy}
               className="rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)] cursor-pointer"
             >
               + Add allergy

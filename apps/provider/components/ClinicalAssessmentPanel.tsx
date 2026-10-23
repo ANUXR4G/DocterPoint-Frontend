@@ -189,19 +189,40 @@ export function ClinicalAssessmentPanel({
     });
   }
 
-  function setNoKnownAllergies() {
+  const hasSpecificAllergies = useMemo(() => {
+    return (local.allergies ?? []).some(
+      (a) => Boolean(a.name?.trim()) && !/no known/i.test(a.name),
+    );
+  }, [local.allergies]);
+
+  function toggleNoKnownAllergies() {
+    if (hasSpecificAllergies) return;
+    const nextVal = !local.noKnownAllergies;
     commit({
       ...local,
-      noKnownAllergies: true,
-      allergies: [
-        {
-          category: "Others",
-          name: "No known allergy",
-          severity: "Not available",
-          active: "No",
-          description: "No known allergy",
-        },
-      ],
+      noKnownAllergies: nextVal,
+      allergies: nextVal
+        ? [
+            {
+              category: "Others",
+              name: "No known allergy",
+              severity: "Not available",
+              active: "No",
+              description: "No known allergies recorded",
+            },
+          ]
+        : [],
+    });
+  }
+
+  function handleAddAllergy() {
+    const existing = (local.allergies ?? []).filter(
+      (a) => !/no known/i.test(a.name ?? ""),
+    );
+    commit({
+      ...local,
+      noKnownAllergies: false,
+      allergies: [...existing, emptyAllergy()],
     });
   }
 
@@ -532,8 +553,12 @@ export function ClinicalAssessmentPanel({
       <>
       <View style={styles.allergyHead}>
         <Text style={styles.h2}>Allergies</Text>
-        {!readOnly ? (
-          <Chip label="No known allergies" onPress={setNoKnownAllergies} />
+        {!readOnly && !hasSpecificAllergies ? (
+          <Chip
+            label={local.noKnownAllergies ? "✓ No known allergies" : "No known allergies"}
+            active={Boolean(local.noKnownAllergies)}
+            onPress={toggleNoKnownAllergies}
+          />
         ) : null}
       </View>
       {(local.allergies ?? []).map((row, idx) => (
@@ -555,7 +580,11 @@ export function ClinicalAssessmentPanel({
                           allergies[idx] = {
                             ...row,
                             category: c,
-                            name: "",
+                            name:
+                              c.toLowerCase() === "others" &&
+                              /no known/i.test(row.name || "")
+                                ? ""
+                                : row.name,
                           };
                           commit({
                             ...local,
@@ -571,30 +600,52 @@ export function ClinicalAssessmentPanel({
           {row.category ? (
             <>
               <Text style={styles.label}>Name</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.row}>
-                  {(allergyNames.get(row.category) ?? []).map((n) => (
-                    <Chip
-                      key={n}
-                      label={n}
-                      active={row.name === n}
-                      onPress={
-                        readOnly
-                          ? undefined
-                          : () => {
-                              const allergies = [...(local.allergies ?? [])];
-                              allergies[idx] = { ...row, name: n };
-                              commit({
-                                ...local,
-                                allergies,
-                                noKnownAllergies: false,
-                              });
-                            }
-                      }
-                    />
-                  ))}
-                </View>
-              </ScrollView>
+              {(row.category || "").toLowerCase() === "others" ? (
+                <TextInput
+                  editable={!readOnly}
+                  value={row.name || ""}
+                  placeholder="Type allergy name..."
+                  placeholderTextColor={colors.inkFaint}
+                  onChangeText={(t) => {
+                    if (/no known/i.test(t) && hasSpecificAllergies) return;
+                    const allergies = [...(local.allergies ?? [])];
+                    allergies[idx] = { ...row, category: "Others", name: t };
+                    commit({
+                      ...local,
+                      allergies,
+                      noKnownAllergies: t.trim().toLowerCase() === "no known allergy",
+                    });
+                  }}
+                  style={styles.input}
+                />
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.row}>
+                    {(allergyNames.get(row.category) ?? [])
+                      .filter((n) => !/no known/i.test(n))
+                      .map((n) => (
+                        <Chip
+                          key={n}
+                          label={n}
+                          active={row.name === n}
+                          onPress={
+                            readOnly
+                              ? undefined
+                              : () => {
+                                  const allergies = [...(local.allergies ?? [])];
+                                  allergies[idx] = { ...row, name: n };
+                                  commit({
+                                    ...local,
+                                    allergies,
+                                    noKnownAllergies: false,
+                                  });
+                                }
+                          }
+                        />
+                      ))}
+                  </View>
+                </ScrollView>
+              )}
             </>
           ) : null}
           <Text style={styles.label}>Severity</Text>
@@ -665,13 +716,7 @@ export function ClinicalAssessmentPanel({
       {!readOnly ? (
         <PrimaryButton
           label="Add allergy"
-          onPress={() =>
-            commit({
-              ...local,
-              noKnownAllergies: false,
-              allergies: [...(local.allergies ?? []), emptyAllergy()],
-            })
-          }
+          onPress={handleAddAllergy}
         />
       ) : null}
       </>

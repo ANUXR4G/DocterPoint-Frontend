@@ -468,7 +468,28 @@ export default function VisitPage() {
       medicineSaved.current = meds.map((row) => visitMedicineSignature(row))
       setDocuments(docs)
       documentsRef.current = docs
-      const chart = (data.clinicalAssessment as ClinicalAssessment) ?? null
+      let chart = (data.clinicalAssessment as ClinicalAssessment) ?? null
+      const patientAllergies = (data as any)?.patient?.allergies
+      const patientNoKnown = Boolean((data as any)?.patient?.noKnownAllergies)
+      const hasChartAllergies =
+        Boolean(chart?.noKnownAllergies) ||
+        (Array.isArray(chart?.allergies) && chart.allergies.some((a) => Boolean(a.name?.trim())))
+
+      if (
+        !hasChartAllergies &&
+        ((Array.isArray(patientAllergies) && patientAllergies.length > 0) || patientNoKnown)
+      ) {
+        chart = {
+          ...(chart ?? {
+            vitals: { breakfast: null, values: {} },
+            pain: [],
+            allergies: [],
+            noKnownAllergies: false,
+          }),
+          allergies: patientAllergies ?? [],
+          noKnownAllergies: patientNoKnown,
+        }
+      }
       clinicalRef.current = chart
       setClinicalAssessment(chart)
       clinicalDirty.current = false
@@ -1145,6 +1166,20 @@ export default function VisitPage() {
           clinicalReady.current = true
           clinicalRef.current = merged
           setClinicalAssessment(merged)
+        }}
+        onSaveAllergies={async (nextAllergies, noKnown) => {
+          if (!bookingId) return
+          const res = await proctoService.updatePatientAllergies(bookingId, {
+            allergies: nextAllergies,
+            noKnownAllergies: noKnown,
+          })
+          if (res.status === "successful") {
+            toast.success("Allergies saved to patient profile & synced across visits")
+            clinicalDirty.current = false
+            await load("hydrate")
+          } else {
+            toast.error(res.message || "Failed to save allergies")
+          }
         }}
         medicines={
           medicines.length === 0 && chartLocked ? (
