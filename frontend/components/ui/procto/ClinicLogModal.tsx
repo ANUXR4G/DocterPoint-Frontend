@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
-import { Download, MessageCircle, X } from "lucide-react"
+import { Download, Loader2, MessageCircle, X } from "lucide-react"
+import { toast } from "sonner"
 import ConsultationSheet from "@/components/ui/procto/ConsultationSheet"
 import PrescriptionSheet from "@/components/ui/procto/PrescriptionSheet"
 import {
@@ -16,7 +17,6 @@ import {
 } from "@/lib/prescriptionPdf"
 import { dashboardPortalRoot } from "@/lib/portalRoot"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
-import SendToCustomerModal from "@/components/ui/procto/SendToCustomerModal"
 
 type PrintKind = "consultation" | "prescription"
 
@@ -39,7 +39,6 @@ export default function ClinicLogModal({
   const [error, setError] = useState("")
   const [booking, setBooking] = useState<ProctoBooking | null>(null)
   const [sending, setSending] = useState(false)
-  const [sendModalOpen, setSendModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState("")
   const [kind, setKind] = useState<PrintKind>(initialKind)
@@ -68,9 +67,31 @@ export default function ClinicLogModal({
     }
   }, [open, bookingId, initialKind])
 
-  function sendToCustomer() {
-    if (!bookingId) return
-    setSendModalOpen(true)
+  async function sendToCustomer() {
+    if (!bookingId || sending) return
+    setSending(true)
+    setNotice("")
+    try {
+      const res = await proctoService.sendClinicLogWhatsApp(bookingId, kind)
+      if (res.status === "successful") {
+        const msg =
+          kind === "consultation"
+            ? "Consultation note sent to customer on WhatsApp."
+            : "Prescription sent to customer on WhatsApp."
+        setNotice(msg)
+        toast.success(msg)
+      } else {
+        const err = res.message || "Could not send via WhatsApp."
+        setNotice(err)
+        toast.error(err)
+      }
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Failed to send to customer."
+      setNotice(err)
+      toast.error(err)
+    } finally {
+      setSending(false)
+    }
   }
 
   async function downloadPdf() {
@@ -135,14 +156,20 @@ export default function ClinicLogModal({
               <div className="flex rounded-full border border-neutral-300 p-0.5 text-xs font-semibold">
                 <button
                   type="button"
-                  onClick={() => setKind("consultation")}
+                  onClick={() => {
+                    setKind("consultation")
+                    setNotice("")
+                  }}
                   className={`rounded-full px-3 py-1 ${kind === "consultation" ? "bg-neutral-900 text-white" : "text-neutral-700"}`}
                 >
                   Consultation
                 </button>
                 <button
                   type="button"
-                  onClick={() => setKind("prescription")}
+                  onClick={() => {
+                    setKind("prescription")
+                    setNotice("")
+                  }}
                   className={`rounded-full px-3 py-1 ${kind === "prescription" ? "bg-neutral-900 text-white" : "text-neutral-700"}`}
                 >
                   Prescription
@@ -162,9 +189,23 @@ export default function ClinicLogModal({
                 disabled={!bookingId || sending || loading}
                 onClick={() => void sendToCustomer()}
                 className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                title={
+                  kind === "consultation"
+                    ? "Send consultation note to customer on WhatsApp"
+                    : "Send prescription to customer on WhatsApp"
+                }
               >
-                <MessageCircle className="size-3.5" aria-hidden />
-                {sending ? "Sending…" : "Send to customer"}
+                {sending ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    Sending…
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="size-3.5" aria-hidden />
+                    Send to customer
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -203,26 +244,5 @@ export default function ClinicLogModal({
     </div>
   )
 
-  return (
-    <>
-      {createPortal(body, dashboardPortalRoot())}
-      <SendToCustomerModal
-        open={sendModalOpen}
-        bookingId={bookingId}
-        patientName={booking?.patientName}
-        patientPhone={booking?.patientPhone}
-        initialKind={kind}
-        onClose={() => setSendModalOpen(false)}
-        onSuccess={(sentKind) => {
-          setNotice(
-            sentKind === "both"
-              ? "Prescription and Consultation sent to customer on WhatsApp."
-              : sentKind === "consultation"
-              ? "Consultation summary sent to customer on WhatsApp."
-              : "Prescription sent to customer on WhatsApp.",
-          )
-        }}
-      />
-    </>
-  )
+  return createPortal(body, dashboardPortalRoot())
 }
