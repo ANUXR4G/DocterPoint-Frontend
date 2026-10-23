@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../core/response.js";
+import { formatLocalDate } from "./slotEngine.js";
 
 export type OrderSetItem = {
   name: string;
@@ -23,6 +24,8 @@ export type OrderSet = {
   createdById?: string;
   createdByName?: string;
   medicines: OrderSetItem[];
+  effectiveDate?: string;
+  effectiveFrom?: string;
   isCustom?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -415,6 +418,19 @@ export class OrderSetService {
     const existingList: OrderSet[] = Array.isArray(rawMasters.orderSets)
       ? (rawMasters.orderSets as OrderSet[])
       : [];
+
+    const target = existingList.find((item) => item.id === orderSetId);
+    if (!target) return false;
+
+    // Historical entries prior to current date must remain immutable!
+    const today = formatLocalDate(new Date());
+    const orderSetDate = target.effectiveDate || target.effectiveFrom || target.createdAt?.slice(0, 10);
+    if (orderSetDate && orderSetDate < today) {
+      throw new AppError(
+        403,
+        "Historical order sets prior to the current date are immutable and cannot be deleted to maintain legal compliance, accurate auditing, and a reliable medical trail.",
+      );
+    }
 
     const filtered = existingList.filter((item) => item.id !== orderSetId);
     const nextMasters = {
