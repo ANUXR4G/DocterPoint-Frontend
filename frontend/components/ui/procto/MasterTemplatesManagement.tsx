@@ -31,9 +31,11 @@ import {
   Clock,
   Layers,
   ArrowRight,
+  Lock,
 } from "lucide-react"
 import { toast } from "sonner"
 import { proctoService } from "@/lib/services/procto"
+import { practiceTodayIso } from "@/lib/practiceTime"
 import {
   CLINICAL_TEMPLATES,
   type ClinicalTemplate,
@@ -312,6 +314,8 @@ export default function MasterTemplatesManagement() {
   const [modalScopeValue, setModalScopeValue] = useState("")
   const [modalAdvice, setModalAdvice] = useState("")
   const [modalDoctorNotes, setModalDoctorNotes] = useState("")
+  const [modalEffectiveDate, setModalEffectiveDate] = useState<string>(practiceTodayIso())
+  const [isHistoricalEdit, setIsHistoricalEdit] = useState<boolean>(false)
   const [modalSaving, setModalSaving] = useState(false)
 
   // Delete modal state
@@ -542,6 +546,8 @@ export default function MasterTemplatesManagement() {
     setModalScopeValue("")
     setModalAdvice("")
     setModalDoctorNotes("")
+    setModalEffectiveDate(practiceTodayIso())
+    setIsHistoricalEdit(false)
     setIsModalOpen(true)
   }
 
@@ -560,6 +566,12 @@ export default function MasterTemplatesManagement() {
       setModalAdviceCategory("__custom__")
       setCustomCategoryInput(cat)
     }
+
+    const today = practiceTodayIso()
+    const tplDate = template.effectiveDate || template.effectiveFrom || (template as any).createdAt?.slice(0, 10)
+    const isHistorical = Boolean(tplDate && tplDate < today)
+    setIsHistoricalEdit(isHistorical)
+    setModalEffectiveDate(isHistorical ? today : (tplDate || today))
 
     const tplSpec = template.specialty || (template.scope === "specialty" ? template.scopeValue : undefined) || "all"
     const tplDocId = template.doctorId || (template.scope === "doctor" ? template.createdById || template.scopeValue : undefined) || "all"
@@ -691,6 +703,9 @@ export default function MasterTemplatesManagement() {
 
     setModalSaving(true)
     try {
+      const today = practiceTodayIso()
+      const effectiveDateToSave = modalEffectiveDate || today
+
       if (modalMode === "edit" && editingId) {
         // Update existing template
         await proctoService.updateTemplate(editingId, {
@@ -704,6 +719,8 @@ export default function MasterTemplatesManagement() {
           doctorName: finalDoctorName,
           advice: finalAdvice,
           content: finalDoctorNotes,
+          effectiveDate: effectiveDateToSave,
+          effectiveFrom: effectiveDateToSave,
           practiceId,
         })
 
@@ -727,13 +744,19 @@ export default function MasterTemplatesManagement() {
                   doctorNotes: finalDoctorNotes,
                   remarks: finalDoctorNotes,
                   content: finalDoctorNotes,
+                  effectiveDate: effectiveDateToSave,
+                  effectiveFrom: effectiveDateToSave,
                   isCustom: true,
                 }
               : t,
           ),
         )
 
-        toast.success("Master template updated successfully.")
+        toast.success(
+          isHistoricalEdit
+            ? "New active template version created from current date onwards."
+            : "Master template updated successfully.",
+        )
       } else {
         // Create new template
         const newId = `custom_${Date.now()}`
@@ -748,6 +771,8 @@ export default function MasterTemplatesManagement() {
           doctorName: finalDoctorName,
           advice: finalAdvice,
           content: finalDoctorNotes,
+          effectiveDate: effectiveDateToSave,
+          effectiveFrom: effectiveDateToSave,
           practiceId,
         }
 
@@ -774,6 +799,8 @@ export default function MasterTemplatesManagement() {
           doctorNotes: finalDoctorNotes,
           remarks: finalDoctorNotes,
           content: finalDoctorNotes,
+          effectiveDate: effectiveDateToSave,
+          effectiveFrom: effectiveDateToSave,
           isCustom: true,
           keywords: [finalTitle.toLowerCase(), finalCategory.toLowerCase()],
         }
@@ -806,6 +833,16 @@ export default function MasterTemplatesManagement() {
   // Delete Template
   async function confirmDeleteTemplate() {
     if (!deletingTemplate) return
+
+    // Historical entries prior to the current date must remain immutable!
+    const today = practiceTodayIso()
+    const templateDate = deletingTemplate.effectiveDate || deletingTemplate.effectiveFrom || (deletingTemplate as any).createdAt?.slice(0, 10)
+    if (templateDate && templateDate < today) {
+      toast.error("Historical templates prior to the current date are immutable and cannot be deleted.")
+      setDeletingTemplate(null)
+      return
+    }
+
     setDeleteLoading(true)
 
     try {
@@ -1216,6 +1253,44 @@ export default function MasterTemplatesManagement() {
                             Custom
                           </span>
                         )}
+
+                        {/* Effective Date Badge */}
+                        {(() => {
+                          const today = practiceTodayIso()
+                          const tplDate = tpl.effectiveDate || tpl.effectiveFrom || (tpl as any).createdAt?.slice(0, 10)
+                          const isHistorical = Boolean(tplDate && tplDate < today)
+                          const isFuture = Boolean(tplDate && tplDate > today)
+                          if (!tplDate) return null
+                          if (isHistorical) {
+                            return (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                title="Historical template prior to current date. Immutable to maintain legal compliance, accurate auditing, and a reliable medical trail."
+                              >
+                                <Lock className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                                Historical ({tplDate})
+                              </span>
+                            )
+                          }
+                          if (isFuture) {
+                            return (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-900 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                                title="Scheduled template. Edit and delete actions fully active."
+                              >
+                                Scheduled ({tplDate})
+                              </span>
+                            )
+                          }
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              title="Current active template. Edit and delete actions fully active."
+                            >
+                              Active
+                            </span>
+                          )
+                        })()}
                       </div>
 
                       <h3 className="text-base font-bold text-slate-900 dark:text-white">
@@ -1227,24 +1302,46 @@ export default function MasterTemplatesManagement() {
                     </div>
 
                     {/* Actions Menu */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(tpl)}
-                        className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
-                        title="Edit Template"
-                      >
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingTemplate(tpl)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
-                        title="Delete Template"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    {(() => {
+                      const today = practiceTodayIso()
+                      const tplDate = tpl.effectiveDate || tpl.effectiveFrom || (tpl as any).createdAt?.slice(0, 10)
+                      const isHistorical = Boolean(tplDate && tplDate < today)
+                      return (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(tpl)}
+                            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
+                            title={
+                              isHistorical
+                                ? "Historical template: editing creates an active version effective from today onwards, keeping past records immutable"
+                                : "Edit Template"
+                            }
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          {tpl.isCustom && (
+                            isHistorical ? (
+                              <span
+                                className="rounded-lg p-1.5 text-slate-300 cursor-not-allowed select-none dark:text-slate-600"
+                                title="Historical templates prior to the current date are immutable and cannot be deleted."
+                              >
+                                <Lock className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setDeletingTemplate(tpl)}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+                                title="Delete Template"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {/* Clinical Advice Box */}
@@ -1340,13 +1437,30 @@ export default function MasterTemplatesManagement() {
                       Edit Template
                     </button>
                     {tpl.isCustom && (
-                      <button
-                        type="button"
-                        onClick={() => setDeletingTemplate(tpl)}
-                        className="font-semibold text-rose-600 hover:underline dark:text-rose-400"
-                      >
-                        Delete
-                      </button>
+                      (() => {
+                        const today = practiceTodayIso()
+                        const tplDate = tpl.effectiveDate || tpl.effectiveFrom || (tpl as any).createdAt?.slice(0, 10)
+                        const isHistorical = Boolean(tplDate && tplDate < today)
+                        if (isHistorical) {
+                          return (
+                            <span
+                              className="font-semibold text-slate-300 dark:text-slate-600 cursor-not-allowed select-none"
+                              title="Historical templates prior to current date are immutable and cannot be deleted."
+                            >
+                              Delete (Locked)
+                            </span>
+                          )
+                        }
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingTemplate(tpl)}
+                            className="font-semibold text-rose-600 hover:underline dark:text-rose-400"
+                          >
+                            Delete
+                          </button>
+                        )
+                      })()
                     )}
                   </div>
                 </div>
@@ -1386,6 +1500,17 @@ export default function MasterTemplatesManagement() {
 
             {/* Modal Body */}
             <form onSubmit={handleSaveTemplate} className="flex-1 overflow-y-auto p-6 space-y-4">
+              {isHistoricalEdit && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <span>Historical Record (Immutable Audit Trail)</span>
+                  </div>
+                  <p className="mt-1 leading-relaxed">
+                    This template was effective prior to today ({modalEffectiveDate}). Any templates or clinical records prior to the current date remain immutable to maintain legal compliance, accurate auditing, and a reliable medical trail. Saving will create a new active version effective from today onwards.
+                  </p>
+                </div>
+              )}
               {/* Template Title & Code */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -1512,6 +1637,23 @@ export default function MasterTemplatesManagement() {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Effective Date */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Effective Date <span className="text-blue-500">*</span>
+                </label>
+                <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  Date from which this template applies. Edit and delete actions remain fully active for all templates scheduled from this date onwards.
+                </p>
+                <input
+                  type="date"
+                  value={modalEffectiveDate}
+                  min={practiceTodayIso()}
+                  onChange={(e) => setModalEffectiveDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                />
               </div>
 
               {/* Patient Advice Textarea */}

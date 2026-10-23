@@ -196,4 +196,49 @@ describe("MasterTemplatesManagement & Clinical Advice Categories", () => {
     assert.equal(autoGenerateCode("Type 2 Diabetes Mellitus Protocol", "clinic"), "CLINIC-DM2-MGMT")
     assert.equal(autoGenerateCode("Type 2 Diabetes Mellitus Protocol", "doctor"), "DOC-DM2-MGMT")
   })
+
+  test("Effective Date-Based Editing Rules for master templates: historical immutable vs current/future active", () => {
+    const today = "2026-10-23"
+    const yesterday = "2026-10-22"
+    const tomorrow = "2026-10-24"
+
+    function isTemplateHistorical(effectiveDate: string, currentDay = today) {
+      return effectiveDate < currentDay
+    }
+
+    function canDeleteTemplate(template: { effectiveDate?: string; createdAt?: string }, currentDay = today) {
+      const templateDate = template.effectiveDate || template.createdAt?.slice(0, 10)
+      if (templateDate && templateDate < currentDay) {
+        return false // Immutable past record
+      }
+      return true // Current & future can be modified or removed
+    }
+
+    // Historical template prior to current date
+    const historicalTpl = {
+      id: "hist_1",
+      name: "SPEC-HIST-PROTOCOL",
+      effectiveDate: yesterday,
+    }
+    assert.equal(isTemplateHistorical(historicalTpl.effectiveDate, today), true)
+    assert.equal(canDeleteTemplate(historicalTpl, today), false, "Historical template cannot be deleted")
+
+    // Active template from current date onwards
+    const todayTpl = {
+      id: "today_1",
+      name: "SPEC-TODAY-PROTOCOL",
+      effectiveDate: today,
+    }
+    assert.equal(isTemplateHistorical(todayTpl.effectiveDate, today), false)
+    assert.equal(canDeleteTemplate(todayTpl, today), true, "Current template can be deleted/modified")
+
+    // Scheduled future template
+    const futureTpl = {
+      id: "future_1",
+      name: "SPEC-FUTURE-PROTOCOL",
+      effectiveDate: tomorrow,
+    }
+    assert.equal(isTemplateHistorical(futureTpl.effectiveDate, today), false)
+    assert.equal(canDeleteTemplate(futureTpl, today), true, "Future template can be deleted/modified")
+  })
 })

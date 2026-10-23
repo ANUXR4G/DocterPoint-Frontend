@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Lock } from "lucide-react"
+import { practiceTodayIso } from "@/lib/practiceTime"
 import {
   defaultMedicineStartDate,
   medicineEndDate,
@@ -42,10 +43,18 @@ export type VisitMedicine = {
 export function isMedicineLocked(
   m?: VisitMedicine | null,
   tableLocked: boolean = false,
+  entryDateIso?: string,
 ): boolean {
   if (tableLocked) return true
   if (!m) return false
   if (Boolean(m.isHistorical) || Boolean(m.isOrdered) || Boolean(m.isDispensed)) {
+    return true
+  }
+  const today = practiceTodayIso()
+  if (m.visitDate && m.visitDate < today) {
+    return true
+  }
+  if (entryDateIso && entryDateIso < today) {
     return true
   }
   const status = String(m.status || "").trim().toLowerCase()

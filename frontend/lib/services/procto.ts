@@ -211,6 +211,8 @@ export const proctoService = {
     specialty?: string;
     doctorId?: string;
     doctorName?: string;
+    effectiveDate?: string;
+    effectiveFrom?: string;
     practiceId?: string;
   }) =>
     proctoFetch("/procto/templates", {
@@ -231,6 +233,8 @@ export const proctoService = {
       specialty?: string;
       doctorId?: string;
       doctorName?: string;
+      effectiveDate?: string;
+      effectiveFrom?: string;
       practiceId?: string;
     },
   ) =>
@@ -531,6 +535,20 @@ export const proctoService = {
       `/procto/practices/${practiceId}/schedules${providerId ? `?providerId=${providerId}` : ""}`,
     ),
 
+  getScheduleReport: (
+    practiceId: string,
+    opts?: { providerId?: string; from?: string; to?: string },
+  ) => {
+    const params = new URLSearchParams()
+    if (opts?.providerId) params.set("providerId", opts.providerId)
+    if (opts?.from) params.set("from", opts.from)
+    if (opts?.to) params.set("to", opts.to)
+    const qs = params.toString()
+    return proctoFetch(
+      `/procto/practices/${practiceId}/reports/schedules${qs ? `?${qs}` : ""}`,
+    )
+  },
+
   saveSchedule: (practiceId: string, body: Record<string, unknown>) =>
     proctoFetch(`/procto/practices/${practiceId}/schedules`, {
       method: "PUT",
@@ -788,6 +806,7 @@ export const proctoService = {
           from?: string;
           to?: string;
           providerId?: string;
+          status?: string;
         },
   ) => {
     const params = new URLSearchParams();
@@ -798,6 +817,7 @@ export const proctoService = {
       if (opts.from) params.set("from", opts.from);
       if (opts.to) params.set("to", opts.to);
       if (opts.providerId) params.set("providerId", opts.providerId);
+      if (opts.status) params.set("status", opts.status);
     }
     const qs = params.toString();
     return proctoFetch(

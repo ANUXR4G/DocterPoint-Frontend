@@ -10,6 +10,7 @@ import {
 } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
+import { Lock } from "lucide-react"
 import { Icon, ThinkingLoader } from "@/components"
 import { firey } from "@/utils"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
@@ -46,6 +47,10 @@ import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
   formatPracticeTime,
+  practiceDateIso,
+  practiceTodayIso,
+  isBeforeClinicToday,
+  isCurrentOrFutureClinicDay,
   isAfterClinicToday,
 } from "@/lib/practiceTime"
 import { patchBookingFields } from "@/lib/liveBooking"
@@ -596,6 +601,14 @@ export default function VisitPage() {
   ) {
     if (!bookingId || String(booking?.status || "").toUpperCase() === "COMPLETED")
       return false
+    const apptDay = booking?.slotStart
+      ? practiceDateIso(booking.slotStart)
+      : booking?.sessionDate
+        ? practiceDateIso(booking.sessionDate)
+        : null
+    if (apptDay && apptDay < practiceTodayIso()) {
+      return false
+    }
     // Ensure WhatsApp / server documents are loaded before any save so we
     // never POST documents:[] and wipe patient attachments.
     let docsToSave = nextDocuments.length ? nextDocuments : documentsRef.current
@@ -862,11 +875,14 @@ export default function VisitPage() {
   async function save(nextStatus?: string): Promise<boolean> {
     if (!bookingId) return false
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return false
-    if (
-      isAfterClinicToday(booking?.slotStart || booking?.sessionDate || null)
-    ) {
+    const apptDay = booking?.slotStart
+      ? practiceDateIso(booking.slotStart)
+      : booking?.sessionDate
+        ? practiceDateIso(booking.sessionDate)
+        : null
+    if (apptDay && apptDay < practiceTodayIso()) {
       toast.error(
-        "You can document this visit on its appointment day, not on a later day.",
+        "Historical entries prior to the current date are immutable and cannot be modified or deleted.",
       )
       return false
     }
@@ -990,10 +1006,14 @@ export default function VisitPage() {
       ? formatPracticeDate(booking.sessionDate)
       : "—"
   const isCompleted = String(booking.status || "").toUpperCase() === "COMPLETED"
-  const futureDay = isAfterClinicToday(
-    booking.slotStart || booking.sessionDate || null,
-  )
-  const chartLocked = isCompleted || futureDay
+  const appointmentDayIso = booking.slotStart
+    ? practiceDateIso(booking.slotStart)
+    : booking.sessionDate
+      ? practiceDateIso(booking.sessionDate)
+      : null
+  const todayIso = practiceTodayIso()
+  const isHistorical = Boolean(appointmentDayIso && appointmentDayIso < todayIso)
+  const chartLocked = isCompleted || isHistorical
   const chiefComplaint = chiefComplaintOf(booking)
   const arrival = formatArrival(booking)
   const arrivalDisplay =
@@ -1144,8 +1164,8 @@ export default function VisitPage() {
             formDirty.current = true
             setComplaint(e.target.value)
           }}
-          readOnly={futureDay}
-          disabled={futureDay}
+          readOnly={chartLocked}
+          disabled={chartLocked}
           maxLength={500}
           rows={2}
           placeholder="Chief complaint"
@@ -1178,11 +1198,13 @@ export default function VisitPage() {
         />
       </section>
 
-      {futureDay ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-          Documentation opens on the appointment day. Any time later today can
-          still be documented.
-        </p>
+      {isHistorical ? (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <Lock className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>
+            <strong>Historical Entry (Immutable):</strong> This clinical record was scheduled on {appointmentDate} (prior to the current date). In accordance with clinical editing rules, any medication orders or records prior to the current date remain immutable in past medical history to maintain legal compliance, accurate auditing, and a reliable medical trail.
+          </span>
+        </div>
       ) : null}
 
       <ClinicalAssessmentPanel
@@ -1199,6 +1221,10 @@ export default function VisitPage() {
         }}
         onSaveAllergies={async (nextAllergies, noKnown) => {
           if (!bookingId) return
+          if (isHistorical) {
+            toast.error("Historical visit records prior to the current date cannot be modified directly.")
+            return
+          }
           const res = await proctoService.updatePatientAllergies(bookingId, {
             allergies: nextAllergies,
             noKnownAllergies: noKnown,
