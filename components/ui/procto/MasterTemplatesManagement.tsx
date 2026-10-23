@@ -677,11 +677,16 @@ export default function MasterTemplatesManagement() {
     if (!finalName) {
       // Auto-generate unique identifier
       const prefix = finalScope === "clinic" ? "CLINIC" : finalScope === "specialty" ? "SPEC" : "DOC"
-      const cleanTitle = finalTitle
-        .toUpperCase()
-        .replace(/[^A-Z0-9]+/g, "-")
-        .slice(0, 24)
-      finalName = `${prefix}-${cleanTitle}-${Math.floor(1000 + Math.random() * 9000)}`
+      if (/type\s*2\s*diabetes/i.test(finalTitle)) {
+        finalName = `${prefix}-DM2-MGMT`
+      } else {
+        const cleanTitle = finalTitle
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 20)
+        finalName = `${prefix}-${cleanTitle || "PROTOCOL"}-${Math.floor(1000 + Math.random() * 9000)}`
+      }
     }
 
     setModalSaving(true)
@@ -1464,9 +1469,9 @@ export default function MasterTemplatesManagement() {
                     onChange={(e) => handleScopeChange(e.target.value as TemplateScope)}
                     className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
                   >
-                    <option value="clinic">Clinic-Level (Available to all facility doctors)</option>
-                    <option value="specialty">Specialty-Level (Shared with specialty doctors)</option>
-                    <option value="doctor">Doctor-Level (Private to selected doctor)</option>
+                    <option value="clinic">Clinic-Level (Default: All Specialty & All Doctors - Accessible to all doctors across the clinic)</option>
+                    <option value="specialty">Specialty-Level (Specific Specialty & All Doctors - Applicable to all doctors within that specific specialty)</option>
+                    <option value="doctor">Doctor-Level (Specific Specialty & Specific Doctor - Strictly restricted to selected doctor)</option>
                   </select>
                 </div>
 
@@ -1503,13 +1508,13 @@ export default function MasterTemplatesManagement() {
                   </span>
                 </div>
                 <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  Clear, patient-friendly guidance on lifestyle, dietary precautions, and warning signs.
+                  Lifestyle, dietary precautions, and warning signs (printed on patient prescription).
                 </p>
                 <textarea
                   rows={3}
                   value={modalAdvice}
                   onChange={(e) => setModalAdvice(e.target.value)}
-                  placeholder="e.g. Follow low glycemic index diet. Take prescribed medications regularly with meals. Avoid processed sugars and walk 30 minutes daily."
+                  placeholder="e.g. Lifestyle & Dietary Precautions: Follow low glycemic index diet. Avoid refined sugars, sweets, and sweetened beverages. Exercise: 30 mins brisk walking daily. Warning Signs: Carry glucose tablets or fruit juice for hypoglycemia (sweating, trembling). Report foot lesions promptly."
                   className="w-full rounded-xl border border-emerald-300 bg-emerald-50/20 p-3 text-xs text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-white"
                 />
               </div>
@@ -1525,13 +1530,13 @@ export default function MasterTemplatesManagement() {
                   </span>
                 </div>
                 <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  Internal clinical remarks, physical assessment notes, and next follow-up plan.
+                  Physical assessment notes, clinical remarks, and follow-up plans (internal clinical records, not printed on prescription).
                 </p>
                 <textarea
                   rows={3}
                   value={modalDoctorNotes}
                   onChange={(e) => setModalDoctorNotes(e.target.value)}
-                  placeholder="e.g. Glycemic control stable. Foot examination performed - sensations intact. Advised annual dilated eye checkup and routine follow-up in 4 weeks."
+                  placeholder="e.g. Physical Assessment: Foot exam intact, pedal pulses palpable. Target HbA1c < 7.0%. Clinical Remarks: Glycemic control stable on current regimen. Follow-up Plan: Dilated eye checkup and urine ACR; review in 4 weeks with home blood glucose log."
                   className="w-full rounded-xl border border-blue-300 bg-blue-50/20 p-3 text-xs text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 dark:border-sky-800 dark:bg-sky-950/20 dark:text-white"
                 />
               </div>
