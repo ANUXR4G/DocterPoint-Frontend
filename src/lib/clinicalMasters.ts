@@ -280,11 +280,6 @@ export const DEFAULT_ALLERGY_MASTERS: AllergyMaster[] = [
     name: "Mold",
     description: "Allergic reactions to mold spores.",
   },
-  {
-    category: "Others",
-    name: "No known allergy",
-    description: "No known allergy.",
-  },
 ];
 
 export const DEFAULT_CLINICAL_MASTERS: ClinicalMasters = {
@@ -297,15 +292,16 @@ export function mergeClinicalMasters(raw: unknown): ClinicalMasters {
   const base = DEFAULT_CLINICAL_MASTERS;
   if (!raw || typeof raw !== "object") return structuredClone(base);
   const o = raw as Partial<ClinicalMasters>;
+  const rawAllergies =
+    Array.isArray(o.allergies) && o.allergies.length > 0
+      ? (o.allergies as AllergyMaster[])
+      : structuredClone(base.allergies);
   return {
     vitals:
       Array.isArray(o.vitals) && o.vitals.length > 0
         ? (o.vitals as VitalMaster[])
         : structuredClone(base.vitals),
-    allergies:
-      Array.isArray(o.allergies) && o.allergies.length > 0
-        ? (o.allergies as AllergyMaster[])
-        : structuredClone(base.allergies),
+    allergies: rawAllergies.filter((a) => !/no known/i.test(a.name || "")),
     painScales:
       Array.isArray(o.painScales) && o.painScales.length > 0
         ? o.painScales.map(String).filter((s) => !isRemovedPainScale(s))
