@@ -380,6 +380,9 @@ export class TemplateService {
     const targetDocName = data.doctorName?.trim() || (data.scope === "doctor" ? doctorName : undefined);
     const targetSpec = data.specialty?.trim() || (data.scope === "specialty" ? data.scopeValue?.trim() : undefined);
 
+    const today = formatLocalDate(new Date());
+    const effectiveDate = data.effectiveDate?.trim() || data.effectiveFrom?.trim() || today;
+
     // Ensure Name is unique within the practice/doctor scope
     let existingName = existingList.find(
       (t) =>
@@ -415,6 +418,8 @@ export class TemplateService {
       doctorName: targetDocName,
       content,
       advice: data.advice?.trim() || undefined,
+      effectiveDate,
+      effectiveFrom: effectiveDate,
       isCustom: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
