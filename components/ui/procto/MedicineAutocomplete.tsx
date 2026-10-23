@@ -111,7 +111,7 @@ export default function MedicineAutocomplete({
     if (onSelect) {
       onSelect(med)
     } else {
-      onChange(med.name || med.brandName)
+      onChange(med.brandName || med.name)
     }
   }
 
@@ -342,7 +342,7 @@ export default function MedicineAutocomplete({
                           </svg>
                         </button>
                         <span className="font-semibold text-neutral-900 dark:text-white truncate">
-                          {med.name || med.brandName}
+                          {med.brandName || med.name}
                         </span>
                       </div>
                       {med.category ? (

@@ -111,22 +111,30 @@ export const proctoService = {
   /** Centralized Medicine Master inventory search & list. */
   searchMedicines: async (q: string, limit = 25): Promise<MedicineMasterItem[]> => {
     try {
+      // Prescription entry only offers active medicines.
       const res = await proctoFetch(
         `/procto/medicines?q=${encodeURIComponent(q)}&limit=${limit}`,
       );
       if (res && res.status === "successful" && Array.isArray((res as any).data)) {
-        return (res as any).data.map(normalizeMedicineMasterItem);
+        return (res as any).data
+          .map(normalizeMedicineMasterItem)
+          .filter((m: MedicineMasterItem) => m.isActive !== false);
       }
     } catch {
       // fallback to centralized inventory
     }
-    return searchMedicineMaster(q, limit);
+    return searchMedicineMaster(q, limit).filter((m) => m.isActive !== false);
   },
 
-  listMedicines: async (params?: { q?: string; favourite?: boolean }) => {
+  listMedicines: async (params?: {
+    q?: string;
+    favourite?: boolean;
+    includeInactive?: boolean;
+  }) => {
     const qs = new URLSearchParams();
     if (params?.q) qs.set("q", params.q);
     if (params?.favourite) qs.set("favourite", "true");
+    if (params?.includeInactive !== false) qs.set("includeInactive", "true");
     const query = qs.toString();
     return proctoFetch(`/procto/medicines${query ? `?${query}` : ""}`);
   },
@@ -154,11 +162,86 @@ export const proctoService = {
       method: "DELETE",
     }),
 
+  setMedicineActive: (id: string, isActive: boolean) =>
+    proctoFetch(`/procto/medicines/${id}/active`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive }),
+    }),
+
   toggleMedicineFavourite: (id: string, favourite?: boolean) =>
     proctoFetch(`/procto/medicines/${id}/favourite`, {
       method: "PATCH",
       body: JSON.stringify({ favourite }),
     }),
+
+  searchDiagnostics: async (q: string, practiceId: string, limit = 25) => {
+    const qs = new URLSearchParams({
+      q,
+      practiceId,
+      limit: String(limit),
+    })
+    return proctoFetch(`/procto/diagnostics?${qs}`)
+  },
+
+  listDiagnostics: (params?: {
+    practiceId?: string
+    q?: string
+    favourite?: boolean
+  }) => {
+    const qs = new URLSearchParams()
+    if (params?.practiceId) qs.set("practiceId", params.practiceId)
+    if (params?.q) qs.set("q", params.q)
+    if (params?.favourite) qs.set("favourite", "true")
+    const query = qs.toString()
+    return proctoFetch(`/procto/diagnostics${query ? `?${query}` : ""}`)
+  },
+
+  toggleDiagnosticFavourite: (id: string, practiceId: string) =>
+    proctoFetch(`/procto/diagnostics/${id}/favourite`, {
+      method: "PATCH",
+      body: JSON.stringify({ practiceId }),
+    }),
+
+  listDiagnosticOrderSets: (practiceId?: string) => {
+    const qs = practiceId
+      ? `?practiceId=${encodeURIComponent(practiceId)}`
+      : ""
+    return proctoFetch(`/procto/diagnostics/order-sets${qs}`)
+  },
+
+  createDiagnosticOrderSet: (body: {
+    practiceId: string
+    name: string
+    description?: string
+    category?: string
+    items: Array<Record<string, unknown>>
+  }) =>
+    proctoFetch("/procto/diagnostics/order-sets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  getDiagnosticTickSheet: (id: string, practiceId?: string) => {
+    const qs = practiceId
+      ? `?practiceId=${encodeURIComponent(practiceId)}`
+      : ""
+    return proctoFetch(
+      `/procto/diagnostics/tick-sheets/${encodeURIComponent(id)}${qs}`,
+    )
+  },
+
+  listPreviousDiagnostics: (params: {
+    practiceId: string
+    patientId?: string
+    patientPhone?: string
+    excludeBookingId?: string
+  }) => {
+    const qs = new URLSearchParams({ practiceId: params.practiceId })
+    if (params.patientId) qs.set("patientId", params.patientId)
+    if (params.patientPhone) qs.set("patientPhone", params.patientPhone)
+    if (params.excludeBookingId) qs.set("excludeBookingId", params.excludeBookingId)
+    return proctoFetch(`/procto/diagnostics/previous?${qs}`)
+  },
 
   listInstructions: async (params?: { practiceId?: string }) => {
     const search = new URLSearchParams();
@@ -648,7 +731,15 @@ export const proctoService = {
 
   getAuditLog: (
     practiceId: string,
-    q: { action?: string; providerId?: string; from?: string; to?: string; before?: string; limit?: number } = {},
+    q: {
+      action?: string
+      category?: string
+      providerId?: string
+      from?: string
+      to?: string
+      before?: string
+      limit?: number
+    } = {},
   ) => {
     const qs = new URLSearchParams(
       Object.entries(q)
@@ -725,6 +816,21 @@ export const proctoService = {
         startDate?: string;
         endDate?: string;
         instruction?: string;
+      }>;
+      diagnostics?: Array<{
+        name: string;
+        diagnosticId?: string;
+        code?: string;
+        type?: string;
+        categoryCode?: string;
+        subcategoryCode?: string;
+        qty?: number;
+        instruction?: string;
+        favourite?: boolean;
+        status?: string;
+        isOrdered?: boolean;
+        isHistorical?: boolean;
+        orderedAt?: string;
       }>;
       documents?: Array<{ name: string; url: string; uploadedAt?: string }>;
       clinicalAssessment?: unknown;
@@ -1114,9 +1220,13 @@ export type ProctoBooking = {
   createdAt?: string | null;
   created_at?: string | null;
   practice?: {
+    id?: string;
     name: string;
-    slug: string;
+    slug?: string;
     specialty?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    bgSrc?: string | null;
     stampSrc?: string | null;
   };
   location?: { name: string; address: string; city: string };
@@ -1160,6 +1270,13 @@ export type ProctoBooking = {
     durationUnit?: string;
     startDate?: string;
     endDate?: string;
+    instruction?: string;
+  }> | null;
+  diagnostics?: Array<{
+    name: string;
+    code?: string;
+    type?: string;
+    qty?: number;
     instruction?: string;
   }> | null;
   documents?: Array<{ name: string; url: string; uploadedAt?: string }> | null;
@@ -1382,16 +1499,26 @@ export type DeskPatientRegistration = {
 };
 
 export type AuditAction =
+  | "BOOKING_CREATED"
+  | "BOOKING_MOVED"
+  | "WALK_IN_ADDED"
+  | "PATIENT_REGISTERED"
   | "SLOT_CREATED"
   | "SLOT_REMOVED"
   | "OVERRIDE_CREATED"
   | "OVERRIDE_REMOVED"
-  | "WALK_IN_ADDED"
-  | "PATIENT_REGISTERED";
+  | "SCHEDULE_SAVED"
+  | "DOCUMENT_SENT"
+  | "DOCUMENT_SHARED"
+  | "DOCUMENT_UPLOADED"
+  | "DOCTOR_STAMP_UPDATED"
+  | "PRACTICE_BRANDING_UPDATED";
+
+export type AuditCategory = "APPOINTMENTS" | "SCHEDULE" | "DOCUMENTS";
 
 export type AuditEvent = {
   id: string;
-  action: AuditAction;
+  action: AuditAction | string;
   actorUserId: string | null;
   actorName: string | null;
   actorRole: string | null;

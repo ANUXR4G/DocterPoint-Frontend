@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Lock } from "lucide-react"
+import TablePagination from "@/components/pagination/TablePagination"
+import { useClientPagination } from "@/hooks/useClientPagination"
 import { proctoService } from "@/lib/services/procto"
 import { practiceTodayIso } from "@/lib/practiceTime"
 import {
@@ -95,6 +97,13 @@ export default function ClinicalMastersPanel({
     setPainScales(d.painScales)
   }
 
+  const vitalsPagination = useClientPagination(vitals, {
+    resetKey: vitals.length,
+  })
+  const allergiesPagination = useClientPagination(allergies, {
+    resetKey: allergies.length,
+  })
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -182,7 +191,9 @@ export default function ClinicalMastersPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-              {vitals.map((v, idx) => (
+              {vitalsPagination.pageItems.map((v) => {
+                const idx = vitals.findIndex((row) => row.key === v.key)
+                return (
                 <tr key={v.key}>
                   <td className="px-3 py-2 font-semibold">
                     {v.label}
@@ -210,6 +221,7 @@ export default function ClinicalMastersPanel({
                         disabled={Boolean(v.derived)}
                         value={v[field] ?? ""}
                         onChange={(e) => {
+                          if (idx < 0) return
                           const next = [...vitals]
                           next[idx] = {
                             ...v,
@@ -222,9 +234,14 @@ export default function ClinicalMastersPanel({
                     </td>
                   ))}
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
+          <TablePagination
+            pagination={vitalsPagination}
+            label="vitals"
+            className="border-t border-neutral-200 px-3 dark:border-neutral-700"
+          />
         </div>
       </section>
 
@@ -264,7 +281,10 @@ export default function ClinicalMastersPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-              {allergies.map((a, idx) => {
+              {allergiesPagination.pageItems.map((a, pageIdx) => {
+                const idx =
+                  (allergiesPagination.page - 1) * allergiesPagination.pageSize +
+                  pageIdx
                 const today = practiceTodayIso()
                 const isHistorical = Boolean(a.effectiveDate && a.effectiveDate < today)
                 return (
@@ -349,6 +369,11 @@ export default function ClinicalMastersPanel({
               })}
             </tbody>
           </table>
+          <TablePagination
+            pagination={allergiesPagination}
+            label="allergies"
+            className="border-t border-neutral-200 px-3 dark:border-neutral-700"
+          />
         </div>
         <p className="text-xs text-neutral-500">
           Severity options on visits: {ALLERGY_SEVERITIES.join(", ")}.

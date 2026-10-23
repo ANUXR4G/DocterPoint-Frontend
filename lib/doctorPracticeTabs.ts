@@ -46,5 +46,5 @@ export function legacyPracticeTabHref(tab: string): string {
   ) {
     return practiceTabHref(normalized as PracticeTab)
   }
-  return "/settings?tab=practice"
+  return "/settings?tab=practice&subtab=setup"
 }

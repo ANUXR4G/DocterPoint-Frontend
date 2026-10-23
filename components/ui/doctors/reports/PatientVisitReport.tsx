@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { proctoService } from "@/lib/services/procto"
 import { practiceTodayIso, formatPracticeDateTime, formatPracticeTime } from "@/lib/practiceTime"
 import { formatReportDate, addDays, getDayOfWeek } from "@/lib/scheduleReport"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
 
 type CriteriaType = "day" | "week" | "month" | "custom"
 
@@ -91,10 +92,15 @@ export default function PatientVisitReport({
 
   // Fetch doctors list from practice memberships
   useEffect(() => {
-    const activePractice = memberships?.find((m) => m.practiceId === practiceId)?.practice
+    const activePractice = memberships?.find(
+      (m: any) =>
+        m.practiceId === practiceId ||
+        m.practice?.id === practiceId ||
+        proctoService.resolvePracticeId(m) === practiceId,
+    )?.practice
     if (activePractice?.members) {
       const docs = activePractice.members
-        .filter((m: any) => m.role === "DOCTOR" || m.doctorId || m.user?.doctor)
+        .filter((m: any) => isPracticingDoctor(m) || m.role === "DOCTOR" || m.doctorId || m.user?.doctor)
         .map((m: any) => ({
           id: m.userId,
           name: m.user?.name || "Doctor",

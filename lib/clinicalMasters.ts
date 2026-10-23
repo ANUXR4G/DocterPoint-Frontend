@@ -390,7 +390,14 @@ export function normalizeClinicalAssessment(
   raw: unknown,
 ): ClinicalAssessment | null {
   if (raw == null) return null;
-  if (typeof raw !== "object") return null;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object") return null;
   const o = raw as ClinicalAssessment;
   const values: Record<string, number | null> = {};
   if (o.vitals?.values && typeof o.vitals.values === "object") {

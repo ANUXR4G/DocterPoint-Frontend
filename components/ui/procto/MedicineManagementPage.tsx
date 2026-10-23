@@ -3,12 +3,13 @@
 import { useEffect, useState, useMemo } from "react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import PopupModal from "@/components/modals/Modal"
+import TablePagination from "@/components/pagination/TablePagination"
+import { useClientPagination } from "@/hooks/useClientPagination"
 import { proctoService } from "@/lib/services/procto"
 import {
   CENTRAL_MEDICINE_MASTER,
   ROUTES_LIST,
   DOSAGE_FORMS_LIST,
-  type MedicineMasterItem,
 } from "@/lib/medicineMaster"
 import { downloadMedicineTemplate } from "@/lib/medicineExcel"
 import BulkUploadMedicineModal from "./BulkUploadMedicineModal"
@@ -23,13 +24,30 @@ export type MedicineItem = {
   dosageForm: string
   genericName: string
   favourite: boolean
+  /** False when the medicine is soft-disabled after being prescribed. */
+  isActive?: boolean
+  /** True when any patient visit has used this medicine in a prescription. */
+  isPrescribed?: boolean
   createdAt?: string
   updatedAt?: string
 }
 
+function isMedicineActive(m: Pick<MedicineItem, "isActive">) {
+  return m.isActive !== false
+}
+
+function canDeleteMedicine(m: Pick<MedicineItem, "isPrescribed">) {
+  return !m.isPrescribed
+}
+
 const STORAGE_KEY = "glucoguide_medicine_management_records"
 
-// Convert default master into MedicineItems
+/** Cache must not leak one doctor's favourites to another on the same browser. */
+function forLocalCache(items: MedicineItem[]): MedicineItem[] {
+  return items.map((m) => ({ ...m, favourite: false }))
+}
+
+// Convert default master into MedicineItems (favourites come from the API per doctor)
 function initialMedicinesFromMaster(): MedicineItem[] {
   return CENTRAL_MEDICINE_MASTER.map((m) => ({
     id: m.id,
@@ -41,7 +59,9 @@ function initialMedicinesFromMaster(): MedicineItem[] {
     dosageForm:
       m.dosageForm || (m.doseUnit === "capsule" ? "Capsule" : "Tablet"),
     genericName: m.genericName,
-    favourite: Boolean(m.favourite || m.isPopular),
+    favourite: false,
+    isActive: true,
+    isPrescribed: false,
   }))
 }
 
@@ -69,8 +89,8 @@ export default function MedicineManagementPage({ portal }: Props) {
   const [formRoute, setFormRoute] = useState("Oral")
   const [formDosageForm, setFormDosageForm] = useState("Tablet")
   const [formGenericName, setFormGenericName] = useState("")
-  const [formFavourite, setFormFavourite] = useState(false)
   const [formError, setFormError] = useState("")
+  const canSetFavourite = portal === "doctor"
 
   // Delete Confirmation Modal state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -86,7 +106,8 @@ export default function MedicineManagementPage({ portal }: Props) {
       if (cached) {
         const parsed = JSON.parse(cached) as MedicineItem[]
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setMedicines(parsed)
+          // Favourites are per-doctor from the API — never restore stars from cache.
+          setMedicines(forLocalCache(parsed))
           setLoading(false)
         }
       }
@@ -94,15 +115,15 @@ export default function MedicineManagementPage({ portal }: Props) {
       // ignore
     }
 
-    // Fetch from backend API
+    // Fetch from backend API (include inactive so status can be managed)
     proctoService
-      .listMedicines()
+      .listMedicines({ includeInactive: true })
       .then((res: any) => {
         if (!active) return
         if (res && res.status === "successful" && Array.isArray(res.data) && res.data.length > 0) {
           setMedicines(res.data)
           try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(res.data))
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(res.data)))
           } catch {
             // ignore
           }
@@ -110,7 +131,7 @@ export default function MedicineManagementPage({ portal }: Props) {
           const defaults = initialMedicinesFromMaster()
           setMedicines(defaults)
           try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults))
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(defaults)))
           } catch {
             // ignore
           }
@@ -132,10 +153,10 @@ export default function MedicineManagementPage({ portal }: Props) {
     }
   }, [])
 
-  // Sync state to localStorage
+  // Sync state to localStorage (without personal favourite flags)
   function syncStorage(items: MedicineItem[]) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(forLocalCache(items)))
     } catch {
       // ignore
     }
@@ -161,7 +182,6 @@ export default function MedicineManagementPage({ portal }: Props) {
     setFormRoute("Oral")
     setFormDosageForm("Tablet")
     setFormGenericName("")
-    setFormFavourite(false)
     setFormError("")
     setModalOpen(true)
   }
@@ -176,7 +196,6 @@ export default function MedicineManagementPage({ portal }: Props) {
     setFormRoute(item.route || "Oral")
     setFormDosageForm(item.dosageForm || "Tablet")
     setFormGenericName(item.genericName)
-    setFormFavourite(Boolean(item.favourite))
     setFormError("")
     setModalOpen(true)
   }
@@ -214,6 +233,7 @@ export default function MedicineManagementPage({ portal }: Props) {
       return
     }
 
+    // Favourite is doctor-only via the table star — never set from this modal.
     const payload = {
       medicineCode: code,
       countryCode: country,
@@ -222,13 +242,14 @@ export default function MedicineManagementPage({ portal }: Props) {
       route: formRoute,
       dosageForm: formDosageForm,
       genericName: generic,
-      favourite: formFavourite,
     }
 
     if (editingId) {
-      // Update existing
+      // Update existing (keep current favourite flag)
       const next = medicines.map((m) =>
-        m.id === editingId ? { ...m, ...payload, updatedAt: new Date().toISOString() } : m,
+        m.id === editingId
+          ? { ...m, ...payload, favourite: m.favourite, updatedAt: new Date().toISOString() }
+          : m,
       )
       setMedicines(next)
       syncStorage(next)
@@ -238,10 +259,13 @@ export default function MedicineManagementPage({ portal }: Props) {
       // Call backend
       proctoService.updateMedicine(editingId, payload).catch(() => {})
     } else {
-      // Create new
+      // Create new — starts not favourite until a doctor stars it
       const newItem: MedicineItem = {
         id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         ...payload,
+        favourite: false,
+        isActive: true,
+        isPrescribed: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -256,8 +280,9 @@ export default function MedicineManagementPage({ portal }: Props) {
     }
   }
 
-  // Toggle Favourite
+  // Toggle Favourite — doctors only
   async function handleToggleFavourite(id: string) {
+    if (!canSetFavourite) return
     const item = medicines.find((m) => m.id === id)
     if (!item) return
     const nextFav = !item.favourite
@@ -269,16 +294,22 @@ export default function MedicineManagementPage({ portal }: Props) {
     syncStorage(next)
     showMessage(
       nextFav
-        ? `"${item.brandName}" marked as favourite ⭐`
-        : `"${item.brandName}" removed from favourites`,
+        ? `"${item.brandName}" added to your favourites ⭐`
+        : `"${item.brandName}" removed from your favourites`,
     )
 
     // Call backend
     proctoService.toggleMedicineFavourite(id, nextFav).catch(() => {})
   }
 
-  // Delete Medicine with confirmation
+  // Delete Medicine with confirmation (only when never prescribed)
   function handlePromptDelete(item: MedicineItem) {
+    if (!canDeleteMedicine(item)) {
+      showError(
+        `"${item.brandName}" has been prescribed. Mark it inactive instead of deleting it.`,
+      )
+      return
+    }
     setMedicineToDelete(item)
     setDeleteConfirmOpen(true)
   }
@@ -288,15 +319,77 @@ export default function MedicineManagementPage({ portal }: Props) {
     const id = medicineToDelete.id
     const brand = medicineToDelete.brandName
 
-    const next = medicines.filter((m) => m.id !== id)
+    try {
+      const res: any = await proctoService.deleteMedicine(id)
+      if (res && res.status && res.status !== "successful") {
+        throw new Error(res.message || "Could not delete medicine.")
+      }
+      const next = medicines.filter((m) => m.id !== id)
+      setMedicines(next)
+      syncStorage(next)
+      setDeleteConfirmOpen(false)
+      setMedicineToDelete(null)
+      showMessage(`Medicine "${brand}" deleted.`)
+    } catch (err: any) {
+      showError(
+        err?.message ||
+          `"${brand}" could not be deleted. If it was prescribed, mark it inactive instead.`,
+      )
+      setDeleteConfirmOpen(false)
+      setMedicineToDelete(null)
+    }
+  }
+
+  async function handleToggleActive(item: MedicineItem) {
+    if (canDeleteMedicine(item)) {
+      showError(
+        `"${item.brandName}" has never been prescribed. Delete it instead of changing status.`,
+      )
+      return
+    }
+    const nextActive = !isMedicineActive(item)
+    const previous = medicines
+    const next = medicines.map((m) =>
+      m.id === item.id
+        ? {
+            ...m,
+            isActive: nextActive,
+            isPrescribed: true,
+            updatedAt: new Date().toISOString(),
+          }
+        : m,
+    )
     setMedicines(next)
     syncStorage(next)
-    setDeleteConfirmOpen(false)
-    setMedicineToDelete(null)
-    showMessage(`Medicine "${brand}" deleted.`)
 
-    // Call backend
-    proctoService.deleteMedicine(id).catch(() => {})
+    try {
+      const res: any = await proctoService.setMedicineActive(item.id, nextActive)
+      if (res && res.status && res.status !== "successful") {
+        throw new Error(res.message || "Could not update medicine status.")
+      }
+      if (res?.data && typeof res.data === "object") {
+        const synced = next.map((m) =>
+          m.id === item.id
+            ? {
+                ...m,
+                isActive: res.data.isActive !== false,
+                isPrescribed: true,
+              }
+            : m,
+        )
+        setMedicines(synced)
+        syncStorage(synced)
+      }
+      showMessage(
+        nextActive
+          ? `"${item.brandName}" marked active.`
+          : `"${item.brandName}" marked inactive.`,
+      )
+    } catch (err: any) {
+      setMedicines(previous)
+      syncStorage(previous)
+      showError(err?.message || `Could not update status for "${item.brandName}".`)
+    }
   }
 
   // Filtered rows
@@ -319,6 +412,10 @@ export default function MedicineManagementPage({ portal }: Props) {
     })
   }, [medicines, activeTab, search])
 
+  const medicinePagination = useClientPagination(filteredMedicines, {
+    resetKey: `${activeTab}:${search.trim().toLowerCase()}`,
+  })
+
   const totalCount = medicines.length
   const favCount = medicines.filter((m) => m.favourite).length
 
@@ -334,7 +431,7 @@ export default function MedicineManagementPage({ portal }: Props) {
         compact
         eyebrow={portal === "doctor" ? "Doctor Portal" : "Clinic Portal"}
         title="Medicine Management"
-        subtitle="Manage master inventory, government codes, commercial brand names, dosage routes, and favourite clinic medications."
+        subtitle="Unused medicines can be deleted. Once prescribed, use Active / Inactive. Renaming updates new prescriptions only — past visit names stay as written."
         action={
           <div className="flex flex-wrap items-center gap-2">
             {/* Download Template Dropdown Menu */}
@@ -452,7 +549,7 @@ export default function MedicineManagementPage({ portal }: Props) {
                 : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
             }`}
           >
-            <span>⭐ Favourite Medicines</span>
+            <span>⭐ {canSetFavourite ? "My Favourites" : "Favourites"}</span>
             <span>({favCount})</span>
           </button>
         </div>
@@ -492,20 +589,21 @@ export default function MedicineManagementPage({ portal }: Props) {
               <th className={`${th} w-[130px]`}>Route</th>
               <th className={`${th} w-[120px]`}>Dosage Form</th>
               <th className={`${th} min-w-[180px]`}>Generic Name</th>
+              <th className={`${th} w-[100px] text-center`}>Status</th>
               <th className={`${th} w-[90px] text-center`}>Favourite</th>
-              <th className={`${th} w-[130px] text-center`}>Actions</th>
+              <th className={`${th} w-[160px] text-center`}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-xs text-neutral-500">
+                <td colSpan={10} className="py-8 text-center text-xs text-neutral-500">
                   Loading medicines inventory…
                 </td>
               </tr>
             ) : filteredMedicines.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center">
+                <td colSpan={10} className="py-12 text-center">
                   <div className="mx-auto max-w-sm space-y-3">
                     <span className="text-3xl">💊</span>
                     <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
@@ -515,7 +613,9 @@ export default function MedicineManagementPage({ portal }: Props) {
                       {search
                         ? `No results matched "${search}". Try clearing the search or adding a new record.`
                         : activeTab === "favourites"
-                        ? "You have not marked any medicines as favourite yet. Click the star icon on any medicine to add it here."
+                        ? canSetFavourite
+                          ? "You have not marked any personal favourites yet. Star a medicine to keep it in your list only — other doctors will not see your stars."
+                          : "Favourites are personal to each doctor. Open the doctor portal to manage your own."
                         : "Your medicine catalog is empty. Click below to add your first medicine record."}
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
@@ -538,10 +638,12 @@ export default function MedicineManagementPage({ portal }: Props) {
                 </td>
               </tr>
             ) : (
-              filteredMedicines.map((m) => (
+              medicinePagination.pageItems.map((m) => (
                 <tr
                   key={m.id}
-                  className="transition-colors hover:bg-neutral-50/70 dark:hover:bg-neutral-900/60"
+                  className={`transition-colors hover:bg-neutral-50/70 dark:hover:bg-neutral-900/60 ${
+                    !isMedicineActive(m) ? "opacity-60" : ""
+                  }`}
                 >
                   {/* 1. Medicine Code */}
                   <td className={td}>
@@ -592,24 +694,59 @@ export default function MedicineManagementPage({ portal }: Props) {
                     </span>
                   </td>
 
-                  {/* 8. Favourite */}
+                  {/* 8. Status */}
                   <td className={`${td} text-center`}>
-                    <button
-                      type="button"
-                      aria-label={m.favourite ? "Remove favourite" : "Make favourite"}
-                      title={m.favourite ? "Favourite medicine (Click to unfavourite)" : "Mark as favourite"}
-                      onClick={() => handleToggleFavourite(m.id)}
-                      className="inline-flex size-7 items-center justify-center rounded hover:bg-neutral-100 transition-transform active:scale-90 dark:hover:bg-neutral-800"
-                    >
-                      {m.favourite ? (
-                        <span className="text-base text-amber-500 font-bold">★</span>
-                      ) : (
-                        <span className="text-base text-neutral-300 hover:text-amber-400 dark:text-neutral-600">☆</span>
-                      )}
-                    </button>
+                    {canDeleteMedicine(m) ? (
+                      <span
+                        className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 border border-sky-200/60 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800/60"
+                        title="Never prescribed — can be deleted"
+                      >
+                        Unused
+                      </span>
+                    ) : isMedicineActive(m) ? (
+                      <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200/60 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 border border-neutral-200/80 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700">
+                        Inactive
+                      </span>
+                    )}
                   </td>
 
-                  {/* 9. Actions (Edit and Delete) */}
+                  {/* 9. Favourite — doctors select this; clinic can only view */}
+                  <td className={`${td} text-center`}>
+                    {canSetFavourite ? (
+                      <button
+                        type="button"
+                        aria-label={m.favourite ? "Remove favourite" : "Make favourite"}
+                        title={
+                          m.favourite
+                            ? "Your favourite (only you) — click to remove"
+                            : "Add to your favourites (only you)"
+                        }
+                        onClick={() => handleToggleFavourite(m.id)}
+                        className="inline-flex size-7 items-center justify-center rounded hover:bg-neutral-100 transition-transform active:scale-90 dark:hover:bg-neutral-800"
+                      >
+                        {m.favourite ? (
+                          <span className="text-base font-bold text-amber-500">★</span>
+                        ) : (
+                          <span className="text-base text-neutral-300 hover:text-amber-400 dark:text-neutral-600">
+                            ☆
+                          </span>
+                        )}
+                      </button>
+                    ) : (
+                      <span
+                        className="inline-flex size-7 items-center justify-center text-base text-neutral-300 dark:text-neutral-600"
+                        title="Favourites are personal to each doctor"
+                      >
+                        ☆
+                      </span>
+                    )}
+                  </td>
+
+                  {/* 10. Actions: Delete when unused; Active/Inactive when prescribed */}
                   <td className={`${td} text-center`}>
                     <div className="flex items-center justify-center gap-1.5">
                       <button
@@ -620,14 +757,33 @@ export default function MedicineManagementPage({ portal }: Props) {
                       >
                         Edit
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePromptDelete(m)}
-                        className="rounded border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300"
-                        title="Delete medicine record"
-                      >
-                        Delete
-                      </button>
+                      {canDeleteMedicine(m) ? (
+                        <button
+                          type="button"
+                          onClick={() => handlePromptDelete(m)}
+                          className="rounded border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300"
+                          title="Delete medicine — never used in a prescription"
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActive(m)}
+                          className={`rounded border px-2.5 py-1 text-xs font-semibold shadow-sm transition ${
+                            isMedicineActive(m)
+                              ? "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          }`}
+                          title={
+                            isMedicineActive(m)
+                              ? "Mark inactive — keeps prescription history"
+                              : "Mark active — available again for new prescriptions"
+                          }
+                        >
+                          {isMedicineActive(m) ? "Deactivate" : "Activate"}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -635,6 +791,11 @@ export default function MedicineManagementPage({ portal }: Props) {
             )}
           </tbody>
         </table>
+        <TablePagination
+          pagination={medicinePagination}
+          label="medicines"
+          className="mt-2 border-t border-neutral-200 px-2 dark:border-neutral-700"
+        />
       </div>
 
       {/* 4. Add / Edit Medicine Modal */}
@@ -761,19 +922,12 @@ export default function MedicineManagementPage({ portal }: Props) {
               </select>
             </div>
 
-            {/* Favourite Checkbox */}
-            <div className="flex items-center gap-2 pt-5">
-              <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-neutral-800 dark:text-neutral-200">
-                <input
-                  type="checkbox"
-                  checked={formFavourite}
-                  onChange={(e) => setFormFavourite(e.target.checked)}
-                  className="size-4 rounded text-sky-600 focus:ring-sky-500"
-                />
-                <span>Mark as Favourite (⭐)</span>
-              </label>
-            </div>
           </div>
+          <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+            Each doctor stars favourites for themselves only (table star). They
+            are not set when creating or editing a medicine, and are not shared
+            with other doctors.
+          </p>
 
           <div className="mt-4 flex justify-end gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-700">
             <button
@@ -811,7 +965,8 @@ export default function MedicineManagementPage({ portal }: Props) {
             (Code: <code className="text-neutral-800 dark:text-neutral-200">{medicineToDelete?.medicineCode}</code>)?
           </p>
           <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-            This action cannot be undone.
+            This medicine has never been prescribed, so it can be removed. This
+            action cannot be undone.
           </p>
           <div className="mt-4 flex justify-end gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-700">
             <button

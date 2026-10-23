@@ -160,6 +160,7 @@ export { default as ThemeBackground } from "./bg/ThemeBackground"
 
 //pagination
 export { default as Pagination } from "./pagination"
+export { default as TablePagination } from "./pagination/TablePagination"
 
 // loader
 export { default as ThinkingLoader } from "./loader/ThinkingLoader"

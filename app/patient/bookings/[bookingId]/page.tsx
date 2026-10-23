@@ -429,7 +429,7 @@ export default function PatientVisitPage() {
 
   const recordRows: Array<[string, string]> = [
     ["Chief complaint", dash(chiefComplaintOf(booking))],
-    ["Diagnosis", dash(chart?.diagnosis || booking.disease)],
+    ["Diagnosis", dash(chart?.diagnosis)],
     ["Doctor Advice", dash(chart?.advice)],
     ["Doctor Notes", dash(doctorRemarks)],
     ["Mode", dash(formatLabel(booking.mode || ""))],

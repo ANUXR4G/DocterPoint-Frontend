@@ -17,6 +17,8 @@ export type MedicineMasterItem = {
   instruction?: string;
   favourite?: boolean;
   isPopular?: boolean;
+  isActive?: boolean;
+  isPrescribed?: boolean;
 };
 
 export const ROUTES_LIST = [
@@ -830,6 +832,8 @@ export function normalizeMedicineMasterItem(m: any): MedicineMasterItem {
     instruction: m.instruction ? String(m.instruction) : "",
     favourite: Boolean(m.favourite || m.isPopular),
     isPopular: Boolean(m.isPopular),
+    isActive: m.isActive !== false,
+    isPrescribed: Boolean(m.isPrescribed),
   }
 }
 

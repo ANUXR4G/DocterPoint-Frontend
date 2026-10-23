@@ -27,6 +27,12 @@ export type GridBooking = {
   end?: Date | null
 }
 
+export type GridTokenBooking = {
+  id: string
+  providerId: string
+  tokenNumber?: number | null
+}
+
 type Column = { id: string; name: string }
 
 type Selection = { providerId: string; start: number; end: number } | null
@@ -76,6 +82,7 @@ export default function CalendarDayGrid({
   isPast,
   columns,
   bookings,
+  tokenBookings,
   windows,
   canCreate,
   selection,
@@ -87,12 +94,14 @@ export default function CalendarDayGrid({
   freshIds,
   renderBooking,
   footer,
+  onFocusDoctor,
 }: {
   dateIso: string
   isToday: boolean
   isPast: boolean
   columns: Column[]
   bookings: GridBooking[]
+  tokenBookings?: GridTokenBooking[]
   windows: Record<string, DayWindows | undefined>
   canCreate: (providerId: string) => boolean
   selection: Selection
@@ -117,6 +126,8 @@ export default function CalendarDayGrid({
   freshIds?: string[]
   renderBooking: (bookingId: string) => ReactNode
   footer?: ReactNode
+  /** Click doctor name in column header → show only that doctor's calendar. */
+  onFocusDoctor?: (providerId: string) => void
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   /** Repeat window whose ✕ asks "this day or all upcoming". */
@@ -219,6 +230,16 @@ export default function CalendarDayGrid({
     }
     return map
   }, [bookings])
+
+  const tokensByProvider = useMemo(() => {
+    const map = new Map<string, GridTokenBooking[]>()
+    for (const b of tokenBookings ?? []) {
+      const list = map.get(b.providerId) ?? []
+      list.push(b)
+      map.set(b.providerId, list)
+    }
+    return map
+  }, [tokenBookings])
 
   function bounds() {
     const lo = isToday
@@ -566,12 +587,15 @@ export default function CalendarDayGrid({
             {columns.map((c) => {
               const w = windows[c.id]
               const can = creatable(c.id)
+              const isToken = w?.mode === "TOKEN_BASED"
               const summary = !w
                 ? "Loading…"
                 : w.dayOff
                   ? "On leave"
-                  : w.mode === "TOKEN_BASED"
-                    ? "Token queue"
+                  : isToken
+                    ? w.hours.length
+                      ? `${w.hours.map(windowLabel).join(", ")} · Token queue`
+                      : "Token queue"
                     : w.hours.length
                       ? `${w.hours.map(windowLabel).join(", ")} · ${w.slotIntervalMin}-min slots`
                       : "No regular hours"
@@ -581,9 +605,20 @@ export default function CalendarDayGrid({
                   className="group relative flex min-w-[220px] flex-1 items-center justify-between gap-2 border-l border-neutral-200 px-3 py-2 dark:border-neutral-700"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-neutral-900 dark:text-white">
-                      {drName(c.name)}
-                    </p>
+                    {onFocusDoctor && columns.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => onFocusDoctor(c.id)}
+                        title={`Show calendar for ${drName(c.name)} only`}
+                        className="truncate text-left text-sm font-bold text-neutral-900 underline-offset-2 hover:text-[var(--theme-primary)] hover:underline dark:text-white dark:hover:text-[var(--theme-primary)]"
+                      >
+                        {drName(c.name)}
+                      </button>
+                    ) : (
+                      <p className="truncate text-sm font-bold text-neutral-900 dark:text-white">
+                        {drName(c.name)}
+                      </p>
+                    )}
                     <p className="truncate text-xs opacity-60">{summary}</p>
                   </div>
                   {can ? (
@@ -605,6 +640,22 @@ export default function CalendarDayGrid({
                       className="shrink-0 rounded-lg border border-[var(--theme-primary)]/40 px-2 py-1 text-xs font-bold text-[var(--theme-primary)] opacity-0 transition hover:bg-[var(--theme-primary)]/10 focus:opacity-100 group-hover:opacity-100"
                     >
                       + Slot
+                    </button>
+                  ) : isToken && onBookSlot && !w?.dayOff ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onBookSlot({
+                          providerId: c.id,
+                          date: dateIso,
+                          start: 0,
+                          end: 0,
+                          anchor: { left: 0, top: 0, width: 0, height: 0 },
+                        })
+                      }
+                      className="shrink-0 rounded-lg border border-[var(--theme-primary)]/40 px-2 py-1 text-xs font-bold text-[var(--theme-primary)] transition hover:bg-[var(--theme-primary)]/10"
+                    >
+                      + Token
                     </button>
                   ) : null}
                 </div>
@@ -632,6 +683,9 @@ export default function CalendarDayGrid({
               const w = windows[c.id]
               const can = creatable(c.id)
               const canBook = bookable(c.id)
+              const colTokens = (tokensByProvider.get(c.id) ?? []).sort(
+                (a, b) => (a.tokenNumber ?? 0) - (b.tokenNumber ?? 0),
+              )
               const colBookings = layoutLanes(
                 (byProvider.get(c.id) ?? []).map((b) => {
                   const s = practiceMinutesOfDay(b.start)
@@ -641,6 +695,92 @@ export default function CalendarDayGrid({
                   return { b, s, e: s + Math.max(5, dur) }
                 }),
               )
+              const isTokenCol =
+                w?.mode === "TOKEN_BASED" ||
+                (colTokens.length > 0 &&
+                  !colBookings.length &&
+                  w?.mode !== "TIME_BASED")
+
+              if (isTokenCol) {
+                return (
+                  <div
+                    key={c.id}
+                    data-cal-col={c.id}
+                    className="relative flex min-h-0 min-w-[220px] flex-1 select-none flex-col border-l border-neutral-200 bg-neutral-50/40 dark:border-neutral-700 dark:bg-neutral-900/30"
+                    style={{ minHeight: height }}
+                  >
+                    <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-sky-100 bg-sky-50/90 px-3 py-2 text-xs font-semibold text-sky-900 backdrop-blur dark:border-sky-900/40 dark:bg-sky-950/70 dark:text-sky-200">
+                      <span className="truncate">
+                        {w?.hours?.length
+                          ? `${w.hours.map(windowLabel).join(", ")} · Token queue`
+                          : "Token queue"}
+                        {colTokens.length
+                          ? ` · ${colTokens.length} token${colTokens.length === 1 ? "" : "s"}`
+                          : ""}
+                      </span>
+                      {onBookSlot && !w?.dayOff ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onBookSlot({
+                              providerId: c.id,
+                              date: dateIso,
+                              start: 0,
+                              end: 0,
+                              anchor: { left: 0, top: 0, width: 0, height: 0 },
+                            })
+                          }
+                          className="shrink-0 rounded px-1.5 py-0.5 text-xs font-bold text-[var(--theme-primary)] hover:bg-[var(--theme-primary)]/10"
+                        >
+                          + Token
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2.5">
+                      {w?.dayOff ? (
+                        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center text-xs font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+                          On leave{w.dayOff.reason ? ` — ${w.dayOff.reason}` : ""}
+                        </div>
+                      ) : null}
+
+                      {colTokens.map((b) => (
+                        <div key={b.id} data-cal-item className="shrink-0">
+                          {renderBooking(b.id)}
+                        </div>
+                      ))}
+
+                      {!colTokens.length && !w?.dayOff ? (
+                        <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+                          <p className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">
+                            Token Queue
+                          </p>
+                          <p className="mt-1 text-[11px] opacity-50">
+                            No tokens booked yet
+                          </p>
+                          {onBookSlot ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onBookSlot({
+                                  providerId: c.id,
+                                  date: dateIso,
+                                  start: 0,
+                                  end: 0,
+                                  anchor: { left: 0, top: 0, width: 0, height: 0 },
+                                })
+                              }
+                              className="mt-2 rounded-lg border border-[var(--theme-primary)]/40 bg-white px-2 py-1 text-xs font-bold text-[var(--theme-primary)] transition hover:bg-[var(--theme-primary)]/10 dark:bg-neutral-900"
+                            >
+                              + Book Token
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              }
               const sel =
                 dragSel?.providerId === c.id
                   ? dragSel
@@ -890,6 +1030,43 @@ export default function CalendarDayGrid({
                       {renderBooking(b.id)}
                     </div>
                   ))}
+
+                  {colTokens.length > 0 ? (
+                    <div
+                      data-cal-item
+                      className="pointer-events-auto absolute inset-x-1 bottom-2 top-auto z-20 flex max-h-[45%] flex-col gap-1.5 overflow-hidden rounded-xl border border-sky-300 bg-white p-2 shadow-md dark:border-sky-700 dark:bg-neutral-900"
+                    >
+                      <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 pb-1.5 dark:border-neutral-800">
+                        <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">
+                          Tokens ({colTokens.length})
+                        </span>
+                        {onBookSlot && !w?.dayOff ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onBookSlot({
+                                providerId: c.id,
+                                date: dateIso,
+                                start: 0,
+                                end: 0,
+                                anchor: { left: 0, top: 0, width: 0, height: 0 },
+                              })
+                            }
+                            className="rounded px-1.5 py-0.5 text-xs font-bold text-[var(--theme-primary)] hover:bg-[var(--theme-primary)]/10"
+                          >
+                            + Token
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
+                        {colTokens.map((b) => (
+                          <div key={b.id} data-cal-item>
+                            {renderBooking(b.id)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )
             })}

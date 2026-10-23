@@ -54,6 +54,7 @@ import {
   matchesQueueStatusFilter,
   type QueueStatusFilter,
 } from "@/lib/bookingStatus"
+import { isEmergencyWalkIn } from "@/lib/bookingDisplay"
 import BookingStatusFilterBar from "@/components/ui/procto/BookingStatusFilterBar"
 
 type ViewMode = "day" | "week" | "month"
@@ -141,19 +142,73 @@ function patientLabel(b: CalBooking) {
   )
 }
 
-function statusClass(status: string) {
-  switch (status) {
-    case "IN_PROGRESS":
-      return "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/40 dark:text-amber-100 dark:border-amber-700"
-    case "COMPLETED":
-      return "bg-green-100 text-green-900 border-green-300 dark:bg-green-900/40 dark:text-green-100 dark:border-green-700"
-    case "CANCELED":
-      return "bg-red-100 text-red-900 border-red-300 dark:bg-red-900/40 dark:text-red-100 dark:border-red-700"
-    case "NO_SHOW":
-      return "bg-[#FFF4CC] text-[#8A6A08] border-[#E6B325] dark:bg-[#3d3208] dark:text-[#F3D36B] dark:border-[#E6B325]"
-    default:
-      return "bg-sky-100 text-sky-900 border-sky-300 dark:bg-sky-900/40 dark:text-sky-100 dark:border-sky-700"
+/** Calendar chip colours — matches the status legend (Cancelled = red). */
+function statusClass(booking: Pick<CalBooking, "status" | "paymentStatus" | "payment_status" | "consultationType" | "consultation_type">) {
+  const status = String(booking.status || "").toUpperCase()
+  const paid = String(
+    booking.paymentStatus ?? booking.payment_status ?? "",
+  ).toUpperCase() === "PAID"
+
+  if (status === "CANCELED" || status === "CANCELLED") {
+    return "bg-red-500 text-white border-red-600 dark:bg-red-600 dark:text-white dark:border-red-500"
   }
+  if (status === "NO_SHOW") {
+    return "bg-[#FFF4CC] text-[#8A6A08] border-[#E6B325] dark:bg-[#3d3208] dark:text-[#F3D36B] dark:border-[#E6B325]"
+  }
+  if (status === "COMPLETED") {
+    return "bg-green-700 text-white border-green-800 dark:bg-green-700 dark:text-white dark:border-green-600"
+  }
+  if (status === "IN_PROGRESS") {
+    return "bg-green-300 text-green-950 border-green-400 dark:bg-green-800/70 dark:text-green-50 dark:border-green-600"
+  }
+  if (status === "WAITING" || status === "CHECKED_IN") {
+    return "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-100 dark:border-emerald-700"
+  }
+  if (isEmergencyWalkIn(booking)) {
+    return "bg-yellow-300 text-yellow-950 border-yellow-400 dark:bg-yellow-700/50 dark:text-yellow-50 dark:border-yellow-500"
+  }
+  if (paid) {
+    return "bg-blue-500 text-white border-blue-600 dark:bg-blue-600 dark:text-white dark:border-blue-500"
+  }
+  // Booked / accepted / scheduled
+  return "bg-orange-200 text-orange-950 border-orange-300 dark:bg-orange-900/50 dark:text-orange-50 dark:border-orange-700"
+}
+
+const CALENDAR_STATUS_LEGEND: Array<{ label: string; swatch: string }> = [
+  { label: "Free Slots", swatch: "border-2 border-neutral-800 bg-white dark:border-white dark:bg-neutral-900" },
+  { label: "Break Time", swatch: "bg-neutral-400 dark:bg-neutral-500" },
+  { label: "Emergency Walkin", swatch: "bg-yellow-400" },
+  { label: "Arrived", swatch: "bg-emerald-200 dark:bg-emerald-400" },
+  { label: "Consultation Started", swatch: "bg-green-400" },
+  { label: "Cancelled", swatch: "bg-red-500" },
+  { label: "No Show", swatch: "bg-amber-400" },
+  { label: "Booked", swatch: "bg-orange-300" },
+  { label: "Consultation Completed", swatch: "bg-green-700" },
+  { label: "Fee Paid", swatch: "bg-blue-500" },
+]
+
+function CalendarStatusLegend() {
+  return (
+    <div
+      className="shrink-0 border-t border-neutral-200 px-1 pt-3 dark:border-neutral-700"
+      aria-label="Calendar status colours"
+    >
+      <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+        {CALENDAR_STATUS_LEGEND.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300"
+          >
+            <span
+              className={`inline-block size-3.5 shrink-0 rounded-full ${item.swatch}`}
+              aria-hidden
+            />
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function phoneOf(b: CalBooking) {
@@ -168,9 +223,11 @@ function dateLabel(b: CalBooking) {
 
 function BookingDetails({
   booking,
+  doctorName,
   onClose,
 }: {
   booking: CalBooking
+  doctorName?: string | null
   onClose: () => void
 }) {
   const { patchBooking } = usePracticeDashboard()
@@ -231,7 +288,11 @@ function BookingDetails({
         <div className="flex justify-between gap-3">
           <dt className="opacity-60">Doctor</dt>
           <dd className="text-right font-semibold">
-            {booking.provider?.name ? drName(booking.provider.name) : "—"}
+            {booking.provider?.name
+              ? drName(booking.provider.name)
+              : doctorName
+                ? drName(doctorName)
+                : "—"}
           </dd>
         </div>
         <div className="flex justify-between gap-3">
@@ -282,6 +343,8 @@ function BookingCard({
   booking,
   compact = false,
   fill = false,
+  showDoctor = false,
+  doctorName,
   onCut,
   onActivate,
 }: {
@@ -289,6 +352,8 @@ function BookingCard({
   compact?: boolean
   /** Stretch to a timed day-grid slot. Week and month chips stay content-sized. */
   fill?: boolean
+  showDoctor?: boolean
+  doctorName?: string | null
   onCut?: () => void
   onActivate?: () => void
 }) {
@@ -299,6 +364,12 @@ function BookingCard({
   const panelRef = useRef<HTMLDivElement>(null)
   /** Cut / the actions menu must not also open the booking details popup. */
   const suppressOpen = useRef(false)
+
+  const docDisplayName = doctorName
+    ? drName(doctorName)
+    : booking.provider?.name
+      ? drName(booking.provider.name)
+      : null
 
   function show() {
     const el = ref.current
@@ -393,14 +464,21 @@ function BookingCard({
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") e.stopPropagation()
         }}
-        className={`block w-full rounded-lg border text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${fill ? "h-full" : ""} ${statusClass(booking.status)} ${
+        className={`block w-full rounded-lg border text-left transition hover:brightness-[0.98] dark:hover:brightness-110 ${fill ? "h-full" : ""} ${statusClass(booking)} ${
           compact ? "px-1.5 py-1" : "px-2.5 py-2"
         } ${open ? "ring-2 ring-[var(--theme-primary)] ring-offset-1 dark:ring-offset-neutral-900" : ""}`}
       >
         {compact ? (
-          <p className="truncate text-[11px] font-semibold leading-tight">
-            {timeLabel(booking)} {patientLabel(booking)}
-          </p>
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-semibold leading-tight">
+              {timeLabel(booking)} {patientLabel(booking)}
+            </p>
+            {showDoctor && docDisplayName ? (
+              <p className="mt-0.5 truncate text-[10px] font-medium text-sky-700 dark:text-sky-300">
+                {docDisplayName}
+              </p>
+            ) : null}
+          </div>
         ) : (
           <>
             <p className="text-sm font-semibold leading-tight">
@@ -416,7 +494,7 @@ function BookingCard({
             </p>
             <p className="mt-0.5 truncate text-xs opacity-80">
               {[
-                booking.provider?.name ? drName(booking.provider.name) : null,
+                showDoctor ? docDisplayName : null,
                 booking.disease?.trim() || "No chief complaint",
               ]
                 .filter(Boolean)
@@ -505,6 +583,7 @@ function BookingCard({
             >
               <BookingDetails
                 booking={booking}
+                doctorName={docDisplayName}
                 onClose={() => setOpen(false)}
               />
             </div>,
@@ -669,6 +748,24 @@ export default function AppointmentCalendar() {
     return match.length ? match : [{ id: providerId, name: "You" }]
   }, [doctors, providerId])
 
+  const doctorMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const d of doctors) {
+      if (d.id) map.set(d.id, d.name)
+    }
+    const practice = (memberships[0] as unknown as Membership)?.practice
+    if (practice?.members) {
+      for (const m of practice.members) {
+        const name = m.user?.name || m.user?.email || "Doctor"
+        if (m.userId) map.set(m.userId, name)
+        if (m.user?.id) map.set(m.user.id, name)
+        const row = m as { doctorId?: string | null }
+        if (row.doctorId) map.set(row.doctorId, name)
+      }
+    }
+    return map
+  }, [doctors, memberships])
+
   const [slotScope, setSlotScope] = useState<
     PracticePermissionScope | undefined
   >(undefined)
@@ -710,14 +807,17 @@ export default function AppointmentCalendar() {
     const next: Record<string, DayWindows | undefined> = {}
     ids.forEach((id, i) => {
       const res = results[i]
-      if (res.status === "successful" && res.data?.windows)
-        next[id] = res.data.windows
+      if (res.status === "successful" && res.data?.windows) {
+        next[id] = {
+          ...res.data.windows,
+          mode: res.data.windows.mode ?? res.data.configuredMode ?? null,
+        }
+      }
     })
     setDayWindows(next)
   }, [practiceId, view, anchor, columnKey])
 
   useEffect(() => {
-    setDayWindows({})
     void loadDayWindows()
   }, [loadDayWindows])
 
@@ -1143,83 +1243,94 @@ export default function AppointmentCalendar() {
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1">
-        {view === "day" ? (
-          <DayView
-            day={anchor}
-            bookings={dayBookings}
-            columns={columns}
-            windows={dayWindows}
-            canCreate={canCreateFor}
-            selection={
-              quick &&
-              quick.date === ymd(anchor) &&
-              quick.start != null &&
-              quick.end != null
-                ? {
-                    providerId: quick.providerId,
-                    start: quick.start,
-                    end: quick.end,
-                  }
-                : null
-            }
-            onQuickCreate={setQuick}
-            onBookSlot={(req) => {
-              if (clipboard && req.start != null) {
-                askMove(clipboard, req.providerId, req.date, req.start)
-                return
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {view === "day" ? (
+            <DayView
+              day={anchor}
+              bookings={dayBookings}
+              columns={columns}
+              windows={dayWindows}
+              canCreate={canCreateFor}
+              canMoveBooking={canMoveBooking}
+              onFocusDoctor={
+                providerId === "all" ? (id) => setProviderId(id) : undefined
               }
-              setBookPrefill({
-                providerId: req.providerId,
-                date: req.date,
-                startMinutes: req.start,
-                endMinutes: req.end,
-              })
-              setBookOpen(true)
-            }}
-            onMoveBooking={(move) => {
-              const b = dayBookings.find((row) => row.id === move.bookingId)
-              if (!b || !canMoveBooking(b)) return
-              askMove(b, move.providerId, move.date, move.start)
-            }}
-            onCut={cutBooking}
-            onActivate={setFocusedId}
-            onRemoveExtra={(id, extra, scope) =>
-              void removeExtra(id, extra, scope)
-            }
-            freshIds={freshIds}
-          />
-        ) : null}
+              selection={
+                quick &&
+                quick.date === ymd(anchor) &&
+                quick.start != null &&
+                quick.end != null
+                  ? {
+                      providerId: quick.providerId,
+                      start: quick.start,
+                      end: quick.end,
+                    }
+                  : null
+              }
+              onQuickCreate={setQuick}
+              onBookSlot={(req) => {
+                if (clipboard && req.start != null) {
+                  askMove(clipboard, req.providerId, req.date, req.start)
+                  return
+                }
+                setBookPrefill({
+                  providerId: req.providerId,
+                  date: req.date,
+                  startMinutes: req.start,
+                  endMinutes: req.end,
+                })
+                setBookOpen(true)
+              }}
+              onMoveBooking={(move) => {
+                const b = dayBookings.find((row) => row.id === move.bookingId)
+                if (!b || !canMoveBooking(b)) return
+                askMove(b, move.providerId, move.date, move.start)
+              }}
+              onCut={cutBooking}
+              onActivate={setFocusedId}
+              onRemoveExtra={(id, extra, scope) =>
+                void removeExtra(id, extra, scope)
+              }
+              freshIds={freshIds}
+            />
+          ) : null}
 
-        {view === "week" ? (
-          <WeekView
-            days={weekDays}
-            byDay={byDay}
-            onSelectDay={(d) => {
-              setAnchor(d)
-              setView("day")
-            }}
-            onAddSlot={
-              creatableDoctors.length ? quickCreateFromHeader : undefined
-            }
-            onCut={cutBooking}
-            onActivate={setFocusedId}
-          />
-        ) : null}
+          {view === "week" ? (
+            <WeekView
+              days={weekDays}
+              byDay={byDay}
+              showDoctor={providerId === "all"}
+              doctorMap={doctorMap}
+              onSelectDay={(d) => {
+                setAnchor(d)
+                setView("day")
+              }}
+              onAddSlot={
+                creatableDoctors.length ? quickCreateFromHeader : undefined
+              }
+              onCut={cutBooking}
+              onActivate={setFocusedId}
+            />
+          ) : null}
 
-        {view === "month" ? (
-          <MonthView
-            anchor={anchor}
-            days={monthDays}
-            byDay={byDay}
-            onSelectDay={(d) => {
-              setAnchor(d)
-              setView("day")
-            }}
-            onCut={cutBooking}
-            onActivate={setFocusedId}
-          />
-        ) : null}
+          {view === "month" ? (
+            <MonthView
+              anchor={anchor}
+              days={monthDays}
+              byDay={byDay}
+              doctorMap={doctorMap}
+              onSelectDay={(d) => {
+                setAnchor(d)
+                setView("day")
+              }}
+              onCut={cutBooking}
+              onActivate={setFocusedId}
+            />
+          ) : null}
+        </div>
+
+        <CalendarStatusLegend />
       </div>
 
       <ClinicBookAppointmentModal
@@ -1284,12 +1395,183 @@ export default function AppointmentCalendar() {
   )
 }
 
+function TokenDayView({
+  day,
+  bookings,
+  columns,
+  windows,
+  canCreate,
+  onActivate,
+  onCut,
+  canMoveBooking,
+  onBookToken,
+  onFocusDoctor,
+}: {
+  day: Date
+  bookings: CalBooking[]
+  columns: Array<{ id: string; name: string }>
+  windows: Record<string, DayWindows | undefined>
+  canCreate: (providerId: string) => boolean
+  onActivate: (id: string) => void
+  onCut: (booking: CalBooking) => void
+  canMoveBooking: (b: CalBooking) => boolean
+  onBookToken?: (providerId: string) => void
+  onFocusDoctor?: (providerId: string) => void
+}) {
+  const byProvider = useMemo(() => {
+    const map = new Map<string, CalBooking[]>()
+    for (const b of bookings) {
+      const pid =
+        b.providerId ??
+        b.provider?.id ??
+        (columns.length === 1 ? columns[0].id : null)
+      if (!pid) continue
+      const list = map.get(pid) ?? []
+      list.push(b)
+      map.set(pid, list)
+    }
+    return map
+  }, [bookings, columns])
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-x-auto overflow-y-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900/40">
+      <div
+        className="grid h-full min-h-0 min-w-[320px] flex-1 divide-x divide-neutral-100 dark:divide-neutral-800"
+        style={{
+          gridTemplateColumns: `repeat(${Math.max(1, columns.length)}, minmax(260px, 1fr))`,
+        }}
+      >
+        {columns.map((c) => {
+          const w = windows[c.id]
+          const list = (byProvider.get(c.id) ?? []).sort(
+            (a, b) => (a.tokenNumber ?? 0) - (b.tokenNumber ?? 0),
+          )
+          const summary = !w
+            ? "Loading…"
+            : w.dayOff
+              ? "On leave"
+              : w.hours.length
+                ? `${w.hours.map(windowLabel).join(", ")} · Token queue`
+                : "Token queue"
+
+          return (
+            <div key={c.id} className="flex h-full min-h-0 flex-col">
+              <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 p-3 dark:border-neutral-800">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    {onFocusDoctor && columns.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => onFocusDoctor(c.id)}
+                        title={`Show calendar for ${drName(c.name)} only`}
+                        className="truncate text-left text-sm font-bold text-neutral-900 underline-offset-2 hover:text-[var(--theme-primary)] hover:underline dark:text-white dark:hover:text-[var(--theme-primary)]"
+                      >
+                        {drName(c.name)}
+                      </button>
+                    ) : (
+                      <p className="truncate text-sm font-bold text-neutral-900 dark:text-white">
+                        {drName(c.name)}
+                      </p>
+                    )}
+                    <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-white dark:text-black">
+                      {list.length} token{list.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-xs opacity-60">{summary}</p>
+                </div>
+                {onBookToken && canCreate(c.id) && !w?.dayOff ? (
+                  <button
+                    type="button"
+                    onClick={() => onBookToken(c.id)}
+                    className="shrink-0 rounded-lg border border-[var(--theme-primary)]/40 bg-white px-2 py-1 text-xs font-bold text-[var(--theme-primary)] transition hover:bg-[var(--theme-primary)]/10 dark:bg-neutral-900"
+                  >
+                    + Book Token
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                {w?.dayOff ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+                    On leave{w.dayOff.reason ? ` — ${w.dayOff.reason}` : ""}
+                  </div>
+                ) : null}
+
+                {list.map((b) => (
+                  <BookingCard
+                    key={b.id}
+                    booking={b}
+                    compact={false}
+                    doctorName={c.name}
+                    onActivate={() => onActivate(b.id)}
+                    onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
+                  />
+                ))}
+
+                {!list.length && !w?.dayOff ? (
+                  <p className="px-1 py-12 text-center text-xs opacity-40">
+                    No token bookings for this day.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function isTokenBooking(b: Partial<CalBooking>): boolean {
+  if (b.tokenNumber != null || b.token_number != null) return true
+  if ((b as { mode?: string }).mode === "TOKEN_BASED") return true
+  // Slot-less visit on a token day (no clock time assigned yet)
+  return !(b.slotStart || b.slot_start)
+}
+
+export function isTimedBooking(b: Partial<CalBooking>): boolean {
+  return (
+    Boolean(b.slotStart || b.slot_start) &&
+    b.tokenNumber == null &&
+    b.token_number == null &&
+    (b as { mode?: string }).mode !== "TOKEN_BASED"
+  )
+}
+
+export function isTokenModeDay(
+  columns: Array<{ id: string }>,
+  windows: Record<string, { mode?: string | null } | undefined>,
+  bookings: CalBooking[],
+): boolean {
+  const tokens = bookings.filter(isTokenBooking)
+  const timed = bookings.filter(isTimedBooking)
+
+  // If there are timed bookings on the day, keep the timed grid for their exact slot times
+  if (timed.length > 0) return false
+
+  // If there are token bookings and no timed bookings, show token day view
+  if (tokens.length > 0) return true
+
+  // If all columns with a configured mode are TOKEN_BASED (and at least one is configured)
+  const configured = columns.map((c) => windows[c.id]?.mode).filter(Boolean)
+  if (configured.length > 0 && configured.every((m) => m === "TOKEN_BASED")) {
+    return true
+  }
+
+  const allTokenMode =
+    columns.length > 0 &&
+    columns.every((c) => windows[c.id]?.mode === "TOKEN_BASED")
+
+  return allTokenMode
+}
+
 function DayView({
   day,
   bookings,
   columns,
   windows,
   canCreate,
+  canMoveBooking,
   selection,
   onQuickCreate,
   onBookSlot,
@@ -1298,12 +1580,14 @@ function DayView({
   onActivate,
   onRemoveExtra,
   freshIds,
+  onFocusDoctor,
 }: {
   day: Date
   bookings: CalBooking[]
   columns: Array<{ id: string; name: string }>
   windows: Record<string, DayWindows | undefined>
   canCreate: (providerId: string) => boolean
+  canMoveBooking: (booking: CalBooking) => boolean
   selection: { providerId: string; start: number; end: number } | null
   onQuickCreate: (req: QuickSlotRequest) => void
   onBookSlot?: (req: QuickSlotRequest) => void
@@ -1321,6 +1605,7 @@ function DayView({
     scope: "one" | "series",
   ) => void
   freshIds: string[]
+  onFocusDoctor?: (providerId: string) => void
 }) {
   const dateIso = ymd(day)
   const today = practiceTodayIso()
@@ -1331,6 +1616,7 @@ function DayView({
   const timed = useMemo(() => {
     const out: GridBooking[] = []
     for (const b of bookings) {
+      if (!isTimedBooking(b)) continue
       const slot = b.slotStart ?? b.slot_start
       const pid = b.providerId ?? b.provider?.id
       if (!slot || !pid) continue
@@ -1344,8 +1630,13 @@ function DayView({
     }
     return out
   }, [bookings])
-  const tokens = bookings.filter((b) => !(b.slotStart || b.slot_start))
+  const tokens = useMemo(
+    () => bookings.filter(isTokenBooking),
+    [bookings],
+  )
 
+  // Always use the day grid so token queues render inside calendar columns
+  // (not a separate list outside the calendar chrome).
   return (
     <CalendarDayGrid
       dateIso={dateIso}
@@ -1353,6 +1644,11 @@ function DayView({
       isPast={dateIso < today}
       columns={columns}
       bookings={timed}
+      tokenBookings={tokens.map((b) => ({
+        id: b.id,
+        providerId: b.providerId ?? b.provider?.id ?? "",
+        tokenNumber: b.tokenNumber ?? b.token_number,
+      }))}
       windows={windows}
       canCreate={canCreate}
       selection={selection}
@@ -1365,33 +1661,26 @@ function DayView({
       }}
       onRemoveExtra={onRemoveExtra}
       freshIds={freshIds}
+      onFocusDoctor={onFocusDoctor}
       renderBooking={(id) => {
         const b = byId.get(id)
         if (!b) return null
+        const timedSlot = isTimedBooking(b)
         return (
           <BookingCard
             booking={b}
             compact
-            fill
+            fill={timedSlot}
+            doctorName={
+              columns.find(
+                (c) => c.id === (b.providerId ?? b.provider?.id),
+              )?.name
+            }
             onActivate={() => onActivate(b.id)}
             onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
           />
         )
       }}
-      footer={
-        tokens.length > 0 ? (
-          <div className="border-t border-neutral-200 px-4 py-4 dark:border-neutral-700">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
-              Token queue · {format(day, "d MMM")}
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {tokens.map((b) => (
-                <BookingCard key={b.id} booking={b} />
-              ))}
-            </div>
-          </div>
-        ) : null
-      }
     />
   )
 }
@@ -1399,6 +1688,8 @@ function DayView({
 function WeekView({
   days,
   byDay,
+  showDoctor = false,
+  doctorMap,
   onSelectDay,
   onAddSlot,
   onCut,
@@ -1406,6 +1697,8 @@ function WeekView({
 }: {
   days: Date[]
   byDay: Map<string, CalBooking[]>
+  showDoctor?: boolean
+  doctorMap?: Map<string, string>
   onSelectDay: (d: Date) => void
   onAddSlot?: (d: Date, el: HTMLElement) => void
   onCut: (booking: CalBooking) => void
@@ -1449,7 +1742,14 @@ function WeekView({
                     {format(d, "d")}
                   </span>
                   <span className="text-xs opacity-60">
-                    {list.length} slot{list.length === 1 ? "" : "s"}
+                    {list.length}{" "}
+                    {list.some(
+                      (b) =>
+                        b.tokenNumber != null ||
+                        (b as { mode?: string }).mode === "TOKEN_BASED",
+                    )
+                      ? `token${list.length === 1 ? "" : "s"}`
+                      : `slot${list.length === 1 ? "" : "s"}`}
                   </span>
                 </button>
               </div>
@@ -1459,6 +1759,11 @@ function WeekView({
                     key={b.id}
                     booking={b}
                     compact
+                    showDoctor={showDoctor}
+                    doctorName={
+                      b.provider?.name ||
+                      doctorMap?.get(b.providerId ?? b.provider?.id ?? "")
+                    }
                     onActivate={() => onActivate(b.id)}
                     onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
                   />
@@ -1479,6 +1784,7 @@ function MonthView({
   anchor,
   days,
   byDay,
+  doctorMap,
   onSelectDay,
   onCut,
   onActivate,
@@ -1486,6 +1792,7 @@ function MonthView({
   anchor: Date
   days: Date[]
   byDay: Map<string, CalBooking[]>
+  doctorMap?: Map<string, string>
   onSelectDay: (d: Date) => void
   onCut: (booking: CalBooking) => void
   onActivate: (id: string) => void
@@ -1549,6 +1856,10 @@ function MonthView({
                         <BookingCard
                           booking={b}
                           compact
+                          doctorName={
+                            b.provider?.name ||
+                            doctorMap?.get(b.providerId ?? b.provider?.id ?? "")
+                          }
                           onActivate={() => onActivate(b.id)}
                           onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
                         />

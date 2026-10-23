@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { CoolKid } from "@/components"
+import TablePagination from "@/components/pagination/TablePagination"
+import { useClientPagination } from "@/hooks/useClientPagination"
 import { practiceTabHref } from "@/lib/doctorPracticeTabs"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
@@ -220,6 +222,9 @@ export default function DoctorQueue({
       }),
     [bookings, statusFilter, providerFilter],
   )
+  const listPagination = useClientPagination(filteredBookings, {
+    resetKey: `${statusFilter}:${providerFilter || "all"}`,
+  })
 
   const counts = useMemo(() => {
     const scoped = providerFilter
@@ -382,7 +387,7 @@ export default function DoctorQueue({
         }
       >
         <ul className="divide-y divide-neutral-200 md:hidden dark:divide-neutral-700">
-          {filteredBookings.map((b) => {
+          {listPagination.pageItems.map((b) => {
             const p = b.patient
             const name =
               p?.name || b.patientName || b.patient_name || "Unknown"
@@ -512,7 +517,7 @@ export default function DoctorQueue({
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-              {filteredBookings.map((b) => {
+              {listPagination.pageItems.map((b) => {
                 const p = b.patient
                 const phone = formatPhoneDisplay(
                   p?.contactNumber ||
@@ -621,6 +626,11 @@ export default function DoctorQueue({
               })}
             </tbody>
           </table>
+          <TablePagination
+            pagination={listPagination}
+            label="queue patients"
+            className="border-t border-neutral-200 px-3 dark:border-neutral-700"
+          />
         </div>
       </div>
     </div>

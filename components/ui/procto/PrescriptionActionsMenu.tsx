@@ -15,10 +15,12 @@ type Props = {
   /** Icon menu on lists, or the three labeled buttons on the visit. */
   layout?: "menu" | "buttons"
   className?: string
+  beforeOpen?: () => Promise<boolean>
+  currentBooking?: import("@/lib/services/procto").ProctoBooking | null
 }
 
 /**
- * Outer-column prescription control for COMPLETED visits:
+ * Outer-column prescription control for visits:
  * icon → Preview Rx | Preview Prescription | Send to customer.
  */
 export default function PrescriptionActionsMenu({
@@ -27,6 +29,8 @@ export default function PrescriptionActionsMenu({
   compact = false,
   layout = "menu",
   className = "",
+  beforeOpen,
+  currentBooking,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
@@ -46,14 +50,22 @@ export default function PrescriptionActionsMenu({
 
   if (!enabled) return null
 
-  function openPreview(kind: "consultation" | "prescription") {
+  async function openPreview(kind: "consultation" | "prescription") {
+    if (beforeOpen) {
+      const ok = await beforeOpen()
+      if (!ok) return
+    }
     setPrintKind(kind)
     setViewOpen(true)
     setOpen(false)
     setNotice("")
   }
 
-  function sendWhatsApp() {
+  async function sendWhatsApp() {
+    if (beforeOpen) {
+      const ok = await beforeOpen()
+      if (!ok) return
+    }
     setOpen(false)
     setSendModalOpen(true)
   }
@@ -64,6 +76,7 @@ export default function PrescriptionActionsMenu({
         open={viewOpen}
         bookingId={viewOpen ? bookingId : null}
         initialKind={printKind}
+        bookingData={currentBooking}
         onClose={() => setViewOpen(false)}
       />
       <SendToCustomerModal

@@ -90,6 +90,8 @@ type Props = {
   versions?: ClinicalVersion[]
   readOnly?: boolean
   onChange: (next: ClinicalAssessment) => void
+  /** Diagnostic orders (labs / radiology) — shown before medicines. */
+  diagnostics?: ReactNode
   /** Medicine entry shown on the tab after Allergies. */
   medicines?: ReactNode
   /** Special advice, shown directly under the medicines table. */
@@ -196,6 +198,7 @@ export default function ClinicalAssessmentPanel({
   versions = [],
   readOnly,
   onChange,
+  diagnostics,
   medicines,
   advice,
   onSaveAllergies,
@@ -1071,6 +1074,15 @@ export default function ClinicalAssessmentPanel({
           </div>
         ) : null}
       </div>
+
+      {diagnostics ? (
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">
+            Diagnostic orders
+          </h2>
+          <div className="mt-3">{diagnostics}</div>
+        </div>
+      ) : null}
 
       <div>
         <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900 dark:text-white">

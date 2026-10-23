@@ -13,12 +13,19 @@ export default function PrescriptionSheet({ booking }: { booking: RxBooking }) {
           {model.tel ? <p>Tel : {model.tel}</p> : null}
           {model.email ? <p>Email : {model.email}</p> : null}
         </div>
-        <div
-          aria-hidden
-          className="print-logo grid size-10 shrink-0 place-items-center rounded-md border text-2xl font-bold leading-none"
-        >
-          +
-        </div>
+        {model.clinicLogoSrc ? (
+          <div className="size-16 shrink-0 overflow-hidden rounded-md border border-neutral-200 bg-white p-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={model.clinicLogoSrc} alt={model.clinic} className="h-full w-full object-contain" />
+          </div>
+        ) : (
+          <div
+            aria-hidden
+            className="print-logo grid size-10 shrink-0 place-items-center rounded-md border text-2xl font-bold leading-none"
+          >
+            +
+          </div>
+        )}
       </header>
       <h1 className="mt-4 text-center text-lg font-bold tracking-wide underline">
         PHARMACY PRESCRIPTION
@@ -84,23 +91,46 @@ export default function PrescriptionSheet({ booking }: { booking: RxBooking }) {
       </table>
       <p className="mt-3 font-bold">Advice:</p>
       <div className="min-h-8">
-        {model.advice.map((line) => (
-          <p key={line}>{line}</p>
-        ))}
+        {model.advice.length === 0 ? (
+          <p className="text-neutral-500 italic">No advice recorded.</p>
+        ) : (
+          model.advice.map((line) => (
+            <p key={line}>{line}</p>
+          ))
+        )}
       </div>
       <footer className="mt-8">
-        <div className="mx-auto flex size-28 items-center justify-center overflow-hidden rounded-full border-2 border-cyan-600 text-center text-[11px] font-semibold leading-tight">
-          {model.stampSrc && /^https?:/i.test(model.stampSrc) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={model.stampSrc} alt="Doctor stamp" className="h-full w-full object-contain" />
-          ) : (
-            <span className="px-3">
-              {model.doctor || "Doctor"}
-              {model.license ? <span className="mt-1 block font-normal">{model.license}</span> : null}
+        <div className="flex flex-wrap items-end justify-around gap-6">
+          <div className="flex flex-col items-center">
+            <div className="flex size-28 items-center justify-center overflow-hidden rounded-full border-2 border-cyan-600 bg-white text-center text-[11px] font-semibold leading-tight">
+              {model.stampSrc && (/^https?:/i.test(model.stampSrc) || /^data:/i.test(model.stampSrc)) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={model.stampSrc} alt="Doctor stamp" className="h-full w-full object-contain" />
+              ) : (
+                <span className="px-3">
+                  {model.doctor || "Doctor"}
+                  {model.license ? <span className="mt-1 block font-normal text-[10px]">{model.license}</span> : null}
+                </span>
+              )}
+            </div>
+            <span className="mt-1.5 text-center text-[11px] font-medium text-neutral-600">
+              Doctor&apos;s Stamp / Signature
             </span>
-          )}
+          </div>
+
+          {model.clinicStampSrc ? (
+            <div className="flex flex-col items-center">
+              <div className="flex size-28 items-center justify-center overflow-hidden rounded-xl border border-neutral-300 bg-white p-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={model.clinicStampSrc} alt="Clinic stamp" className="h-full w-full object-contain" />
+              </div>
+              <span className="mt-1.5 text-center text-[11px] font-medium text-neutral-600">
+                Clinic Stamp
+              </span>
+            </div>
+          ) : null}
         </div>
-        <p className="mt-6 border-t border-black pt-2">Printed On : {model.printed}</p>
+        <p className="mt-6 border-t border-black pt-2 text-[11px]">Printed On : {model.printed}</p>
       </footer>
     </article>
   )

@@ -116,16 +116,13 @@ export default function ClinicLogDocument({
       : "—"
 
   const chief = chiefComplaintOf(booking)
-  const diagnosis =
-    booking.disease?.trim() ||
-    booking.consultationType?.trim() ||
-    booking.consultation_type?.trim() ||
-    ""
+  const diagnosis = assessment?.diagnosis?.trim() || ""
 
   const medicines = (booking.medicines ?? []).filter((m) => m?.name?.trim())
   const clinicStamp = resolveUploadUrl(booking.practice?.stampSrc)
   const doctorStamp = resolveUploadUrl(booking.provider?.stampSrc)
   const remarks = String(booking.doctorRemarks || "").trim()
+  const advice = assessment?.advice?.trim() || ""
   const recordedAt = assessment?.savedAt || assessment?.vitals?.recordedAt
     ? formatPracticeDateTime(
         assessment.savedAt || assessment.vitals?.recordedAt || "",
@@ -256,6 +253,15 @@ export default function ClinicLogDocument({
         </div>
       </section>
 
+      <section className="mt-5">
+        <h2 className="text-sm font-bold uppercase tracking-wide">
+          Advice
+        </h2>
+        <div className="mt-2 min-h-[3rem] rounded-xl border border-neutral-300 px-4 py-3 text-sm whitespace-pre-wrap">
+          {advice || "No advice recorded."}
+        </div>
+      </section>
+
       <footer className="mt-10 border-t border-neutral-200 pt-6">
         <div
           className="flex size-24 flex-col items-center justify-center rounded-full border-2 border-sky-500 bg-sky-50 text-center text-[10px] font-bold leading-tight text-sky-800"
@@ -356,6 +362,15 @@ export default function ClinicLogDocument({
               })}
             </ol>
           )}
+
+          <div className="mt-5">
+            <h2 className="text-sm font-bold uppercase tracking-wide">
+              Advice
+            </h2>
+            <div className="mt-2 min-h-[3rem] rounded-xl border border-neutral-300 px-4 py-3 text-sm whitespace-pre-wrap">
+              {advice || "No advice recorded."}
+            </div>
+          </div>
         </section>
       ) : null}
 

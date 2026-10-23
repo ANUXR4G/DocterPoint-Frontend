@@ -46,6 +46,8 @@ export type PracticeMembership = {
         phone?: string | null
         doctor?: {
           licenseNo?: string | null
+          stampSrc?: string | null
+          description?: string | null
           specialties?: Array<{ specialty: { id: string; name: string } }>
         } | null
       }
@@ -55,6 +57,8 @@ export type PracticeMembership = {
 
 export type RoleAccess = {
   resourceType?: string
+  customRole?: string
+  customRoleName?: string
   licenseExpiry?: string
   licenseProvider?: string
   restricted?: boolean
@@ -93,7 +97,7 @@ export type PracticePatientRow = {
   bookingCount: number
   lastVisitAt: string | null
   lastStatus: string | null
-  /** Set for registered profiles with no booking at this practice yet. */
+  /** When the patient was registered / linked to this clinic (or account created). */
   registeredAt?: string | null
   providerNames: string[]
   recentBookings: Array<{
@@ -238,7 +242,11 @@ export function PracticeDashboardProvider({ children }: { children: ReactNode })
   const actorUserId = memberships[0]?.userId ?? null
   const isClinicAdmin =
     membershipRole === "PRACTICE_OWNER" ||
-    membershipRole === "PRACTICE_ADMIN"
+    membershipRole === "PRACTICE_ADMIN" ||
+    (membershipRole === "DOCTOR" &&
+      !memberships[0]?.practice?.members?.some(
+        (m: any) => m.role === "PRACTICE_OWNER" && m.isActive !== false,
+      ))
   const isIndependentPractice = practiceType === "SOLO"
   const isClinicStaffDoctor =
     !isIndependentPractice &&

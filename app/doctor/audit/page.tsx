@@ -10,7 +10,7 @@ export default function DoctorAuditPage() {
         compact
         eyebrow="Practice"
         title="Audit log"
-        subtitle="Who added or removed slots, leave and blocks, walk-ins and desk registrations — and when"
+        subtitle="Appointments, schedule and blocks, prescriptions and documents, branding changes — who did what, and when"
       />
       <AuditLogPanel />
     </div>

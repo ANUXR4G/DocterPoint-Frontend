@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { MessageCircle, RefreshCw, Siren } from "lucide-react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
+import TablePagination from "@/components/pagination/TablePagination"
+import { useClientPagination } from "@/hooks/useClientPagination"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
   isTerminalVisitStatus,
@@ -421,6 +423,9 @@ export default function DoctorAppointmentsList({
       ),
     [doctorRows, statusFilter],
   )
+  const listPagination = useClientPagination(filtered, {
+    resetKey: statusFilter,
+  })
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -573,7 +578,7 @@ export default function DoctorAppointmentsList({
       ) : (
         <>
           <ul className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto md:hidden">
-            {filtered.map((b) => (
+            {listPagination.pageItems.map((b) => (
               <li
                 key={b.id}
                 className="rounded-2xl border border-neutral-300 bg-white p-4 dark:border-neutral-600 dark:bg-neutral-800"
@@ -678,7 +683,7 @@ export default function DoctorAppointmentsList({
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                {filtered.map((b) => {
+                {listPagination.pageItems.map((b) => {
                   const when = bookingWhenParts(b)
                   const arrived = formatArrival(b)
                   return (
@@ -772,6 +777,11 @@ export default function DoctorAppointmentsList({
               </tbody>
             </table>
           </div>
+          <TablePagination
+            pagination={listPagination}
+            label="appointments"
+            className="mt-2 shrink-0 border-t border-neutral-200 px-1 dark:border-neutral-700"
+          />
         </>
       )}
 

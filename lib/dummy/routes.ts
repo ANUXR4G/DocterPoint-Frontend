@@ -178,11 +178,6 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/clinic/payments",
     },
     {
-      name: "Hours & blocks",
-      icon: "calendar",
-      dest: "/settings?tab=practice&subtab=setup",
-    },
-    {
       name: "Subscription",
       icon: "heart-w-pulse",
       dest: "/clinic/subscription",

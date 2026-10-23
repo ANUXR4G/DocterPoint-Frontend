@@ -5,6 +5,7 @@ type Props = {
   handlePreviousPage: () => void
   handleNextPage: () => void
   pageCount?: number // number of pages to show at a time
+  className?: string
 }
 
 export default function Pagination({
@@ -14,6 +15,7 @@ export default function Pagination({
   handlePreviousPage,
   handleNextPage,
   pageCount = 5,
+  className = "mt-4",
 }: Props) {
   const startPage = Math.max(currentPage - Math.floor(pageCount / 2), 1)
   const endPage = Math.min(startPage + pageCount - 1, totalPages)
@@ -24,7 +26,9 @@ export default function Pagination({
   }
 
   return (
-    <div className="mt-10 text-sm flex mx-auto border border-neutral-400/80 dark:border-neutral-600 w-fit divide-x divide-neutral-400/80 dark:divide-neutral-600 rounded-md">
+    <div
+      className={`${className} text-sm flex mx-auto border border-neutral-400/80 dark:border-neutral-600 w-fit divide-x divide-neutral-400/80 dark:divide-neutral-600 rounded-md`}
+    >
       <button
         onClick={handlePreviousPage}
         className={`px-4 py-2 ${

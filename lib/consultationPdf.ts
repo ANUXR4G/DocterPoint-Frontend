@@ -1,4 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib"
+import { embedPdfImage } from "@/lib/pdfImage"
+import { resolveUploadUrl } from "@/lib/uploads"
 
 export type ConsultMedicine = {
   name?: string
@@ -11,6 +13,14 @@ export type ConsultMedicine = {
   frequency?: string
   duration?: string
   durationUnit?: string
+  instruction?: string
+}
+
+export type ConsultDiagnostic = {
+  name?: string
+  code?: string
+  type?: string
+  qty?: number
   instruction?: string
 }
 
@@ -33,11 +43,14 @@ export type ConsultBooking = {
   patientPhone?: string | null
   patient_phone?: string | null
   medicines?: ConsultMedicine[] | null
+  diagnostics?: ConsultDiagnostic[] | null
   clinicalAssessment?: unknown
   practice?: {
     name?: string | null
     phone?: string | null
     email?: string | null
+    bgSrc?: string | null
+    stampSrc?: string | null
   } | null
   location?: { name?: string; address?: string; city?: string } | null
   provider?: {
@@ -324,6 +337,17 @@ function medicineRows(medicines: ConsultMedicine[] | null | undefined) {
     })
 }
 
+function diagnosticRows(diagnostics: ConsultDiagnostic[] | null | undefined) {
+  return (diagnostics ?? [])
+    .filter((d) => d?.name?.trim())
+    .map((d) => ({
+      type: (d.type || "").trim() || "Investigation",
+      name: d.name!.trim(),
+      qty: d.qty && d.qty > 0 ? String(d.qty) : "1",
+      instruction: (d.instruction || "").trim(),
+    }))
+}
+
 function realLabel(value?: string | null): string {
   const text = (value || "").trim()
   if (!text || /^general\s+consultation$/i.test(text)) return ""
@@ -343,13 +367,38 @@ export function consultationModel(booking: ConsultBooking) {
       : startLabel
     : ""
   const chief = realLabel(booking.disease)
-  const enteredDiagnosis =
-    booking.clinicalAssessment && typeof booking.clinicalAssessment === "object"
-      ? String((booking.clinicalAssessment as { diagnosis?: string }).diagnosis || "")
-      : ""
-  const diagnosis =
-    realLabel(enteredDiagnosis) ||
-    realLabel(booking.consultationType || booking.consultation_type)
+  const enteredDiagnosis = (() => {
+    if (!booking.clinicalAssessment) return ""
+    if (typeof booking.clinicalAssessment === "object") {
+      return String((booking.clinicalAssessment as { diagnosis?: string }).diagnosis || "").trim()
+    }
+    if (typeof booking.clinicalAssessment === "string") {
+      try {
+        const parsed = JSON.parse(booking.clinicalAssessment)
+        return String(parsed?.diagnosis || "").trim()
+      } catch {
+        return ""
+      }
+    }
+    return ""
+  })()
+  const diagnosis = realLabel(enteredDiagnosis)
+  const enteredAdvice = (() => {
+    if (!booking.clinicalAssessment) return ""
+    if (typeof booking.clinicalAssessment === "object") {
+      return String((booking.clinicalAssessment as { advice?: string }).advice || "").trim()
+    }
+    if (typeof booking.clinicalAssessment === "string") {
+      try {
+        const parsed = JSON.parse(booking.clinicalAssessment)
+        return String(parsed?.advice || "").trim()
+      } catch {
+        return ""
+      }
+    }
+    return ""
+  })()
+  const advice = enteredAdvice || String((booking as any)?.advice || "").trim()
   const remarks = [booking.doctorRemarks, booking.notes]
     .map((line) => (line || "").trim())
     .filter((line, index, all) => line && all.indexOf(line) === index)
@@ -378,7 +427,10 @@ export function consultationModel(booking: ConsultBooking) {
     doctor,
     license: booking.provider?.licenseNo?.trim() || "",
     qualification,
-    stampSrc: booking.provider?.stampSrc?.trim() || "",
+    stampSrc: resolveUploadUrl(booking.provider?.stampSrc?.trim()) || "",
+    clinicStampSrc: resolveUploadUrl(booking.practice?.stampSrc?.trim()) || "",
+    // Clinic logo is stored on practice.bgSrc (Settings → Clinic logo).
+    clinicLogoSrc: resolveUploadUrl(booking.practice?.bgSrc?.trim()) || "",
     chief: chief || "No chief complaint recorded.",
     secondary: "No secondary complaints provided",
     interpretation: interpretation(chart.values),
@@ -399,6 +451,8 @@ export function consultationModel(booking: ConsultBooking) {
     pain: painText(chart),
     diagnosis,
     remarks,
+    advice,
+    diagnostics: diagnosticRows(booking.diagnostics),
     medicines: medicineRows(booking.medicines),
     printed: printedStamp(),
   }
@@ -420,20 +474,6 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   }
   if (current) lines.push(current)
   return lines
-}
-
-async function embedStamp(doc: PDFDocument, url: string) {
-  if (!/^https?:/i.test(url)) return null
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const bytes = new Uint8Array(await res.arrayBuffer())
-    if (bytes[0] === 0x89 && bytes[1] === 0x50) return doc.embedPng(bytes)
-    if (bytes[0] === 0xff && bytes[1] === 0xd8) return doc.embedJpg(bytes)
-  } catch {
-    return null
-  }
-  return null
 }
 
 export async function buildConsultationPdf(booking: ConsultBooking): Promise<Uint8Array> {
@@ -464,6 +504,17 @@ export async function buildConsultationPdf(booking: ConsultBooking): Promise<Uin
     const value = safe(text)
     if (!value) return
     target.drawText(value, { x, y, size, font: face, color })
+  }
+
+  const clinicLogo = await embedPdfImage(doc, model.clinicLogoSrc)
+  if (clinicLogo) {
+    const logoSize = 44
+    page.drawImage(clinicLogo, {
+      x: right - logoSize,
+      y: y - logoSize + 10,
+      width: logoSize,
+      height: logoSize,
+    })
   }
 
   draw(model.clinic, left, 12, bold)
@@ -603,6 +654,40 @@ export async function buildConsultationPdf(booking: ConsultBooking): Promise<Uin
   }
   y = remarksTop - boxHeight - 16
 
+  if (model.diagnostics.length) {
+    heading("DIAGNOSTIC ORDERS")
+    draw("Type", left, 9, bold)
+    draw("Description", left + 110, 9, bold)
+    draw("Qty", left + 360, 9, bold)
+    draw("Instruction", left + 400, 9, bold)
+    y -= 4
+    page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.4, color: INK })
+    y -= 12
+    model.diagnostics.forEach((dx, index) => {
+      const nameLines = wrap(`${index + 1}) ${dx.name}`, font, 9, 240)
+      const instrLines = dx.instruction
+        ? wrap(dx.instruction, font, 8, width - 420)
+        : [""]
+      ensure(14 + Math.max(nameLines.length, instrLines.length) * 11)
+      nameLines.forEach((line, lineIndex) => {
+        if (lineIndex === 0) {
+          draw(dx.type, left, 8)
+          draw(dx.qty, left + 360, 8)
+        }
+        draw(line, left + 110, 9)
+        if (lineIndex < instrLines.length && instrLines[lineIndex]) {
+          draw(instrLines[lineIndex]!, left + 400, 8, font, MUTED)
+        }
+        y -= 11
+      })
+      for (let i = nameLines.length; i < instrLines.length; i++) {
+        draw(instrLines[i]!, left + 400, 8, font, MUTED)
+        y -= 11
+      }
+    })
+    y -= 12
+  }
+
   heading("PRESCRIPTION")
   draw("Rx", left, 11, bold)
   y -= 6
@@ -636,21 +721,48 @@ export async function buildConsultationPdf(booking: ConsultBooking): Promise<Uin
     }
   })
 
+  if (model.advice) {
+    y -= 14
+    heading("ADVICE")
+    const adviceLinesList = model.advice
+      .split("\n")
+      .flatMap((block) => wrap(block || " ", font, 9, width - 16))
+    const adviceBoxHeight = Math.max(36, adviceLinesList.length * 12 + 12)
+    ensure(adviceBoxHeight + 8)
+    const adviceTop = y
+    page.drawRectangle({
+      x: left,
+      y: adviceTop - adviceBoxHeight,
+      width,
+      height: adviceBoxHeight,
+      borderWidth: 0.8,
+      borderColor: MUTED,
+    })
+    y -= 14
+    for (const line of adviceLinesList) {
+      draw(line, left + 8, 9)
+      y -= 12
+    }
+    y = adviceTop - adviceBoxHeight - 16
+  }
+
   y -= 18
   ensure(110)
-  const stamp = await embedStamp(doc, model.stampSrc)
-  if (stamp) {
-    const box = 84
-    page.drawImage(stamp, { x: left, y: y - box, width: box, height: box })
-    y -= box + 16
+  const footerTopY = y
+  const box = 80
+
+  // 1. Doctor's individual stamp / seal (left)
+  const doctorStamp = await embedPdfImage(doc, model.stampSrc)
+  if (doctorStamp) {
+    page.drawImage(doctorStamp, { x: left, y: footerTopY - box, width: box, height: box })
   } else {
-    const cx = left + 70
-    const cy = y - 36
+    const cx = left + 50
+    const cy = footerTopY - 36
     page.drawEllipse({
       x: cx,
       y: cy,
-      xScale: 46,
-      yScale: 46,
+      xScale: 44,
+      yScale: 44,
       borderWidth: 1.2,
       borderColor: TEAL,
     })
@@ -659,7 +771,7 @@ export async function buildConsultationPdf(booking: ConsultBooking): Promise<Uin
     for (const line of stampLines) {
       const size = line === model.doctor ? 8 : 7
       const face = line === model.doctor ? bold : font
-      const text = safe(line).slice(0, 28)
+      const text = safe(line).slice(0, 26)
       const tw = face.widthOfTextAtSize(text, size)
       page.drawText(text, {
         x: cx - tw / 2,
@@ -670,8 +782,15 @@ export async function buildConsultationPdf(booking: ConsultBooking): Promise<Uin
       })
       stampY -= 11
     }
-    y = cy - 58
   }
+
+  // 2. Common Clinic stamp (right)
+  const clinicStamp = await embedPdfImage(doc, model.clinicStampSrc)
+  if (clinicStamp) {
+    page.drawImage(clinicStamp, { x: right - box, y: footerTopY - box, width: box, height: box })
+  }
+
+  y = footerTopY - box - 16
   page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.6, color: INK })
   y -= 14
   draw(`Printed On : ${model.printed}`, left, 9)

@@ -26,6 +26,7 @@ type Props = {
   onClose: () => void
   /** Which sheet opens first. Both prints stay available in the preview. */
   initialKind?: PrintKind
+  bookingData?: ProctoBooking | null
 }
 
 export default function ClinicLogModal({
@@ -33,11 +34,12 @@ export default function ClinicLogModal({
   bookingId,
   onClose,
   initialKind = "consultation",
+  bookingData,
 }: Props) {
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [booking, setBooking] = useState<ProctoBooking | null>(null)
+  const [booking, setBooking] = useState<ProctoBooking | null>(bookingData || null)
   const [sending, setSending] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState("")
@@ -46,26 +48,89 @@ export default function ClinicLogModal({
   useEffect(() => setMounted(true), [])
 
   useEffect(() => {
-    if (!open || !bookingId) return
+    if (!open) return
+    if (!bookingId && !bookingData) return
     let cancelled = false
-    setLoading(true)
     setError("")
-    setBooking(null)
     setNotice("")
     setKind(initialKind)
-    void proctoService.getBooking(bookingId).then((res) => {
-      if (cancelled) return
+    if (bookingData) {
+      setBooking(bookingData)
       setLoading(false)
-      if (res.status !== "successful" || !res.data) {
-        setError(res.message || "Could not load the prescription.")
-        return
-      }
-      setBooking(res.data as ProctoBooking)
-    })
+    } else {
+      setLoading(true)
+      setBooking(null)
+    }
+    if (bookingId) {
+      void Promise.all([
+        proctoService.getBooking(bookingId),
+        proctoService.getMyPractices(),
+      ]).then(([res, practicesRes]) => {
+        if (cancelled) return
+        setLoading(false)
+        if (res.status !== "successful" || !res.data) {
+          if (!bookingData) {
+            setError(res.message || "Could not load the prescription.")
+          }
+          return
+        }
+        const row = res.data as ProctoBooking
+        const practices =
+          practicesRes.status === "successful" && Array.isArray(practicesRes.data)
+            ? practicesRes.data
+            : []
+        const rowPracticeId =
+          (row as { practiceId?: string }).practiceId || row.practice?.id
+        const practiceRow = practices.find(
+          (m: { practice?: { id?: string } }) =>
+            m.practice?.id && m.practice.id === rowPracticeId,
+        )?.practice as
+          | {
+              id?: string
+              bgSrc?: string | null
+              stampSrc?: string | null
+              phone?: string | null
+              email?: string | null
+              name?: string | null
+              members?: Array<{
+                userId: string
+                user?: {
+                  doctor?: { stampSrc?: string | null } | null
+                }
+              }>
+            }
+          | undefined
+
+        const providerId =
+          (row as { providerId?: string }).providerId || row.provider?.id
+        const memberStamp = providerId
+          ? practiceRow?.members?.find((m) => m.userId === providerId)?.user
+              ?.doctor?.stampSrc ?? null
+          : null
+
+        setBooking({
+          ...row,
+          practice: {
+            ...(row.practice || { name: "Clinic" }),
+            name: row.practice?.name || practiceRow?.name || "Clinic",
+            bgSrc: row.practice?.bgSrc || practiceRow?.bgSrc || null,
+            stampSrc: row.practice?.stampSrc || practiceRow?.stampSrc || null,
+            phone: row.practice?.phone || practiceRow?.phone || null,
+            email: row.practice?.email || practiceRow?.email || null,
+          },
+          provider: row.provider
+            ? {
+                ...row.provider,
+                stampSrc: row.provider.stampSrc || memberStamp || null,
+              }
+            : row.provider,
+        } as ProctoBooking)
+      })
+    }
     return () => {
       cancelled = true
     }
-  }, [open, bookingId, initialKind])
+  }, [open, bookingId, initialKind, bookingData])
 
   async function sendToCustomer() {
     if (!bookingId || sending) return

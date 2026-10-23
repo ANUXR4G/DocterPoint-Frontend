@@ -17,14 +17,13 @@ type Membership = {
   }
 }
 
-/** Mirrors backend assertProfileEditor: owner/admin, or the only doctor of a SOLO practice. */
+/** Mirrors backend assertProfileEditor: owner/admin, or the only doctor of a SOLO practice / clinic without explicit owner. */
 function canManagePractice(m: Membership | undefined): boolean {
   if (!m) return false
   if (m.role === "PRACTICE_OWNER" || m.role === "PRACTICE_ADMIN") return true
   return (
     m.role === "DOCTOR" &&
-    m.practice?.type === "SOLO" &&
-    (m.practice.members?.length ?? 0) === 1
+    !m.practice?.members?.some((x) => x.role === "PRACTICE_OWNER")
   )
 }
 

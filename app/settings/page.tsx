@@ -110,7 +110,7 @@ function SettingsPageInner() {
   function selectTab(next: Tab) {
     setTab(next)
     if (next === "practice") {
-      router.replace("/settings?tab=practice&subtab=calendar", { scroll: false })
+      router.replace("/settings?tab=practice&subtab=setup", { scroll: false })
       return
     }
     router.replace(`/settings?tab=${next}`, { scroll: false })
@@ -368,8 +368,8 @@ function PhotoSettings({
             label="Clinic logo"
             hint={
               isSolo
-                ? "Shown on your clinic card when you have no photo."
-                : "Shown on your clinic card and profile page."
+                ? "Shown on prescriptions, consultation reports, and your clinic card."
+                : "Shown on prescriptions, consultation reports, and your clinic profile."
             }
             src={membership.practice.bgSrc}
             name={membership.practice.name}
@@ -390,7 +390,7 @@ function PhotoSettings({
         {showLogo ? (
           <ProfilePhotoField
             label="Clinic stamp"
-            hint="Printed at the bottom of every prescription from this clinic."
+            hint="Common clinic seal on every prescription and consultation from this clinic. Each doctor can also add their own stamp under Practice → Doctors."
             src={membership.practice.stampSrc}
             name={membership.practice.name}
             shape="square"
@@ -410,7 +410,7 @@ function PhotoSettings({
         {me?.doctor ? (
           <ProfilePhotoField
             label="Doctor stamp"
-            hint="Printed at the bottom of prescriptions for your visits."
+            hint="Your personal stamp — printed on your prescriptions and consultation reports next to the clinic stamp."
             src={me.doctor.stampSrc}
             name={me.name}
             shape="square"

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { format, startOfToday } from "date-fns"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
+import DoctorStampField from "@/components/ui/procto/DoctorStampField"
 import {
   CLINIC_SUBSCRIPTION_HREF,
   practiceTabHref,
@@ -23,6 +24,7 @@ type RosterDoctor = {
   email: string | null
   role: string
   phone?: string | null
+  stampSrc?: string | null
 }
 
 /**
@@ -30,8 +32,13 @@ type RosterDoctor = {
  * analyze / queue each doctor one by one.
  */
 export default function ClinicDoctorsPage() {
-  const { memberships, bookings: allBookings, ready, isClinicAdmin } =
-    usePracticeDashboard()
+  const {
+    memberships,
+    bookings: allBookings,
+    ready,
+    isClinicAdmin,
+    refresh,
+  } = usePracticeDashboard()
   const { byDoctor, planLocked, isLoading: analyticsLoading } = useAnalytics(
     "week",
     null,
@@ -61,6 +68,7 @@ export default function ClinicDoctorsPage() {
         name: m.user?.name || m.user?.email || "Doctor",
         email: m.user?.email ?? null,
         role: m.role,
+        stampSrc: m.user?.doctor?.stampSrc ?? null,
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [practice?.members])
@@ -215,8 +223,8 @@ export default function ClinicDoctorsPage() {
         <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-800/60">
           <h2 className="text-sm font-semibold">All doctors</h2>
           <p className="text-xs text-neutral-500">
-            Today’s queue counts and this week’s analytics — open one doctor to
-            dig in
+            Today’s queue, analytics, and each doctor’s stamp for prescriptions
+            &amp; consultation reports
           </p>
         </div>
 
@@ -282,6 +290,19 @@ export default function ClinicDoctorsPage() {
                               ? "Today has visits — open queue for details"
                               : "No bookings in period"}
                     </p>
+                    {practiceId ? (
+                      <DoctorStampField
+                        practiceId={practiceId}
+                        memberUserId={d.id}
+                        doctorName={d.name}
+                        currentStamp={d.stampSrc}
+                        canManage={Boolean(isClinicAdmin)}
+                        compact
+                        onSaved={async () => {
+                          await refresh()
+                        }}
+                      />
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link

@@ -4,6 +4,8 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
+import TablePagination from "@/components/pagination/TablePagination"
+import { useClientPagination } from "@/hooks/useClientPagination"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 import {
   bookingStatusTone,
@@ -76,6 +78,7 @@ export default function MyBookings() {
   } = usePatientDashboard()
   const bookings = rawBookings as PatientBooking[]
   const showLoading = !ready && loading
+  const listPagination = useClientPagination(bookings)
 
   const [flash, setFlash] = useState<{ tone: "ok" | "err"; text: string } | null>(
     null,
@@ -208,7 +211,7 @@ export default function MyBookings() {
         <>
           {/* Mobile cards */}
           <ul className="space-y-3 md:hidden">
-            {bookings.map((b) => {
+            {listPagination.pageItems.map((b) => {
               const canCancel = canCancelStatus(b.status)
               return (
                 <li
@@ -331,7 +334,7 @@ export default function MyBookings() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/10">
-                {bookings.map((b) => {
+                {listPagination.pageItems.map((b) => {
                   const canCancel = canCancelStatus(b.status)
                   return (
                     <tr
@@ -439,6 +442,11 @@ export default function MyBookings() {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            pagination={listPagination}
+            label="bookings"
+            className="mt-3"
+          />
         </>
       ) : null}
     </div>

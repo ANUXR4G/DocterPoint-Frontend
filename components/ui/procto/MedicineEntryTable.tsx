@@ -16,6 +16,10 @@ import { toast } from "sonner"
 
 export type VisitMedicine = {
   name: string
+  /** Master catalog id when selected from Medicine Management (stable across renames). */
+  medicineId?: string
+  /** Master medicine code snapshot / link for usage tracking after renames. */
+  medicineCode?: string
   amount?: string
   times?: string[]
   strength?: string
@@ -312,11 +316,17 @@ export default function MedicineEntryTable({
   }
 
   function handleMasterSelect(med: MedicineMasterItem) {
-    const medName = (med.name || med.brandName || "").trim()
+    // Prefer current master brand/name so future prescriptions follow renames.
+    const medName = (med.brandName || med.name || "").trim()
     if (!medName) return
 
     const isAlreadyAdded = rows.some(
-      (r) => r.name.trim().toLowerCase() === medName.toLowerCase(),
+      (r) =>
+        (med.id && r.medicineId === med.id) ||
+        (med.medicineCode &&
+          r.medicineCode?.trim().toLowerCase() ===
+            med.medicineCode.trim().toLowerCase()) ||
+        r.name.trim().toLowerCase() === medName.toLowerCase(),
     )
     if (isAlreadyAdded) {
       toast.info(`"${medName}" is already added to the prescription.`)
@@ -337,6 +347,8 @@ export default function MedicineEntryTable({
 
     const next: VisitMedicine = {
       name: medName,
+      medicineId: med.id || undefined,
+      medicineCode: med.medicineCode || undefined,
       strength: med.strength || draft.strength || "",
       route: med.route || draft.route || "Oral",
       dose,
@@ -473,7 +485,9 @@ export default function MedicineEntryTable({
                     onSelect={(med) => {
                       edit(
                         {
-                          name: med.name || med.brandName,
+                          name: med.brandName || med.name,
+                          medicineId: med.id || undefined,
+                          medicineCode: med.medicineCode || undefined,
                           strength: m.strength || med.strength,
                           route: m.route || med.route,
                           dose: m.dose || med.dose,

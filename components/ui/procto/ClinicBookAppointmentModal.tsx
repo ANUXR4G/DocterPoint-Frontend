@@ -11,6 +11,7 @@ import {
   practiceSlotStartIso,
   practiceTodayIso,
 } from "@/lib/practiceTime"
+import { toHm } from "@/lib/quickSlots"
 import {
   usePracticeDashboard,
   type PracticeMembership,
@@ -47,6 +48,17 @@ type Availability = {
   configuredMode?: "TIME_BASED" | "TOKEN_BASED" | null
   configuredModes?: string[]
 }
+
+type Intent = "book" | "block"
+
+const BLOCK_REASON_CHIPS = [
+  "Meeting",
+  "Lunch break",
+  "Personal",
+  "Admin work",
+  "Procedure",
+  "Emergency",
+] as const
 
 function isFutureSlotStart(start: string): boolean {
   const t = new Date(start).getTime()
@@ -111,10 +123,12 @@ export default function ClinicBookAppointmentModal({
   const [locationId, setLocationId] = useState("")
   const [date, setDate] = useState(() => practiceTodayIso())
   const [mode, setMode] = useState<"TIME_BASED" | "TOKEN_BASED">("TIME_BASED")
+  const [intent, setIntent] = useState<Intent>("book")
   const [availability, setAvailability] = useState<Availability | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
   const [patient, setPatient] = useState<DeskPatient | null>(null)
   const [disease, setDisease] = useState("")
+  const [blockReason, setBlockReason] = useState("")
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState("")
@@ -124,7 +138,9 @@ export default function ClinicBookAppointmentModal({
     setMessage("")
     setSelectedSlot(null)
     setDisease("")
+    setBlockReason("")
     setPatient(null)
+    setIntent("book")
     const prefDoc =
       prefill?.providerId &&
       doctors.some((d) => d.id === prefill.providerId)
@@ -209,7 +225,92 @@ export default function ClinicBookAppointmentModal({
     return prefill.endMinutes - prefill.startMinutes
   }, [prefill?.startMinutes, prefill?.endMinutes, selectedSlot])
 
-  async function submit() {
+  const selectedSlotRow = useMemo(
+    () => openSlots.find((s) => s.start === selectedSlot) ?? null,
+    [openSlots, selectedSlot],
+  )
+
+  const blockWindowLabel = useMemo(() => {
+    if (mode !== "TIME_BASED" || !selectedSlot) return ""
+    const startHm = formatPracticeTime(selectedSlot)
+    const endHm =
+      blockMinutes > 0 && prefill?.startMinutes != null
+        ? toHm(prefill.startMinutes + blockMinutes)
+        : selectedSlotRow
+          ? formatPracticeTime(selectedSlotRow.end)
+          : ""
+    if (!startHm || !endHm) return startHm
+    return `${startHm}–${endHm}`
+  }, [mode, selectedSlot, selectedSlotRow, blockMinutes, prefill?.startMinutes])
+
+  async function submitBlock() {
+    if (!practiceId || !providerId) {
+      setMessage("Select a doctor.")
+      return
+    }
+    const reason = blockReason.trim()
+    if (!reason) {
+      setMessage("Enter a reason for blocking this slot.")
+      return
+    }
+    if (mode === "TIME_BASED") {
+      if (!selectedSlot || !selectedSlotRow) {
+        setMessage("Select a time slot to block.")
+        return
+      }
+      if (!isFutureSlotStart(selectedSlot)) {
+        setMessage("That time has already passed. Pick a later slot.")
+        setSelectedSlot(null)
+        return
+      }
+      const startTime = formatPracticeTime(selectedSlot)
+      const endTime =
+        blockMinutes > 0 && prefill?.startMinutes != null
+          ? toHm(prefill.startMinutes + blockMinutes)
+          : formatPracticeTime(selectedSlotRow.end)
+      if (!startTime || !endTime || startTime >= endTime) {
+        setMessage("Could not determine the block window. Pick another slot.")
+        return
+      }
+      setSubmitting(true)
+      setMessage("")
+      const res = await proctoService.createOverride(practiceId, {
+        providerId,
+        date,
+        type: "BLOCK_SLOT",
+        startTime,
+        endTime,
+        reason,
+      })
+      setSubmitting(false)
+      if (res.status === "successful") {
+        onBooked()
+        onClose()
+        return
+      }
+      setMessage(res.message || "Could not block this slot.")
+      return
+    }
+
+    // Token clinics: block the doctor's whole day for this date.
+    setSubmitting(true)
+    setMessage("")
+    const res = await proctoService.createOverride(practiceId, {
+      providerId,
+      date,
+      type: "BLOCK_DAY",
+      reason,
+    })
+    setSubmitting(false)
+    if (res.status === "successful") {
+      onBooked()
+      onClose()
+      return
+    }
+    setMessage(res.message || "Could not block this day.")
+  }
+
+  async function submitBooking() {
     if (!practiceId || !providerId || !locationId) {
       setMessage("Select doctor and location.")
       return
@@ -269,14 +370,30 @@ export default function ClinicBookAppointmentModal({
     setMessage(res.message || "Booking failed. Try another slot.")
   }
 
+  async function submit() {
+    if (intent === "block") {
+      await submitBlock()
+      return
+    }
+    await submitBooking()
+  }
+
   const fieldClass =
     "mt-1 w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+
+  const primaryDisabled =
+    submitting ||
+    !practiceId ||
+    (intent === "book"
+      ? !patient
+      : !blockReason.trim() ||
+        (mode === "TIME_BASED" && !selectedSlot))
 
   return (
     <PopupModal
       open={open}
       handler={onClose}
-      title="Book appointment"
+      title={intent === "block" ? "Block slot" : "Book appointment"}
       direction="center"
       className="!h-auto max-h-[96dvh] w-full max-w-xl overflow-hidden"
       secondaryBtn={
@@ -294,19 +411,74 @@ export default function ClinicBookAppointmentModal({
           type="button"
           className="dashboard-btn-primary"
           onClick={() => void submit()}
-          disabled={submitting || !practiceId || !patient}
+          disabled={primaryDisabled}
         >
-          {submitting ? "Booking…" : "Confirm booking"}
+          {submitting
+            ? intent === "block"
+              ? "Blocking…"
+              : "Booking…"
+            : intent === "block"
+              ? "Confirm block"
+              : "Confirm booking"}
         </button>
       }
     >
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-2 text-sm">
+        <div className="flex gap-2" role="tablist" aria-label="Booking or block">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={intent === "book"}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+              intent === "book"
+                ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
+                : "bg-neutral-100 dark:bg-neutral-800"
+            }`}
+            onClick={() => {
+              setIntent("book")
+              setMessage("")
+            }}
+          >
+            Book patient
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={intent === "block"}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+              intent === "block"
+                ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
+                : "bg-neutral-100 dark:bg-neutral-800"
+            }`}
+            onClick={() => {
+              setIntent("block")
+              setMessage("")
+            }}
+          >
+            Block slot
+          </button>
+        </div>
+
         <p className="text-neutral-600 dark:text-neutral-400">
-          Manual booking for{" "}
-          <span className="font-semibold text-neutral-900 dark:text-white">
-            {practiceName || "this clinic"}
-          </span>
-          . Choose a doctor, slot and a registered patient (Patient ID / MRN).
+          {intent === "block" ? (
+            <>
+              Block time for{" "}
+              <span className="font-semibold text-neutral-900 dark:text-white">
+                {practiceName || "this clinic"}
+              </span>
+              {mode === "TOKEN_BASED"
+                ? ". Token clinics block the doctor's whole day for the selected date."
+                : ". Choose a doctor, slot, and reason so patients cannot book it."}
+            </>
+          ) : (
+            <>
+              Manual booking for{" "}
+              <span className="font-semibold text-neutral-900 dark:text-white">
+                {practiceName || "this clinic"}
+              </span>
+              . Choose a doctor, slot and a registered patient (Patient ID / MRN).
+            </>
+          )}
         </p>
 
         {!doctors.length ? (
@@ -413,7 +585,13 @@ export default function ClinicBookAppointmentModal({
                 {formatPracticeTime(
                   practiceSlotStartIso(date, prefill.startMinutes + blockMinutes),
                 )}
-                . One appointment holds every slot in this block.
+                {intent === "block"
+                  ? ". This window will be blocked."
+                  : ". One appointment holds every slot in this block."}
+              </p>
+            ) : intent === "block" && blockWindowLabel ? (
+              <p className="mt-1 text-xs font-semibold text-[var(--theme-primary)]">
+                Blocking {blockWindowLabel}. Patients cannot book this window.
               </p>
             ) : null}
             {openSlots.length === 0 ? (
@@ -451,6 +629,11 @@ export default function ClinicBookAppointmentModal({
               </div>
             )}
           </div>
+        ) : intent === "block" ? (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+            Token clinics block the whole day for this doctor on the selected
+            date (no new tokens).
+          </p>
         ) : (
           <p className="rounded-xl border border-neutral-200 px-3 py-2 dark:border-neutral-700">
             {tokenSession?.available
@@ -459,26 +642,62 @@ export default function ClinicBookAppointmentModal({
           </p>
         )}
 
-        {open && practiceId ? (
-          <DeskPatientPicker
-            practiceId={practiceId}
-            value={patient}
-            onChange={setPatient}
-          />
-        ) : null}
+        {intent === "book" ? (
+          <>
+            {open && practiceId ? (
+              <DeskPatientPicker
+                practiceId={practiceId}
+                value={patient}
+                onChange={setPatient}
+              />
+            ) : null}
 
-        <label className="block">
-          <span className="font-semibold">Chief complaint *</span>
-          <textarea
-            className={fieldClass}
-            rows={2}
-            value={disease}
-            onChange={(e) => setDisease(e.target.value)}
-            placeholder="e.g. chest pain, high fever"
-            required
-            aria-required
-          />
-        </label>
+            <label className="block">
+              <span className="font-semibold">Chief complaint *</span>
+              <textarea
+                className={fieldClass}
+                rows={2}
+                value={disease}
+                onChange={(e) => setDisease(e.target.value)}
+                placeholder="e.g. chest pain, high fever"
+                required
+                aria-required
+              />
+            </label>
+          </>
+        ) : (
+          <div className="space-y-2">
+            <label className="block">
+              <span className="font-semibold">Reason for blocking *</span>
+              <textarea
+                className={fieldClass}
+                rows={2}
+                value={blockReason}
+                onChange={(e) => setBlockReason(e.target.value)}
+                placeholder="e.g. doctor meeting, lunch, personal leave"
+                maxLength={200}
+                required
+                aria-required
+              />
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {BLOCK_REASON_CHIPS.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                    blockReason === chip
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-black"
+                      : "border-neutral-300 dark:border-neutral-600"
+                  }`}
+                  onClick={() => setBlockReason(chip)}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {message ? (
           <p className="text-red-700 dark:text-red-400" role="alert">

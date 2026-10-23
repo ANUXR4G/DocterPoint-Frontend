@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib"
+import { embedPdfImage } from "@/lib/pdfImage"
 import { consultationModel, type ConsultBooking } from "./consultationPdf"
 
 export type RxMedicine = {
@@ -171,25 +172,20 @@ export function prescriptionModel(booking: RxBooking) {
     vitalLine: vitals,
     pharmacy: pharmacyRows(booking.medicines),
     advice: adviceLines(
-      booking.clinicalAssessment && typeof booking.clinicalAssessment === "object"
-        ? (booking.clinicalAssessment as { advice?: string }).advice
-        : "",
+      visit.advice ||
+        (booking.clinicalAssessment && typeof booking.clinicalAssessment === "object"
+          ? (booking.clinicalAssessment as { advice?: string }).advice
+          : typeof (booking as any)?.clinicalAssessment === "string"
+            ? (() => {
+                try {
+                  return String(JSON.parse((booking as any).clinicalAssessment)?.advice || "")
+                } catch {
+                  return ""
+                }
+              })()
+            : String((booking as any)?.advice || "")),
     ),
   }
-}
-
-async function embedStamp(doc: PDFDocument, url: string) {
-  if (!/^https?:/i.test(url)) return null
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const bytes = new Uint8Array(await res.arrayBuffer())
-    if (bytes[0] === 0x89 && bytes[1] === 0x50) return doc.embedPng(bytes)
-    if (bytes[0] === 0xff && bytes[1] === 0xd8) return doc.embedJpg(bytes)
-  } catch {
-    return null
-  }
-  return null
 }
 
 function drawMark(page: PDFPage, x: number, top: number) {
@@ -247,7 +243,18 @@ export async function buildPrescriptionPdf(booking: RxBooking): Promise<Uint8Arr
     page.drawText(value, { x, y, size, font: face, color })
   }
 
-  drawMark(page, right - 36, y + 4)
+  const clinicLogo = await embedPdfImage(doc, model.clinicLogoSrc)
+  if (clinicLogo) {
+    const logoSize = 40
+    page.drawImage(clinicLogo, {
+      x: right - logoSize,
+      y: y - logoSize + 8,
+      width: logoSize,
+      height: logoSize,
+    })
+  } else {
+    drawMark(page, right - 36, y + 4)
+  }
   draw(model.clinic, left, 12, bold)
   y -= 14
   if (model.address) {
@@ -382,7 +389,7 @@ export async function buildPrescriptionPdf(booking: RxBooking): Promise<Uint8Arr
   ensure(20)
   draw("Advice:", left, 11, bold)
   y -= 14
-  const advice = model.advice.length ? model.advice : [""]
+  const advice = model.advice.length ? model.advice : ["* No advice recorded."]
   for (const line of advice) {
     for (const wrapped of wrap(line, font, 9, width)) {
       ensure(12)
@@ -393,19 +400,22 @@ export async function buildPrescriptionPdf(booking: RxBooking): Promise<Uint8Arr
 
   y -= 24
   ensure(120)
-  const stamp = await embedStamp(doc, model.stampSrc)
-  if (stamp) {
-    const box = 72
-    page.drawImage(stamp, { x: left + width / 2 - box / 2, y: y - box, width: box, height: box })
-    y -= box + 28
+  const footerTopY = y
+  const box = 72
+
+  // 1. Doctor's individual stamp / seal
+  const doctorStamp = await embedPdfImage(doc, model.stampSrc)
+  if (doctorStamp) {
+    const doctorX = model.clinicStampSrc ? left + width / 4 - box / 2 : left + width / 2 - box / 2
+    page.drawImage(doctorStamp, { x: doctorX, y: footerTopY - box, width: box, height: box })
   } else {
-    const cx = left + width / 2
-    const cy = y - 28
+    const cx = model.clinicStampSrc ? left + width / 4 : left + width / 2
+    const cy = footerTopY - 28
     page.drawEllipse({
       x: cx,
       y: cy,
-      xScale: 42,
-      yScale: 42,
+      xScale: 40,
+      yScale: 40,
       borderWidth: 1.2,
       borderColor: TEAL,
     })
@@ -414,7 +424,7 @@ export async function buildPrescriptionPdf(booking: RxBooking): Promise<Uint8Arr
     for (const line of stampLines) {
       const size = line === model.doctor ? 8 : 7
       const face = line === model.doctor ? bold : font
-      const text = safe(line).slice(0, 28)
+      const text = safe(line).slice(0, 26)
       page.drawText(text, {
         x: cx - face.widthOfTextAtSize(text, size) / 2,
         y: stampY,
@@ -424,8 +434,16 @@ export async function buildPrescriptionPdf(booking: RxBooking): Promise<Uint8Arr
       })
       stampY -= 11
     }
-    y = cy - 56
   }
+
+  // 2. Common Clinic stamp
+  const clinicStamp = await embedPdfImage(doc, model.clinicStampSrc)
+  if (clinicStamp) {
+    const clinicX = left + (3 * width) / 4 - box / 2
+    page.drawImage(clinicStamp, { x: clinicX, y: footerTopY - box, width: box, height: box })
+  }
+
+  y = footerTopY - box - 24
   ensure(20)
   page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.6, color: INK })
   y -= 14

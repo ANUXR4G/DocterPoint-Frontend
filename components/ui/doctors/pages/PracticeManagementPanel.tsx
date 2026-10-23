@@ -42,6 +42,9 @@ import {
 } from "@/components/ui/procto/ScheduleChangeControls";
 import ClinicalMastersPanel from "@/components/ui/procto/ClinicalMastersPanel";
 import { SpecialtySelect } from "@/components/ui/procto/SpecialtySelect";
+import { useCloudinary } from "@/hooks/useCloudinary";
+import { resolveUploadUrl } from "@/lib/uploads";
+import DoctorStampField from "@/components/ui/procto/DoctorStampField";
 
 type Tab = PracticeTab;
 
@@ -64,6 +67,7 @@ type PracticeMember = {
         phone?: string | null;
         doctor?: {
           licenseNo: string | null;
+          stampSrc?: string | null;
           appointmentValidityDays: number;
           description?: string | null;
         } | null;
@@ -218,7 +222,9 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
       ? tabParam === "schedule" || tabParam === "overrides"
         ? "setup"
         : (tabParam as Tab)
-      : "calendar";
+      : embedded
+        ? "setup"
+        : "calendar";
 
   const [tab, setTab] = useState<Tab>(initialTab);
   const [setupPane, setSetupPane] = useState<"hours" | "blocks">(
@@ -264,7 +270,11 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
   const locationId = practice?.locations[0]?.id;
   const isClinicAdmin =
     membership?.role === "PRACTICE_OWNER" ||
-    membership?.role === "PRACTICE_ADMIN";
+    membership?.role === "PRACTICE_ADMIN" ||
+    (membership?.role === "DOCTOR" &&
+      !practice?.members?.some(
+        (m) => m.role === "PRACTICE_OWNER" && m.isActive !== false,
+      ));
 
   const rosterDoctors = useMemo(() => {
     if (!practice) return [];
@@ -552,13 +562,21 @@ function ProviderPracticePageInner({ embedded = false }: { embedded?: boolean })
       >
         <div className="flex min-w-max gap-1 border-b border-slate-200 dark:border-white/10">
         {(
-          [
-            "calendar",
-            "setup",
-            ...(isClinicAdmin ? (["doctors"] as Tab[]) : []),
-            "inbox",
-            "clinical",
-          ] as Tab[]
+          embedded
+            ? ([
+                "setup",
+                "inbox",
+                ...(tabParam && ["calendar", "doctors", "clinical"].includes(tabParam)
+                  ? [tabParam as Tab]
+                  : []),
+              ] as Tab[])
+            : ([
+                "calendar",
+                "setup",
+                ...(isClinicAdmin ? (["doctors"] as Tab[]) : []),
+                "inbox",
+                "clinical",
+              ] as Tab[])
         ).map((t) => (
           <button
             key={t}
@@ -948,6 +966,30 @@ function DoctorsPanel({
   const [canAddDoctor, setCanAddDoctor] = useState(true);
   const [planHint, setPlanHint] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [newDoctorStamp, setNewDoctorStamp] = useState("");
+  const newStampInputRef = useRef<HTMLInputElement>(null);
+  const { handleImgUpload: uploadNewStamp, isUploading: isUploadingNewStamp } = useCloudinary(null);
+
+  async function onPickNewDoctorStamp(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    if (!file.type.startsWith("image/")) {
+      setError("Choose an image (PNG or JPG).");
+      return;
+    }
+    try {
+      const json = await uploadNewStamp(file);
+      if (json?.secure_url) {
+        setNewDoctorStamp(json.secure_url as string);
+      } else {
+        setError("Upload failed. Try again.");
+      }
+    } catch {
+      setError("Failed to upload stamp image.");
+    }
+  }
 
   const doctors = members.filter(
     (m) =>
@@ -1058,6 +1100,7 @@ function DoctorsPanel({
       phone: phone.trim() || undefined,
       specialtyIds,
       licenseNo: licenseNo.trim() || undefined,
+      stampSrc: newDoctorStamp.trim() || undefined,
     });
     setBusy(false);
     if (res.status !== "successful") {
@@ -1072,6 +1115,7 @@ function DoctorsPanel({
     setPhone("");
     setSpecialtyIds([]);
     setLicenseNo("");
+    setNewDoctorStamp("");
     await onChanged();
   }
 
@@ -1153,6 +1197,17 @@ function DoctorsPanel({
                     {m.user.doctor.description}
                   </p>
                 ) : null}
+                <DoctorStampField
+                  practiceId={practiceId}
+                  memberUserId={m.userId}
+                  doctorName={m.user.name || "Doctor"}
+                  currentStamp={m.user.doctor?.stampSrc}
+                  canManage={canManage}
+                  onSaved={async () => {
+                    setMessage(`Stamp updated for ${m.user.name || "doctor"}.`);
+                    await onChanged();
+                  }}
+                />
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
               {canManage && m.role === "PRACTICE_OWNER" ? (
@@ -1362,6 +1417,49 @@ function DoctorsPanel({
                 />
               </div>
             </label>
+            <div className="mt-1 rounded-lg border border-slate-200 bg-slate-50 p-2.5 dark:border-neutral-700 dark:bg-neutral-800/60 sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-neutral-300">
+                Doctor&apos;s Stamp (optional)
+              </label>
+              <p className="mt-0.5 text-[11px] text-slate-500 dark:text-neutral-400">
+                Upload this doctor&apos;s personal stamp / signature image (can also be uploaded or changed later).
+              </p>
+              <div className="mt-2 flex items-center gap-3">
+                {newDoctorStamp ? (
+                  <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={resolveUploadUrl(newDoctorStamp)}
+                      alt="New doctor stamp"
+                      className="size-11 rounded-md border border-neutral-300 bg-white object-contain dark:border-neutral-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewDoctorStamp("")}
+                      className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-red-600 text-[10px] text-white"
+                      title="Remove"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={isUploadingNewStamp}
+                  onClick={() => newStampInputRef.current?.click()}
+                  className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200"
+                >
+                  {isUploadingNewStamp ? "Uploading…" : newDoctorStamp ? "Change stamp" : "Choose stamp image"}
+                </button>
+                <input
+                  ref={newStampInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => void onPickNewDoctorStamp(e)}
+                />
+              </div>
+            </div>
             <button
               type="submit"
               disabled={busy || !canAddDoctor}

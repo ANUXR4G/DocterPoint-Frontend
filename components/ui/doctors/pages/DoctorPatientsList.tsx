@@ -3,6 +3,8 @@
 import { useMemo, useState, Fragment } from "react"
 import Link from "next/link"
 import { Paperclip } from "lucide-react"
+import TablePagination from "@/components/pagination/TablePagination"
+import { useClientPagination } from "@/hooks/useClientPagination"
 import { firey } from "@/utils"
 import {
   usePracticeDashboard,
@@ -215,6 +217,10 @@ export default function DoctorPatientsList() {
     })
   }, [patients, query, statusFilter])
 
+  const listPagination = useClientPagination(filtered, {
+    resetKey: `${statusFilter}:${query.trim().toLowerCase()}`,
+  })
+
   if (showLoading) {
     return (
       <div
@@ -258,10 +264,18 @@ export default function DoctorPatientsList() {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-base font-bold text-neutral-900 dark:text-white">
-          {practiceName} · {filtered.length} patient
-          {filtered.length === 1 ? "" : "s"}
-        </p>
+        <div className="min-w-0">
+          <p className="text-base font-bold text-neutral-900 dark:text-white">
+            {practiceName} · {filtered.length} patient
+            {filtered.length === 1 ? "" : "s"}
+          </p>
+          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+            Registration is the clinic link / account date and time. Different
+            MRN prefixes are normal — each ID keeps the clinic that issued it
+            (plain MR… is older, before clinic prefixes); renaming the clinic
+            does not rewrite issued MRNs.
+          </p>
+        </div>
         <input
           type="search"
           value={query}
@@ -282,8 +296,10 @@ export default function DoctorPatientsList() {
       {filtered.length > 0 ? (
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
           <ul className="min-h-0 flex-1 divide-y divide-neutral-200 overflow-y-auto md:hidden dark:divide-neutral-700">
-            {filtered.map((p, index) => {
-              const key = patientRowKey(p, index)
+            {listPagination.pageItems.map((p, index) => {
+              const absoluteIndex =
+                (listPagination.page - 1) * listPagination.pageSize + index
+              const key = patientRowKey(p, absoluteIndex)
               const open = expanded === key
               const via = formatPhoneDisplay(bookedViaPhone(p))
               return (
@@ -311,6 +327,11 @@ export default function DoctorPatientsList() {
                         {p.mrn?.trim() ? (
                           <p className="mt-0.5 text-xs font-semibold tabular-nums tracking-wide opacity-70">
                             MRN {p.mrn.trim()}
+                          </p>
+                        ) : null}
+                        {p.registeredAt ? (
+                          <p className="mt-0.5 text-xs opacity-60">
+                            Registered {formatPracticeDateTime(p.registeredAt)}
                           </p>
                         ) : null}
                         <p className="mt-1 text-xs opacity-60">
@@ -356,12 +377,12 @@ export default function DoctorPatientsList() {
                           <span className="opacity-50">{viaLabel(p)}: </span>
                           {via}
                         </p>
-                        {p.registeredAt ? (
-                          <p>
-                            <span className="opacity-50">Registered: </span>
-                            {formatPracticeDateTime(p.registeredAt)}
-                          </p>
-                        ) : null}
+                        <p>
+                          <span className="opacity-50">Registered: </span>
+                          {p.registeredAt
+                            ? formatPracticeDateTime(p.registeredAt)
+                            : "—"}
+                        </p>
                         {p.relationship?.trim() ? (
                           <p>
                             <span className="opacity-50">Relation: </span>
@@ -457,21 +478,24 @@ export default function DoctorPatientsList() {
             <table className="w-full table-fixed border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-neutral-100 text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                 <tr>
-                  <th className="w-[18%] px-3 py-1.5">Member</th>
-                  <th className="w-[14%] px-3 py-1.5">MRN</th>
-                  <th className="w-[16%] px-3 py-1.5">Booked via</th>
-                  <th className="w-[6%] px-3 py-1.5">Age</th>
-                  <th className="w-[10%] px-3 py-1.5">Gender</th>
-                  <th className="w-[7%] px-3 py-1.5">Visits</th>
-                  <th className="w-[16%] px-3 py-1.5 text-center">
+                  <th className="w-[16%] px-3 py-1.5">Member</th>
+                  <th className="w-[12%] px-3 py-1.5">MRN</th>
+                  <th className="w-[14%] px-3 py-1.5">Registration</th>
+                  <th className="w-[14%] px-3 py-1.5">Booked via</th>
+                  <th className="w-[5%] px-3 py-1.5">Age</th>
+                  <th className="w-[9%] px-3 py-1.5">Gender</th>
+                  <th className="w-[6%] px-3 py-1.5">Visits</th>
+                  <th className="w-[12%] px-3 py-1.5 text-center">
                     Attachments
                   </th>
-                  <th className="w-[13%] px-3 py-1.5 text-right">Details</th>
+                  <th className="w-[12%] px-3 py-1.5 text-right">Details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                {filtered.map((p, index) => {
-                  const key = patientRowKey(p, index)
+                {listPagination.pageItems.map((p, index) => {
+                  const absoluteIndex =
+                    (listPagination.page - 1) * listPagination.pageSize + index
+                  const key = patientRowKey(p, absoluteIndex)
                   const open = expanded === key
                   const via = formatPhoneDisplay(bookedViaPhone(p))
                   return (
@@ -502,6 +526,13 @@ export default function DoctorPatientsList() {
                         </td>
                         <td className="overflow-hidden px-3 py-1 font-semibold tabular-nums tracking-wide">
                           <div className="truncate">{p.mrn?.trim() || "—"}</div>
+                        </td>
+                        <td className="overflow-hidden px-3 py-1 text-xs tabular-nums">
+                          <div className="truncate">
+                            {p.registeredAt
+                              ? formatPracticeDateTime(p.registeredAt)
+                              : "—"}
+                          </div>
                         </td>
                         <td className="overflow-hidden px-3 py-1 font-medium">
                           <div className="truncate">{via}</div>
@@ -540,7 +571,7 @@ export default function DoctorPatientsList() {
                       </tr>
                       {open ? (
                         <tr className="bg-neutral-50 dark:bg-neutral-950/40">
-                          <td colSpan={8} className="px-4 py-4">
+                          <td colSpan={9} className="px-4 py-4">
                             <div className="grid gap-3 text-xs sm:grid-cols-2">
                               <p>
                                 <span className="opacity-50">Member: </span>
@@ -556,12 +587,12 @@ export default function DoctorPatientsList() {
                                 <span className="opacity-50">{viaLabel(p)}: </span>
                                 {via}
                               </p>
-                              {p.registeredAt ? (
-                                <p>
-                                  <span className="opacity-50">Registered: </span>
-                                  {formatPracticeDateTime(p.registeredAt)}
-                                </p>
-                              ) : null}
+                              <p>
+                                <span className="opacity-50">Registered: </span>
+                                {p.registeredAt
+                                  ? formatPracticeDateTime(p.registeredAt)
+                                  : "—"}
+                              </p>
                               <div className="sm:col-span-2">
                                 <p className="opacity-50">Attachments</p>
                                 <div className="mt-1">
@@ -659,6 +690,11 @@ export default function DoctorPatientsList() {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            pagination={listPagination}
+            label="patients"
+            className="shrink-0 border-t border-neutral-200 px-3 dark:border-neutral-700"
+          />
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-10 text-center text-sm font-medium text-neutral-600 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">

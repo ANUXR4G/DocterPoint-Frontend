@@ -11,6 +11,8 @@ import {
   Send,
 } from "lucide-react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
+import TablePagination from "@/components/pagination/TablePagination"
+import { useClientPagination } from "@/hooks/useClientPagination"
 import PaymentRequestModal from "@/components/ui/procto/PaymentRequestModal"
 import {
   proctoService,
@@ -191,6 +193,9 @@ export default function PaymentsPage({
   const summary = data?.summary
   const items = data?.items ?? []
   const showDoctor = isClinicAdmin && portal === "clinic"
+  const listPagination = useClientPagination(items, {
+    resetKey: `${status}:${range}:${debounced}`,
+  })
 
   return (
     <>
@@ -362,7 +367,7 @@ export default function PaymentsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {items.map((r) => {
+                {listPagination.pageItems.map((r) => {
                   const s = paymentStatusStyle(r.status)
                   const delivery = deliveryLabel(r)
                   return (
@@ -463,7 +468,7 @@ export default function PaymentsPage({
           </div>
 
           <ul className="space-y-3 md:hidden">
-            {items.map((r) => {
+            {listPagination.pageItems.map((r) => {
               const s = paymentStatusStyle(r.status)
               return (
                 <li
@@ -505,6 +510,11 @@ export default function PaymentsPage({
               )
             })}
           </ul>
+          <TablePagination
+            pagination={listPagination}
+            label="payments"
+            className="mt-3"
+          />
         </>
       )}
     </>

@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner"
 import { proctoService } from "@/lib/services/procto"
 import { practiceTodayIso } from "@/lib/practiceTime"
+import { isPracticingDoctor } from "@/lib/rosterDoctor"
 import {
   buildDayScheduleReport,
   buildWeekScheduleReport,
@@ -99,6 +100,29 @@ export default function DoctorScheduleReport({
     }
   }, [criteria, anchorDate])
 
+  // Populate doctors roster from memberships
+  useEffect(() => {
+    const activePractice = memberships?.find(
+      (m: any) =>
+        m.practiceId === practiceId ||
+        m.practice?.id === practiceId ||
+        proctoService.resolvePracticeId(m) === practiceId,
+    )?.practice
+    if (activePractice?.members) {
+      const docs = activePractice.members
+        .filter((m: any) => isPracticingDoctor(m) || m.role === "DOCTOR" || m.doctorId || m.user?.doctor)
+        .map((m: any) => ({
+          id: m.userId,
+          name: m.user?.name || "Doctor",
+          specialties:
+            m.user?.doctor?.specialties?.map((s: any) => s.specialty?.name).filter(Boolean) || [],
+        }))
+      if (docs.length > 0) {
+        setDoctorsList((prev) => (docs.length >= prev.length ? docs : prev))
+      }
+    }
+  }, [practiceId, memberships])
+
   // Fetch doctors and schedule rules from backend
   const loadScheduleData = useCallback(async () => {
     if (!practiceId) return
@@ -132,21 +156,30 @@ export default function DoctorScheduleReport({
       })
 
       if (res?.status === "successful" && res?.data) {
-        setDoctorsList(res.data.doctors || [])
+        if ((selectedDoctorId === "all" || doctorsList.length === 0) && Array.isArray(res.data.doctors) && res.data.doctors.length > 0) {
+          setDoctorsList(res.data.doctors)
+        }
         setSchedules(res.data.schedules || [])
         setOverrides(res.data.overrides || [])
       } else {
         // Fallback to active practice members if report endpoint unavailable
-        const activePractice = memberships?.find((m) => m.practiceId === practiceId)?.practice
+        const activePractice = memberships?.find(
+          (m: any) =>
+            m.practiceId === practiceId ||
+            m.practice?.id === practiceId ||
+            proctoService.resolvePracticeId(m) === practiceId,
+        )?.practice
         if (activePractice?.members) {
           const docs = activePractice.members
-            .filter((m: any) => m.role === "DOCTOR" || m.doctorId || m.user?.doctor)
+            .filter((m: any) => isPracticingDoctor(m) || m.role === "DOCTOR" || m.doctorId || m.user?.doctor)
             .map((m: any) => ({
               id: m.userId,
               name: m.user?.name || "Doctor",
               specialties: m.user?.doctor?.specialties?.map((s: any) => s.specialty?.name) || [],
             }))
-          setDoctorsList(docs)
+          if (docs.length > 0) {
+            setDoctorsList(docs)
+          }
         }
       }
     } catch (err) {
@@ -166,6 +199,7 @@ export default function DoctorScheduleReport({
     customFrom,
     customTo,
     memberships,
+    doctorsList.length,
   ])
 
   useEffect(() => {

@@ -13,10 +13,9 @@ const LINKS = [
   { href: DOCTOR_PATIENTS_HREF, label: "Patients" },
   { href: "/doctor/activity", label: "Patient Support" },
   { href: "/doctor/calendar", label: "Calendar" },
+  { href: "/clinic/doctors", label: "Doctors" },
   { href: "/doctor/analytics", label: "Analytics" },
   { href: "/clinic/payments", label: "Payments" },
-  { href: practiceTabHref("setup"), label: "Hours & blocks" },
-  { href: practiceTabHref("doctors"), label: "Doctors" },
   { href: "/clinic/access", label: "Role access" },
   { href: "/clinic/subscription", label: "Subscription" },
   { href: "/clinic/master", label: "Master" },
@@ -46,10 +45,7 @@ export function isClinicNavActive(
   }
 
   if (destPath === "/settings" && !destTab) {
-    return (
-      pathname === "/settings" &&
-      !(currentTab === "practice" && currentSubtab === "setup")
-    )
+    return pathname === "/settings"
   }
 
   if (destPath === "/clinic/dashboard") {

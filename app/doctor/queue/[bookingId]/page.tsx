@@ -43,6 +43,9 @@ import MedicineEntryTable, {
   isMedicineLocked,
   type VisitMedicine,
 } from "@/components/ui/procto/MedicineEntryTable"
+import DiagnosticEntryTable, {
+  type VisitDiagnostic,
+} from "@/components/ui/procto/DiagnosticEntryTable"
 import { formatPhoneDisplay } from "@/lib/formatPhone"
 import {
   formatPracticeDate,
@@ -78,6 +81,7 @@ type VisitBooking = {
   disease?: string | null
   doctorRemarks?: string | null
   medicines?: Medicine[] | null
+  diagnostics?: VisitDiagnostic[] | null
   documents?: VisitDoc[] | null
   clinicalAssessment?: ClinicalAssessment | null
   clinicalVersions?: Array<{
@@ -251,9 +255,23 @@ export default function VisitPage() {
   const [error, setError] = useState("")
   const [loadTick, setLoadTick] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [startingConsultation, setStartingConsultation] = useState(false)
   const [sendingWa, setSendingWa] = useState(false)
   const [sendCustomerModalOpen, setSendCustomerModalOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  const statusUpper = String(booking?.status || "").toUpperCase()
+  const isCompleted = statusUpper === "COMPLETED"
+  const isInConsultation = statusUpper === "IN_PROGRESS"
+  const appointmentDayIso = booking?.slotStart
+    ? practiceDateIso(booking.slotStart)
+    : booking?.sessionDate
+      ? practiceDateIso(booking.sessionDate)
+      : null
+  const todayIso = practiceTodayIso()
+  const isHistorical = Boolean(appointmentDayIso && appointmentDayIso < todayIso)
+  // When status is "IN_PROGRESS" ("Start consultation"), only then the appointment page open text is enabled
+  const chartLocked = !isInConsultation || isHistorical
 
   const [remarks, setRemarks] = useState("")
   const [complaint, setComplaint] = useState("")
@@ -282,6 +300,7 @@ export default function VisitPage() {
     el.style.height = `${Math.max(80, el.scrollHeight)}px`
   }, [advice])
   const [medicines, setMedicines] = useState<Medicine[]>([])
+  const [diagnostics, setDiagnostics] = useState<VisitDiagnostic[]>([])
   const [documents, setDocuments] = useState<VisitDoc[]>([])
   const [clinicalAssessment, setClinicalAssessment] =
     useState<ClinicalAssessment | null>(null)
@@ -307,6 +326,8 @@ export default function VisitPage() {
   medDraftRef.current = medDraft
   const medicinesRef = useRef<Medicine[]>([])
   medicinesRef.current = medicines
+  const diagnosticsRef = useRef<VisitDiagnostic[]>([])
+  diagnosticsRef.current = diagnostics
   const medicineSaved = useRef<string[]>([])
   const medicineGeneration = useRef(0)
   const visitHeaderRef = useRef<HTMLDivElement>(null)
@@ -468,10 +489,13 @@ export default function VisitPage() {
       setAdvice(storedAdvice)
       adviceRef.current = storedAdvice
       const meds = Array.isArray(data.medicines) ? data.medicines : []
+      const dx = Array.isArray(data.diagnostics) ? data.diagnostics : []
       const docs = Array.isArray(data.documents) ? data.documents : []
       setMedicines(meds)
       medicinesRef.current = meds
       medicineSaved.current = meds.map((row) => visitMedicineSignature(row))
+      setDiagnostics(dx)
+      diagnosticsRef.current = dx
       setDocuments(docs)
       documentsRef.current = docs
       let chart = (data.clinicalAssessment as ClinicalAssessment) ?? null
@@ -597,6 +621,7 @@ export default function VisitPage() {
       status?: string
       successMessage?: string
       medicineGeneration?: number
+      nextDiagnostics?: VisitDiagnostic[]
     },
   ) {
     if (!bookingId || String(booking?.status || "").toUpperCase() === "COMPLETED")
@@ -634,10 +659,21 @@ export default function VisitPage() {
             orderedAt: m.orderedAt || new Date().toISOString(),
           }))
         : nextMedicines
+    const dxSource = opts?.nextDiagnostics ?? diagnosticsRef.current
+    const diagnosticsPayload =
+      opts?.status === "COMPLETED"
+        ? dxSource.map((d) => ({
+            ...d,
+            isOrdered: true,
+            status: d.status || "ordered",
+            orderedAt: d.orderedAt || new Date().toISOString(),
+          }))
+        : dxSource
     const res = await proctoService.updateBookingVisit(bookingId, {
       doctorRemarks: remarks,
       ...(disease ? { disease } : {}),
       medicines: medicinesPayload,
+      diagnostics: diagnosticsPayload,
       documents: docsToSave,
       ...(clinicalReady.current || chart.diagnosis || chart.advice
         ? { clinicalAssessment: chart }
@@ -670,8 +706,7 @@ export default function VisitPage() {
 
   function addMedicine() {
     const row = medicineFromDraft(medDraftRef.current)
-    if (!row || !bookingId) return
-    if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
+    if (!row || !bookingId || chartLocked) return
 
     const alreadyAdded = medicinesRef.current.some(
       (m) => m.name.trim().toLowerCase() === row.name.trim().toLowerCase(),
@@ -692,11 +727,7 @@ export default function VisitPage() {
   }
 
   function removeMedicine(idx: number) {
-    if (
-      !bookingId ||
-      String(booking?.status || "").toUpperCase() === "COMPLETED"
-    )
-      return
+    if (!bookingId || chartLocked) return
     const target = medicinesRef.current[idx]
     if (target && isMedicineLocked(target, chartLocked)) {
       toast.error(`"${target.name}" has already been ordered and is locked to preserve historical audit trails.`)
@@ -767,11 +798,7 @@ export default function VisitPage() {
     patch: Partial<Medicine>,
     commit: boolean,
   ) {
-    if (
-      !bookingId ||
-      String(booking?.status || "").toUpperCase() === "COMPLETED"
-    )
-      return
+    if (!bookingId || chartLocked) return
     const current = medicinesRef.current[idx]
     if (!current) return
     if (isMedicineLocked(current, chartLocked)) {
@@ -829,7 +856,7 @@ export default function VisitPage() {
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ""
-    if (!file || !bookingId) return
+    if (!file || !bookingId || chartLocked) return
     if (documents.length >= MAX_BOOKING_DOCUMENTS) {
       toast.error(`At most ${MAX_BOOKING_DOCUMENTS} documents per visit.`)
       return
@@ -946,6 +973,39 @@ export default function VisitPage() {
     setSendCustomerModalOpen(true)
   }
 
+  async function handleStartConsultation() {
+    if (!bookingId || startingConsultation) return
+    setStartingConsultation(true)
+    try {
+      const currentStatus = String(booking?.status || "").toUpperCase()
+      if (
+        ["SCHEDULED", "CONFIRMED", "ACCEPTED", "REQUESTED", "BOOKED"].includes(
+          currentStatus,
+        )
+      ) {
+        await proctoService.updateBookingStatus(bookingId, "WAITING")
+      }
+      const res = await proctoService.updateBookingStatus(
+        bookingId,
+        "IN_PROGRESS",
+      )
+      if (res.status === "successful") {
+        const patch = { status: "IN_PROGRESS" }
+        setBooking((prev) => (prev ? { ...prev, ...patch } : prev))
+        patchSharedBooking(bookingId, patch)
+        toast.success("Consultation started. Clinical notes are now editable.")
+      } else {
+        toast.error(res.message || "Could not start consultation.")
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Failed to start consultation.",
+      )
+    } finally {
+      setStartingConsultation(false)
+    }
+  }
+
   if (!detailLoaded) {
     return (
       <div className="dashboard-page-wide py-10">
@@ -1005,15 +1065,6 @@ export default function VisitPage() {
     : booking.sessionDate
       ? formatPracticeDate(booking.sessionDate)
       : "—"
-  const isCompleted = String(booking.status || "").toUpperCase() === "COMPLETED"
-  const appointmentDayIso = booking.slotStart
-    ? practiceDateIso(booking.slotStart)
-    : booking.sessionDate
-      ? practiceDateIso(booking.sessionDate)
-      : null
-  const todayIso = practiceTodayIso()
-  const isHistorical = Boolean(appointmentDayIso && appointmentDayIso < todayIso)
-  const chartLocked = isCompleted || isHistorical
   const chiefComplaint = chiefComplaintOf(booking)
   const arrival = formatArrival(booking)
   const arrivalDisplay =
@@ -1093,11 +1144,23 @@ export default function VisitPage() {
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1.5">
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${bookingStatusClass(booking.status)}`}
-                >
-                  {bookingStatusLabel(booking.status)}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${bookingStatusClass(booking.status)}`}
+                  >
+                    {bookingStatusLabel(booking.status)}
+                  </span>
+                  {!isInConsultation && !isCompleted && !isHistorical ? (
+                    <button
+                      type="button"
+                      disabled={startingConsultation}
+                      onClick={() => void handleStartConsultation()}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-teal-600 px-3.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-teal-700 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {startingConsultation ? "Starting…" : "Start consultation"}
+                    </button>
+                  ) : null}
+                </div>
                 {isEmergencyWalkIn(booking) ? <EmergencyWalkInBadge /> : null}
                 <PaymentStatusButton
                   bookingId={booking.id}
@@ -1114,15 +1177,50 @@ export default function VisitPage() {
           </div>
         </section>
 
-        {isCompleted ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <PrescriptionActionsMenu
-              bookingId={booking.id}
-              enabled
-              layout="buttons"
-            />
+        {!isInConsultation && !isCompleted && !isHistorical ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base" aria-hidden>ℹ️</span>
+              <p className="text-xs sm:text-sm font-medium">
+                Consultation has not started yet. Click <strong>Start consultation</strong> to enable diagnosis, diagnostic orders, clinical notes, medicines, and advice.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={startingConsultation}
+              onClick={() => void handleStartConsultation()}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-teal-700 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {startingConsultation ? "Starting…" : "Start consultation"}
+            </button>
           </div>
         ) : null}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <PrescriptionActionsMenu
+            bookingId={booking.id}
+            enabled
+            layout="buttons"
+            currentBooking={{
+              ...(booking as unknown as ProctoBooking),
+              disease: complaintRef.current.trim() || booking.disease,
+              doctorRemarks: remarks,
+              medicines: medicinesRef.current as any,
+              diagnostics: diagnosticsRef.current as any,
+              clinicalAssessment: chartWithDiagnosis(clinicalRef.current),
+            }}
+            beforeOpen={async () => {
+              if (formDirty.current || clinicalDirty.current) {
+                const nextMedicines = medicinesToSave()
+                medicinesRef.current = nextMedicines
+                setMedicines(nextMedicines)
+                const saved = await persistVisit(nextMedicines, documentsRef.current)
+                return Boolean(saved)
+              }
+              return true
+            }}
+          />
+        </div>
       </div>
 
       <section className="max-w-full overflow-x-auto rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] dark:shadow-none">
@@ -1168,9 +1266,13 @@ export default function VisitPage() {
           disabled={chartLocked}
           maxLength={500}
           rows={2}
-          placeholder="Chief complaint"
+          placeholder={
+            !isInConsultation && !isCompleted && !isHistorical
+              ? "Start consultation to edit chief complaint"
+              : "Chief complaint"
+          }
           aria-label="Chief complaint"
-          className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+          className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:cursor-not-allowed disabled:opacity-75 disabled:bg-neutral-50 dark:border-neutral-600 dark:disabled:bg-neutral-900/40"
         />
       </section>
 
@@ -1192,9 +1294,13 @@ export default function VisitPage() {
           disabled={chartLocked}
           maxLength={500}
           rows={2}
-          placeholder="Diagnosis"
+          placeholder={
+            !isInConsultation && !isCompleted && !isHistorical
+              ? "Start consultation to edit diagnosis"
+              : "Diagnosis"
+          }
           aria-label="Diagnosis"
-          className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+          className="mt-2 min-h-10 w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-1.5 text-sm leading-snug disabled:cursor-not-allowed disabled:opacity-75 disabled:bg-neutral-50 dark:border-neutral-600 dark:disabled:bg-neutral-900/40"
         />
       </section>
 
@@ -1237,6 +1343,25 @@ export default function VisitPage() {
             toast.error(res.message || "Failed to save allergies")
           }
         }}
+        diagnostics={
+          diagnostics.length === 0 && chartLocked ? (
+            <p className="text-sm opacity-60">No diagnostic orders recorded.</p>
+          ) : (
+            <DiagnosticEntryTable
+              value={diagnostics}
+              readOnly={chartLocked}
+              practiceId={booking.practiceId}
+              patientId={booking.patient?.id}
+              patientPhone={booking.patientPhone}
+              bookingId={booking.id}
+              onChange={(next) => {
+                formDirty.current = true
+                diagnosticsRef.current = next
+                setDiagnostics(next)
+              }}
+            />
+          )
+        }
         medicines={
           medicines.length === 0 && chartLocked ? (
             <p className="text-sm opacity-60">No medicines recorded.</p>
@@ -1306,9 +1431,13 @@ export default function VisitPage() {
               disabled={chartLocked}
               maxLength={3000}
               rows={3}
-              placeholder="Advice for the patient"
+              placeholder={
+                !isInConsultation && !isCompleted && !isHistorical
+                  ? "Start consultation to enter advice"
+                  : "Advice for the patient"
+              }
               aria-label="Advice"
-              className="mt-1 min-h-[80px] w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm leading-snug disabled:opacity-80 dark:border-neutral-600"
+              className="mt-1 min-h-[80px] w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm leading-snug disabled:cursor-not-allowed disabled:opacity-75 disabled:bg-neutral-50 dark:border-neutral-600 dark:disabled:bg-neutral-900/40"
             />
           </div>
         }
@@ -1362,9 +1491,13 @@ export default function VisitPage() {
           readOnly={chartLocked}
           disabled={chartLocked}
           rows={6}
-          placeholder="Doctor notes..."
+          placeholder={
+            !isInConsultation && !isCompleted && !isHistorical
+              ? "Start consultation to enter doctor notes"
+              : "Doctor notes..."
+          }
           aria-label="Doctor notes"
-          className="mt-1 min-h-[160px] w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-2.5 text-sm leading-relaxed disabled:opacity-80 dark:border-neutral-600"
+          className="mt-1 min-h-[160px] w-full resize-y rounded-lg border border-neutral-300 bg-transparent px-3 py-2.5 text-sm leading-relaxed disabled:cursor-not-allowed disabled:opacity-75 disabled:bg-neutral-50 dark:border-neutral-600 dark:disabled:bg-neutral-900/40"
         />
       </section>
 
@@ -1513,7 +1646,7 @@ export default function VisitPage() {
       )}
 
       {/* Sticky actions — in page flow, not a portal that fights layouts */}
-      {!chartLocked ? (
+      {!isHistorical && !isCompleted ? (
         <div className="sticky bottom-0 z-30 -mx-2 border-t border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur-md dark:border-[var(--solune-border-strong)] dark:bg-[color-mix(in_srgb,var(--solune-surface)_92%,transparent)]">
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <p className="hidden text-sm text-neutral-600 sm:block dark:text-slate-300">
@@ -1526,48 +1659,61 @@ export default function VisitPage() {
             <div className="ml-auto flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={saving}
+                disabled={saving || startingConsultation}
                 onClick={handleNavigateBack}
                 className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 disabled:opacity-50 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-elevated)] dark:text-slate-100 dark:hover:bg-[var(--solune-surface-muted)] cursor-pointer"
               >
                 Back
               </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void save()}
-                className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 disabled:opacity-50 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-elevated)] dark:text-slate-100 dark:hover:bg-[var(--solune-surface-muted)]"
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
-              <button
-                type="button"
-                disabled={saving || sendingWa}
-                onClick={() => void sendToCustomer()}
-                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {sendingWa ? "Sending…" : "Send to customer"}
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void save("COMPLETED")}
-                className="rounded-xl border border-green-500/60 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 disabled:opacity-50 dark:border-green-400/30 dark:bg-[color-mix(in_srgb,theme(colors.green.500)_18%,var(--solune-surface))] dark:text-green-200"
-              >
-                {saving ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="size-4">
-                      <Icon
-                        name="spinning-loader"
-                        className="fill-green-800 dark:fill-green-200"
-                      />
-                    </span>
-                    Saving…
-                  </span>
-                ) : (
-                  "Finish appointment"
-                )}
-              </button>
+              {!isInConsultation ? (
+                <button
+                  type="button"
+                  disabled={startingConsultation}
+                  onClick={() => void handleStartConsultation()}
+                  className="rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-teal-700 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {startingConsultation ? "Starting consultation…" : "Start consultation"}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void save()}
+                    className="rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 disabled:opacity-50 dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-elevated)] dark:text-slate-100 dark:hover:bg-[var(--solune-surface-muted)]"
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || sendingWa}
+                    onClick={() => void sendToCustomer()}
+                    className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {sendingWa ? "Sending…" : "Send to customer"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void save("COMPLETED")}
+                    className="rounded-xl border border-green-500/60 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 disabled:opacity-50 dark:border-green-400/30 dark:bg-[color-mix(in_srgb,theme(colors.green.500)_18%,var(--solune-surface))] dark:text-green-200"
+                  >
+                    {saving ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="size-4">
+                          <Icon
+                            name="spinning-loader"
+                            className="fill-green-800 dark:fill-green-200"
+                          />
+                        </span>
+                        Saving…
+                      </span>
+                    ) : (
+                      "Finish appointment"
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
