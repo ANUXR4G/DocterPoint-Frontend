@@ -130,6 +130,74 @@ describe("TemplateService Hierarchical Scoping Model", () => {
     );
   });
 
+  test("Specialty and Doctor combination rules: All doctors in specialty vs specific doctor", () => {
+    const combinedTemplates: DoctorNoteTemplate[] = [
+      {
+        id: "t_all_all",
+        name: "ALL-CLINIC",
+        title: "Clinic Wide Template",
+        category: "general",
+        scope: "clinic",
+        content: "Content",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "t_pediatrics_all",
+        name: "SPEC-PEDIATRICS-ALL",
+        title: "Pediatrics Dept Protocol",
+        category: "condition",
+        scope: "specialty",
+        specialty: "Pediatrics",
+        scopeValue: "Pediatrics",
+        content: "Pediatrics advice and notes",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "t_pediatrics_doc_charles",
+        name: "DOC-CHARLES-PEDIATRIC",
+        title: "Dr. Charles Pediatrics Notes",
+        category: "condition",
+        scope: "doctor",
+        specialty: "Pediatrics",
+        doctorId: "user_charles",
+        createdById: "user_charles",
+        content: "Private to Dr. Charles",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    // Dr. Charles (Pediatrics) sees: clinic template, all pediatrics template, and his own doctor template
+    const forCharles = TemplateService.filterTemplatesByScope(combinedTemplates, {
+      doctorUserId: "user_charles",
+      specialty: "Pediatrics",
+    });
+    assert.equal(forCharles.length, 3);
+    assert.ok(forCharles.some((t) => t.id === "t_all_all"));
+    assert.ok(forCharles.some((t) => t.id === "t_pediatrics_all"));
+    assert.ok(forCharles.some((t) => t.id === "t_pediatrics_doc_charles"));
+
+    // Dr. Dana (also Pediatrics) sees: clinic template, all pediatrics template, but NOT Charles's private template
+    const forDana = TemplateService.filterTemplatesByScope(combinedTemplates, {
+      doctorUserId: "user_dana",
+      specialty: "Pediatrics",
+    });
+    assert.equal(forDana.length, 2);
+    assert.ok(forDana.some((t) => t.id === "t_all_all"));
+    assert.ok(forDana.some((t) => t.id === "t_pediatrics_all"));
+    assert.strictEqual(forDana.some((t) => t.id === "t_pediatrics_doc_charles"), false);
+
+    // Dr. Eric (Cardiology) sees: only clinic template
+    const forEric = TemplateService.filterTemplatesByScope(combinedTemplates, {
+      doctorUserId: "user_eric",
+      specialty: "Cardiology",
+    });
+    assert.equal(forEric.length, 1);
+    assert.equal(forEric[0].id, "t_all_all");
+  });
+
   test("Master template catalog has valid clinic and specialty templates with unique names", () => {
     const names = new Set<string>();
     for (const t of MASTER_DOCTOR_NOTE_TEMPLATES) {
