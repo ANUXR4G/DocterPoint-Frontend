@@ -86,13 +86,13 @@ const FREQUENCIES = [
 
 export const DURATION_UNITS = ["Days", "Weeks", "Months"]
 
-export function normalizeDurationUnit(unit?: string): string {
-  if (!unit) return ""
-  const trimmed = unit.trim()
-  if (/^days?$/i.test(trimmed)) return "Days"
-  if (/^weeks?$/i.test(trimmed)) return "Weeks"
-  if (/^months?$/i.test(trimmed)) return "Months"
-  return trimmed
+export function normalizeDurationUnit(raw?: string | null): string {
+  if (!raw || !String(raw).trim()) return ""
+  const s = String(raw).trim().toLowerCase()
+  if (s === "day" || s === "days") return "Days"
+  if (s === "week" || s === "weeks") return "Weeks"
+  if (s === "month" || s === "months") return "Months"
+  return String(raw).trim()
 }
 
 const SCHEDULE_FIELDS = new Set(["duration", "durationUnit", "startDate"])
@@ -104,6 +104,9 @@ export function editedVisitMedicine(
   commit: boolean,
 ): VisitMedicine {
   const next: VisitMedicine = { ...row, ...patch }
+  if ("durationUnit" in patch) {
+    next.durationUnit = patch.durationUnit ? normalizeDurationUnit(patch.durationUnit) : undefined
+  }
   if ("startDate" in patch && !String(patch.startDate || "").trim()) {
     next.startDate = row.startDate
   }
@@ -116,9 +119,7 @@ export function editedVisitMedicine(
     next.doseUnit = next.doseUnit?.trim() || undefined
     next.frequency = next.frequency?.trim() || undefined
     next.duration = next.duration?.trim() || undefined
-    next.durationUnit = next.durationUnit?.trim()
-      ? normalizeDurationUnit(next.durationUnit.trim())
-      : undefined
+    next.durationUnit = next.durationUnit ? normalizeDurationUnit(next.durationUnit) : undefined
     next.instruction = next.instruction?.trim() || undefined
     next.startDate = next.startDate?.trim() || row.startDate
     next.endDate = next.endDate?.trim() || undefined
@@ -128,9 +129,6 @@ export function editedVisitMedicine(
     keys.some((key) => SCHEDULE_FIELDS.has(key)) &&
     !(keys.length === 1 && keys[0] === "endDate")
   if (reschedule) {
-    if (next.durationUnit) {
-      next.durationUnit = normalizeDurationUnit(next.durationUnit)
-    }
     const scheduled = medicineWithStartDate(next, next.startDate || "")
     next.startDate = scheduled.startDate
     next.endDate =
@@ -176,7 +174,7 @@ export function medicineFromDraft(draft: VisitMedicine): VisitMedicine | null {
   const doseUnit = draft.doseUnit?.trim() || "tablet"
   const frequency = draft.frequency?.trim() || "Once daily"
   const duration = draft.duration?.trim() || "5"
-  const durationUnit = normalizeDurationUnit(draft.durationUnit?.trim()) || "Days"
+  const durationUnit = normalizeDurationUnit(draft.durationUnit) || "Days"
   const amount = [dose, doseUnit].filter(Boolean).join(" ")
   const startDate = draft.startDate?.trim() || defaultMedicineStartDate()
   const endDate =
@@ -263,9 +261,6 @@ export default function MedicineEntryTable({
   const [showOrderModal, setShowOrderModal] = useState(false)
   function set<K extends keyof VisitMedicine>(key: K, value: string | boolean) {
     const next: VisitMedicine = { ...draft, [key]: value }
-    if (key === "durationUnit" && typeof value === "string") {
-      next.durationUnit = normalizeDurationUnit(value)
-    }
     if (key === "duration" || key === "durationUnit" || key === "startDate") {
       const scheduled = medicineWithStartDate(next, next.startDate || "")
       next.startDate = scheduled.startDate
@@ -289,8 +284,7 @@ export default function MedicineEntryTable({
     }
 
     const duration = med.duration || draft.duration || "5"
-    const durationUnit =
-      normalizeDurationUnit(med.durationUnit || draft.durationUnit) || "Days"
+    const durationUnit = med.durationUnit || draft.durationUnit || "Day"
     const startDate = draft.startDate || defaultMedicineStartDate()
     const endDate =
       medicineEndDate(startDate, duration, durationUnit) ||
@@ -433,10 +427,7 @@ export default function MedicineEntryTable({
                           doseUnit: m.doseUnit || med.doseUnit,
                           frequency: m.frequency || med.frequency,
                           duration: m.duration || med.duration,
-                          durationUnit:
-                            normalizeDurationUnit(
-                              m.durationUnit || med.durationUnit,
-                            ) || "Days",
+                          durationUnit: m.durationUnit || med.durationUnit,
                           instruction: m.instruction || med.instruction,
                           favourite: med.favourite !== undefined ? med.favourite : m.favourite,
                         },
@@ -548,28 +539,22 @@ export default function MedicineEntryTable({
               <td className={td}>
                 {editable ? (
                   <select
-                    value={normalizeDurationUnit(m.durationUnit)}
+                    value={m.durationUnit || ""}
                     aria-label={`Duration unit for ${m.name}`}
                     className={field}
-                    onChange={(e) =>
-                      edit(
-                        { durationUnit: normalizeDurationUnit(e.target.value) },
-                        true,
-                      )
-                    }
+                    onChange={(e) => edit({ durationUnit: e.target.value }, true)}
                   >
                     <option value="">Select...</option>
-                    {optionsWithCurrent(
-                      DURATION_UNITS,
-                      normalizeDurationUnit(m.durationUnit),
-                    ).map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
+                    {optionsWithCurrent(DURATION_UNITS, m.durationUnit || "").map(
+                      (v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ),
+                    )}
                   </select>
                 ) : (
-                  normalizeDurationUnit(m.durationUnit) || ""
+                  m.durationUnit || ""
                 )}
               </td>
               <td className={td}>
@@ -736,10 +721,9 @@ export default function MedicineEntryTable({
               </td>
               <td className={td}>
                 <select
-                  value={normalizeDurationUnit(draft.durationUnit)}
+                  value={draft.durationUnit || ""}
                   onChange={(e) => set("durationUnit", e.target.value)}
                   className={field}
-                  aria-label="Duration unit"
                 >
                   <option value="">Select...</option>
                   {DURATION_UNITS.map((v) => (

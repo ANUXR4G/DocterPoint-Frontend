@@ -709,6 +709,24 @@ export const proctoService = {
       body: JSON.stringify(body),
     }),
 
+  updatePatientAllergies: (
+    bookingId: string,
+    body: {
+      allergies?: Array<{
+        category?: string;
+        name?: string;
+        severity?: string;
+        active?: string;
+        description?: string;
+      }>;
+      noKnownAllergies?: boolean;
+    },
+  ) =>
+    proctoFetch(`/procto/bookings/${bookingId}/allergies`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
   getGeneralDocuments: (bookingId: string) =>
     proctoFetch(`/procto/bookings/${bookingId}/general-documents`),
 
