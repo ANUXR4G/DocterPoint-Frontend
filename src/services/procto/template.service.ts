@@ -453,6 +453,11 @@ export class TemplateService {
     const target = existingList.find((t) => t.id === templateId);
     if (!target) return false;
 
+    // Standard master templates cannot be deleted to preserve system integrity
+    if (!target.isCustom && MASTER_DOCTOR_NOTE_TEMPLATES.some((m) => m.id === templateId)) {
+      throw new AppError(403, "Standard master templates cannot be deleted to preserve system integrity.");
+    }
+
     // Doctor can only delete their own templates unless clinic admin
     const member = await prisma.practiceMember.findUnique({
       where: { practiceId_userId: { practiceId, userId: doctorUserId } },

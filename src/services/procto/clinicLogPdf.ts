@@ -426,6 +426,23 @@ export async function sendClinicLogPdf(
       );
     }
 
+    if (kind === "both" && medicines.length > 0) {
+      try {
+        const finalizedMeds = medicines.map((m) => ({
+          ...m,
+          isOrdered: true,
+          status: (m as any).status || "ordered",
+          orderedAt: (m as any).orderedAt || new Date().toISOString(),
+        }));
+        await prisma.practiceBooking.update({
+          where: { id: booking.id },
+          data: { medicines: finalizedMeds },
+        });
+      } catch {
+        // non-fatal
+      }
+    }
+
     return {
       filename: `${rxFilename}, ${consultFilename}`,
       filenames: [rxFilename, consultFilename],
@@ -443,6 +460,24 @@ export async function sendClinicLogPdf(
       result.error || "Could not send the prescription PDF on WhatsApp.",
     );
   }
+
+  if (medicines.length > 0) {
+    try {
+      const finalizedMeds = medicines.map((m) => ({
+        ...m,
+        isOrdered: true,
+        status: (m as any).status || "ordered",
+        orderedAt: (m as any).orderedAt || new Date().toISOString(),
+      }));
+      await prisma.practiceBooking.update({
+        where: { id: booking.id },
+        data: { medicines: finalizedMeds },
+      });
+    } catch {
+      // non-fatal
+    }
+  }
+
   return {
     filename: rxFilename,
     filenames: [rxFilename],

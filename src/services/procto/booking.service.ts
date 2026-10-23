@@ -161,6 +161,13 @@ function normalizeMedicines(
     startDate?: string;
     endDate?: string;
     instruction?: string;
+    favourite?: boolean;
+    status?: string;
+    isOrdered?: boolean;
+    isDispensed?: boolean;
+    isHistorical?: boolean;
+    orderedAt?: string;
+    dispensedAt?: string;
   }> | null,
 ) {
   return (raw ?? [])
@@ -187,6 +194,13 @@ function normalizeMedicines(
         startDate: clip(m.startDate, 10),
         endDate: clip(m.endDate, 10),
         instruction: clip(m.instruction, 200),
+        favourite: Boolean(m.favourite),
+        status: clip(m.status, 20),
+        isOrdered: Boolean(m.isOrdered),
+        isDispensed: Boolean(m.isDispensed),
+        isHistorical: Boolean(m.isHistorical),
+        orderedAt: clip(m.orderedAt, 30),
+        dispensedAt: clip(m.dispensedAt, 30),
       };
     })
     .filter((m) => m.name.length > 0);
@@ -1498,8 +1512,8 @@ export const BookingService = {
       throw new AppError(
         400,
         existing.status === BookingStatus.COMPLETED
-          ? "visit is already completed."
-          : "this appointment is closed and cannot be edited.",
+          ? "Historical integrity violation: Visit is already completed. Finalized and ordered prescriptions are locked and view-only to preserve medical history and legal audit trails."
+          : "Historical integrity violation: This appointment is closed and cannot be edited.",
       );
     }
 
@@ -1507,6 +1521,33 @@ export const BookingService = {
       data.medicines !== undefined
         ? normalizeMedicines(data.medicines)
         : undefined;
+
+    // Historical Integrity: verify that ordered/dispensed medicines are not deleted
+    if (medicines !== undefined && Array.isArray(existing.medicines)) {
+      const existingMeds = existing.medicines as Array<Record<string, any>>;
+      const lockedExisting = existingMeds.filter(
+        (m) =>
+          m.isOrdered ||
+          m.isDispensed ||
+          m.isHistorical ||
+          m.status === "ordered" ||
+          m.status === "dispensed" ||
+          m.status === "completed",
+      );
+      for (const lockedMed of lockedExisting) {
+        const found = medicines.find(
+          (m) =>
+            m.name.trim().toLowerCase() ===
+            String(lockedMed.name || "").trim().toLowerCase(),
+        );
+        if (!found) {
+          throw new AppError(
+            400,
+            `Historical integrity violation: Ordered medication "${lockedMed.name}" cannot be deleted from medical records.`,
+          );
+        }
+      }
+    }
     const documents =
       data.documents !== undefined
         ? normalizeBookingDocuments(data.documents)
@@ -1553,6 +1594,26 @@ export const BookingService = {
       : prevDocCount;
     const documentsAdded = documentsChanged && nextDocCount > prevDocCount;
 
+    // Finalize all active medicines when completing the visit
+    const finalMedicines =
+      medicines !== undefined
+        ? nextStatus === BookingStatus.COMPLETED
+          ? medicines.map((m: any) => ({
+              ...m,
+              isOrdered: true,
+              status: m.status || "ordered",
+              orderedAt: m.orderedAt || new Date().toISOString(),
+            }))
+          : medicines
+        : nextStatus === BookingStatus.COMPLETED && Array.isArray(existing.medicines)
+        ? (existing.medicines as any[]).map((m: any) => ({
+            ...m,
+            isOrdered: true,
+            status: m.status || "ordered",
+            orderedAt: m.orderedAt || new Date().toISOString(),
+          }))
+        : undefined;
+
     const updated = await prisma.practiceBooking.update({
       where: { id: bookingId },
       data: {
@@ -1562,7 +1623,7 @@ export const BookingService = {
         ...(data.disease !== undefined
           ? { disease: data.disease?.trim().slice(0, 500) || null }
           : {}),
-        ...(medicines !== undefined ? { medicines } : {}),
+        ...(finalMedicines !== undefined ? { medicines: finalMedicines } : {}),
         ...(documents !== undefined ? { documents } : {}),
         ...(clinicalAssessment !== undefined
           ? {
