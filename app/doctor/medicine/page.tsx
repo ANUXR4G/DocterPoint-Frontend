@@ -1,8 +1,5 @@
-"use client"
-
-import MedicineManagementPage from "@/components/ui/procto/MedicineManagementPage"
+import { redirect } from "next/navigation"
 
 export default function DoctorMedicinePage() {
-  return <MedicineManagementPage portal="doctor" />
+  redirect("/doctor/master?tab=medicines")
 }
-

@@ -19,7 +19,6 @@ const LINKS = [
   { href: practiceTabHref("doctors"), label: "Doctors" },
   { href: "/clinic/access", label: "Role access" },
   { href: "/clinic/subscription", label: "Subscription" },
-  { href: "/clinic/medicine", label: "Medicine" },
   { href: "/clinic/master", label: "Master" },
 ] as const
 
@@ -60,21 +59,20 @@ export function isClinicNavActive(
     return pathname === "/clinic/subscription"
   }
 
-  if (destPath === "/clinic/medicine") {
-    return (
-      pathname === "/clinic/medicine" ||
-      pathname.startsWith("/clinic/medicine/") ||
-      pathname === "/clinic/medicines" ||
-      pathname.startsWith("/clinic/medicines/")
-    )
-  }
-
   if (destPath === "/clinic/master" || destPath === "/doctor/master") {
     return (
       pathname === "/clinic/master" ||
       pathname.startsWith("/clinic/master/") ||
       pathname === "/doctor/master" ||
-      pathname.startsWith("/doctor/master/")
+      pathname.startsWith("/doctor/master/") ||
+      pathname === "/clinic/medicine" ||
+      pathname.startsWith("/clinic/medicine/") ||
+      pathname === "/clinic/medicines" ||
+      pathname.startsWith("/clinic/medicines/") ||
+      pathname === "/doctor/medicine" ||
+      pathname.startsWith("/doctor/medicine/") ||
+      pathname === "/doctor/medicines" ||
+      pathname.startsWith("/doctor/medicines/")
     )
   }
 
