@@ -973,8 +973,15 @@ export default function AppointmentCalendar() {
               type="button"
               onClick={() => setAnchor(startOfToday())}
               className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-semibold dark:border-neutral-700"
+              title={
+                view === "week"
+                  ? "Go to current week"
+                  : view === "month"
+                  ? "Go to current month"
+                  : "Go to today"
+              }
             >
-              Today
+              {view === "week" ? "Week" : view === "month" ? "Month" : "Today"}
             </button>
             <button
               type="button"
