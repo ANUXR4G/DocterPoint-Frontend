@@ -11,6 +11,9 @@ export type DoctorNoteTemplate = {
   category: "condition" | "medication" | "general";
   scope: TemplateScope;
   scopeValue?: string; // Specialty name if specialty-scoped; doctor userId if doctor-scoped
+  specialty?: string;
+  doctorId?: string;
+  doctorName?: string;
   practiceId?: string;
   createdById?: string;
   createdByName?: string;
@@ -256,9 +259,9 @@ export class TemplateService {
 
       // 2. Specialty-level templates are accessible to all clinicians in that specialty
       if (t.scope === "specialty") {
-        if (!t.scopeValue) return true;
+        const templateSpec = (t.specialty || t.scopeValue || "").trim().toLowerCase();
+        if (!templateSpec) return true;
         if (!spec) return true;
-        const templateSpec = t.scopeValue.trim().toLowerCase();
         return (
           templateSpec === spec ||
           spec.includes(templateSpec) ||
@@ -268,9 +271,10 @@ export class TemplateService {
         );
       }
 
-      // 3. Doctor-level templates are strictly private to the creating practitioner
+      // 3. Doctor-level templates are strictly private to the creating/target practitioner
       if (t.scope === "doctor") {
-        return Boolean(doctorId && t.createdById?.trim().toLowerCase() === doctorId);
+        const targetDoc = (t.doctorId || t.createdById || t.scopeValue || "").trim().toLowerCase();
+        return Boolean(doctorId && targetDoc === doctorId);
       }
 
       return false;
@@ -331,6 +335,9 @@ export class TemplateService {
       category?: "condition" | "medication" | "general";
       scope: TemplateScope;
       scopeValue?: string;
+      specialty?: string;
+      doctorId?: string;
+      doctorName?: string;
     },
   ): Promise<DoctorNoteTemplate> {
     const name = String(data.name || "").trim();
@@ -355,11 +362,15 @@ export class TemplateService {
       ? (rawMasters.doctorNoteTemplates as DoctorNoteTemplate[])
       : [];
 
+    const targetDocId = data.doctorId?.trim() || (data.scope === "doctor" ? doctorUserId : undefined);
+    const targetDocName = data.doctorName?.trim() || (data.scope === "doctor" ? doctorName : undefined);
+    const targetSpec = data.specialty?.trim() || (data.scope === "specialty" ? data.scopeValue?.trim() : undefined);
+
     // Ensure Name is unique within the practice/doctor scope
     const existingName = existingList.find(
       (t) =>
         t.name.trim().toLowerCase() === name.toLowerCase() &&
-        (t.scope === data.scope || (data.scope === "doctor" && t.createdById === doctorUserId)),
+        (t.scope === data.scope || (data.scope === "doctor" && (t.doctorId === targetDocId || t.createdById === targetDocId))),
     );
     if (existingName) {
       throw new AppError(400, `A template with the name "${name}" already exists.`);
@@ -374,13 +385,16 @@ export class TemplateService {
       scope: data.scope,
       scopeValue:
         data.scope === "specialty"
-          ? (data.scopeValue || practice.specialty || "General Medicine").trim()
+          ? (targetSpec || practice.specialty || "General Medicine").trim()
           : data.scope === "doctor"
-          ? doctorUserId
+          ? (targetDocId || doctorUserId)
           : undefined,
       practiceId,
-      createdById: doctorUserId,
-      createdByName: doctorName,
+      createdById: targetDocId || doctorUserId,
+      createdByName: targetDocName || doctorName,
+      specialty: targetSpec,
+      doctorId: targetDocId,
+      doctorName: targetDocName,
       content,
       advice: data.advice?.trim() || undefined,
       isCustom: true,
@@ -462,6 +476,9 @@ export class TemplateService {
       category?: string;
       scope?: TemplateScope;
       scopeValue?: string;
+      specialty?: string;
+      doctorId?: string;
+      doctorName?: string;
     },
   ): Promise<DoctorNoteTemplate> {
     const practice = await prisma.practice.findUnique({
@@ -493,6 +510,9 @@ export class TemplateService {
         ...(patch.category !== undefined ? { category: patch.category as any } : {}),
         ...(patch.scope !== undefined ? { scope: patch.scope } : {}),
         ...(patch.scopeValue !== undefined ? { scopeValue: patch.scopeValue } : {}),
+        ...(patch.specialty !== undefined ? { specialty: patch.specialty?.trim() || undefined } : {}),
+        ...(patch.doctorId !== undefined ? { doctorId: patch.doctorId?.trim() || undefined } : {}),
+        ...(patch.doctorName !== undefined ? { doctorName: patch.doctorName?.trim() || undefined } : {}),
         isCustom: true,
         updatedAt: new Date().toISOString(),
       };
@@ -526,8 +546,18 @@ export class TemplateService {
       ...(patch.category !== undefined ? { category: patch.category as any } : {}),
       ...(patch.scope !== undefined ? { scope: patch.scope } : {}),
       ...(patch.scopeValue !== undefined ? { scopeValue: patch.scopeValue } : {}),
+      ...(patch.specialty !== undefined ? { specialty: patch.specialty?.trim() || undefined } : {}),
+      ...(patch.doctorId !== undefined ? { doctorId: patch.doctorId?.trim() || undefined } : {}),
+      ...(patch.doctorName !== undefined ? { doctorName: patch.doctorName?.trim() || undefined } : {}),
       updatedAt: new Date().toISOString(),
     };
+    if (patch.doctorId && patch.scope === "doctor") {
+      updated.createdById = patch.doctorId;
+      updated.scopeValue = patch.doctorId;
+    }
+    if (patch.doctorName) {
+      updated.createdByName = patch.doctorName;
+    }
 
     existingList[index] = updated;
     const nextMasters = {

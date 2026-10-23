@@ -15,6 +15,9 @@ export type ClinicalTemplate = {
   adviceCategory?: string
   scope: TemplateScope
   scopeValue?: string
+  specialty?: string
+  doctorId?: string
+  doctorName?: string
   advice: string
   doctorNotes: string // Formerly remarks
   remarks?: string // Compatibility alias
@@ -368,6 +371,7 @@ type TemplateSelectorProps = {
   currentContent?: string
   practiceId?: string
   specialty?: string
+  doctorId?: string
   disabled?: boolean
   className?: string
   placeholder?: string
@@ -381,6 +385,7 @@ export default function TemplateSelector({
   currentContent = "",
   practiceId,
   specialty = "General Medicine",
+  doctorId,
   disabled = false,
   className = "",
   placeholder = "Select template...",
@@ -423,7 +428,7 @@ export default function TemplateSelector({
   useEffect(() => {
     let active = true
     proctoService
-      .listTemplates({ practiceId, specialty })
+      .listTemplates({ practiceId, specialty, doctorUserId: doctorId })
       .then((res) => {
         if (!active || !res || res.status !== "successful" || !Array.isArray(res.data)) return
         const remote = res.data as ClinicalTemplate[]
@@ -471,7 +476,7 @@ export default function TemplateSelector({
     return () => {
       active = false
     }
-  }, [practiceId, specialty])
+  }, [practiceId, specialty, doctorId])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -504,10 +509,33 @@ export default function TemplateSelector({
     }
   }, [isOpen])
 
-  // Filter templates based on Scope, Category, and Search Query
+  // Filter templates based on Scope, Category, Doctor/Specialty applicability, and Search Query
   const query = searchQuery.trim().toLowerCase()
+  const currentDocId = (doctorId || "").trim().toLowerCase()
+  const currentSpec = (specialty || "").trim().toLowerCase()
+
   const filtered = templates.filter((tpl) => {
-    // Hierarchical Scope filter
+    // 1. Doctor-level templates: only applicable to the targeted practitioner
+    if (tpl.scope === "doctor") {
+      const tplDocId = (tpl.doctorId || tpl.createdById || tpl.scopeValue || "").trim().toLowerCase()
+      if (currentDocId && tplDocId && tplDocId !== currentDocId) {
+        return false
+      }
+    }
+
+    // 2. Specialty-level templates: only applicable to doctors in that specialty
+    if (tpl.scope === "specialty") {
+      const tplSpec = (tpl.specialty || tpl.scopeValue || "").trim().toLowerCase()
+      if (tplSpec && currentSpec && tplSpec !== "general medicine" && currentSpec !== "general") {
+        const matches =
+          tplSpec === currentSpec ||
+          tplSpec.includes(currentSpec) ||
+          currentSpec.includes(tplSpec)
+        if (!matches) return false
+      }
+    }
+
+    // Hierarchical Scope filter (from UI tabs)
     if (scopeFilter !== "all" && tpl.scope !== scopeFilter) {
       return false
     }

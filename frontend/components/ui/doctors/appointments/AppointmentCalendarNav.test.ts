@@ -20,3 +20,4 @@ describe("AppointmentCalendar navigation button label", () => {
     assert.equal(getJumpLabel("month"), "Month")
   })
 })
+

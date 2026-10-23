@@ -173,10 +173,11 @@ export const proctoService = {
       body: JSON.stringify({ instruction, practiceId }),
     }),
 
-  listTemplates: async (params?: { practiceId?: string; specialty?: string }) => {
+  listTemplates: async (params?: { practiceId?: string; specialty?: string; doctorUserId?: string }) => {
     const search = new URLSearchParams();
     if (params?.practiceId) search.set("practiceId", params.practiceId);
     if (params?.specialty) search.set("specialty", params.specialty);
+    if (params?.doctorUserId) search.set("doctorUserId", params.doctorUserId);
     const qs = search.toString();
     return proctoFetch(`/procto/templates${qs ? `?${qs}` : ""}`);
   },
@@ -189,6 +190,9 @@ export const proctoService = {
     category?: string;
     scope: "clinic" | "specialty" | "doctor";
     scopeValue?: string;
+    specialty?: string;
+    doctorId?: string;
+    doctorName?: string;
     practiceId?: string;
   }) =>
     proctoFetch("/procto/templates", {
@@ -204,6 +208,9 @@ export const proctoService = {
     category?: string;
     scope: "clinic" | "specialty" | "doctor";
     scopeValue?: string;
+    specialty?: string;
+    doctorId?: string;
+    doctorName?: string;
     practiceId?: string;
   }) =>
     proctoFetch("/procto/templates", {
@@ -221,6 +228,9 @@ export const proctoService = {
       category?: string;
       scope?: "clinic" | "specialty" | "doctor";
       scopeValue?: string;
+      specialty?: string;
+      doctorId?: string;
+      doctorName?: string;
       practiceId?: string;
     },
   ) =>

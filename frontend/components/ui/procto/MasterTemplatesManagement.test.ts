@@ -115,4 +115,52 @@ describe("MasterTemplatesManagement & Clinical Advice Categories", () => {
       )
     }
   })
+
+  test("Specialty and Doctor Name scoping rules for template creation", () => {
+    function computeTemplateScope(specialty: string, doctorId: string) {
+      const finalDocId = doctorId !== "all" ? doctorId : undefined
+      const finalSpec = specialty !== "all" ? specialty : undefined
+
+      if (finalDocId) {
+        return {
+          scope: "doctor" as const,
+          scopeValue: finalDocId,
+          doctorId: finalDocId,
+          specialty: finalSpec,
+        }
+      }
+      if (finalSpec) {
+        return {
+          scope: "specialty" as const,
+          scopeValue: finalSpec,
+          specialty: finalSpec,
+          doctorId: undefined,
+        }
+      }
+      return {
+        scope: "clinic" as const,
+        scopeValue: undefined,
+        specialty: undefined,
+        doctorId: undefined,
+      }
+    }
+
+    // Default: Specialty is "all", Doctor is "all" -> clinic wide
+    const defaultScope = computeTemplateScope("all", "all")
+    assert.equal(defaultScope.scope, "clinic")
+    assert.equal(defaultScope.specialty, undefined)
+    assert.equal(defaultScope.doctorId, undefined)
+
+    // User selects specialty and doctor name is all -> applicable for that Specialty doctors
+    const specAll = computeTemplateScope("Cardiology", "all")
+    assert.equal(specAll.scope, "specialty")
+    assert.equal(specAll.specialty, "Cardiology")
+    assert.equal(specAll.doctorId, undefined)
+
+    // User selects specialty and selects a doctor -> applicable only for that doctor
+    const specDoctor = computeTemplateScope("Cardiology", "doc_ananya")
+    assert.equal(specDoctor.scope, "doctor")
+    assert.equal(specDoctor.doctorId, "doc_ananya")
+    assert.equal(specDoctor.specialty, "Cardiology")
+  })
 })
