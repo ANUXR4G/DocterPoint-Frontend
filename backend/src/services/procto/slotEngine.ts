@@ -125,6 +125,24 @@ export function isClinicDayAfterToday(
   return dayIso > formatLocalDate(now);
 }
 
+/** Clinic calendar day is strictly before today (historical / past date). */
+export function isClinicDayBeforeToday(
+  dayIso: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!dayIso || !/^\d{4}-\d{2}-\d{2}$/.test(dayIso)) return false;
+  return dayIso < formatLocalDate(now);
+}
+
+/** Clinic calendar day is current date or future (today onwards). */
+export function isClinicDayCurrentOrFuture(
+  dayIso: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!dayIso || !/^\d{4}-\d{2}-\d{2}$/.test(dayIso)) return false;
+  return dayIso >= formatLocalDate(now);
+}
+
 export function parseTimeOnDate(date: Date, timeStr: string): Date {
   return zonedDateTime(formatLocalDate(date), timeStr);
 }
