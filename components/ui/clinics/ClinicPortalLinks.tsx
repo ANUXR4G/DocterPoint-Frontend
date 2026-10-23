@@ -20,6 +20,7 @@ const LINKS = [
   { href: "/clinic/access", label: "Role access" },
   { href: "/clinic/subscription", label: "Subscription" },
   { href: "/clinic/master", label: "Master" },
+  { href: "/clinic/reports", label: "Reports" },
 ] as const
 
 function pathOnly(href: string): string {
