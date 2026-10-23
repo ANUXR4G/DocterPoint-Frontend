@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../core/response.js";
+import { formatLocalDate } from "./slotEngine.js";
 
 export type TemplateScope = "clinic" | "specialty" | "doctor";
 
@@ -19,6 +20,8 @@ export type DoctorNoteTemplate = {
   createdByName?: string;
   content: string; // Doctor Notes template text
   advice?: string; // Optional patient advice text
+  effectiveDate?: string; // YYYY-MM-DD
+  effectiveFrom?: string; // YYYY-MM-DD alias
   isCustom?: boolean;
   createdAt: string;
   updatedAt: string;
