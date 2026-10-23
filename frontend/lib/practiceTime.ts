@@ -97,6 +97,28 @@ export function isAfterClinicToday(
   return day > today
 }
 
+/** True when the clinic calendar day is strictly before today (historical / past date). */
+export function isBeforeClinicToday(
+  input: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const day = practiceDateIso(input)
+  const today = practiceDateIso(now)
+  if (!day || !today) return false
+  return day < today
+}
+
+/** True when the clinic calendar day is current date or future (today onwards). */
+export function isCurrentOrFutureClinicDay(
+  input: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const day = practiceDateIso(input)
+  const today = practiceDateIso(now)
+  if (!day || !today) return false
+  return day >= today
+}
+
 /** YYYY-MM-DD for "today" in clinic timezone. */
 export function practiceTodayIso(): string {
   return practiceDateIso(new Date()) || new Date().toISOString().slice(0, 10)
