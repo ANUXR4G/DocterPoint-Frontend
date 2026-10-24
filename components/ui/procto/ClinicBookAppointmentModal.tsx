@@ -8,7 +8,6 @@ import { isPracticingDoctor } from "@/lib/rosterDoctor"
 import {
   formatPracticeTime,
   practiceMinutesOfDay,
-  practiceSlotStartIso,
   practiceTodayIso,
 } from "@/lib/practiceTime"
 import { toHm } from "@/lib/quickSlots"
@@ -126,6 +125,8 @@ export default function ClinicBookAppointmentModal({
   const [intent, setIntent] = useState<Intent>("book")
   const [availability, setAvailability] = useState<Availability | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
+  /** Exclusive end minutes (clinic TZ) when multiple contiguous slots are selected. */
+  const [rangeEndMinutes, setRangeEndMinutes] = useState<number | null>(null)
   const [patient, setPatient] = useState<DeskPatient | null>(null)
   const [disease, setDisease] = useState("")
   const [blockReason, setBlockReason] = useState("")
@@ -137,6 +138,7 @@ export default function ClinicBookAppointmentModal({
     if (!open) return
     setMessage("")
     setSelectedSlot(null)
+    setRangeEndMinutes(null)
     setDisease("")
     setBlockReason("")
     setPatient(null)
@@ -159,6 +161,7 @@ export default function ClinicBookAppointmentModal({
     let cancelled = false
     setLoadingSlots(true)
     setSelectedSlot(null)
+    setRangeEndMinutes(null)
     setMessage("")
     void proctoService
       .getAvailability({ practiceId, providerId, locationId, date })
@@ -203,45 +206,160 @@ export default function ClinicBookAppointmentModal({
   )
   const tokenSession = availability?.tokenSessions?.[0]
 
+  const slotStepMinutes = useMemo(() => {
+    const first = openSlots[0]
+    if (!first) return 15
+    const start = new Date(first.start).getTime()
+    const end = new Date(first.end).getTime()
+    const step = Math.round((end - start) / 60_000)
+    return step > 0 ? step : 15
+  }, [openSlots])
+
+  /** True when every engine slot from startMins (inclusive) to endMins (exclusive) is open. */
+  function isContiguousOpen(startMins: number, endMins: number): boolean {
+    if (endMins <= startMins) return false
+    const needed = openSlots.filter((s) => {
+      const m = practiceMinutesOfDay(s.start)
+      return m >= startMins && m < endMins
+    })
+    if (!needed.length) return false
+    const first = needed[0]!
+    const last = needed[needed.length - 1]!
+    if (practiceMinutesOfDay(first.start) !== startMins) return false
+    if (practiceMinutesOfDay(last.end) < endMins) return false
+    for (let i = 1; i < needed.length; i++) {
+      const prevEnd = practiceMinutesOfDay(needed[i - 1]!.end)
+      const nextStart = practiceMinutesOfDay(needed[i]!.start)
+      if (nextStart !== prevEnd) return false
+    }
+    return true
+  }
+
   useEffect(() => {
     if (!open || mode !== "TIME_BASED") return
     if (prefill?.startMinutes == null || !openSlots.length) return
     const hit = openSlots.find(
       (s) => practiceMinutesOfDay(s.start) === prefill.startMinutes,
     )
-    if (hit) setSelectedSlot(hit.start)
-  }, [open, mode, openSlots, prefill?.startMinutes])
+    if (!hit) return
+    setSelectedSlot(hit.start)
+    if (
+      prefill.endMinutes != null &&
+      prefill.endMinutes > prefill.startMinutes &&
+      isContiguousOpen(prefill.startMinutes, prefill.endMinutes)
+    ) {
+      setRangeEndMinutes(prefill.endMinutes)
+    } else {
+      setRangeEndMinutes(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-seed from prefill / slot list
+  }, [open, mode, openSlots, prefill?.startMinutes, prefill?.endMinutes])
 
   const blockMinutes = useMemo(() => {
-    if (
-      prefill?.startMinutes == null ||
-      prefill.endMinutes == null ||
-      prefill.endMinutes <= prefill.startMinutes ||
-      !selectedSlot
-    ) {
-      return 0
+    if (!selectedSlot) return 0
+    const startMins = practiceMinutesOfDay(selectedSlot)
+    if (rangeEndMinutes != null && rangeEndMinutes > startMins) {
+      return rangeEndMinutes - startMins
     }
-    if (practiceMinutesOfDay(selectedSlot) !== prefill.startMinutes) return 0
-    return prefill.endMinutes - prefill.startMinutes
-  }, [prefill?.startMinutes, prefill?.endMinutes, selectedSlot])
+    if (
+      prefill?.startMinutes != null &&
+      prefill.endMinutes != null &&
+      prefill.endMinutes > prefill.startMinutes &&
+      startMins === prefill.startMinutes
+    ) {
+      return prefill.endMinutes - prefill.startMinutes
+    }
+    return 0
+  }, [selectedSlot, rangeEndMinutes, prefill?.startMinutes, prefill?.endMinutes])
 
   const selectedSlotRow = useMemo(
     () => openSlots.find((s) => s.start === selectedSlot) ?? null,
     [openSlots, selectedSlot],
   )
 
+  const selectionEndMinutes = useMemo(() => {
+    if (!selectedSlot) return null
+    const startMins = practiceMinutesOfDay(selectedSlot)
+    if (blockMinutes > 0) return startMins + blockMinutes
+    if (selectedSlotRow) return practiceMinutesOfDay(selectedSlotRow.end)
+    return startMins + slotStepMinutes
+  }, [selectedSlot, blockMinutes, selectedSlotRow, slotStepMinutes])
+
+  function pickSlot(slotStart: string, opts?: { shiftKey?: boolean }) {
+    const clickedMins = practiceMinutesOfDay(slotStart)
+    if (
+      opts?.shiftKey &&
+      selectedSlot &&
+      practiceMinutesOfDay(selectedSlot) !== clickedMins
+    ) {
+      const anchorMins = practiceMinutesOfDay(selectedSlot)
+      const from = Math.min(anchorMins, clickedMins)
+      const laterSlot = openSlots.find(
+        (s) => practiceMinutesOfDay(s.start) === Math.max(anchorMins, clickedMins),
+      )
+      if (!laterSlot) {
+        setMessage("Those slots are not both available.")
+        return
+      }
+      const toExclusive = practiceMinutesOfDay(laterSlot.end)
+      if (!isContiguousOpen(from, toExclusive)) {
+        setMessage(
+          "Multi-slot bookings must be continuous free slots (no gaps).",
+        )
+        return
+      }
+      const startRow = openSlots.find((s) => practiceMinutesOfDay(s.start) === from)
+      if (!startRow) return
+      setSelectedSlot(startRow.start)
+      setRangeEndMinutes(toExclusive)
+      setMessage("")
+      return
+    }
+    // Second click on a later contiguous slot (no Shift) extends the range.
+    if (
+      selectedSlot &&
+      !opts?.shiftKey &&
+      clickedMins > practiceMinutesOfDay(selectedSlot)
+    ) {
+      const from = practiceMinutesOfDay(selectedSlot)
+      const laterSlot = openSlots.find((s) => s.start === slotStart)
+      if (laterSlot) {
+        const toExclusive = practiceMinutesOfDay(laterSlot.end)
+        if (isContiguousOpen(from, toExclusive)) {
+          setRangeEndMinutes(toExclusive)
+          setMessage("")
+          return
+        }
+      }
+    }
+    setSelectedSlot(slotStart)
+    setRangeEndMinutes(null)
+    setMessage("")
+  }
+
+  function extendSelectionBySlots(slotCount: number) {
+    if (!selectedSlot || slotCount < 1) return
+    const from = practiceMinutesOfDay(selectedSlot)
+    const toExclusive = from + slotCount * slotStepMinutes
+    if (!isContiguousOpen(from, toExclusive)) {
+      setMessage(
+        `Need ${slotCount} continuous free slots from ${formatPracticeTime(selectedSlot)}.`,
+      )
+      return
+    }
+    setRangeEndMinutes(slotCount === 1 ? null : toExclusive)
+    setMessage("")
+  }
+
   const blockWindowLabel = useMemo(() => {
-    if (mode !== "TIME_BASED" || !selectedSlot) return ""
+    if (mode !== "TIME_BASED" || !selectedSlot || selectionEndMinutes == null) {
+      return ""
+    }
     const startHm = formatPracticeTime(selectedSlot)
-    const endHm =
-      blockMinutes > 0 && prefill?.startMinutes != null
-        ? toHm(prefill.startMinutes + blockMinutes)
-        : selectedSlotRow
-          ? formatPracticeTime(selectedSlotRow.end)
-          : ""
+    const endHm = toHm(selectionEndMinutes)
     if (!startHm || !endHm) return startHm
     return `${startHm}–${endHm}`
-  }, [mode, selectedSlot, selectedSlotRow, blockMinutes, prefill?.startMinutes])
+  }, [mode, selectedSlot, selectionEndMinutes])
 
   async function submitBlock() {
     if (!practiceId || !providerId) {
@@ -265,8 +383,8 @@ export default function ClinicBookAppointmentModal({
       }
       const startTime = formatPracticeTime(selectedSlot)
       const endTime =
-        blockMinutes > 0 && prefill?.startMinutes != null
-          ? toHm(prefill.startMinutes + blockMinutes)
+        selectionEndMinutes != null
+          ? toHm(selectionEndMinutes)
           : formatPracticeTime(selectedSlotRow.end)
       if (!startTime || !endTime || startTime >= endTime) {
         setMessage("Could not determine the block window. Pick another slot.")
@@ -355,8 +473,14 @@ export default function ClinicBookAppointmentModal({
     if (disease.trim()) body.disease = disease.trim()
     if (mode === "TIME_BASED" && selectedSlot) {
       body.slotStart = selectedSlot
-      const span = blockMinutes
-      if (span > 0) body.durationMinutes = span
+      const span =
+        blockMinutes > 0
+          ? blockMinutes
+          : selectedSlotRow
+            ? practiceMinutesOfDay(selectedSlotRow.end) -
+              practiceMinutesOfDay(selectedSlot)
+            : 0
+      if (span > slotStepMinutes) body.durationMinutes = span
     }
     if (mode === "TOKEN_BASED") body.sessionDate = date
 
@@ -577,14 +701,9 @@ export default function ClinicBookAppointmentModal({
         ) : mode === "TIME_BASED" ? (
           <div>
             <p className="font-semibold">Time</p>
-            {blockMinutes > 0 && prefill?.startMinutes != null ? (
+            {blockMinutes > slotStepMinutes && blockWindowLabel ? (
               <p className="mt-1 text-xs font-semibold text-[var(--theme-primary)]">
-                {blockMinutes} min ·{" "}
-                {formatPracticeTime(practiceSlotStartIso(date, prefill.startMinutes))}
-                –
-                {formatPracticeTime(
-                  practiceSlotStartIso(date, prefill.startMinutes + blockMinutes),
-                )}
+                {blockMinutes} min · {blockWindowLabel}
                 {intent === "block"
                   ? ". This window will be blocked."
                   : ". One appointment holds every slot in this block."}
@@ -593,6 +712,36 @@ export default function ClinicBookAppointmentModal({
               <p className="mt-1 text-xs font-semibold text-[var(--theme-primary)]">
                 Blocking {blockWindowLabel}. Patients cannot book this window.
               </p>
+            ) : selectedSlot ? (
+              <p className="mt-1 text-xs text-neutral-500">
+                Click another later slot (or Shift-click) for a continuous
+                multi-slot visit — e.g. 30 or 45 minutes for a procedure.
+              </p>
+            ) : null}
+            {selectedSlot ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {[1, 2, 3, 4].map((n) => {
+                  const mins = n * slotStepMinutes
+                  const active =
+                    n === 1
+                      ? blockMinutes <= slotStepMinutes
+                      : blockMinutes === mins
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                        active
+                          ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-black"
+                          : "border-neutral-300 dark:border-neutral-600"
+                      }`}
+                      onClick={() => extendSelectionBySlots(n)}
+                    >
+                      {n === 1 ? `1 slot (${mins}m)` : `${mins} min`}
+                    </button>
+                  )
+                })}
+              </div>
             ) : null}
             {openSlots.length === 0 ? (
               <p className="mt-1 text-neutral-500">
@@ -602,13 +751,17 @@ export default function ClinicBookAppointmentModal({
               <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
                 {openSlots.map((s) => {
                   const label = formatPracticeTime(s.start)
-                  const active = selectedSlot === s.start
                   const mins = practiceMinutesOfDay(s.start)
+                  const startMins = selectedSlot
+                    ? practiceMinutesOfDay(selectedSlot)
+                    : null
+                  const endExclusive = selectionEndMinutes
                   const inBlock =
-                    blockMinutes > 0 &&
-                    prefill?.startMinutes != null &&
-                    mins >= prefill.startMinutes &&
-                    mins < prefill.startMinutes + blockMinutes
+                    startMins != null &&
+                    endExclusive != null &&
+                    mins >= startMins &&
+                    mins < endExclusive
+                  const active = selectedSlot === s.start
                   return (
                     <button
                       key={s.start}
@@ -620,7 +773,9 @@ export default function ClinicBookAppointmentModal({
                             ? "border-[var(--theme-primary)] bg-[var(--theme-primary)]/10 text-[var(--theme-primary)]"
                             : "border-neutral-300 dark:border-neutral-600"
                       }`}
-                      onClick={() => setSelectedSlot(s.start)}
+                      onClick={(e) =>
+                        pickSlot(s.start, { shiftKey: e.shiftKey })
+                      }
                     >
                       {label}
                     </button>

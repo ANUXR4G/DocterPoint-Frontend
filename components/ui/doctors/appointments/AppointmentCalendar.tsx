@@ -24,6 +24,7 @@ import {
   formatPracticeDateTime,
   formatPracticeTime,
   practiceDateIso,
+  practiceMinutesOfDay,
   practiceSlotStartIso,
   practiceTodayIso,
 } from "@/lib/practiceTime"
@@ -613,6 +614,7 @@ export default function AppointmentCalendar() {
     actorUserId,
     lastCalendarEvent,
     refresh: refreshDashboard,
+    setBookings,
   } = usePracticeDashboard()
   const isFrontDesk =
     isClinicAdmin ||
@@ -959,7 +961,7 @@ export default function AppointmentCalendar() {
     setFocusedId(b.id)
     setMoveAsk(null)
     setNotice({
-      text: `${patientLabel(b)} cut. Open a day, click a slot, then Paste.`,
+      text: `${patientLabel(b)} cut. In Week/Month click a day to paste at the same time, or open Day and click an empty slot.`,
       tone: "ok",
     })
   }
@@ -979,6 +981,28 @@ export default function AppointmentCalendar() {
       return
     }
     setMoveAsk({ booking, providerId, date, startMinutes, notify: true })
+  }
+
+  /** Week/Month: paste the cut visit onto a day at the same clock time (same doctor). */
+  function pasteOntoDay(d: Date) {
+    const date = ymd(d)
+    setAnchor(d)
+    if (!clipboard) {
+      setView("day")
+      return
+    }
+    const providerId =
+      clipboard.providerId ?? clipboard.provider?.id ?? ""
+    const slot = clipboard.slotStart ?? clipboard.slot_start
+    if (!providerId || !slot) {
+      setView("day")
+      setNotice({
+        text: "Could not read the cut appointment time. Open Day view and click a slot.",
+        tone: "error",
+      })
+      return
+    }
+    askMove(clipboard, providerId, date, practiceMinutesOfDay(slot))
   }
 
   function canMoveBookingPerm(b: CalBooking) {
@@ -1004,15 +1028,46 @@ export default function AppointmentCalendar() {
     if (res.status === "successful") {
       const name = patientLabel(moveAsk.booking)
       const told = moveAsk.notify
+      const moved = (res.data || {}) as Partial<CalBooking> & {
+        provider_id?: string | null
+        slotEnd?: string | null
+      }
+      const nextStart = moved.slotStart ?? moved.slot_start ?? null
+      const nextEnd = moved.slotEnd ?? moved.slot_end ?? null
+      const nextProvider =
+        moved.providerId ?? moved.provider_id ?? moveAsk.providerId
+      const doctorName =
+        columns.find((c) => c.id === nextProvider)?.name ||
+        moveAsk.booking.provider?.name ||
+        null
+      setBookings((prev) =>
+        prev.map((b) =>
+          b.id !== moveAsk.booking.id
+            ? b
+            : ({
+                ...b,
+                ...moved,
+                slotStart: nextStart,
+                slot_start: nextStart,
+                slot_end: nextEnd,
+                providerId: nextProvider,
+                provider: doctorName
+                  ? { id: nextProvider, name: doctorName }
+                  : b.provider,
+              } as ProctoBooking),
+        ),
+      )
       setClipboard((cur) => (cur?.id === moveAsk.booking.id ? null : cur))
       setMoveAsk(null)
-      void refreshDashboard({ silent: true })
+      setFocusedId(moveAsk.booking.id)
       setNotice({
         text: told
           ? `${name} moved. WhatsApp update queued.`
           : `${name} moved.`,
         tone: "ok",
       })
+      // Background reconcile only — UI already patched from the move response.
+      void refreshDashboard({ silent: true })
       return
     }
     setNotice({
@@ -1249,8 +1304,8 @@ export default function AppointmentCalendar() {
       {clipboard ? (
         <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
           <span>
-            ✂️ {patientLabel(clipboard)} — Cut. Select a new date and slot, then
-            Paste.
+            ✂️ {patientLabel(clipboard)} — Cut. Week/Month: click a day to paste
+            at the same time. Day: click an empty slot, then Paste (⌘/Ctrl+V).
           </span>
           <button
             type="button"
@@ -1369,10 +1424,8 @@ export default function AppointmentCalendar() {
               byDay={byDay}
               showDoctor={providerId === "all"}
               doctorMap={doctorMap}
-              onSelectDay={(d) => {
-                setAnchor(d)
-                setView("day")
-              }}
+              clipboardActive={Boolean(clipboard)}
+              onSelectDay={pasteOntoDay}
               onAddSlot={
                 slotDoctors.length ? quickCreateFromHeader : undefined
               }
@@ -1389,10 +1442,8 @@ export default function AppointmentCalendar() {
               days={monthDays}
               byDay={byDay}
               doctorMap={doctorMap}
-              onSelectDay={(d) => {
-                setAnchor(d)
-                setView("day")
-              }}
+              clipboardActive={Boolean(clipboard)}
+              onSelectDay={pasteOntoDay}
               onCut={cutBooking}
               onActivate={setFocusedId}
               canMoveBooking={canMoveBookingPerm}
@@ -1767,6 +1818,7 @@ function WeekView({
   byDay,
   showDoctor = false,
   doctorMap,
+  clipboardActive = false,
   onSelectDay,
   onAddSlot,
   onCut,
@@ -1778,6 +1830,7 @@ function WeekView({
   byDay: Map<string, CalBooking[]>
   showDoctor?: boolean
   doctorMap?: Map<string, string>
+  clipboardActive?: boolean
   onSelectDay: (d: Date) => void
   onAddSlot?: (d: Date, el: HTMLElement) => void
   onCut: (booking: CalBooking) => void
@@ -1796,7 +1849,7 @@ function WeekView({
           return (
             <div key={key} className="flex h-full min-h-0 flex-col">
               <div className="group relative shrink-0">
-                {onAddSlot && d >= today ? (
+                {onAddSlot && d >= today && !clipboardActive ? (
                   <button
                     type="button"
                     onClick={(e) => onAddSlot(d, e.currentTarget)}
@@ -1810,6 +1863,10 @@ function WeekView({
                   onClick={() => onSelectDay(d)}
                   className={`flex w-full shrink-0 flex-col items-start border-b border-neutral-100 px-3 py-3 text-left dark:border-neutral-800 ${
                     isToday ? "bg-[#0099ff]/10" : ""
+                  } ${
+                    clipboardActive
+                      ? "ring-2 ring-inset ring-amber-400/70 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                      : ""
                   }`}
                 >
                   <span className="text-xs font-semibold uppercase tracking-wide opacity-50">
@@ -1823,14 +1880,17 @@ function WeekView({
                     {format(d, "d")}
                   </span>
                   <span className="text-xs opacity-60">
-                    {list.length}{" "}
-                    {list.some(
-                      (b) =>
-                        b.tokenNumber != null ||
-                        (b as { mode?: string }).mode === "TOKEN_BASED",
-                    )
-                      ? `token${list.length === 1 ? "" : "s"}`
-                      : `slot${list.length === 1 ? "" : "s"}`}
+                    {clipboardActive
+                      ? "Paste here"
+                      : `${list.length} ${
+                          list.some(
+                            (b) =>
+                              b.tokenNumber != null ||
+                              (b as { mode?: string }).mode === "TOKEN_BASED",
+                          )
+                            ? `token${list.length === 1 ? "" : "s"}`
+                            : `slot${list.length === 1 ? "" : "s"}`
+                        }`}
                   </span>
                 </button>
               </div>
@@ -1867,6 +1927,7 @@ function MonthView({
   days,
   byDay,
   doctorMap,
+  clipboardActive = false,
   onSelectDay,
   onCut,
   onActivate,
@@ -1877,6 +1938,7 @@ function MonthView({
   days: Date[]
   byDay: Map<string, CalBooking[]>
   doctorMap?: Map<string, string>
+  clipboardActive?: boolean
   onSelectDay: (d: Date) => void
   onCut: (booking: CalBooking) => void
   onActivate: (id: string) => void
@@ -1920,7 +1982,11 @@ function MonthView({
                   }}
                   className={`flex min-h-[5.5rem] cursor-pointer flex-col border-b border-r border-neutral-100 p-2 text-left transition hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/60 ${
                     !inMonth ? "opacity-40" : ""
-                  } ${isToday ? "bg-[#0099ff]/5" : ""}`}
+                  } ${isToday ? "bg-[#0099ff]/5" : ""} ${
+                    clipboardActive
+                      ? "ring-2 ring-inset ring-amber-400/60"
+                      : ""
+                  }`}
                 >
                   <div className="flex shrink-0 items-center justify-between gap-1">
                     <span
@@ -1930,7 +1996,11 @@ function MonthView({
                     >
                       {format(d, "d")}
                     </span>
-                    {list.length ? (
+                    {clipboardActive ? (
+                      <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white">
+                        Paste
+                      </span>
+                    ) : list.length ? (
                       <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-white dark:text-black">
                         {list.length}
                       </span>
