@@ -1,8 +1,6 @@
 /** Routes where Mira is shown (middleware already requires auth). */
 const MIRA_BOT_PREFIXES = [
   "/patient",
-  "/doctor",
-  "/clinic",
   "/admin",
   "/settings",
 ] as const

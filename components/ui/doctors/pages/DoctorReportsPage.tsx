@@ -1,8 +1,7 @@
 "use client"
 
-import React, { useState, Suspense } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
-import { Calendar, Users, FileText, BarChart3, Clock } from "lucide-react"
+import { Users, FileText, Clock } from "lucide-react"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
 import DoctorPortalLinks from "@/components/ui/doctors/DoctorPortalLinks"
 import ClinicPortalLinks from "@/components/ui/clinics/ClinicPortalLinks"
@@ -52,14 +51,14 @@ export default function DoctorReportsPage({
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto custom-scroll">
       {/* Portal Cross Links Navigation */}
-      <div className="no-print">
+      <div className="no-print shrink-0">
         {portal === "clinic" ? <ClinicPortalLinks /> : <DoctorPortalLinks />}
       </div>
 
       {/* Report Switcher Tabs */}
-      <div className="no-print rounded-2xl border border-neutral-200 bg-white p-2 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="no-print shrink-0 rounded-2xl border border-neutral-200 bg-white p-2 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {tabs.map((tab) => {
             const Icon = tab.icon
@@ -105,7 +104,7 @@ export default function DoctorReportsPage({
       </div>
 
       {/* Active Report View */}
-      <div>
+      <div className="min-h-0 flex-1 pb-4">
         {currentTab === "schedule" && (
           <DoctorScheduleReport
             practiceId={practiceId || undefined}

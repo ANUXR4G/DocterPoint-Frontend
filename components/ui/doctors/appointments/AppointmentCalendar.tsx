@@ -190,10 +190,10 @@ const CALENDAR_STATUS_LEGEND: Array<{ label: string; swatch: string }> = [
 function CalendarStatusLegend() {
   return (
     <div
-      className="shrink-0 border-t border-neutral-200 px-1 pt-3 dark:border-neutral-700"
+      className="max-h-[30%] shrink-0 overflow-y-auto border-t border-neutral-200 px-1 pt-3 dark:border-neutral-700"
       aria-label="Calendar status colours"
     >
-      <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
         {CALENDAR_STATUS_LEGEND.map((item) => (
           <div
             key={item.label}
@@ -203,7 +203,7 @@ function CalendarStatusLegend() {
               className={`inline-block size-3.5 shrink-0 rounded-full ${item.swatch}`}
               aria-hidden
             />
-            <span>{item.label}</span>
+            <span className="truncate">{item.label}</span>
           </div>
         ))}
       </div>

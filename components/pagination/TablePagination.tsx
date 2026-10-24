@@ -62,7 +62,7 @@ export default function TablePagination<T>({
 
   return (
     <div
-      className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-1 py-2 ${className}`}
+      className={`flex flex-col gap-3 px-1 py-2 sm:flex-row sm:items-center sm:justify-between ${className}`}
     >
       <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-600 dark:text-neutral-300">
         <p>
@@ -90,7 +90,7 @@ export default function TablePagination<T>({
           onPageChange={handlePageChange}
           handlePreviousPage={handlePreviousPage}
           handleNextPage={handleNextPage}
-          className="mt-0"
+          className="mt-0 shrink-0 self-start sm:self-auto"
         />
       ) : null}
     </div>
