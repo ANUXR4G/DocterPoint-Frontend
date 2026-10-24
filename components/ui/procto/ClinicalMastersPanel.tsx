@@ -60,6 +60,7 @@ export default function ClinicalMastersPanel({
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [canEdit, setCanEdit] = useState(false)
 
   useEffect(() => {
     const next = mergeClinicalMasters(clinicalMasters ?? DEFAULT_CLINICAL_MASTERS)
@@ -69,7 +70,24 @@ export default function ClinicalMastersPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only when content changes
   }, [mastersKey])
 
+  useEffect(() => {
+    let active = true
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (!active) return
+      if (res.status === "successful" && res.data?.permissions) {
+        setCanEdit(Boolean(res.data.permissions.EDIT_MASTER_DATA))
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [practiceId])
+
   async function save() {
+    if (!canEdit) {
+      setError("Your role cannot edit master data. Ask a clinic admin.")
+      return
+    }
     setBusy(true)
     setError("")
     setMessage("")
@@ -116,21 +134,29 @@ export default function ClinicalMastersPanel({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={resetDefaults}
-            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold dark:border-neutral-600"
-          >
-            Reset defaults
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void save()}
-            className="rounded-lg bg-[var(--theme-primary)] px-4 py-2 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)] disabled:opacity-60"
-          >
-            {busy ? "Saving…" : "Save masters"}
-          </button>
+          {canEdit ? (
+            <>
+              <button
+                type="button"
+                onClick={resetDefaults}
+                className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold dark:border-neutral-600"
+              >
+                Reset defaults
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void save()}
+                className="rounded-lg bg-[var(--theme-primary)] px-4 py-2 text-sm font-semibold text-[var(--theme-primary-foreground)] hover:bg-[var(--theme-primary-hover)] disabled:opacity-60"
+              >
+                {busy ? "Saving…" : "Save masters"}
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              View only — Master Data Editing required to change vitals / allergies.
+            </p>
+          )}
         </div>
       </div>
 

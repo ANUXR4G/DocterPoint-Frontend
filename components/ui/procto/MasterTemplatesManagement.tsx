@@ -297,6 +297,37 @@ export default function MasterTemplatesManagement() {
   const [specialties, setSpecialties] = useState<string[]>(DEFAULT_SPECIALTIES)
   const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialties?: string[] }>>([])
   const [loading, setLoading] = useState(false)
+  const [templatePerms, setTemplatePerms] = useState({
+    createClinic: false,
+    createSpecialty: false,
+    createDoctor: false,
+    editClinic: false,
+    editSpecialty: false,
+    editDoctor: false,
+    deleteClinic: false,
+    deleteSpecialty: false,
+    deleteDoctor: false,
+  })
+
+  function canCreateScope(scope: TemplateScope) {
+    if (scope === "clinic") return templatePerms.createClinic
+    if (scope === "specialty") return templatePerms.createSpecialty
+    return templatePerms.createDoctor
+  }
+  function canEditScope(scope: TemplateScope) {
+    if (scope === "clinic") return templatePerms.editClinic
+    if (scope === "specialty") return templatePerms.editSpecialty
+    return templatePerms.editDoctor
+  }
+  function canDeleteScope(scope: TemplateScope) {
+    if (scope === "clinic") return templatePerms.deleteClinic
+    if (scope === "specialty") return templatePerms.deleteSpecialty
+    return templatePerms.deleteDoctor
+  }
+  const canCreateAny =
+    templatePerms.createClinic ||
+    templatePerms.createSpecialty ||
+    templatePerms.createDoctor
 
   // Add / Edit Modal state
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -352,6 +383,21 @@ export default function MasterTemplatesManagement() {
           resolvedPid = proctoService.resolvePracticeId(first) || undefined
           if (active && resolvedPid) {
             setPracticeId(resolvedPid)
+            const permRes = await proctoService.getMyPracticePermissions(resolvedPid)
+            if (active && permRes.status === "successful" && permRes.data?.permissions) {
+              const p = permRes.data.permissions
+              setTemplatePerms({
+                createClinic: Boolean(p.CREATE_TEMPLATE_CLINIC),
+                createSpecialty: Boolean(p.CREATE_TEMPLATE_SPECIALTY),
+                createDoctor: Boolean(p.CREATE_TEMPLATE_DOCTOR),
+                editClinic: Boolean(p.EDIT_TEMPLATE_CLINIC),
+                editSpecialty: Boolean(p.EDIT_TEMPLATE_SPECIALTY),
+                editDoctor: Boolean(p.EDIT_TEMPLATE_DOCTOR),
+                deleteClinic: Boolean(p.DELETE_TEMPLATE_CLINIC),
+                deleteSpecialty: Boolean(p.DELETE_TEMPLATE_SPECIALTY),
+                deleteDoctor: Boolean(p.DELETE_TEMPLATE_DOCTOR),
+              })
+            }
           }
 
           const docMap = new Map<string, { id: string; name: string; specialties?: string[] }>()
@@ -531,6 +577,10 @@ export default function MasterTemplatesManagement() {
 
   // Open Create Modal
   function handleOpenCreate() {
+    if (!canCreateAny) {
+      toast.error("Your role cannot create templates.")
+      return
+    }
     setModalMode("create")
     setEditingId(null)
     setModalTitle("")
@@ -539,11 +589,24 @@ export default function MasterTemplatesManagement() {
       selectedCategory !== "all" ? selectedCategory : MASTER_ADVICE_CATEGORIES[0].label
     setModalAdviceCategory(defaultCat)
     setCustomCategoryInput("")
-    // By default Specialty will be "All" and Doctor Name also will be "All"
-    setModalSpecialty("all")
-    setModalDoctorId("all")
-    setModalScope("clinic")
-    setModalScopeValue("")
+    // Prefer the broadest scope the user may create.
+    const defaultScope: TemplateScope = canCreateScope("clinic")
+      ? "clinic"
+      : canCreateScope("specialty")
+        ? "specialty"
+        : "doctor"
+    setModalSpecialty(defaultScope === "specialty" ? specialties[0] || "General Medicine" : "all")
+    setModalDoctorId(
+      defaultScope === "doctor" && doctors[0] ? doctors[0].id : "all",
+    )
+    setModalScope(defaultScope)
+    setModalScopeValue(
+      defaultScope === "specialty"
+        ? specialties[0] || "General Medicine"
+        : defaultScope === "doctor" && doctors[0]
+          ? doctors[0].id
+          : "",
+    )
     setModalAdvice("")
     setModalDoctorNotes("")
     setModalEffectiveDate(practiceTodayIso())
@@ -553,6 +616,11 @@ export default function MasterTemplatesManagement() {
 
   // Open Edit Modal
   function handleOpenEdit(template: ClinicalTemplate) {
+    const scope = (template.scope || "doctor") as TemplateScope
+    if (!canEditScope(scope)) {
+      toast.error("Your role cannot edit templates at this scope.")
+      return
+    }
     setModalMode("edit")
     setEditingId(template.id)
     setModalTitle(template.title)
@@ -699,6 +767,15 @@ export default function MasterTemplatesManagement() {
           .slice(0, 20)
         finalName = `${prefix}-${cleanTitle || "PROTOCOL"}-${Math.floor(1000 + Math.random() * 9000)}`
       }
+    }
+
+    if (modalMode === "create" && !canCreateScope(finalScope)) {
+      toast.error(`You cannot create ${finalScope}-level templates.`)
+      return
+    }
+    if (modalMode === "edit" && !canEditScope(finalScope)) {
+      toast.error(`You cannot edit ${finalScope}-level templates.`)
+      return
     }
 
     setModalSaving(true)
@@ -915,14 +992,20 @@ export default function MasterTemplatesManagement() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleOpenCreate}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-95"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add Master Template</span>
-            </button>
+            {canCreateAny ? (
+              <button
+                type="button"
+                onClick={handleOpenCreate}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-95"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Master Template</span>
+              </button>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                View only — Template Master create rights required.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -1306,8 +1389,13 @@ export default function MasterTemplatesManagement() {
                       const today = practiceTodayIso()
                       const tplDate = tpl.effectiveDate || tpl.effectiveFrom || (tpl as any).createdAt?.slice(0, 10)
                       const isHistorical = Boolean(tplDate && tplDate < today)
+                      const scope = (tpl.scope || "doctor") as TemplateScope
+                      const showEdit = canEditScope(scope)
+                      const showDelete = Boolean(tpl.isCustom) && canDeleteScope(scope)
+                      if (!showEdit && !showDelete) return null
                       return (
                         <div className="flex items-center gap-1">
+                          {showEdit ? (
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(tpl)}
@@ -1320,7 +1408,8 @@ export default function MasterTemplatesManagement() {
                           >
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
-                          {tpl.isCustom && (
+                          ) : null}
+                          {showDelete ? (
                             isHistorical ? (
                               <span
                                 className="rounded-lg p-1.5 text-slate-300 cursor-not-allowed select-none dark:text-slate-600"
@@ -1338,7 +1427,7 @@ export default function MasterTemplatesManagement() {
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             )
-                          )}
+                          ) : null}
                         </div>
                       )
                     })()}
@@ -1429,6 +1518,7 @@ export default function MasterTemplatesManagement() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {canEditScope((tpl.scope || "doctor") as TemplateScope) ? (
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(tpl)}
@@ -1436,7 +1526,8 @@ export default function MasterTemplatesManagement() {
                     >
                       Edit Template
                     </button>
-                    {tpl.isCustom && (
+                    ) : null}
+                    {tpl.isCustom && canDeleteScope((tpl.scope || "doctor") as TemplateScope) ? (
                       (() => {
                         const today = practiceTodayIso()
                         const tplDate = tpl.effectiveDate || tpl.effectiveFrom || (tpl as any).createdAt?.slice(0, 10)
@@ -1461,7 +1552,7 @@ export default function MasterTemplatesManagement() {
                           </button>
                         )
                       })()
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>

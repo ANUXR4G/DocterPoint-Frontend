@@ -1571,9 +1571,24 @@ export type AuditLogPage = {
 export type MyPracticePermissions = {
   userId: string;
   role: string;
+  roleName?: string;
+  roleId?: string | null;
   permissions: {
     MANAGE_SLOTS_INLINE: PracticePermissionScope;
     VIEW_AUDIT_LOG: PracticePermissionScope;
+    CREATE_MASTER_DATA?: PracticePermissionScope;
+    EDIT_MASTER_DATA?: PracticePermissionScope;
+    DEACTIVATE_MASTER_DATA?: PracticePermissionScope;
+    CREATE_TEMPLATE_CLINIC?: PracticePermissionScope;
+    EDIT_TEMPLATE_CLINIC?: PracticePermissionScope;
+    DELETE_TEMPLATE_CLINIC?: PracticePermissionScope;
+    CREATE_TEMPLATE_SPECIALTY?: PracticePermissionScope;
+    EDIT_TEMPLATE_SPECIALTY?: PracticePermissionScope;
+    DELETE_TEMPLATE_SPECIALTY?: PracticePermissionScope;
+    CREATE_TEMPLATE_DOCTOR?: PracticePermissionScope;
+    EDIT_TEMPLATE_DOCTOR?: PracticePermissionScope;
+    DELETE_TEMPLATE_DOCTOR?: PracticePermissionScope;
+    [key: string]: PracticePermissionScope | undefined;
   };
 };
 

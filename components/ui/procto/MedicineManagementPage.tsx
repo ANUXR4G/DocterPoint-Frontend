@@ -91,10 +91,38 @@ export default function MedicineManagementPage({ portal }: Props) {
   const [formGenericName, setFormGenericName] = useState("")
   const [formError, setFormError] = useState("")
   const canSetFavourite = portal === "doctor"
+  const [canCreate, setCanCreate] = useState(false)
+  const [canEdit, setCanEdit] = useState(false)
+  const [canDeactivate, setCanDeactivate] = useState(false)
 
   // Delete Confirmation Modal state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [medicineToDelete, setMedicineToDelete] = useState<MedicineItem | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const practicesRes = await proctoService.getMyPractices()
+        if (!active || practicesRes.status !== "successful" || !Array.isArray(practicesRes.data)) {
+          return
+        }
+        const pid = proctoService.resolvePracticeId(practicesRes.data[0])
+        if (!pid) return
+        const permRes = await proctoService.getMyPracticePermissions(pid)
+        if (!active || permRes.status !== "successful" || !permRes.data?.permissions) return
+        const p = permRes.data.permissions
+        setCanCreate(Boolean(p.CREATE_MASTER_DATA))
+        setCanEdit(Boolean(p.EDIT_MASTER_DATA))
+        setCanDeactivate(Boolean(p.DEACTIVATE_MASTER_DATA))
+      } catch {
+        /* keep write actions hidden until permissions load */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Load medicines from backend API (with localStorage fallback/cache)
   useEffect(() => {
@@ -473,8 +501,10 @@ export default function MedicineManagementPage({ portal }: Props) {
         title="Medicine Management"
         subtitle="If a medicine was used on earlier appointments, use Active / Inactive (not Delete). Renaming applies only to new appointments — earlier prescription names stay unchanged."
         action={
+          canCreate || canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
             {/* Download Template Dropdown Menu */}
+            {canCreate ? (
             <div className="relative">
               <button
                 type="button"
@@ -528,8 +558,10 @@ export default function MedicineManagementPage({ portal }: Props) {
                 </>
               ) : null}
             </div>
+            ) : null}
 
             {/* Upload Excel Button */}
+            {canCreate ? (
             <button
               type="button"
               onClick={() => setBulkUploadOpen(true)}
@@ -539,8 +571,10 @@ export default function MedicineManagementPage({ portal }: Props) {
               <span>📤</span>
               <span>Upload Excel</span>
             </button>
+            ) : null}
 
             {/* Add Medicine Button */}
+            {canCreate ? (
             <button
               type="button"
               onClick={handleOpenAdd}
@@ -549,7 +583,9 @@ export default function MedicineManagementPage({ portal }: Props) {
               <span>+</span>
               <span>Add Medicine</span>
             </button>
+            ) : null}
           </div>
+          ) : null
         }
       />
 
@@ -658,6 +694,7 @@ export default function MedicineManagementPage({ portal }: Props) {
                           : "Favourites are personal to each doctor. Open the doctor portal to manage your own."
                         : "Your medicine catalog is empty. Click below to add your first medicine record."}
                     </p>
+                    {canCreate ? (
                     <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                       <button
                         type="button"
@@ -674,6 +711,11 @@ export default function MedicineManagementPage({ portal }: Props) {
                         📤 Bulk Upload Excel
                       </button>
                     </div>
+                    ) : (
+                      <p className="pt-1 text-[11px] text-neutral-500">
+                        You can view the catalogue. Ask a clinic admin for Master Data Creation to add medicines.
+                      </p>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -788,7 +830,9 @@ export default function MedicineManagementPage({ portal }: Props) {
 
                   {/* 10. Actions: Delete when unused; Active/Inactive when prescribed */}
                   <td className={`${td} text-center`}>
+                    {canEdit || canDeactivate ? (
                     <div className="flex items-center justify-center gap-1.5">
+                      {canEdit ? (
                       <button
                         type="button"
                         onClick={() => handleOpenEdit(m)}
@@ -797,7 +841,8 @@ export default function MedicineManagementPage({ portal }: Props) {
                       >
                         Edit
                       </button>
-                      {canDeleteMedicine(m) ? (
+                      ) : null}
+                      {canDeactivate && canDeleteMedicine(m) ? (
                         <button
                           type="button"
                           onClick={() => handlePromptDelete(m)}
@@ -806,7 +851,8 @@ export default function MedicineManagementPage({ portal }: Props) {
                         >
                           Delete
                         </button>
-                      ) : (
+                      ) : null}
+                      {canDeactivate && !canDeleteMedicine(m) ? (
                         <button
                           type="button"
                           onClick={() => handleToggleActive(m)}
@@ -823,8 +869,11 @@ export default function MedicineManagementPage({ portal }: Props) {
                         >
                           {isMedicineActive(m) ? "Inactive" : "Active"}
                         </button>
-                      )}
+                      ) : null}
                     </div>
+                    ) : (
+                      <span className="text-[11px] text-neutral-400">View only</span>
+                    )}
                   </td>
                 </tr>
               ))
