@@ -40,7 +40,9 @@ export default function PrescriptionActionsMenu({
   const [open, setOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
   const [sendModalOpen, setSendModalOpen] = useState(false)
-  const [printKind, setPrintKind] = useState<"consultation" | "prescription">("consultation")
+  const [printKind, setPrintKind] = useState<
+    "consultation" | "prescription" | "diagnostics"
+  >("consultation")
   const [notice, setNotice] = useState("")
   const [canCreateDocument, setCanCreateDocument] = useState(true)
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
@@ -115,7 +117,9 @@ export default function PrescriptionActionsMenu({
 
   if (!enabled || !canCreateDocument) return null
 
-  async function openPreview(kind: "consultation" | "prescription") {
+  async function openPreview(
+    kind: "consultation" | "prescription" | "diagnostics",
+  ) {
     if (!canCreateDocument) {
       toast.error("Your clinic role can't generate clinical documents.")
       return
@@ -188,6 +192,13 @@ export default function PrescriptionActionsMenu({
         </button>
         <button
           type="button"
+          onClick={() => openPreview("diagnostics")}
+          className="inline-flex h-9 items-center rounded-full border border-teal-600/30 bg-teal-600/10 px-3 text-sm font-semibold text-teal-800 hover:bg-teal-600/20 dark:text-teal-200"
+        >
+          Diagnostic order
+        </button>
+        <button
+          type="button"
           onClick={() => void sendWhatsApp()}
           className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
@@ -229,6 +240,15 @@ export default function PrescriptionActionsMenu({
             >
               <Eye className="size-4 shrink-0 text-teal-600" aria-hidden />
               Prescription
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:text-neutral-100 dark:hover:bg-neutral-800"
+              onClick={() => openPreview("diagnostics")}
+            >
+              <Eye className="size-4 shrink-0 text-teal-600" aria-hidden />
+              Diagnostic order
             </button>
             <button
               type="button"

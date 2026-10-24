@@ -6,6 +6,7 @@ import { Download, Loader2, MessageCircle, X } from "lucide-react"
 import { toast } from "sonner"
 import ConsultationSheet from "@/components/ui/procto/ConsultationSheet"
 import PrescriptionSheet from "@/components/ui/procto/PrescriptionSheet"
+import DiagnosticOrderSheet from "@/components/ui/procto/DiagnosticOrderSheet"
 import {
   buildConsultationPdf,
   consultationFileName,
@@ -15,16 +16,21 @@ import {
   prescriptionBlob,
   prescriptionFileName,
 } from "@/lib/prescriptionPdf"
+import {
+  buildDiagnosticOrderPdf,
+  diagnosticOrderBlob,
+  diagnosticOrderFileName,
+} from "@/lib/diagnosticOrderPdf"
 import { dashboardPortalRoot } from "@/lib/portalRoot"
 import { proctoService, type ProctoBooking } from "@/lib/services/procto"
 
-type PrintKind = "consultation" | "prescription"
+type PrintKind = "consultation" | "prescription" | "diagnostics"
 
 type Props = {
   open: boolean
   bookingId: string | null
   onClose: () => void
-  /** Which sheet opens first. Both prints stay available in the preview. */
+  /** Which sheet opens first. All print kinds stay available in the preview. */
   initialKind?: PrintKind
   bookingData?: ProctoBooking | null
 }
@@ -133,11 +139,14 @@ export default function ClinicLogModal({
   }, [open, bookingId, initialKind, bookingData])
 
   async function sendToCustomer() {
-    if (!bookingId || sending) return
+    if (!bookingId || sending || kind === "diagnostics") return
     setSending(true)
     setNotice("")
     try {
-      const res = await proctoService.sendClinicLogWhatsApp(bookingId, kind)
+      const res = await proctoService.sendClinicLogWhatsApp(
+        bookingId,
+        kind === "consultation" ? "consultation" : "prescription",
+      )
       if (res.status === "successful") {
         const msg =
           kind === "consultation"
@@ -167,22 +176,29 @@ export default function ClinicLogModal({
       const bytes =
         kind === "consultation"
           ? await buildConsultationPdf(booking)
-          : await buildPrescriptionPdf(booking)
-      const blob = prescriptionBlob(bytes)
+          : kind === "diagnostics"
+            ? await buildDiagnosticOrderPdf(booking)
+            : await buildPrescriptionPdf(booking)
+      const blob =
+        kind === "diagnostics" ? diagnosticOrderBlob(bytes) : prescriptionBlob(bytes)
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
       link.download =
         kind === "consultation"
           ? consultationFileName(booking)
-          : prescriptionFileName(booking)
+          : kind === "diagnostics"
+            ? diagnosticOrderFileName(booking)
+            : prescriptionFileName(booking)
       link.click()
       URL.revokeObjectURL(url)
     } catch {
       setNotice(
         kind === "consultation"
           ? "Could not create the consultation PDF."
-          : "Could not create the prescription PDF.",
+          : kind === "diagnostics"
+            ? "Could not create the diagnostic order PDF."
+            : "Could not create the prescription PDF.",
       )
     } finally {
       setSaving(false)
@@ -215,7 +231,11 @@ export default function ClinicLogModal({
         <div className="sticky top-0 z-10 border-b border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
             <h2 id="clinic-log-title" className="text-sm font-bold text-neutral-900">
-              {kind === "consultation" ? "Consultation" : "Prescription"}
+              {kind === "consultation"
+                ? "Consultation"
+                : kind === "diagnostics"
+                  ? "Diagnostic Order"
+                  : "Prescription"}
             </h2>
             <div className="flex items-center gap-2">
               <div className="flex rounded-full border border-neutral-300 p-0.5 text-xs font-semibold">
@@ -239,6 +259,16 @@ export default function ClinicLogModal({
                 >
                   Prescription
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKind("diagnostics")
+                    setNotice("")
+                  }}
+                  className={`rounded-full px-3 py-1 ${kind === "diagnostics" ? "bg-neutral-900 text-white" : "text-neutral-700"}`}
+                >
+                  Diagnostics
+                </button>
               </div>
               <button
                 type="button"
@@ -247,17 +277,25 @@ export default function ClinicLogModal({
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border border-neutral-300 px-3 text-xs font-semibold text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
               >
                 <Download className="size-3.5" aria-hidden />
-                {saving ? "Saving…" : kind === "consultation" ? "Download consultation" : "Download prescription"}
+                {saving
+                  ? "Saving…"
+                  : kind === "consultation"
+                    ? "Download consultation"
+                    : kind === "diagnostics"
+                      ? "Download diagnostic order"
+                      : "Download prescription"}
               </button>
               <button
                 type="button"
-                disabled={!bookingId || sending || loading}
+                disabled={!bookingId || sending || loading || kind === "diagnostics"}
                 onClick={() => void sendToCustomer()}
                 className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                 title={
-                  kind === "consultation"
-                    ? "Send consultation note to customer on WhatsApp"
-                    : "Send prescription to customer on WhatsApp"
+                  kind === "diagnostics"
+                    ? "WhatsApp send for diagnostic orders coming soon"
+                    : kind === "consultation"
+                      ? "Send consultation note to customer on WhatsApp"
+                      : "Send prescription to customer on WhatsApp"
                 }
               >
                 {sending ? (
@@ -291,7 +329,11 @@ export default function ClinicLogModal({
         <div className="max-h-[min(85vh,900px)] overflow-y-auto">
           {loading ? (
             <p className="p-8 text-sm text-neutral-500">
-              {kind === "consultation" ? "Loading consultation…" : "Loading prescription…"}
+              {kind === "consultation"
+                ? "Loading consultation…"
+                : kind === "diagnostics"
+                  ? "Loading diagnostic order…"
+                  : "Loading prescription…"}
             </p>
           ) : error ? (
             <p className="p-8 text-sm text-red-600" role="alert">
@@ -300,6 +342,8 @@ export default function ClinicLogModal({
           ) : booking ? (
             kind === "consultation" ? (
               <ConsultationSheet booking={booking} />
+            ) : kind === "diagnostics" ? (
+              <DiagnosticOrderSheet booking={booking} />
             ) : (
               <PrescriptionSheet booking={booking} />
             )

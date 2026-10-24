@@ -230,6 +230,71 @@ export const proctoService = {
     )
   },
 
+  listDiagnosticMasters: (params?: {
+    practiceId?: string
+    includeInactive?: boolean
+  }) => {
+    const qs = new URLSearchParams()
+    if (params?.practiceId) qs.set("practiceId", params.practiceId)
+    if (params?.includeInactive) qs.set("includeInactive", "true")
+    const query = qs.toString()
+    return proctoFetch(`/procto/diagnostics/masters${query ? `?${query}` : ""}`)
+  },
+
+  createDiagnosticCategory: (body: Record<string, unknown>) =>
+    proctoFetch("/procto/diagnostics/categories", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateDiagnosticCategory: (code: string, body: Record<string, unknown>) =>
+    proctoFetch(`/procto/diagnostics/categories/${encodeURIComponent(code)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deactivateDiagnosticCategory: (code: string, practiceId: string) =>
+    proctoFetch(
+      `/procto/diagnostics/categories/${encodeURIComponent(code)}?practiceId=${encodeURIComponent(practiceId)}`,
+      { method: "DELETE" },
+    ),
+
+  createDiagnosticService: (body: Record<string, unknown>) =>
+    proctoFetch("/procto/diagnostics/services", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateDiagnosticService: (id: string, body: Record<string, unknown>) =>
+    proctoFetch(`/procto/diagnostics/services/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deactivateDiagnosticService: (id: string, practiceId: string) =>
+    proctoFetch(
+      `/procto/diagnostics/services/${encodeURIComponent(id)}?practiceId=${encodeURIComponent(practiceId)}`,
+      { method: "DELETE" },
+    ),
+
+  createDiagnosticTickSheet: (body: Record<string, unknown>) =>
+    proctoFetch("/procto/diagnostics/tick-sheets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateDiagnosticTickSheet: (id: string, body: Record<string, unknown>) =>
+    proctoFetch(`/procto/diagnostics/tick-sheets/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deactivateDiagnosticTickSheet: (id: string, practiceId: string) =>
+    proctoFetch(
+      `/procto/diagnostics/tick-sheets/${encodeURIComponent(id)}?practiceId=${encodeURIComponent(practiceId)}`,
+      { method: "DELETE" },
+    ),
+
   listPreviousDiagnostics: (params: {
     practiceId: string
     patientId?: string

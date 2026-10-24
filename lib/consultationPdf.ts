@@ -341,6 +341,7 @@ function diagnosticRows(diagnostics: ConsultDiagnostic[] | null | undefined) {
   return (diagnostics ?? [])
     .filter((d) => d?.name?.trim())
     .map((d) => ({
+      code: (d.code || "").trim(),
       type: (d.type || "").trim() || "Investigation",
       name: d.name!.trim(),
       qty: d.qty && d.qty > 0 ? String(d.qty) : "1",

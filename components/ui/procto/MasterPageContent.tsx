@@ -2,14 +2,15 @@
 
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { BookOpen, FileText, Pill, Stethoscope } from "lucide-react"
+import { FileText, FlaskConical, Pill, Stethoscope } from "lucide-react"
 import DashboardPageHeader from "@/components/dashboard/DashboardPageHeader"
 import MasterTemplatesManagement from "./MasterTemplatesManagement"
 import ClinicalMastersPanel from "./ClinicalMastersPanel"
 import MedicineManagementPage from "./MedicineManagementPage"
+import DiagnosticMasterPage from "./DiagnosticMasterPage"
 import { proctoService } from "@/lib/services/procto"
 
-export type MasterTab = "templates" | "clinical" | "medicines"
+export type MasterTab = "templates" | "clinical" | "medicines" | "diagnostics"
 
 type Props = {
   portal: "doctor" | "clinic"
@@ -41,7 +42,12 @@ function MasterPageInner({ portal }: Props) {
   const [loadingPractice, setLoadingPractice] = useState(true)
 
   useEffect(() => {
-    if (tabParam === "templates" || tabParam === "clinical" || tabParam === "medicines") {
+    if (
+      tabParam === "templates" ||
+      tabParam === "clinical" ||
+      tabParam === "medicines" ||
+      tabParam === "diagnostics"
+    ) {
       setTab(tabParam)
     }
   }, [tabParam])
@@ -99,6 +105,12 @@ function MasterPageInner({ portal }: Props) {
       description: "Central medicine inventory and custom drugs",
       icon: Pill,
     },
+    {
+      id: "diagnostics",
+      label: "Diagnostic Order Master",
+      description: "Categories, services, and specialty tick sheets",
+      icon: FlaskConical,
+    },
   ]
 
   return (
@@ -106,7 +118,7 @@ function MasterPageInner({ portal }: Props) {
       <DashboardPageHeader
         eyebrow="Clinical Management"
         title="Master"
-        subtitle="Manage master clinical templates, advice presets, notes, vitals, allergies, and drug databases."
+        subtitle="Manage clinical templates, vitals, medicines, and diagnostic order masters."
       />
 
       {/* Top Tab Switcher */}
@@ -163,6 +175,10 @@ function MasterPageInner({ portal }: Props) {
       ) : tab === "medicines" ? (
         <div className="w-full">
           <MedicineManagementPage portal={portal} />
+        </div>
+      ) : tab === "diagnostics" ? (
+        <div className="dashboard-panel w-full">
+          <DiagnosticMasterPage portal={portal} />
         </div>
       ) : null}
     </div>
