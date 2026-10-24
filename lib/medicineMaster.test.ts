@@ -4,6 +4,7 @@ import {
   searchMedicineMaster,
   medicineMatchesQuery,
   medicineSelectionKey,
+  mergeMedicineMasterItems,
   listFavoriteMedicineMaster,
   CENTRAL_MEDICINE_MASTER,
 } from "./medicineMaster"
@@ -75,7 +76,77 @@ describe("Centralized Medicine Master", () => {
       strength: "850mg",
     })
     assert.notEqual(a, b)
-    assert.equal(a, "name:metformin 500mg|500mg")
+    assert.equal(a, "label:metformin 500mg|500mg")
+  })
+
+  test("same medicineCode collapses Metformin and Glucophage brand alias", () => {
+    const merged = mergeMedicineMasterItems([
+      {
+        id: "med-metformin-500",
+        medicineCode: "MED-MET-500",
+        name: "Metformin 500mg",
+        brandName: "Glucophage 500",
+        strength: "500mg",
+        frequency: "Twice daily",
+        duration: "1",
+        durationUnit: "Month",
+        instruction: "After meals",
+        favourite: true,
+      },
+      {
+        id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        medicineCode: "MED-MET-500",
+        name: "Glucophage 500",
+        brandName: "Glucophage 500",
+        strength: "500 mg",
+        favourite: true,
+      },
+    ])
+    assert.equal(merged.length, 1)
+    assert.equal(merged[0]!.medicineCode, "MED-MET-500")
+    assert.equal(merged[0]!.frequency, "Twice daily")
+    assert.match(merged[0]!.name + merged[0]!.brandName, /Metformin|Glucophage/i)
+  })
+
+  test("selecting one merged favorite must not yield two Rx names", () => {
+    const merged = mergeMedicineMasterItems([
+      {
+        id: "med-metformin-500",
+        medicineCode: "MED-MET-500",
+        name: "Metformin 500mg",
+        brandName: "Glucophage 500",
+        strength: "500mg",
+        favourite: true,
+      },
+      {
+        id: "med-metformin-850",
+        medicineCode: "MED-MET-850",
+        name: "Metformin 850mg",
+        brandName: "Glucophage 850",
+        strength: "850mg",
+        favourite: true,
+      },
+      {
+        id: "uuid-glucophage-500",
+        name: "Glucophage 500",
+        brandName: "Glucophage 500",
+        strength: "500 mg",
+        medicineCode: "MED-MET-500",
+        favourite: true,
+      },
+      {
+        id: "uuid-glucophage-850",
+        name: "Glucophage 850",
+        brandName: "Glucophage 850",
+        strength: "850 mg",
+        medicineCode: "MED-MET-850",
+        favourite: true,
+      },
+    ])
+    assert.equal(merged.length, 2)
+    const selected = new Set([medicineSelectionKey(merged[0]!)])
+    const toAdd = merged.filter((m) => selected.has(medicineSelectionKey(m)))
+    assert.equal(toAdd.length, 1)
   })
 
   test("listFavoriteMedicineMaster returns starred/popular rows (not search slice)", () => {

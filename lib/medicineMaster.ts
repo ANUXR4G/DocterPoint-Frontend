@@ -837,22 +837,147 @@ export function normalizeMedicineMasterItem(m: any): MedicineMasterItem {
   }
 }
 
-/** Stable key for checkbox / multi-select (never collide on empty id). */
+function normalizeMedicineLabel(value: string | undefined | null): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/\s*(mg|mcg|g|ml|iu)\b/g, "$1")
+}
+
+const UUID_LIKE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Stable key for checkbox / multi-select.
+ * Prefer medicineCode so Metformin 500mg and brand "Glucophage 500" (same code)
+ * never appear as two selectable favorites.
+ */
 export function medicineSelectionKey(
   m: Partial<
     Pick<
       MedicineMasterItem,
-      "id" | "medicineCode" | "name" | "strength" | "brandName"
+      "id" | "medicineCode" | "name" | "strength" | "brandName" | "genericName"
     >
   >,
 ): string {
-  const id = String(m.id || "").trim()
-  if (id) return `id:${id}`
-  const code = String(m.medicineCode || "").trim()
+  const code = String(m.medicineCode || "").trim().toLowerCase()
   if (code) return `code:${code}`
-  const name = String(m.name || m.brandName || "").trim().toLowerCase()
-  const strength = String(m.strength || "").trim().toLowerCase()
-  return `name:${name}|${strength}`
+
+  const id = String(m.id || "").trim()
+  // Keep slug ids (med-metformin-500); skip random UUIDs so brand aliases can merge.
+  if (id && !UUID_LIKE.test(id)) return `id:${id}`
+
+  const strength = normalizeMedicineLabel(m.strength)
+  const brand = normalizeMedicineLabel(m.brandName)
+  const name = normalizeMedicineLabel(m.name)
+  const generic = normalizeMedicineLabel(m.genericName)
+  if (brand && strength) return `label:${brand}|${strength}`
+  if (name && strength) return `label:${name}|${strength}`
+  if (generic && strength) return `generic:${generic}|${strength}`
+  if (id) return `id:${id}`
+  return `name:${name || brand}|${strength}`
+}
+
+/** All alias keys that should collapse to one favorite / Rx row. */
+export function medicineAliasKeys(
+  m: Partial<
+    Pick<
+      MedicineMasterItem,
+      "id" | "medicineCode" | "name" | "strength" | "brandName" | "genericName"
+    >
+  >,
+): string[] {
+  const keys = new Set<string>()
+  keys.add(medicineSelectionKey(m))
+  const code = String(m.medicineCode || "").trim().toLowerCase()
+  if (code) keys.add(`code:${code}`)
+  const id = String(m.id || "").trim()
+  if (id && !UUID_LIKE.test(id)) keys.add(`id:${id}`)
+  const strength = normalizeMedicineLabel(m.strength)
+  const brand = normalizeMedicineLabel(m.brandName)
+  const name = normalizeMedicineLabel(m.name)
+  const generic = normalizeMedicineLabel(m.genericName)
+  if (brand && strength) keys.add(`label:${brand}|${strength}`)
+  if (name && strength) keys.add(`label:${name}|${strength}`)
+  if (generic && strength) keys.add(`generic:${generic}|${strength}`)
+  return [...keys]
+}
+
+function medicineDosingScore(m: MedicineMasterItem): number {
+  let score = 0
+  if (m.frequency && m.frequency !== "Once daily") score += 2
+  else if (m.frequency) score += 1
+  if (m.duration && m.duration !== "5") score += 2
+  else if (m.duration) score += 1
+  if (m.instruction?.trim()) score += 2
+  if (m.dose) score += 1
+  if (m.favourite || m.isPopular) score += 1
+  return score
+}
+
+/** Merge catalog + API rows; collapse brand/name aliases of the same medicine. */
+export function mergeMedicineMasterItems(
+  rows: Array<Partial<MedicineMasterItem> | MedicineMasterItem>,
+  opts?: { forceFavourite?: boolean },
+): MedicineMasterItem[] {
+  const byPrimary = new Map<string, MedicineMasterItem>()
+  const aliasToPrimary = new Map<string, string>()
+
+  for (const raw of rows) {
+    const m = normalizeMedicineMasterItem(raw)
+    if (!m.name?.trim() && !m.brandName?.trim()) continue
+    const next = opts?.forceFavourite ? { ...m, favourite: true } : m
+    const aliases = medicineAliasKeys(next)
+    const existingPrimary = aliases
+      .map((k) => aliasToPrimary.get(k))
+      .find(Boolean)
+    const primary = existingPrimary || medicineSelectionKey(next)
+    const prev = byPrimary.get(primary)
+    const chosen =
+      !prev || medicineDosingScore(next) >= medicineDosingScore(prev)
+        ? {
+            ...prev,
+            ...next,
+            // Keep the richer dosing fields when the incoming row is sparse.
+            frequency: next.frequency || prev?.frequency,
+            duration: next.duration || prev?.duration,
+            durationUnit: next.durationUnit || prev?.durationUnit,
+            instruction: next.instruction || prev?.instruction,
+            dose: next.dose || prev?.dose,
+            doseUnit: next.doseUnit || prev?.doseUnit,
+            strength: next.strength || prev?.strength,
+            medicineCode: next.medicineCode || prev?.medicineCode,
+            id: next.id && !UUID_LIKE.test(next.id) ? next.id : prev?.id || next.id,
+            name: next.name || prev?.name || "",
+            brandName: next.brandName || prev?.brandName || "",
+            genericName: next.genericName || prev?.genericName || "",
+            favourite: Boolean(next.favourite || prev?.favourite),
+          }
+        : {
+            ...next,
+            ...prev,
+            frequency: prev!.frequency || next.frequency,
+            duration: prev!.duration || next.duration,
+            durationUnit: prev!.durationUnit || next.durationUnit,
+            instruction: prev!.instruction || next.instruction,
+            dose: prev!.dose || next.dose,
+            doseUnit: prev!.doseUnit || next.doseUnit,
+            strength: prev!.strength || next.strength,
+            medicineCode: prev!.medicineCode || next.medicineCode,
+            id:
+              prev!.id && !UUID_LIKE.test(prev!.id)
+                ? prev!.id
+                : next.id || prev!.id,
+            favourite: Boolean(next.favourite || prev?.favourite),
+          }
+    byPrimary.set(primary, chosen as MedicineMasterItem)
+    for (const k of medicineAliasKeys(chosen as MedicineMasterItem)) {
+      aliasToPrimary.set(k, primary)
+    }
+  }
+
+  return Array.from(byPrimary.values())
 }
 
 /** Match all whitespace-separated tokens across name / brand / generic / strength / codes. */

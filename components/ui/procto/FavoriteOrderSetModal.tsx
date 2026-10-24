@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { proctoService } from "@/lib/services/procto"
 import {
   listFavoriteMedicineMaster,
+  medicineAliasKeys,
   medicineMatchesQuery,
   medicineSelectionKey,
+  mergeMedicineMasterItems,
   normalizeMedicineMasterItem,
   searchMedicineMaster,
   type MedicineMasterItem,
@@ -319,22 +321,6 @@ export default function FavoriteOrderSetModal({
   const [newSetMedicines, setNewSetMedicines] = useState<OrderSetItem[]>([])
   const [savingSet, setSavingSet] = useState(false)
 
-  function mergeMedicineList(
-    rows: MedicineMasterItem[],
-    opts?: { forceFavourite?: boolean },
-  ): MedicineMasterItem[] {
-    const map = new Map<string, MedicineMasterItem>()
-    for (const raw of rows) {
-      const m = normalizeMedicineMasterItem(raw)
-      if (!m.name?.trim()) continue
-      map.set(
-        medicineSelectionKey(m),
-        opts?.forceFavourite ? { ...m, favourite: true } : m,
-      )
-    }
-    return Array.from(map.values())
-  }
-
   function toVisitRow(med: MedicineMasterItem): VisitMedicine {
     const duration = med.duration || "5"
     const durationUnit = normalizeDurationUnit(med.durationUnit) || "Days"
@@ -344,8 +330,10 @@ export default function FavoriteOrderSetModal({
     const dose = med.dose || "1"
     const doseUnit = med.doseUnit || "tablet"
     const frequency = med.frequency || "Once daily"
+    // Prefer the catalog display name shown on the favorite card (not a brand alias).
+    const rxName = (med.name || med.brandName || "").trim()
     return {
-      name: med.name,
+      name: rxName,
       medicineId: med.id || undefined,
       medicineCode: med.medicineCode || undefined,
       strength: med.strength || "",
@@ -364,6 +352,23 @@ export default function FavoriteOrderSetModal({
     }
   }
 
+  function prescriptionAliasSet(rows: VisitMedicine[]): Set<string> {
+    const set = new Set<string>()
+    for (const r of rows) {
+      for (const k of medicineAliasKeys({
+        id: r.medicineId,
+        medicineCode: r.medicineCode,
+        name: r.name,
+        strength: r.strength,
+      })) {
+        set.add(k)
+      }
+      const n = r.name.trim().toLowerCase()
+      if (n) set.add(`name:${n}`)
+    }
+    return set
+  }
+
   // Fetch favorite medicines when the modal opens
   useEffect(() => {
     if (!isOpen) return
@@ -371,7 +376,9 @@ export default function FavoriteOrderSetModal({
     setSelectedFavIds(new Set())
     setCatalogHits([])
     const localFavs = listFavoriteMedicineMaster()
-    setFavoriteMeds(mergeMedicineList(localFavs, { forceFavourite: true }))
+    setFavoriteMeds(
+      mergeMedicineMasterItems(localFavs, { forceFavourite: true }),
+    )
 
     let cancelled = false
     void proctoService
@@ -387,8 +394,9 @@ export default function FavoriteOrderSetModal({
           const remote = (res.data as unknown[]).map((row) =>
             normalizeMedicineMasterItem(row),
           )
+          // Local first so catalog dosing wins; aliases (Glucophage ↔ Metformin) collapse.
           setFavoriteMeds(
-            mergeMedicineList([...localFavs, ...remote], {
+            mergeMedicineMasterItems([...localFavs, ...remote], {
               forceFavourite: true,
             }),
           )
@@ -421,7 +429,7 @@ export default function FavoriteOrderSetModal({
     }
     let cancelled = false
     const localHits = searchMedicineMaster(q, 40)
-    setCatalogHits(mergeMedicineList(localHits))
+    setCatalogHits(mergeMedicineMasterItems(localHits))
     const t = window.setTimeout(() => {
       void proctoService
         .listMedicines({ q })
@@ -436,7 +444,9 @@ export default function FavoriteOrderSetModal({
             const remote = (res.data as unknown[]).map((row) =>
               normalizeMedicineMasterItem(row),
             )
-            setCatalogHits(mergeMedicineList([...localHits, ...remote]))
+            setCatalogHits(
+              mergeMedicineMasterItems([...localHits, ...remote]),
+            )
           }
         })
         .catch(() => {})
@@ -452,10 +462,13 @@ export default function FavoriteOrderSetModal({
   }, [favoriteMeds, favSearch])
 
   const filteredCatalog = useMemo(() => {
-    const favKeys = new Set(favoriteMeds.map((m) => medicineSelectionKey(m)))
+    const favKeys = new Set<string>()
+    for (const m of favoriteMeds) {
+      for (const k of medicineAliasKeys(m)) favKeys.add(k)
+    }
     return catalogHits.filter((m) => {
       if (!medicineMatchesQuery(m, favSearch)) return false
-      return !favKeys.has(medicineSelectionKey(m))
+      return !medicineAliasKeys(m).some((k) => favKeys.has(k))
     })
   }, [catalogHits, favoriteMeds, favSearch])
 
@@ -493,15 +506,14 @@ export default function FavoriteOrderSetModal({
   }
 
   function handleAddSingleFav(med: MedicineMasterItem) {
-    const isAlreadyAdded = currentPrescriptionRows.some(
-      (r) => r.name.trim().toLowerCase() === med.name.trim().toLowerCase(),
-    )
-    if (isAlreadyAdded) {
-      toast.info(`"${med.name}" is already added to the prescription.`)
+    const existing = prescriptionAliasSet(currentPrescriptionRows)
+    const aliases = medicineAliasKeys(med)
+    if (aliases.some((k) => existing.has(k))) {
+      toast.info(`"${med.name || med.brandName}" is already added to the prescription.`)
       return
     }
     onAddMedicines([toVisitRow(med)])
-    toast.success(`Added "${med.name}" to prescription`)
+    toast.success(`Added "${med.name || med.brandName}" to prescription`)
   }
 
   function handleAddSelectedFavs() {
@@ -511,28 +523,33 @@ export default function FavoriteOrderSetModal({
       return
     }
     // Only the currently selected cards — never the full favorites list.
-    const toAdd: MedicineMasterItem[] = []
+    const picked = new Map<string, MedicineMasterItem>()
     for (const key of keys) {
       const med =
         selectablePool.get(key) ||
         favByKeyRef.current.get(key) ||
         favoriteMeds.find((m) => medicineSelectionKey(m) === key)
-      if (med) toAdd.push(med)
+      if (!med) continue
+      picked.set(medicineSelectionKey(med), med)
     }
+    const toAdd = [...picked.values()]
     if (toAdd.length === 0) {
       toast.error("Could not match the selected medicines. Try again.")
       setSelectedFavIds(new Set())
       return
     }
-    const existing = new Set(
-      currentPrescriptionRows.map((r) => r.name.trim().toLowerCase()),
-    )
-    const validMeds = toAdd.filter(
-      (m) => !existing.has(m.name.trim().toLowerCase()),
-    )
-    const already = toAdd.filter((m) =>
-      existing.has(m.name.trim().toLowerCase()),
-    )
+    const existing = prescriptionAliasSet(currentPrescriptionRows)
+    const validMeds: MedicineMasterItem[] = []
+    const already: MedicineMasterItem[] = []
+    for (const m of toAdd) {
+      const aliases = medicineAliasKeys(m)
+      if (aliases.some((k) => existing.has(k))) {
+        already.push(m)
+        continue
+      }
+      validMeds.push(m)
+      for (const k of aliases) existing.add(k)
+    }
 
     if (validMeds.length === 0) {
       toast.info(
