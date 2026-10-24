@@ -426,7 +426,7 @@ export default function MedicineEntryTable({
         )}
       </div>
 
-      <div className="chart-x min-w-0 max-w-full overflow-x-auto rounded-lg border border-neutral-200 bg-white p-2 pb-32 text-neutral-900 dark:border-neutral-600 dark:bg-neutral-950 dark:!text-neutral-100">
+      <div className="chart-x min-w-0 max-w-full overflow-x-auto rounded-lg border border-neutral-200 bg-white p-2 text-neutral-900 dark:border-neutral-600 dark:bg-neutral-950 dark:!text-neutral-100">
         <table className="w-full min-w-[1240px] border-collapse">
         <thead>
           <tr>

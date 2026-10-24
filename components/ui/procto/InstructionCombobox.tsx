@@ -1,7 +1,9 @@
 "use client"
 
-import { useEffect, useRef, useState, useId } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, useId } from "react"
+import { createPortal } from "react-dom"
 import { proctoService } from "@/lib/services/procto"
+import { dashboardPortalRoot } from "@/lib/portalRoot"
 
 export const COMMON_INSTRUCTIONS: string[] = [
   "After food",
@@ -153,11 +155,41 @@ export default function InstructionCombobox({
   const [instructionsList, setInstructionsList] = useState<string[]>(
     options || instructionsCache,
   )
+  const [floatPos, setFloatPos] = useState<{
+    top: number
+    left: number
+    width: number
+    maxHeight: number
+    placeAbove: boolean
+  } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const bannerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const listboxId = useId()
+
+  function syncFloatPos(preferWidth: number) {
+    const el = containerRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const width = Math.min(preferWidth, window.innerWidth - 16)
+    let left = r.left
+    if (left + width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - width - 8)
+    }
+    const spaceBelow = window.innerHeight - r.bottom - 8
+    const spaceAbove = r.top - 8
+    const placeAbove = spaceBelow < 220 && spaceAbove > spaceBelow
+    const maxHeight = Math.min(320, Math.max(140, placeAbove ? spaceAbove : spaceBelow))
+    setFloatPos({
+      top: placeAbove ? r.top - 4 : r.bottom + 4,
+      left,
+      width,
+      maxHeight,
+      placeAbove,
+    })
+  }
 
   // Subscribe to dynamic instructions updates
   useEffect(() => {
@@ -221,17 +253,31 @@ export default function InstructionCombobox({
     }
   }, [activeIndex])
 
+  useLayoutEffect(() => {
+    if (!isOpen && !showBanner) {
+      setFloatPos(null)
+      return
+    }
+    syncFloatPos(showBanner ? 384 : 280)
+    const onMove = () => syncFloatPos(showBanner ? 384 : 280)
+    window.addEventListener("resize", onMove)
+    window.addEventListener("scroll", onMove, true)
+    return () => {
+      window.removeEventListener("resize", onMove)
+      window.removeEventListener("scroll", onMove, true)
+    }
+  }, [isOpen, showBanner])
+
   // Handle outside click to close dropdown and banner
   useEffect(() => {
     function handlePointerDown(e: PointerEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false)
-        setShowBanner(false)
-        commitValue(value)
-      }
+      const t = e.target as Node
+      if (containerRef.current?.contains(t)) return
+      if (menuRef.current?.contains(t)) return
+      if (bannerRef.current?.contains(t)) return
+      setIsOpen(false)
+      setShowBanner(false)
+      commitValue(value)
     }
     if (isOpen || showBanner) {
       document.addEventListener("pointerdown", handlePointerDown)
@@ -289,11 +335,178 @@ export default function InstructionCombobox({
     }
   }
 
+  const floatStyle = floatPos
+    ? {
+        top: floatPos.placeAbove ? undefined : floatPos.top,
+        bottom: floatPos.placeAbove
+          ? window.innerHeight - floatPos.top
+          : undefined,
+        left: floatPos.left,
+        width: floatPos.width,
+        maxHeight: floatPos.maxHeight,
+      }
+    : undefined
+
+  const banner =
+    showBanner && floatPos
+      ? createPortal(
+          <div
+            ref={bannerRef}
+            className="fixed z-[220] overflow-hidden rounded-xl border border-sky-300 bg-white p-3 shadow-2xl dark:border-sky-900/60 dark:bg-neutral-900"
+            style={floatStyle}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-neutral-800">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-sky-900 dark:text-sky-300">
+                <span className="flex size-5 items-center justify-center rounded-full bg-sky-100 text-[11px] text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+                  ⚡
+                </span>
+                <span>Predefined Special Instructions</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBanner(false)}
+                className="rounded p-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+              Click any predefined value to fill into the box. You can freely
+              edit, append, or modify the text after selecting.
+            </p>
+
+            <div
+              className="mt-2.5 space-y-2.5 overflow-y-auto pr-1 text-xs custom-scroll"
+              style={{ maxHeight: Math.max(100, floatPos.maxHeight - 88) }}
+            >
+              {PREDEFINED_INSTRUCTION_GROUPS.map((group) => (
+                <div key={group.category}>
+                  <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                    <span>{group.icon}</span>
+                    <span>{group.category}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.items.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => {
+                          onChange(item)
+                          commitValue(item)
+                          setShowBanner(false)
+                          inputRef.current?.focus()
+                        }}
+                        className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs font-medium text-neutral-800 transition-colors hover:border-sky-400 hover:bg-sky-50 hover:text-sky-950 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:border-sky-600 dark:hover:bg-sky-950/60 dark:hover:text-sky-200 cursor-pointer"
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>,
+          dashboardPortalRoot(),
+        )
+      : null
+
+  const menu =
+    isOpen && !showBanner && floatPos
+      ? createPortal(
+          <div
+            ref={menuRef}
+            className="fixed z-[220] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+            style={floatStyle}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <div className="border-b border-neutral-100 bg-neutral-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/80 dark:text-neutral-400">
+              Special Instructions
+            </div>
+
+            <ul
+              id={listboxId}
+              ref={listRef}
+              role="listbox"
+              className="overflow-y-auto py-1 text-xs custom-scroll"
+              style={{ maxHeight: Math.max(80, floatPos.maxHeight - 28) }}
+            >
+              {filtered.length === 0 ? (
+                <li
+                  role="option"
+                  aria-selected
+                  onClick={() => handleSelect(value.trim())}
+                  className="cursor-pointer px-3 py-2.5 text-xs text-neutral-500 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                >
+                  <div className="font-medium text-neutral-700 dark:text-neutral-300">
+                    Custom instruction:
+                  </div>
+                  <div className="mt-0.5 truncate font-semibold text-sky-600 dark:text-sky-400">
+                    &ldquo;{value}&rdquo;
+                  </div>
+                  <div className="mt-1 text-[10px] text-neutral-400">
+                    Press Enter or click to save for future selections.
+                  </div>
+                </li>
+              ) : (
+                <>
+                  {filtered.map((instruction, idx) => {
+                    const isSelected = idx === activeIndex
+                    const isCurrent =
+                      instruction.toLowerCase() === value.trim().toLowerCase()
+                    return (
+                      <li
+                        key={instruction}
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={() => handleSelect(instruction)}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        className={`cursor-pointer px-3 py-1.5 transition-colors ${
+                          isSelected
+                            ? "bg-sky-50 text-sky-950 font-semibold dark:bg-sky-950/60 dark:text-sky-100"
+                            : isCurrent
+                              ? "bg-neutral-50 font-medium text-sky-700 dark:bg-neutral-800/80 dark:text-sky-300"
+                              : "text-neutral-800 hover:bg-neutral-50 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate">{instruction}</span>
+                          {isCurrent ? (
+                            <span className="text-[10px] text-sky-600 dark:text-sky-400">
+                              ✓
+                            </span>
+                          ) : null}
+                        </div>
+                      </li>
+                    )
+                  })}
+
+                  {value.trim() && !hasExactMatch ? (
+                    <li
+                      role="option"
+                      aria-selected={activeIndex === filtered.length}
+                      onClick={() => handleSelect(value.trim())}
+                      onMouseEnter={() => setActiveIndex(filtered.length)}
+                      className="border-t border-neutral-100 px-3 py-1.5 text-xs text-sky-700 transition-colors hover:bg-sky-50 dark:border-neutral-800 dark:text-sky-300 dark:hover:bg-neutral-800 cursor-pointer"
+                    >
+                      <span className="text-[11px] font-normal text-neutral-400">
+                        Use custom:
+                      </span>{" "}
+                      <span className="font-semibold">
+                        &ldquo;{value}&rdquo;
+                      </span>
+                    </li>
+                  ) : null}
+                </>
+              )}
+            </ul>
+          </div>,
+          dashboardPortalRoot(),
+        )
+      : null
+
   return (
-    <div
-      ref={containerRef}
-      className={`relative w-full ${isOpen || showBanner ? "z-[9999]" : "z-auto"}`}
-    >
+    <div ref={containerRef} className="relative w-full">
       <div className="relative flex items-center">
         <input
           ref={inputRef}
@@ -316,11 +529,13 @@ export default function InstructionCombobox({
             if (!showBanner) setIsOpen(true)
           }}
           onBlur={() => {
-            // Small timeout to allow option click before blur closes dropdown
             setTimeout(() => {
+              const active = document.activeElement
               if (
-                document.activeElement &&
-                containerRef.current?.contains(document.activeElement)
+                active &&
+                (containerRef.current?.contains(active) ||
+                  menuRef.current?.contains(active) ||
+                  bannerRef.current?.contains(active))
               ) {
                 return
               }
@@ -331,9 +546,7 @@ export default function InstructionCombobox({
           onKeyDown={handleKeyDown}
         />
 
-        {/* Buttons inside the box */}
         <div className="absolute right-1 flex items-center gap-1">
-          {/* Quick-Select Banner Button */}
           <button
             type="button"
             tabIndex={-1}
@@ -355,7 +568,6 @@ export default function InstructionCombobox({
             <span>Presets</span>
           </button>
 
-          {/* Dropdown chevron toggle button */}
           <button
             type="button"
             tabIndex={-1}
@@ -386,149 +598,8 @@ export default function InstructionCombobox({
           </button>
         </div>
       </div>
-
-      {/* Predefined Instructions Banner Popover */}
-      {showBanner && (
-        <div
-          ref={bannerRef}
-          className="absolute left-0 top-full z-[999999] mt-1.5 w-80 sm:w-96 rounded-xl border border-sky-300 bg-white p-3 shadow-2xl transition-all dark:border-sky-900/60 dark:bg-neutral-900"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-neutral-800">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-sky-900 dark:text-sky-300">
-              <span className="flex size-5 items-center justify-center rounded-full bg-sky-100 text-[11px] text-sky-700 dark:bg-sky-950 dark:text-sky-300">
-                ⚡
-              </span>
-              <span>Predefined Special Instructions</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowBanner(false)}
-              className="rounded p-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-            >
-              ✕
-            </button>
-          </div>
-          <p className="mt-1.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
-            Click any predefined value to fill into the box. You can freely edit, append, or modify the text after selecting.
-          </p>
-
-          <div className="mt-2.5 max-h-56 space-y-2.5 overflow-y-auto pr-1 text-xs custom-scroll">
-            {PREDEFINED_INSTRUCTION_GROUPS.map((group) => (
-              <div key={group.category}>
-                <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                  <span>{group.icon}</span>
-                  <span>{group.category}</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {group.items.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => {
-                        onChange(item)
-                        commitValue(item)
-                        setShowBanner(false)
-                        inputRef.current?.focus()
-                      }}
-                      className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs font-medium text-neutral-800 transition-colors hover:border-sky-400 hover:bg-sky-50 hover:text-sky-950 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:border-sky-600 dark:hover:bg-sky-950/60 dark:hover:text-sky-200 cursor-pointer"
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Combobox Dropdown Menu */}
-      {isOpen && !showBanner && (
-        <div
-          className="absolute left-0 top-full z-[99999] mt-1 min-w-[220px] max-w-[320px] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          <div className="border-b border-neutral-100 bg-neutral-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/80 dark:text-neutral-400">
-            Special Instructions
-          </div>
-
-          <ul
-            id={listboxId}
-            ref={listRef}
-            role="listbox"
-            className="max-h-52 overflow-y-auto py-1 text-xs custom-scroll"
-          >
-            {filtered.length === 0 ? (
-              <li
-                role="option"
-                aria-selected
-                onClick={() => handleSelect(value.trim())}
-                className="cursor-pointer px-3 py-2.5 text-xs text-neutral-500 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800"
-              >
-                <div className="font-medium text-neutral-700 dark:text-neutral-300">
-                  Custom instruction:
-                </div>
-                <div className="mt-0.5 truncate font-semibold text-sky-600 dark:text-sky-400">
-                  &ldquo;{value}&rdquo;
-                </div>
-                <div className="mt-1 text-[10px] text-neutral-400">
-                  Press Enter or click to save for future selections.
-                </div>
-              </li>
-            ) : (
-              <>
-                {filtered.map((instruction, idx) => {
-                  const isSelected = idx === activeIndex
-                  const isCurrent =
-                    instruction.toLowerCase() === value.trim().toLowerCase()
-                  return (
-                    <li
-                      key={instruction}
-                      role="option"
-                      aria-selected={isSelected}
-                      onClick={() => handleSelect(instruction)}
-                      onMouseEnter={() => setActiveIndex(idx)}
-                      className={`cursor-pointer px-3 py-1.5 transition-colors ${
-                        isSelected
-                          ? "bg-sky-50 text-sky-950 font-semibold dark:bg-sky-950/60 dark:text-sky-100"
-                          : isCurrent
-                          ? "bg-neutral-50 font-medium text-sky-700 dark:bg-neutral-800/80 dark:text-sky-300"
-                          : "text-neutral-800 hover:bg-neutral-50 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate">{instruction}</span>
-                        {isCurrent ? (
-                          <span className="text-[10px] text-sky-600 dark:text-sky-400">
-                            ✓
-                          </span>
-                        ) : null}
-                      </div>
-                    </li>
-                  )
-                })}
-
-                {/* Show custom option if clinician typed something not in list */}
-                {value.trim() && !hasExactMatch ? (
-                  <li
-                    role="option"
-                    aria-selected={activeIndex === filtered.length}
-                    onClick={() => handleSelect(value.trim())}
-                    onMouseEnter={() => setActiveIndex(filtered.length)}
-                    className="border-t border-neutral-100 px-3 py-1.5 text-xs text-sky-700 transition-colors hover:bg-sky-50 dark:border-neutral-800 dark:text-sky-300 dark:hover:bg-neutral-800 cursor-pointer"
-                  >
-                    <span className="text-[11px] font-normal text-neutral-400">
-                      Use custom:
-                    </span>{" "}
-                    <span className="font-semibold">&ldquo;{value}&rdquo;</span>
-                  </li>
-                ) : null}
-              </>
-            )}
-          </ul>
-        </div>
-      )}
+      {banner}
+      {menu}
     </div>
   )
 }
