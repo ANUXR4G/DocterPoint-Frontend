@@ -196,6 +196,22 @@ export default function DoctorAppointmentsList({
   const [bookOpen, setBookOpen] = useState(false)
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [chatBooking, setChatBooking] = useState<ProctoBooking | null>(null)
+  const [canChangeStatus, setCanChangeStatus] = useState(true)
+  const [canCreateAppointment, setCanCreateAppointment] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    if (!practiceId) return
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (!alive || res.status !== "successful" || !res.data?.permissions) return
+      const p = res.data.permissions
+      setCanChangeStatus(Boolean(p.CHANGE_BOOKING_STATUS))
+      setCanCreateAppointment(Boolean(p.CREATE_APPOINTMENT))
+    })
+    return () => {
+      alive = false
+    }
+  }, [practiceId])
 
   const isClinic = portal === "clinic"
 
@@ -444,6 +460,7 @@ export default function DoctorAppointmentsList({
               : "Your visits."
         }
         action={
+          canCreateAppointment ? (
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -461,6 +478,7 @@ export default function DoctorAppointmentsList({
               Book appointment
             </button>
           </div>
+          ) : null
         }
       />
 
@@ -567,13 +585,15 @@ export default function DoctorAppointmentsList({
       ) : rangeError ? null : filtered.length === 0 ? (
         <p className="mt-4 text-sm text-neutral-500">
           No appointments for {rangeLabel} in this filter.{" "}
-          <button
-            type="button"
-            className="font-semibold text-[var(--theme-primary)] hover:underline"
-            onClick={() => setBookOpen(true)}
-          >
-            Book one now
-          </button>
+          {canCreateAppointment ? (
+            <button
+              type="button"
+              className="font-semibold text-[var(--theme-primary)] hover:underline"
+              onClick={() => setBookOpen(true)}
+            >
+              Book one now
+            </button>
+          ) : null}
         </p>
       ) : (
         <>
@@ -630,6 +650,7 @@ export default function DoctorAppointmentsList({
                     busy={busyId === b.id}
                     compact
                     showActionButtons={false}
+                    allowChange={canChangeStatus}
                     ariaLabel={`Update status for ${b.patientName || "patient"}`}
                     onChange={(status, reason) => void onStatus(b.id, status, reason)}
                   />
@@ -732,6 +753,7 @@ export default function DoctorAppointmentsList({
                         busy={busyId === b.id}
                         compact
                         showActionButtons={false}
+                        allowChange={canChangeStatus}
                         ariaLabel={`Update status for ${b.patientName || "patient"}`}
                         onChange={(status, reason) => void onStatus(b.id, status, reason)}
                       />

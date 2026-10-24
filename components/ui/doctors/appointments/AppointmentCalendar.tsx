@@ -225,16 +225,18 @@ function BookingDetails({
   booking,
   doctorName,
   onClose,
+  allowStatusChange = true,
 }: {
   booking: CalBooking
   doctorName?: string | null
   onClose: () => void
+  allowStatusChange?: boolean
 }) {
   const { patchBooking } = usePracticeDashboard()
   const [statusBusy, setStatusBusy] = useState(false)
 
   async function onStatus(status: string, reason?: string) {
-    if (isTerminalVisitStatus(booking.status)) return
+    if (!allowStatusChange || isTerminalVisitStatus(booking.status)) return
     const previous = booking.status
     setStatusBusy(true)
     patchBooking(booking.id, { status })
@@ -316,6 +318,7 @@ function BookingDetails({
           status={booking.status}
           busy={statusBusy}
           compact
+          allowChange={allowStatusChange}
           visitHref={`/doctor/queue/${booking.id}`}
           onChange={(status, reason) => void onStatus(status, reason)}
         />
@@ -347,6 +350,7 @@ function BookingCard({
   doctorName,
   onCut,
   onActivate,
+  allowStatusChange = true,
 }: {
   booking: CalBooking
   compact?: boolean
@@ -356,6 +360,7 @@ function BookingCard({
   doctorName?: string | null
   onCut?: () => void
   onActivate?: () => void
+  allowStatusChange?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
@@ -585,6 +590,7 @@ function BookingCard({
                 booking={booking}
                 doctorName={docDisplayName}
                 onClose={() => setOpen(false)}
+                allowStatusChange={allowStatusChange}
               />
             </div>,
             document.body,
@@ -769,12 +775,25 @@ export default function AppointmentCalendar() {
   const [slotScope, setSlotScope] = useState<
     PracticePermissionScope | undefined
   >(undefined)
+  const [bookScope, setBookScope] = useState<
+    PracticePermissionScope | undefined
+  >(undefined)
+  const [moveScope, setMoveScope] = useState<
+    PracticePermissionScope | undefined
+  >(undefined)
+  const [statusScope, setStatusScope] = useState<
+    PracticePermissionScope | undefined
+  >(undefined)
   useEffect(() => {
     if (!practiceId) return
     let alive = true
     void proctoService.getMyPracticePermissions(practiceId).then((res) => {
-      if (alive && res.status === "successful" && res.data?.permissions)
-        setSlotScope(res.data.permissions.MANAGE_SLOTS_INLINE ?? null)
+      if (!alive || res.status !== "successful" || !res.data?.permissions) return
+      const p = res.data.permissions
+      setSlotScope(p.MANAGE_SLOTS_INLINE ?? null)
+      setBookScope(p.CREATE_APPOINTMENT ?? null)
+      setMoveScope(p.UPDATE_APPOINTMENT ?? null)
+      setStatusScope(p.CHANGE_BOOKING_STATUS ?? null)
     })
     return () => {
       alive = false
@@ -784,13 +803,41 @@ export default function AppointmentCalendar() {
   // Until the server answers, fall back to the membership role; save is enforced server-side.
   const scope =
     slotScope === undefined ? (isFrontDesk ? "ANY" : "OWN") : slotScope
-  const canCreateFor = useCallback(
+  const bookingScope =
+    bookScope === undefined ? (isFrontDesk ? "ANY" : "OWN") : bookScope
+  const rescheduleScope =
+    moveScope === undefined ? (isFrontDesk ? "ANY" : "OWN") : moveScope
+  const queueStatusScope =
+    statusScope === undefined ? (isFrontDesk ? "ANY" : "OWN") : statusScope
+  const canManageSlotsFor = useCallback(
     (id: string) => scope === "ANY" || (scope === "OWN" && id === actorUserId),
     [scope, actorUserId],
+  )
+  const canCreateFor = useCallback(
+    (id: string) =>
+      bookingScope === "ANY" ||
+      (bookingScope === "OWN" && id === actorUserId),
+    [bookingScope, actorUserId],
+  )
+  const canMoveFor = useCallback(
+    (id: string) =>
+      rescheduleScope === "ANY" ||
+      (rescheduleScope === "OWN" && id === actorUserId),
+    [rescheduleScope, actorUserId],
+  )
+  const canChangeStatusFor = useCallback(
+    (id: string) =>
+      queueStatusScope === "ANY" ||
+      (queueStatusScope === "OWN" && id === actorUserId),
+    [queueStatusScope, actorUserId],
   )
   const creatableDoctors = useMemo(
     () => doctors.filter((d) => canCreateFor(d.id)),
     [doctors, canCreateFor],
+  )
+  const slotDoctors = useMemo(
+    () => doctors.filter((d) => canManageSlotsFor(d.id)),
+    [doctors, canManageSlotsFor],
   )
 
   const columnKey = columns.map((c) => c.id).join(",")
@@ -923,7 +970,26 @@ export default function AppointmentCalendar() {
     date: string,
     startMinutes: number,
   ) {
+    const fromId = booking.providerId ?? booking.provider?.id ?? ""
+    if (!canMoveFor(fromId) || !canMoveFor(providerId)) {
+      setNotice({
+        text: "Your role cannot reschedule appointments for that doctor.",
+        tone: "error",
+      })
+      return
+    }
     setMoveAsk({ booking, providerId, date, startMinutes, notify: true })
+  }
+
+  function canMoveBookingPerm(b: CalBooking) {
+    if (!canMoveBooking(b)) return false
+    const pid = b.providerId ?? b.provider?.id
+    return Boolean(pid && canMoveFor(pid))
+  }
+
+  function canChangeStatusPerm(b: CalBooking) {
+    const pid = b.providerId ?? b.provider?.id
+    return Boolean(pid && canChangeStatusFor(pid))
   }
 
   async function confirmMove() {
@@ -1252,7 +1318,8 @@ export default function AppointmentCalendar() {
               columns={columns}
               windows={dayWindows}
               canCreate={canCreateFor}
-              canMoveBooking={canMoveBooking}
+              canMoveBooking={canMoveBookingPerm}
+              canChangeStatus={canChangeStatusPerm}
               onFocusDoctor={
                 providerId === "all" ? (id) => setProviderId(id) : undefined
               }
@@ -1307,10 +1374,12 @@ export default function AppointmentCalendar() {
                 setView("day")
               }}
               onAddSlot={
-                creatableDoctors.length ? quickCreateFromHeader : undefined
+                slotDoctors.length ? quickCreateFromHeader : undefined
               }
               onCut={cutBooking}
               onActivate={setFocusedId}
+              canMoveBooking={canMoveBookingPerm}
+              canChangeStatus={canChangeStatusPerm}
             />
           ) : null}
 
@@ -1326,6 +1395,8 @@ export default function AppointmentCalendar() {
               }}
               onCut={cutBooking}
               onActivate={setFocusedId}
+              canMoveBooking={canMoveBookingPerm}
+              canChangeStatus={canChangeStatusPerm}
             />
           ) : null}
         </div>
@@ -1353,9 +1424,9 @@ export default function AppointmentCalendar() {
           key={`${quick.providerId}:${quick.date}:${quick.start ?? ""}:${quick.end ?? ""}`}
           practiceId={practiceId}
           doctors={
-            creatableDoctors.length
-              ? creatableDoctors
-              : columns.filter((c) => canCreateFor(c.id))
+            slotDoctors.length
+              ? slotDoctors
+              : columns.filter((c) => canManageSlotsFor(c.id))
           }
           request={quick}
           seed={windowSeed}
@@ -1404,6 +1475,7 @@ function TokenDayView({
   onActivate,
   onCut,
   canMoveBooking,
+  canChangeStatus = () => true,
   onBookToken,
   onFocusDoctor,
 }: {
@@ -1415,6 +1487,7 @@ function TokenDayView({
   onActivate: (id: string) => void
   onCut: (booking: CalBooking) => void
   canMoveBooking: (b: CalBooking) => boolean
+  canChangeStatus?: (b: CalBooking) => boolean
   onBookToken?: (providerId: string) => void
   onFocusDoctor?: (providerId: string) => void
 }) {
@@ -1505,6 +1578,7 @@ function TokenDayView({
                     doctorName={c.name}
                     onActivate={() => onActivate(b.id)}
                     onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
+                    allowStatusChange={canChangeStatus(b)}
                   />
                 ))}
 
@@ -1572,6 +1646,7 @@ function DayView({
   windows,
   canCreate,
   canMoveBooking,
+  canChangeStatus,
   selection,
   onQuickCreate,
   onBookSlot,
@@ -1588,6 +1663,7 @@ function DayView({
   windows: Record<string, DayWindows | undefined>
   canCreate: (providerId: string) => boolean
   canMoveBooking: (booking: CalBooking) => boolean
+  canChangeStatus: (booking: CalBooking) => boolean
   selection: { providerId: string; start: number; end: number } | null
   onQuickCreate: (req: QuickSlotRequest) => void
   onBookSlot?: (req: QuickSlotRequest) => void
@@ -1678,6 +1754,7 @@ function DayView({
             }
             onActivate={() => onActivate(b.id)}
             onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
+            allowStatusChange={canChangeStatus(b)}
           />
         )
       }}
@@ -1694,6 +1771,8 @@ function WeekView({
   onAddSlot,
   onCut,
   onActivate,
+  canMoveBooking: canMove = canMoveBooking,
+  canChangeStatus = () => true,
 }: {
   days: Date[]
   byDay: Map<string, CalBooking[]>
@@ -1703,6 +1782,8 @@ function WeekView({
   onAddSlot?: (d: Date, el: HTMLElement) => void
   onCut: (booking: CalBooking) => void
   onActivate: (id: string) => void
+  canMoveBooking?: (b: CalBooking) => boolean
+  canChangeStatus?: (b: CalBooking) => boolean
 }) {
   const today = startOfToday()
   return (
@@ -1765,7 +1846,8 @@ function WeekView({
                       doctorMap?.get(b.providerId ?? b.provider?.id ?? "")
                     }
                     onActivate={() => onActivate(b.id)}
-                    onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
+                    onCut={canMove(b) ? () => onCut(b) : undefined}
+                    allowStatusChange={canChangeStatus(b)}
                   />
                 ))}
                 {!list.length ? (
@@ -1788,6 +1870,8 @@ function MonthView({
   onSelectDay,
   onCut,
   onActivate,
+  canMoveBooking: canMove = canMoveBooking,
+  canChangeStatus = () => true,
 }: {
   anchor: Date
   days: Date[]
@@ -1796,6 +1880,8 @@ function MonthView({
   onSelectDay: (d: Date) => void
   onCut: (booking: CalBooking) => void
   onActivate: (id: string) => void
+  canMoveBooking?: (b: CalBooking) => boolean
+  canChangeStatus?: (b: CalBooking) => boolean
 }) {
   const today = startOfToday()
   const headers = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -1861,7 +1947,8 @@ function MonthView({
                             doctorMap?.get(b.providerId ?? b.provider?.id ?? "")
                           }
                           onActivate={() => onActivate(b.id)}
-                          onCut={canMoveBooking(b) ? () => onCut(b) : undefined}
+                          onCut={canMove(b) ? () => onCut(b) : undefined}
+                          allowStatusChange={canChangeStatus(b)}
                         />
                       </li>
                     ))}

@@ -144,6 +144,8 @@ export default function DoctorQueue({
   })
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
   const [bookOpen, setBookOpen] = useState(false)
+  const [canChangeStatus, setCanChangeStatus] = useState(allowStatusControl)
+  const [canCreateAppointment, setCanCreateAppointment] = useState(true)
 
   // Clinic-staff doctors default to (and stay on) their own queue.
   // Clinic admins honor ?doctor= deep links, then can switch to all.
@@ -165,6 +167,23 @@ export default function DoctorQueue({
   )
 
   const practiceId = memberships[0]?.practice.id
+
+  useEffect(() => {
+    let alive = true
+    if (!practiceId) return
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (!alive || res.status !== "successful" || !res.data?.permissions) return
+      const p = res.data.permissions
+      setCanChangeStatus(
+        allowStatusControl && Boolean(p.CHANGE_BOOKING_STATUS),
+      )
+      setCanCreateAppointment(Boolean(p.CREATE_APPOINTMENT))
+    })
+    return () => {
+      alive = false
+    }
+  }, [practiceId, allowStatusControl])
+
   const emptyShell = compact
     ? "flex min-h-48 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-sky-50/50 p-6 text-center dark:border-white/10 dark:bg-white/5"
     : "flex h-full min-h-64 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-sky-50/50 p-10 text-center dark:border-white/10 dark:bg-white/5"
@@ -306,13 +325,17 @@ export default function DoctorQueue({
         <CoolKid className="mb-4 h-28 w-28 opacity-80" />
         <p className="text-sm font-medium opacity-80">
           No appointments for today ({formatPracticeDate(date)}).{" "}
-          <button
-            type="button"
-            className="font-semibold text-[var(--theme-primary)] hover:underline"
-            onClick={() => setBookOpen(true)}
-          >
-            Book one now
-          </button>
+          {canCreateAppointment ? (
+            <button
+              type="button"
+              className="font-semibold text-[var(--theme-primary)] hover:underline"
+              onClick={() => setBookOpen(true)}
+            >
+              Book one now
+            </button>
+          ) : (
+            <span className="opacity-70">Ask an admin for Appointment Creation to book.</span>
+          )}
         </p>
         <Link
           href={practiceTabHref("calendar")}
@@ -444,6 +467,7 @@ export default function DoctorQueue({
                     compact
                     nowrap
                     showSelect={false}
+                    allowChange={canChangeStatus}
                     ariaLabel={`Update status for ${name}`}
                     visitHref={`/doctor/queue/${b.id}`}
                     onChange={(status, reason) => void onStatus(b.id, status, reason)}
@@ -600,7 +624,8 @@ export default function DoctorQueue({
                           compact
                           nowrap
                           showSelect={false}
-                          showActionButtons={allowStatusControl}
+                          showActionButtons={canChangeStatus}
+                          allowChange={canChangeStatus}
                           ariaLabel={`Update status for ${name}`}
                           visitHref={`/doctor/queue/${b.id}`}
                           onChange={(status, reason) => void onStatus(b.id, status, reason)}

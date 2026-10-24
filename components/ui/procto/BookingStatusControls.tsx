@@ -40,6 +40,8 @@ type Props = {
   /** Keep select + action buttons on one horizontal row. */
   nowrap?: boolean
   ariaLabel?: string
+  /** Role Master: Queue Status Change. When false, show label only. */
+  allowChange?: boolean
 }
 
 /** Shared visit status controls for clinic and doctor portals. */
@@ -53,9 +55,10 @@ export default function BookingStatusControls({
   compact = false,
   nowrap = false,
   ariaLabel = "Visit status",
+  allowChange = true,
 }: Props) {
   const value = bookingStatusControlValue(status)
-  const locked = isTerminalVisitStatus(status)
+  const locked = isTerminalVisitStatus(status) || !allowChange
   const actions = bookingNextActions(status)
   const [pending, setPending] = useState<BookingStatusAction | null>(null)
   const btnPad = compact
@@ -64,8 +67,9 @@ export default function BookingStatusControls({
   const rowClass = nowrap
     ? "flex flex-nowrap items-center gap-1.5"
     : "flex flex-wrap items-center gap-2"
-  const lockedTitle =
-    String(status || "").toUpperCase() === "COMPLETED"
+  const lockedTitle = !allowChange
+    ? "Your role cannot change queue status"
+    : String(status || "").toUpperCase() === "COMPLETED"
       ? "Finished — status cannot be changed"
       : "Closed appointments cannot be canceled or rescheduled"
 

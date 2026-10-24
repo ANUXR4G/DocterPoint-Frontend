@@ -1615,6 +1615,12 @@ export type MyPracticePermissions = {
     DELETE_PATIENT?: PracticePermissionScope;
     MERGE_PATIENT?: PracticePermissionScope;
     VIEW_PATIENT_HISTORY?: PracticePermissionScope;
+    VIEW_QUEUE?: PracticePermissionScope;
+    CREATE_APPOINTMENT?: PracticePermissionScope;
+    READ_APPOINTMENT?: PracticePermissionScope;
+    UPDATE_APPOINTMENT?: PracticePermissionScope;
+    CANCEL_APPOINTMENT?: PracticePermissionScope;
+    CHANGE_BOOKING_STATUS?: PracticePermissionScope;
     CREATE_MASTER_DATA?: PracticePermissionScope;
     EDIT_MASTER_DATA?: PracticePermissionScope;
     DEACTIVATE_MASTER_DATA?: PracticePermissionScope;
