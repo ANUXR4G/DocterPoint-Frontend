@@ -245,38 +245,78 @@ export default function MedicineManagementPage({ portal }: Props) {
     }
 
     if (editingId) {
-      // Update existing (keep current favourite flag)
-      const next = medicines.map((m) =>
-        m.id === editingId
-          ? { ...m, ...payload, favourite: m.favourite, updatedAt: new Date().toISOString() }
-          : m,
-      )
-      setMedicines(next)
-      syncStorage(next)
-      setModalOpen(false)
-      showMessage(`Medicine "${brand}" updated successfully.`)
+      const previous = medicines.find((m) => m.id === editingId)
+      const renamed =
+        Boolean(previous) &&
+        previous!.brandName.trim().toLowerCase() !== brand.toLowerCase()
 
-      // Call backend
-      proctoService.updateMedicine(editingId, payload).catch(() => {})
-    } else {
-      // Create new — starts not favourite until a doctor stars it
-      const newItem: MedicineItem = {
-        id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        ...payload,
-        favourite: false,
-        isActive: true,
-        isPrescribed: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+      try {
+        const res: any = await proctoService.updateMedicine(editingId, payload)
+        if (res && res.status && res.status !== "successful") {
+          throw new Error(res.message || "Could not update medicine.")
+        }
+        const serverRow =
+          res?.data && typeof res.data === "object" ? res.data : null
+        const next = medicines.map((m) =>
+          m.id === editingId
+            ? {
+                ...m,
+                ...(serverRow || payload),
+                favourite: m.favourite,
+                // Usage flags stay local unless the API returns them.
+                isPrescribed: serverRow?.isPrescribed ?? m.isPrescribed,
+                isActive:
+                  serverRow?.isActive !== undefined
+                    ? serverRow.isActive !== false
+                    : m.isActive,
+                updatedAt: new Date().toISOString(),
+              }
+            : m,
+        )
+        setMedicines(next)
+        syncStorage(next)
+        setModalOpen(false)
+        showMessage(
+          renamed && previous?.isPrescribed
+            ? `Medicine renamed to "${brand}". New appointments use this name; earlier prescriptions keep "${previous.brandName}".`
+            : `Medicine "${brand}" updated successfully.`,
+        )
+      } catch (err: any) {
+        showError(err?.message || `Could not update "${brand}".`)
       }
-      const next = [newItem, ...medicines]
-      setMedicines(next)
-      syncStorage(next)
-      setModalOpen(false)
-      showMessage(`Medicine "${brand}" added successfully.`)
-
-      // Call backend
-      proctoService.createMedicine(payload).catch(() => {})
+    } else {
+      try {
+        const res: any = await proctoService.createMedicine(payload)
+        if (res && res.status && res.status !== "successful") {
+          throw new Error(res.message || "Could not add medicine.")
+        }
+        const serverRow =
+          res?.data && typeof res.data === "object" ? res.data : null
+        const newItem: MedicineItem = {
+          id:
+            serverRow?.id ||
+            `med-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          medicineCode: serverRow?.medicineCode || code,
+          countryCode: serverRow?.countryCode || country,
+          brandName: serverRow?.brandName || brand,
+          strength: serverRow?.strength || strength,
+          route: serverRow?.route || formRoute,
+          dosageForm: serverRow?.dosageForm || formDosageForm,
+          genericName: serverRow?.genericName || generic,
+          favourite: false,
+          isActive: true,
+          isPrescribed: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        const next = [newItem, ...medicines]
+        setMedicines(next)
+        syncStorage(next)
+        setModalOpen(false)
+        showMessage(`Medicine "${brand}" added successfully.`)
+      } catch (err: any) {
+        showError(err?.message || `Could not add "${brand}".`)
+      }
     }
   }
 
@@ -431,7 +471,7 @@ export default function MedicineManagementPage({ portal }: Props) {
         compact
         eyebrow={portal === "doctor" ? "Doctor Portal" : "Clinic Portal"}
         title="Medicine Management"
-        subtitle="Unused medicines can be deleted. Once prescribed, use Active / Inactive. Renaming updates new prescriptions only — past visit names stay as written."
+        subtitle="If a medicine was used on earlier appointments, use Active / Inactive (not Delete). Renaming applies only to new appointments — earlier prescription names stay unchanged."
         action={
           <div className="flex flex-wrap items-center gap-2">
             {/* Download Template Dropdown Menu */}
@@ -762,7 +802,7 @@ export default function MedicineManagementPage({ portal }: Props) {
                           type="button"
                           onClick={() => handlePromptDelete(m)}
                           className="rounded border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300"
-                          title="Delete medicine — never used in a prescription"
+                          title="Delete medicine — never used on an appointment"
                         >
                           Delete
                         </button>
@@ -777,11 +817,11 @@ export default function MedicineManagementPage({ portal }: Props) {
                           }`}
                           title={
                             isMedicineActive(m)
-                              ? "Mark inactive — keeps prescription history"
-                              : "Mark active — available again for new prescriptions"
+                              ? "Mark Inactive — hides from new prescriptions; earlier appointments keep this medicine"
+                              : "Mark Active — available again for new appointments"
                           }
                         >
-                          {isMedicineActive(m) ? "Deactivate" : "Activate"}
+                          {isMedicineActive(m) ? "Inactive" : "Active"}
                         </button>
                       )}
                     </div>

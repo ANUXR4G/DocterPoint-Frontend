@@ -546,9 +546,16 @@ export default function VisitPage() {
     clinicalDirty.current = false
     formDirty.current = false
     clinicalRef.current = null
-    setDetailLoaded(false)
     setClinicalAssessment(null)
     setError("")
+    // Instant shell from queue cache — full hydrate follows without waiting.
+    if (fromShared) {
+      applyVisitData(fromShared, "hydrate")
+    } else {
+      setDetailLoaded(false)
+      setBooking(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- paint shared booking once per id
   }, [bookingId])
 
   useEffect(() => {
@@ -556,7 +563,8 @@ export default function VisitPage() {
     const gen = ++fetchGen.current
     let cancelled = false
     void (async () => {
-      const gaps = [0, 1000, 2500]
+      // Fast retries only — avoid 1s/2.5s waits that made visits feel stuck.
+      const gaps = [0, 200, 600]
       let res: Awaited<ReturnType<typeof proctoService.getBooking>> | null = null
       for (let attempt = 0; attempt < gaps.length; attempt++) {
         if (gaps[attempt]) await new Promise((r) => setTimeout(r, gaps[attempt]))
@@ -572,12 +580,12 @@ export default function VisitPage() {
         if (missing) break
       }
       if (cancelled || gen !== fetchGen.current) return
-      setError(res?.message || "Visit not found.")
+      if (!fromShared) setError(res?.message || "Visit not found.")
     })()
     return () => {
       cancelled = true
     }
-  }, [bookingId, ready, applyVisitData, loadTick])
+  }, [bookingId, ready, applyVisitData, loadTick, fromShared])
 
   useEffect(() => {
     if (!fromShared || !detailLoaded) return
@@ -591,15 +599,28 @@ export default function VisitPage() {
   const loadGeneralDocs = useCallback(async () => {
     if (!bookingId) return
     const res = await proctoService.getGeneralDocuments(bookingId)
-    if (res.status !== "successful" || !res.data) return
+    if (res.status !== "successful" || !res.data) {
+      setGeneralLinked(false)
+      setGeneralDocs([])
+      return
+    }
     const data = res.data as { patientLinked?: boolean; documents?: VisitDoc[] }
     setGeneralLinked(Boolean(data.patientLinked))
     setGeneralDocs(Array.isArray(data.documents) ? data.documents : [])
   }, [bookingId])
 
+  // Lazy-load general docs only when that tab is opened (keeps visit hydrate fast).
   useEffect(() => {
-    if (ready) void loadGeneralDocs()
-  }, [ready, loadGeneralDocs])
+    if (!ready || !bookingId) return
+    if (docTab !== "general") return
+    if (generalLinked !== null) return
+    void loadGeneralDocs()
+  }, [ready, bookingId, docTab, generalLinked, loadGeneralDocs])
+
+  useEffect(() => {
+    setGeneralDocs([])
+    setGeneralLinked(null)
+  }, [bookingId])
 
   function chartWithDiagnosis(chart: ClinicalAssessment | null): ClinicalAssessment {
     return {
@@ -841,7 +862,11 @@ export default function VisitPage() {
         toast.error(res.message || "Could not save to the patient record.")
         return
       }
-      const data = res.data as { documents?: VisitDoc[] }
+      const data = res.data as {
+        patientLinked?: boolean
+        documents?: VisitDoc[]
+      }
+      setGeneralLinked(data?.patientLinked !== false)
       setGeneralDocs(Array.isArray(data?.documents) ? data.documents : [])
       toast.success("Saved to the patient's general documents.")
     } catch (err) {
