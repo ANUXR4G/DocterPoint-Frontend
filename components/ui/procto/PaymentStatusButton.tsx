@@ -109,16 +109,24 @@ export default function PaymentStatusButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title={style.label}
-        className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border font-semibold transition hover:opacity-85 ${style.className} ${
-          compact ? "px-2 py-0.5 text-[11px]" : "px-3 py-1 text-xs"
+        title={
+          current === "PAID" || current === "PENDING"
+            ? `${style.label} · ${formatRupees(shownAmount)}`
+            : style.label
+        }
+        className={`inline-flex min-w-0 items-center gap-1.5 rounded-full border font-semibold transition hover:opacity-85 ${style.className} ${
+          compact
+            ? "max-w-[9.25rem] px-2 py-0.5 text-[11px]"
+            : "max-w-full px-3 py-1 text-xs"
         }`}
       >
         <CreditCard className={`shrink-0 ${compact ? "size-3" : "size-3.5"}`} aria-hidden />
-        <span className="min-w-0 truncate">{style.label}</span>
-        {current === "PAID" || current === "PENDING"
-          ? ` · ${formatRupees(shownAmount)}`
-          : ""}
+        <span className="min-w-0 truncate">
+          {style.label}
+          {current === "PAID" || current === "PENDING"
+            ? ` · ${formatRupees(shownAmount)}`
+            : ""}
+        </span>
       </button>
 
       <PaymentRequestModal

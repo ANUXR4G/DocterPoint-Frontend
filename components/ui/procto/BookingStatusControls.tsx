@@ -123,7 +123,7 @@ export default function BookingStatusControls({
               const action = actions.find((a) => a.status === e.target.value)
               if (action) request(action)
             }}
-            className={`max-w-[11rem] border-2 font-semibold disabled:opacity-50 ${btnPad} ${bookingActionSelectClass(value)}`}
+            className={`w-[8.75rem] max-w-full border-2 font-semibold disabled:opacity-50 ${btnPad} ${bookingActionSelectClass(value)}`}
           >
             {selectOptions.map((o) => (
               <option key={o.status} value={o.status}>

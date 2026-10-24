@@ -687,7 +687,7 @@ export default function DoctorAppointmentsList({
           </ul>
 
           <div className="mt-3 hidden min-h-0 w-full flex-1 overflow-auto rounded-2xl border border-neutral-300 bg-white dark:border-[var(--solune-border-strong)] dark:bg-[var(--solune-surface)] md:block">
-            <table className="w-full min-w-[1180px] text-left text-sm">
+            <table className="w-full min-w-[1280px] text-left text-sm">
               <thead className="sticky top-0 z-10 bg-neutral-100 text-xs font-bold uppercase tracking-wide text-neutral-600 dark:bg-[var(--solune-elevated)] dark:text-neutral-300">
                 <tr>
                   <th className="px-3 py-2">Patient</th>
@@ -696,8 +696,8 @@ export default function DoctorAppointmentsList({
                   <th className="px-3 py-2">When</th>
                   <th className="px-3 py-2">Arrival</th>
                   <th className="min-w-[180px] px-3 py-2">Chief complaint</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Payment</th>
+                  <th className="min-w-[9.5rem] px-3 py-2">Status</th>
+                  <th className="min-w-[9.5rem] px-3 py-2">Payment</th>
                   <th className="px-3 py-2">Chat</th>
                   <th className="px-3 py-2">Rx</th>
                   <th className="px-3 py-2 text-right">Visit</th>
@@ -747,27 +747,32 @@ export default function DoctorAppointmentsList({
                         onSave={(disease) => void onComplaint(b.id, disease)}
                       />
                     </td>
-                    <td className="px-3 py-2">
-                      <BookingStatusControls
-                        status={b.status || "SCHEDULED"}
-                        busy={busyId === b.id}
-                        compact
-                        showActionButtons={false}
-                        allowChange={canChangeStatus}
-                        ariaLabel={`Update status for ${b.patientName || "patient"}`}
-                        onChange={(status, reason) => void onStatus(b.id, status, reason)}
-                      />
+                    <td className="overflow-visible px-3 py-2 align-middle">
+                      <div className="min-w-0 max-w-[9rem]">
+                        <BookingStatusControls
+                          status={b.status || "SCHEDULED"}
+                          busy={busyId === b.id}
+                          compact
+                          nowrap
+                          showActionButtons={false}
+                          allowChange={canChangeStatus}
+                          ariaLabel={`Update status for ${b.patientName || "patient"}`}
+                          onChange={(status, reason) => void onStatus(b.id, status, reason)}
+                        />
+                      </div>
                     </td>
-                    <td className="px-3 py-2">
-                      <PaymentStatusButton
-                        bookingId={b.id}
-                        status={b.paymentStatus ?? b.payment_status}
-                        amount={b.paymentAmount ?? b.payment_amount}
-                        patientName={b.patientName || b.patient?.name}
-                        patientPhone={b.patientPhone}
-                        compact
-                        onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
-                      />
+                    <td className="overflow-hidden px-3 py-2 align-middle">
+                      <div className="min-w-0 max-w-[9.25rem]">
+                        <PaymentStatusButton
+                          bookingId={b.id}
+                          status={b.paymentStatus ?? b.payment_status}
+                          amount={b.paymentAmount ?? b.payment_amount}
+                          patientName={b.patientName || b.patient?.name}
+                          patientPhone={b.patientPhone}
+                          compact
+                          onUpdate={(patch) => onPaymentUpdate(b.id, patch)}
+                        />
+                      </div>
                     </td>
                     <td className="px-3 py-2">
                       <ChatIconButton
