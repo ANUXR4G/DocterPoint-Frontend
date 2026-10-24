@@ -272,6 +272,35 @@ export default function VisitPage() {
   const isHistorical = Boolean(appointmentDayIso && appointmentDayIso < todayIso)
   // When status is "IN_PROGRESS" ("Start consultation"), only then the appointment page open text is enabled
   const chartLocked = !isInConsultation || isHistorical
+  const [canEditDocs, setCanEditDocs] = useState(true)
+  const [canEditRx, setCanEditRx] = useState(true)
+  const [canApplyAdviceTemplate, setCanApplyAdviceTemplate] = useState(true)
+  const [canApproveClinical, setCanApproveClinical] = useState(true)
+  const [canOrderDiagnostics, setCanOrderDiagnostics] = useState(true)
+  const docsLocked = chartLocked || !canEditDocs
+  const rxLocked = chartLocked || !canEditRx
+  const dxLocked = chartLocked || !canOrderDiagnostics
+  const templatesLocked = chartLocked || !canApplyAdviceTemplate
+
+  useEffect(() => {
+    const pid = booking?.practiceId
+    if (!pid) return
+    let alive = true
+    void proctoService.getMyPracticePermissions(pid).then((res) => {
+      if (!alive || res.status !== "successful" || !res.data?.permissions) return
+      const p = res.data.permissions
+      setCanEditDocs(Boolean(p.EDIT_PATIENT_DOCS))
+      setCanEditRx(Boolean(p.EDIT_PRESCRIPTION))
+      setCanApplyAdviceTemplate(
+        Boolean(p.APPLY_ADVICE_TEMPLATE || p.EDIT_PATIENT_DOCS),
+      )
+      setCanApproveClinical(Boolean(p.APPROVE_CLINICAL))
+      setCanOrderDiagnostics(Boolean(p.ORDER_DIAGNOSTICS))
+    })
+    return () => {
+      alive = false
+    }
+  }, [booking?.practiceId])
 
   const [remarks, setRemarks] = useState("")
   const [complaint, setComplaint] = useState("")
@@ -727,7 +756,7 @@ export default function VisitPage() {
 
   function addMedicine() {
     const row = medicineFromDraft(medDraftRef.current)
-    if (!row || !bookingId || chartLocked) return
+    if (!row || !bookingId || rxLocked) return
 
     const alreadyAdded = medicinesRef.current.some(
       (m) => m.name.trim().toLowerCase() === row.name.trim().toLowerCase(),
@@ -748,9 +777,9 @@ export default function VisitPage() {
   }
 
   function removeMedicine(idx: number) {
-    if (!bookingId || chartLocked) return
+    if (!bookingId || rxLocked) return
     const target = medicinesRef.current[idx]
-    if (target && isMedicineLocked(target, chartLocked)) {
+    if (target && isMedicineLocked(target, rxLocked)) {
       toast.error(`"${target.name}" has already been ordered and is locked to preserve historical audit trails.`)
       return
     }
@@ -761,7 +790,7 @@ export default function VisitPage() {
   }
 
   function addMedicinesBulk(newMeds: VisitMedicine[]) {
-    if (!newMeds.length || !bookingId) return
+    if (!newMeds.length || !bookingId || rxLocked) return
     if (String(booking?.status || "").toUpperCase() === "COMPLETED") return
 
     const existingNames = new Set(
@@ -819,10 +848,10 @@ export default function VisitPage() {
     patch: Partial<Medicine>,
     commit: boolean,
   ) {
-    if (!bookingId || chartLocked) return
+    if (!bookingId || rxLocked) return
     const current = medicinesRef.current[idx]
     if (!current) return
-    if (isMedicineLocked(current, chartLocked)) {
+    if (isMedicineLocked(current, rxLocked)) {
       if (commit) {
         toast.error(`"${current.name}" has already been ordered and cannot be edited.`)
       }
@@ -881,7 +910,7 @@ export default function VisitPage() {
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ""
-    if (!file || !bookingId || chartLocked) return
+    if (!file || !bookingId || docsLocked) return
     if (documents.length >= MAX_BOOKING_DOCUMENTS) {
       toast.error(`At most ${MAX_BOOKING_DOCUMENTS} documents per visit.`)
       return
@@ -1287,8 +1316,8 @@ export default function VisitPage() {
             formDirty.current = true
             setComplaint(e.target.value)
           }}
-          readOnly={chartLocked}
-          disabled={chartLocked}
+          readOnly={docsLocked}
+          disabled={docsLocked}
           maxLength={500}
           rows={2}
           placeholder={
@@ -1315,8 +1344,8 @@ export default function VisitPage() {
             diagnosisRef.current = e.target.value
             setDiagnosis(e.target.value)
           }}
-          readOnly={chartLocked}
-          disabled={chartLocked}
+          readOnly={docsLocked}
+          disabled={docsLocked}
           maxLength={500}
           rows={2}
           placeholder={
@@ -1342,7 +1371,7 @@ export default function VisitPage() {
         mastersRaw={booking.practice?.clinicalMasters}
         value={clinicalAssessment}
         versions={clinicalVersions}
-        readOnly={chartLocked}
+        readOnly={docsLocked}
         onChange={(next) => {
           const merged = chartWithDiagnosis(next)
           clinicalDirty.current = true
@@ -1354,6 +1383,10 @@ export default function VisitPage() {
           if (!bookingId) return
           if (isHistorical) {
             toast.error("Historical visit records prior to the current date cannot be modified directly.")
+            return
+          }
+          if (!canEditDocs) {
+            toast.error("Your clinic role can't edit clinical documentation.")
             return
           }
           const res = await proctoService.updatePatientAllergies(bookingId, {
@@ -1369,12 +1402,12 @@ export default function VisitPage() {
           }
         }}
         diagnostics={
-          diagnostics.length === 0 && chartLocked ? (
+          diagnostics.length === 0 && dxLocked ? (
             <p className="text-sm opacity-60">No diagnostic orders recorded.</p>
           ) : (
             <DiagnosticEntryTable
               value={diagnostics}
-              readOnly={chartLocked}
+              readOnly={dxLocked}
               practiceId={booking.practiceId}
               patientId={booking.patient?.id}
               patientPhone={booking.patientPhone}
@@ -1388,13 +1421,13 @@ export default function VisitPage() {
           )
         }
         medicines={
-          medicines.length === 0 && chartLocked ? (
+          medicines.length === 0 && rxLocked ? (
             <p className="text-sm opacity-60">No medicines recorded.</p>
           ) : (
             <MedicineEntryTable
               rows={medicines}
               draft={medDraft}
-              locked={chartLocked}
+              locked={rxLocked}
               practiceId={booking.practiceId}
               onDraft={(next) => {
                 formDirty.current = true
@@ -1425,7 +1458,7 @@ export default function VisitPage() {
                 practiceId={booking.practiceId}
                 specialty={booking.practice?.specialty || "General Medicine"}
                 doctorId={booking.provider?.id || undefined}
-                disabled={chartLocked}
+                disabled={templatesLocked || docsLocked}
                 onOpenChange={setIsAdviceTemplateOpen}
                 onSelect={(templateText) => {
                   clinicalDirty.current = true
@@ -1452,8 +1485,8 @@ export default function VisitPage() {
                 el.style.height = "auto"
                 el.style.height = `${Math.max(80, el.scrollHeight)}px`
               }}
-              readOnly={chartLocked}
-              disabled={chartLocked}
+              readOnly={docsLocked}
+              disabled={docsLocked}
               maxLength={3000}
               rows={3}
               placeholder={
@@ -1488,7 +1521,7 @@ export default function VisitPage() {
             practiceId={booking.practiceId}
             specialty={booking.practice?.specialty || "General Medicine"}
             doctorId={booking.provider?.id || undefined}
-            disabled={chartLocked}
+            disabled={templatesLocked || docsLocked}
             onOpenChange={setIsNotesTemplateOpen}
             onSelect={(templateText) => {
               formDirty.current = true
@@ -1513,8 +1546,8 @@ export default function VisitPage() {
             el.style.height = "auto"
             el.style.height = `${Math.max(160, el.scrollHeight)}px`
           }}
-          readOnly={chartLocked}
-          disabled={chartLocked}
+          readOnly={docsLocked}
+          disabled={docsLocked}
           rows={6}
           placeholder={
             !isInConsultation && !isCompleted && !isHistorical
@@ -1580,7 +1613,7 @@ export default function VisitPage() {
             />
           ) : (
           <>
-          {!chartLocked ? (
+          {!docsLocked ? (
             <label
               className={`mt-3 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/50 px-4 py-6 text-center dark:border-blue-500/40 dark:bg-blue-950/20 ${
                 uploading || documents.length >= MAX_BOOKING_DOCUMENTS
@@ -1719,7 +1752,12 @@ export default function VisitPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={saving}
+                    disabled={saving || !canApproveClinical}
+                    title={
+                      canApproveClinical
+                        ? undefined
+                        : "Your clinic role can't finalise clinical documentation"
+                    }
                     onClick={() => void save("COMPLETED")}
                     className="rounded-xl border border-green-500/60 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 disabled:opacity-50 dark:border-green-400/30 dark:bg-[color-mix(in_srgb,theme(colors.green.500)_18%,var(--solune-surface))] dark:text-green-200"
                   >
