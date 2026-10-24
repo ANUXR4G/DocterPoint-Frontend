@@ -211,24 +211,27 @@ export default function RolePermissionsMasterPage() {
             ← Dashboard
           </button>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
-            Roles & permissions
+            Roles & Permissions
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Step 1 of 2 — define organisational roles and their rights first. Then{" "}
+            Role & Access Management · Step 1 — create role names (e.g. Senior
+            Physician) and check system privileges by module. Then{" "}
             <Link
               href="/clinic/access"
               className="font-semibold text-[var(--theme-primary)] hover:underline"
             >
-              add users
+              User Accounts
             </Link>{" "}
-            and assign a role from this list.
+            assigns those roles to staff.
           </p>
           <p className="mt-1 text-xs text-slate-500">
             <Link href="/clinic/dashboard" className="hover:underline">
               Dashboard
             </Link>
             <span className="mx-1">›</span>
-            <span>Roles & permissions</span>
+            <span>Role & Access Management</span>
+            <span className="mx-1">›</span>
+            <span>Roles & Permissions</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -236,7 +239,7 @@ export default function RolePermissionsMasterPage() {
             href="/clinic/access"
             className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
           >
-            Step 2 · Users →
+            User Accounts →
           </Link>
           <button
             type="button"

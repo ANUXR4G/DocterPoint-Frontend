@@ -1,7 +1,5 @@
 "use client"
 
-import Link from "next/link"
-
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { Icon, Background } from "@/components"
@@ -11,6 +9,7 @@ import { useClinicAdmin } from "@/hooks/useClinicAdmin"
 import { isDoctorNavActive } from "@/components/ui/doctors/DoctorPortalLinks"
 import { isClinicNavActive } from "@/components/ui/clinics/ClinicPortalLinks"
 import { isAdminNavActive } from "@/components/ui/admin/AdminPortalLinks"
+import NavOverviewItems from "@/components/ui/NavOverviewItems"
 import { cookies } from "@/utils/cookies"
 import { navRoleFromContext, dashboardBrandLabel } from "@/lib/providerPortal"
 import { useAdminSupportUnread } from "@/hooks/useAdminSupportUnread"
@@ -25,13 +24,21 @@ type Props = {
 
 function splitNav(
   role: string | null | undefined,
-  opts: { hideDoctorsNav: boolean; hideAuditNav?: boolean },
+  opts: {
+    hideDoctorsNav: boolean
+    hideAuditNav?: boolean
+    hideRoleAccessNav?: boolean
+  },
 ) {
   const content = role && role in routes ? routes[role] : []
   const filtered = content.filter(
     (r) =>
       !(opts.hideDoctorsNav && r.name === "Doctors") &&
-      !(opts.hideAuditNav && r.name === "Audit log"),
+      !(opts.hideAuditNav && r.name === "Audit log") &&
+      !(
+        opts.hideRoleAccessNav &&
+        r.name === "Role & Access Management"
+      ),
   )
   const supportStart = filtered.findIndex((r) => r.name === "Settings")
   const splitAt = supportStart >= 0 ? supportStart : filtered.length
@@ -92,6 +99,8 @@ export default function Sidebar({ role, logout }: Props) {
   const { overview, support } = splitNav(navRole, {
     hideDoctorsNav,
     hideAuditNav: !clinicLoading && isReceptionOnly,
+    hideRoleAccessNav:
+      navRole === "clinic" && !clinicLoading && !isClinicAdmin,
   })
   const { unreadTotal: supportUnread } = useAdminSupportUnread(navRole === "admin")
   const { openCount: notificationOpen } = usePracticeOpenNotifications(
@@ -126,42 +135,16 @@ export default function Sidebar({ role, logout }: Props) {
           <span className="mb-1 hidden px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-400 xl:block">
             Overview
           </span>
-          {overview.map(({ name, icon, dest }, idx) => {
-            const active = navActiveFn(pathname, dest, currentTab)
-            const badge = navBadgeCount(name)
-            return (
-              <Link
-                href={dest ?? "#"}
-                className={navLinkClass(active)}
-                key={`sidebar_upper_link_${idx}`}
-              >
-                <div className="relative flex size-10 shrink-0 items-center justify-center xl:size-9">
-                  <Icon
-                    name={icon}
-                    pathClassName={`transition duration-200 ${
-                      active
-                        ? "stroke-slate-900 dark:stroke-white"
-                        : "stroke-slate-400 dark:stroke-slate-500"
-                    }`}
-                  />
-                  {/* Collapsed rail: badge on icon. Expanded xl: badge beside label only. */}
-                  {badge > 0 ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white xl:hidden">
-                      {badge > 99 ? "99+" : badge}
-                    </span>
-                  ) : null}
-                </div>
-                <span className="hidden flex-1 items-center gap-2 text-[13px] font-semibold tracking-[-0.1px] xl:flex">
-                  <span>{name}</span>
-                  {badge > 0 ? (
-                    <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                      {badge > 99 ? "99+" : badge}
-                    </span>
-                  ) : null}
-                </span>
-              </Link>
-            )
-          })}
+          <NavOverviewItems
+            items={overview}
+            pathname={pathname}
+            currentTab={currentTab}
+            navActiveFn={navActiveFn}
+            navBadgeCount={navBadgeCount}
+            navLinkClass={navLinkClass}
+            variant="sidebar"
+            linkKeyPrefix="sidebar_upper_link"
+          />
         </div>
 
         <div className="mt-3 flex shrink-0 flex-col gap-1.5 border-t border-slate-100 pt-3 dark:border-white/10 xl:mt-4">

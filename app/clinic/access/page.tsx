@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import PasswordField from "@/components/inputs/PasswordField"
@@ -9,6 +10,7 @@ import {
   usePracticeDashboard,
   type RoleAccess,
 } from "@/contexts/PracticeDashboardContext"
+import { dashboardPortalRoot } from "@/lib/portalRoot"
 import { proctoService } from "@/lib/services/procto"
 
 const ROLES = [
@@ -324,6 +326,7 @@ export default function RoleAccessPage() {
           })
         }
         setMessage("User saved.")
+        setEditingId(null)
       } else if (editingId) {
         const specialtiesChanged = !sameIds(specialtyIds, loadedSpecialtyIds)
         const res = await proctoService.updateRoleAccess(practiceId, editingId, {
@@ -343,6 +346,7 @@ export default function RoleAccessPage() {
           return
         }
         setMessage("User updated.")
+        setEditingId(null)
       }
       await refresh()
     } catch {
@@ -350,6 +354,11 @@ export default function RoleAccessPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function closeModal() {
+    setEditingId(null)
+    setError("")
   }
 
   function addDevice() {
@@ -386,33 +395,22 @@ export default function RoleAccessPage() {
         <div>
           <button
             type="button"
-            onClick={() => {
-              if (editingId) {
-                setEditingId(null)
-                setError("")
-                setMessage("")
-                return
-              }
-              router.push("/clinic/dashboard")
-            }}
+            onClick={() => router.push("/clinic/dashboard")}
             className="text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white"
           >
-            ← {editingId ? "Users list" : "Dashboard"}
+            ← Dashboard
           </button>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
-            {editingId === "new"
-              ? "Add user"
-              : editingId
-                ? "Update user"
-                : "Users"}
+            User Accounts
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Step 2 of 2 — create staff profiles and assign a role defined in{" "}
+            Role & Access Management · Step 2 — add staff profiles and assign a
+            pre-built role from{" "}
             <Link
               href="/clinic/roles"
               className="font-semibold text-[var(--theme-primary)] hover:underline"
             >
-              Roles & permissions
+              Roles & Permissions
             </Link>
             .
           </p>
@@ -421,46 +419,26 @@ export default function RoleAccessPage() {
               Dashboard
             </Link>
             <span className="mx-1">›</span>
-            <Link href="/clinic/roles" className="hover:underline">
-              Roles & permissions
-            </Link>
+            <span>Role & Access Management</span>
             <span className="mx-1">›</span>
-            <button
-              type="button"
-              className="hover:underline"
-              onClick={() => {
-                setEditingId(null)
-                setError("")
-                setMessage("")
-              }}
-            >
-              Users list
-            </button>
-            {editingId ? (
-              <>
-                <span className="mx-1">›</span>
-                <span>{editingId === "new" ? "Add" : "Edit"}</span>
-              </>
-            ) : null}
+            <span>User Accounts</span>
           </p>
         </div>
-        {!editingId ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/clinic/roles"
-              className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
-            >
-              ← Step 1 · Roles
-            </Link>
-            <button
-              type="button"
-              onClick={openNew}
-              className="inline-flex h-10 items-center rounded-lg bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white"
-            >
-              Add user
-            </button>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/clinic/roles"
+            className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
+          >
+            Roles & Permissions
+          </Link>
+          <button
+            type="button"
+            onClick={openNew}
+            className="inline-flex h-10 items-center rounded-lg bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white"
+          >
+            Add user
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -474,54 +452,91 @@ export default function RoleAccessPage() {
         </p>
       ) : null}
 
-      {!editingId ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-[var(--solune-surface)]">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-white/[0.04]">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Name</th>
-                <th className="px-4 py-3 font-semibold">Email</th>
-                <th className="px-4 py-3 font-semibold">Role</th>
-                <th className="px-4 py-3 font-semibold" />
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-[var(--solune-surface)]">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-white/[0.04]">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Name</th>
+              <th className="px-4 py-3 font-semibold">Email</th>
+              <th className="px-4 py-3 font-semibold">Phone</th>
+              <th className="px-4 py-3 font-semibold">Role</th>
+              <th className="px-4 py-3 font-semibold" />
+            </tr>
+          </thead>
+          <tbody>
+            {people.map((m) => (
+              <tr
+                key={m.userId}
+                className="border-t border-slate-100 dark:border-white/10"
+              >
+                <td className="px-4 py-3 font-medium">
+                  {m.user?.name || "Unnamed"}
+                </td>
+                <td className="px-4 py-3 text-slate-500">{m.user?.email}</td>
+                <td className="px-4 py-3 text-slate-500">
+                  {m.user?.phone || "—"}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>{roleLabel(m.role, m.access)}</span>
+                    {m.access?.customRole || m.access?.customRoleName ? (
+                      <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950/60 dark:text-sky-300">
+                        Custom
+                      </span>
+                    ) : null}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    type="button"
+                    onClick={() => openMember(m)}
+                    className="text-sm font-semibold text-[var(--theme-primary)]"
+                  >
+                    Edit
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {people.map((m) => (
-                <tr
-                  key={m.userId}
-                  className="border-t border-slate-100 dark:border-white/10"
-                >
-                  <td className="px-4 py-3 font-medium">
-                    {m.user?.name || "Unnamed"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{m.user?.email}</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span>{roleLabel(m.role, m.access)}</span>
-                      {m.access?.customRole || m.access?.customRoleName ? (
-                        <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950/60 dark:text-sky-300">
-                          Custom
-                        </span>
-                      ) : null}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openMember(m)}
-                      className="text-sm font-semibold text-[var(--theme-primary)]"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-slate-200 bg-[#f7fbfb] p-4 dark:border-white/10 dark:bg-[var(--solune-surface)] sm:p-6">
-          <div className="grid gap-4 md:grid-cols-3">
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {editingId
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[220] flex items-end justify-center bg-black/40 p-3 sm:items-center"
+              role="dialog"
+              aria-modal="true"
+              aria-label={editingId === "new" ? "Add user" : "Update user"}
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closeModal()
+              }}
+            >
+              <div className="flex max-h-[min(92vh,44rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[var(--solune-surface)]">
+                <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-white/10 sm:px-6">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                      {editingId === "new" ? "Add user" : "Update user"}
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Profile details and a User Role from Roles & Permissions.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+                  {error ? (
+                    <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
+                      {error}
+                    </p>
+                  ) : null}
+                  <div className="grid gap-4 md:grid-cols-3">
             <label className="block text-sm">
               <span className="mb-1 block text-xs font-medium text-slate-500">
                 First Name *
@@ -893,29 +908,33 @@ export default function RoleAccessPage() {
             Add department
           </button>
 
-          <div className="mt-6 flex gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void save()}
-              className="inline-flex h-10 items-center rounded-lg bg-[var(--theme-primary)] px-5 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {busy ? "Saving…" : "Update"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingId(null)
-                setError("")
-                setMessage("")
-              }}
-              className="inline-flex h-10 items-center rounded-lg border border-slate-300 px-5 text-sm font-semibold dark:border-white/15"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+                  <div className="mt-6 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void save()}
+                      className="inline-flex h-10 items-center rounded-lg bg-[var(--theme-primary)] px-5 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {busy
+                        ? "Saving…"
+                        : editingId === "new"
+                          ? "Create user"
+                          : "Update"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="inline-flex h-10 items-center rounded-lg border border-slate-300 px-5 text-sm font-semibold dark:border-white/15"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            dashboardPortalRoot(),
+          )
+        : null}
     </div>
   )
 }

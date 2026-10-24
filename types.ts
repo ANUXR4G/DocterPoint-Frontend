@@ -370,6 +370,8 @@ export type TRouteProps = {
   name: string
   icon: IconNames
   dest?: string
+  /** Nested admin/settings links (e.g. Role & Access Management). */
+  children?: TRouteProps[]
 }
 
 export type THealth = {

@@ -143,14 +143,20 @@ export const routes: Record<string, TRouteProps[]> = {
       dest: "/clinic/doctors",
     },
     {
-      name: "Roles & permissions",
+      name: "Role & Access Management",
       icon: "two-people",
-      dest: "/clinic/roles",
-    },
-    {
-      name: "Users",
-      icon: "two-people",
-      dest: "/clinic/access",
+      children: [
+        {
+          name: "Roles & Permissions",
+          icon: "written-page",
+          dest: "/clinic/roles",
+        },
+        {
+          name: "User Accounts",
+          icon: "two-people",
+          dest: "/clinic/access",
+        },
+      ],
     },
     {
       name: "Patients",
