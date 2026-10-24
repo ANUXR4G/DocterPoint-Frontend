@@ -1,6 +1,10 @@
 import test, { describe, it } from "node:test"
 import assert from "node:assert/strict"
-import { searchMedicineMaster } from "@/lib/medicineMaster"
+import {
+  listFavoriteMedicineMaster,
+  medicineSelectionKey,
+  searchMedicineMaster,
+} from "@/lib/medicineMaster"
 import { type VisitMedicine } from "./MedicineEntryTable"
 import { type OrderSet, type OrderSetItem } from "./FavoriteOrderSetModal"
 
@@ -17,11 +21,23 @@ describe("Favorite Medicines & Order Set Quick-Prescription Integration", () => 
   })
 
   it("adds selected favorite medicines to prescription rows", () => {
-    const mockFavorites = searchMedicineMaster("", 10).filter((m) => m.favourite)
-    assert.ok(mockFavorites.length > 0, "Should have favorite medicines in catalog")
+    const mockFavorites = listFavoriteMedicineMaster()
+    assert.ok(mockFavorites.length > 1, "Should have favorite medicines in catalog")
 
-    const selectedIds = new Set([mockFavorites[0].id])
-    const toAdd = mockFavorites.filter((m) => selectedIds.has(m.id))
+    const first = mockFavorites[0]!
+    const second = mockFavorites[1]!
+    const selectedKeys = new Set([
+      medicineSelectionKey(first),
+      medicineSelectionKey(second),
+    ])
+    const toAdd = mockFavorites.filter((m) =>
+      selectedKeys.has(medicineSelectionKey(m)),
+    )
+
+    // Must not dump the rest of the favorites list when two are selected.
+    assert.equal(toAdd.length, 2)
+    assert.equal(toAdd[0]!.name, first.name)
+    assert.equal(toAdd[1]!.name, second.name)
 
     const prescriptionRows: VisitMedicine[] = toAdd.map((med) => ({
       name: med.name,
@@ -36,10 +52,19 @@ describe("Favorite Medicines & Order Set Quick-Prescription Integration", () => 
       favourite: true,
     }))
 
-    assert.equal(prescriptionRows.length, 1)
-    assert.equal(prescriptionRows[0].name, mockFavorites[0].name)
-    assert.equal(prescriptionRows[0].favourite, true)
-    assert.ok(prescriptionRows[0].instruction)
+    assert.equal(prescriptionRows.length, 2)
+    assert.equal(prescriptionRows[0]!.favourite, true)
+    assert.ok(prescriptionRows[0]!.instruction)
+  })
+
+  it("empty-id favorites do not collide on selection key", () => {
+    const a = { id: "", name: "Metformin 500mg", strength: "500mg" }
+    const b = { id: "", name: "Metformin 850mg", strength: "850mg" }
+    const selected = new Set([medicineSelectionKey(a)])
+    const pool = [a, b]
+    const toAdd = pool.filter((m) => selected.has(medicineSelectionKey(m)))
+    assert.equal(toAdd.length, 1)
+    assert.equal(toAdd[0]!.name, "Metformin 500mg")
   })
 
   it("clicking an order set applies all medicines in that group to prescription", () => {

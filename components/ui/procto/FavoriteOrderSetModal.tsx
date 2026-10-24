@@ -1,8 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { proctoService } from "@/lib/services/procto"
-import { searchMedicineMaster, type MedicineMasterItem } from "@/lib/medicineMaster"
+import {
+  listFavoriteMedicineMaster,
+  medicineMatchesQuery,
+  medicineSelectionKey,
+  normalizeMedicineMasterItem,
+  searchMedicineMaster,
+  type MedicineMasterItem,
+} from "@/lib/medicineMaster"
 import {
   defaultMedicineStartDate,
   medicineEndDate,
@@ -297,10 +304,12 @@ export default function FavoriteOrderSetModal({
 }: Props) {
   const [tab, setTab] = useState<"favorites" | "ordersets">("favorites")
   const [favoriteMeds, setFavoriteMeds] = useState<MedicineMasterItem[]>([])
+  const [catalogHits, setCatalogHits] = useState<MedicineMasterItem[]>([])
   const [orderSets, setOrderSets] = useState<OrderSet[]>(DEFAULT_ORDER_SETS)
   const [favSearch, setFavSearch] = useState("")
   const [osSearch, setOsSearch] = useState("")
   const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set())
+  const favByKeyRef = useRef<Map<string, MedicineMasterItem>>(new Map())
 
   // Create Order Set form state
   const [isCreatingSet, setIsCreatingSet] = useState(false)
@@ -310,101 +319,23 @@ export default function FavoriteOrderSetModal({
   const [newSetMedicines, setNewSetMedicines] = useState<OrderSetItem[]>([])
   const [savingSet, setSavingSet] = useState(false)
 
-  // Fetch favorite medicines
-  useEffect(() => {
-    if (!isOpen) return
-    // Immediate local catalog favorites
-    const localAll = searchMedicineMaster("", 200)
-    const localFavs = localAll.filter((m) => m.favourite || m.isPopular)
-    setFavoriteMeds(localFavs)
-
-    // Remote favorites query
-    proctoService
-      .listMedicines({ favourite: true })
-      .then((res) => {
-        if (res && res.status === "successful" && Array.isArray(res.data) && res.data.length > 0) {
-          const map = new Map<string, MedicineMasterItem>()
-          localFavs.forEach((m) => map.set(m.name.toLowerCase(), m))
-          res.data.forEach((m: any) => {
-            map.set(m.brandName?.toLowerCase() || m.name?.toLowerCase(), {
-              id: m.id,
-              medicineCode: m.medicineCode || m.id || "",
-              countryCode: m.countryCode || "IN",
-              name: m.brandName || m.name,
-              brandName: m.brandName || m.name,
-              genericName: m.genericName || "",
-              category: m.category || "General",
-              strength: m.strength || "",
-              route: m.route || "Oral",
-              dosageForm: m.dosageForm || "Tablet",
-              dose: m.dose || "1",
-              doseUnit: m.doseUnit || "tablet",
-              frequency: m.frequency || "Once daily",
-              duration: m.duration || "5",
-              durationUnit: normalizeDurationUnit(m.durationUnit) || "Days",
-              instruction: m.instruction || "",
-              favourite: true,
-            })
-          })
-          setFavoriteMeds(Array.from(map.values()))
-        }
-      })
-      .catch(() => {})
-
-    // Fetch order sets
-    proctoService
-      .listOrderSets({ practiceId })
-      .then((res) => {
-        if (res && res.status === "successful" && Array.isArray(res.data)) {
-          setOrderSets(res.data)
-        }
-      })
-      .catch(() => {})
-  }, [isOpen, practiceId])
-
-  if (!isOpen) return null
-
-  // Filter favorite medicines
-  const filteredFavs = favoriteMeds.filter((m) => {
-    if (!favSearch.trim()) return true
-    const q = favSearch.trim().toLowerCase()
-    return (
-      (m.name || "").toLowerCase().includes(q) ||
-      (m.brandName || "").toLowerCase().includes(q) ||
-      (m.genericName || "").toLowerCase().includes(q)
-    )
-  })
-
-  // Filter order sets
-  const filteredOrderSets = orderSets.filter((os) => {
-    if (!osSearch.trim()) return true
-    const q = osSearch.trim().toLowerCase()
-    return (
-      os.name.toLowerCase().includes(q) ||
-      (os.description || "").toLowerCase().includes(q) ||
-      (os.category || "").toLowerCase().includes(q) ||
-      os.medicines.some((m) => m.name.toLowerCase().includes(q))
-    )
-  })
-
-  function toggleSelectFav(id: string) {
-    setSelectedFavIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  function mergeMedicineList(
+    rows: MedicineMasterItem[],
+    opts?: { forceFavourite?: boolean },
+  ): MedicineMasterItem[] {
+    const map = new Map<string, MedicineMasterItem>()
+    for (const raw of rows) {
+      const m = normalizeMedicineMasterItem(raw)
+      if (!m.name?.trim()) continue
+      map.set(
+        medicineSelectionKey(m),
+        opts?.forceFavourite ? { ...m, favourite: true } : m,
+      )
+    }
+    return Array.from(map.values())
   }
 
-  function handleAddSingleFav(med: MedicineMasterItem) {
-    const isAlreadyAdded = currentPrescriptionRows.some(
-      (r) => r.name.trim().toLowerCase() === med.name.trim().toLowerCase(),
-    )
-    if (isAlreadyAdded) {
-      toast.info(`"${med.name}" is already added to the prescription.`)
-      return
-    }
-
+  function toVisitRow(med: MedicineMasterItem): VisitMedicine {
     const duration = med.duration || "5"
     const durationUnit = normalizeDurationUnit(med.durationUnit) || "Days"
     const startDate = defaultMedicineStartDate()
@@ -413,9 +344,10 @@ export default function FavoriteOrderSetModal({
     const dose = med.dose || "1"
     const doseUnit = med.doseUnit || "tablet"
     const frequency = med.frequency || "Once daily"
-
-    const row: VisitMedicine = {
+    return {
       name: med.name,
+      medicineId: med.id || undefined,
+      medicineCode: med.medicineCode || undefined,
       strength: med.strength || "",
       route: med.route || "Oral",
       dose,
@@ -430,13 +362,166 @@ export default function FavoriteOrderSetModal({
       times: frequency ? [frequency] : undefined,
       favourite: true,
     }
-    onAddMedicines([row])
+  }
+
+  // Fetch favorite medicines when the modal opens
+  useEffect(() => {
+    if (!isOpen) return
+    setFavSearch("")
+    setSelectedFavIds(new Set())
+    setCatalogHits([])
+    const localFavs = listFavoriteMedicineMaster()
+    setFavoriteMeds(mergeMedicineList(localFavs, { forceFavourite: true }))
+
+    let cancelled = false
+    void proctoService
+      .listMedicines({ favourite: true })
+      .then((res) => {
+        if (cancelled) return
+        if (
+          res &&
+          res.status === "successful" &&
+          Array.isArray(res.data) &&
+          res.data.length > 0
+        ) {
+          const remote = (res.data as unknown[]).map((row) =>
+            normalizeMedicineMasterItem(row),
+          )
+          setFavoriteMeds(
+            mergeMedicineList([...localFavs, ...remote], {
+              forceFavourite: true,
+            }),
+          )
+        }
+      })
+      .catch(() => {})
+
+    void proctoService
+      .listOrderSets({ practiceId })
+      .then((res) => {
+        if (cancelled) return
+        if (res && res.status === "successful" && Array.isArray(res.data)) {
+          setOrderSets(res.data)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen, practiceId])
+
+  // When searching, also pull catalog / API hits so non-favorite matches appear
+  useEffect(() => {
+    if (!isOpen || tab !== "favorites") return
+    const q = favSearch.trim()
+    if (q.length < 2) {
+      setCatalogHits([])
+      return
+    }
+    let cancelled = false
+    const localHits = searchMedicineMaster(q, 40)
+    setCatalogHits(mergeMedicineList(localHits))
+    const t = window.setTimeout(() => {
+      void proctoService
+        .listMedicines({ q })
+        .then((res) => {
+          if (cancelled) return
+          if (
+            res &&
+            res.status === "successful" &&
+            Array.isArray(res.data) &&
+            res.data.length > 0
+          ) {
+            const remote = (res.data as unknown[]).map((row) =>
+              normalizeMedicineMasterItem(row),
+            )
+            setCatalogHits(mergeMedicineList([...localHits, ...remote]))
+          }
+        })
+        .catch(() => {})
+    }, 220)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [isOpen, tab, favSearch])
+
+  const filteredFavs = useMemo(() => {
+    return favoriteMeds.filter((m) => medicineMatchesQuery(m, favSearch))
+  }, [favoriteMeds, favSearch])
+
+  const filteredCatalog = useMemo(() => {
+    const favKeys = new Set(favoriteMeds.map((m) => medicineSelectionKey(m)))
+    return catalogHits.filter((m) => {
+      if (!medicineMatchesQuery(m, favSearch)) return false
+      return !favKeys.has(medicineSelectionKey(m))
+    })
+  }, [catalogHits, favoriteMeds, favSearch])
+
+  const selectablePool = useMemo(() => {
+    const map = new Map<string, MedicineMasterItem>()
+    for (const m of [...filteredFavs, ...filteredCatalog]) {
+      map.set(medicineSelectionKey(m), m)
+    }
+    favByKeyRef.current = map
+    return map
+  }, [filteredFavs, filteredCatalog])
+
+  const filteredOrderSets = useMemo(() => {
+    if (!osSearch.trim()) return orderSets
+    const q = osSearch.trim().toLowerCase()
+    return orderSets.filter(
+      (os) =>
+        os.name.toLowerCase().includes(q) ||
+        (os.description || "").toLowerCase().includes(q) ||
+        (os.category || "").toLowerCase().includes(q) ||
+        os.medicines.some((m) => m.name.toLowerCase().includes(q)),
+    )
+  }, [orderSets, osSearch])
+
+  if (!isOpen) return null
+
+  function toggleSelectFav(key: string) {
+    if (!key) return
+    setSelectedFavIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function handleAddSingleFav(med: MedicineMasterItem) {
+    const isAlreadyAdded = currentPrescriptionRows.some(
+      (r) => r.name.trim().toLowerCase() === med.name.trim().toLowerCase(),
+    )
+    if (isAlreadyAdded) {
+      toast.info(`"${med.name}" is already added to the prescription.`)
+      return
+    }
+    onAddMedicines([toVisitRow(med)])
+    toast.success(`Added "${med.name}" to prescription`)
   }
 
   function handleAddSelectedFavs() {
-    const toAdd = favoriteMeds.filter((m) => selectedFavIds.has(m.id || m.name))
+    const keys = [...selectedFavIds]
+    if (keys.length === 0) {
+      toast.error("Please select at least one medicine to add.")
+      return
+    }
+    // Only the currently selected cards — never the full favorites list.
+    const toAdd: MedicineMasterItem[] = []
+    for (const key of keys) {
+      const med =
+        selectablePool.get(key) ||
+        favByKeyRef.current.get(key) ||
+        favoriteMeds.find((m) => medicineSelectionKey(m) === key)
+      if (med) toAdd.push(med)
+    }
     if (toAdd.length === 0) {
-      toast.error("Please select at least one favorite medicine to add.")
+      toast.error("Could not match the selected medicines. Try again.")
+      setSelectedFavIds(new Set())
       return
     }
     const existing = new Set(
@@ -452,43 +537,20 @@ export default function FavoriteOrderSetModal({
     if (validMeds.length === 0) {
       toast.info(
         already.length === 1
-          ? `"${already[0].name}" is already added to the prescription.`
+          ? `"${already[0]!.name}" is already added to the prescription.`
           : `${already.length} medicines are already added to the prescription.`,
       )
       return
     }
 
-    const startDate = defaultMedicineStartDate()
-    const rows: VisitMedicine[] = validMeds.map((med) => {
-      const duration = med.duration || "5"
-      const durationUnit = normalizeDurationUnit(med.durationUnit) || "Days"
-      const endDate =
-        medicineEndDate(startDate, duration, durationUnit) || undefined
-      const dose = med.dose || "1"
-      const doseUnit = med.doseUnit || "tablet"
-      const frequency = med.frequency || "Once daily"
-      return {
-        name: med.name,
-        strength: med.strength || "",
-        route: med.route || "Oral",
-        dose,
-        doseUnit,
-        frequency,
-        duration,
-        durationUnit,
-        startDate,
-        endDate,
-        instruction: med.instruction || "After food",
-        amount: [dose, doseUnit].filter(Boolean).join(" "),
-        times: frequency ? [frequency] : undefined,
-        favourite: true,
-      }
-    })
-    onAddMedicines(rows)
+    onAddMedicines(validMeds.map(toVisitRow))
+    toast.success(
+      validMeds.length === 1
+        ? `Added "${validMeds[0]!.name}" to prescription`
+        : `Added ${validMeds.length} medicines to prescription`,
+    )
     if (already.length > 0) {
-      toast.info(
-        `Skipped ${already.length} already-added medicine(s).`,
-      )
+      toast.info(`Skipped ${already.length} already-added medicine(s).`)
     }
     setSelectedFavIds(new Set())
     onClose()
@@ -693,10 +755,11 @@ export default function FavoriteOrderSetModal({
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
                 <div className="relative w-full sm:w-80">
                   <input
-                    type="text"
-                    placeholder="Search favorites (e.g. Paracetamol, Metformin)..."
+                    type="search"
+                    placeholder="Search (e.g. paracetamol 500mg, metformin)…"
                     value={favSearch}
                     onChange={(e) => setFavSearch(e.target.value)}
+                    autoFocus
                     className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 pl-8 text-xs text-neutral-800 placeholder:text-neutral-400 focus:border-sky-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
                   />
                   <span className="absolute left-2.5 top-2 text-neutral-400 text-xs">🔍</span>
@@ -713,86 +776,165 @@ export default function FavoriteOrderSetModal({
                 ) : null}
               </div>
 
-              {filteredFavs.length === 0 ? (
+              {filteredFavs.length === 0 && filteredCatalog.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-neutral-300 py-12 text-center text-xs text-neutral-400 dark:border-neutral-700">
-                  No favorite medicines found matching &ldquo;{favSearch}&rdquo;.
+                  {favSearch.trim()
+                    ? <>No medicines found matching &ldquo;{favSearch.trim()}&rdquo;.</>
+                    : "No favorite medicines yet. Star medicines in the master list, or search the catalog above."}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {filteredFavs.map((med) => {
-                    const key = med.id || med.name
-                    const isSelected = selectedFavIds.has(key)
-                    return (
-                      <div
-                        key={key}
-                        onClick={() => toggleSelectFav(key)}
-                        onDoubleClick={() => handleAddSingleFav(med)}
-                        title="Click to select for batch addition, or click '+ Add to Rx' (or double-click) to add immediately to prescription"
-                        className={`flex flex-col justify-between rounded-xl border p-3 transition-all cursor-pointer ${
-                          isSelected
-                            ? "border-emerald-500 bg-emerald-50/50 dark:border-emerald-600 dark:bg-emerald-950/30"
-                            : "border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-800/60 dark:hover:bg-neutral-800"
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleSelectFav(key)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="size-4 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
-                              />
-                              <span className="font-bold text-sm text-neutral-900 dark:text-white">
-                                {med.name}
-                              </span>
+                <div className="space-y-5">
+                  {filteredFavs.length > 0 ? (
+                    <div>
+                      {favSearch.trim() ? (
+                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                          Favorites matching search ({filteredFavs.length})
+                        </p>
+                      ) : null}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {filteredFavs.map((med) => {
+                          const key = medicineSelectionKey(med)
+                          const isSelected = selectedFavIds.has(key)
+                          return (
+                            <div
+                              key={key}
+                              onClick={() => toggleSelectFav(key)}
+                              onDoubleClick={() => handleAddSingleFav(med)}
+                              title="Click to select for batch addition, or click '+ Add to Rx' (or double-click) to add immediately"
+                              className={`flex flex-col justify-between rounded-xl border p-3 transition-all cursor-pointer ${
+                                isSelected
+                                  ? "border-emerald-500 bg-emerald-50/50 dark:border-emerald-600 dark:bg-emerald-950/30"
+                                  : "border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-800/60 dark:hover:bg-neutral-800"
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleSelectFav(key)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="size-4 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="font-bold text-sm text-neutral-900 dark:text-white">
+                                      {med.name}
+                                    </span>
+                                  </div>
+                                  <span className="text-emerald-500 text-sm">★</span>
+                                </div>
+
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                                  {med.strength ? (
+                                    <span className="rounded bg-sky-100 px-1.5 py-0.2 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                                      {med.strength}
+                                    </span>
+                                  ) : null}
+                                  <span>{med.dosageForm || "Tablet"}</span>
+                                  <span>•</span>
+                                  <span>{med.route || "Oral"}</span>
+                                  {med.genericName ? (
+                                    <>
+                                      <span>•</span>
+                                      <span className="italic">{med.genericName}</span>
+                                    </>
+                                  ) : null}
+                                </div>
+
+                                {med.instruction ? (
+                                  <p className="mt-1 text-[11px] text-neutral-400 italic">
+                                    &ldquo;{med.instruction}&rdquo;
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2 dark:border-neutral-800/80">
+                                <span className="text-[10px] text-neutral-400">
+                                  {med.frequency || "Once daily"} · {med.duration || "5"}{" "}
+                                  {med.durationUnit || "days"}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAddSingleFav(med)
+                                  }}
+                                  className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 shadow-xs active:scale-95 transition-all cursor-pointer"
+                                >
+                                  + Add to Rx
+                                </button>
+                              </div>
                             </div>
-                            <span className="text-emerald-500 text-sm">★</span>
-                          </div>
-
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                            {med.strength ? (
-                              <span className="rounded bg-sky-100 px-1.5 py-0.2 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
-                                {med.strength}
-                              </span>
-                            ) : null}
-                            <span>{med.dosageForm || "Tablet"}</span>
-                            <span>•</span>
-                            <span>{med.route || "Oral"}</span>
-                            {med.genericName ? (
-                              <>
-                                <span>•</span>
-                                <span className="italic">{med.genericName}</span>
-                              </>
-                            ) : null}
-                          </div>
-
-                          {med.instruction ? (
-                            <p className="mt-1 text-[11px] text-neutral-400 italic">
-                              &ldquo;{med.instruction}&rdquo;
-                            </p>
-                          ) : null}
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2 dark:border-neutral-800/80">
-                          <span className="text-[10px] text-neutral-400">
-                            {med.frequency || "Once daily"} · {med.duration || "5"} {med.durationUnit || "days"}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAddSingleFav(med)
-                            }}
-                            className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 shadow-xs active:scale-95 transition-all cursor-pointer"
-                          >
-                            + Add to Rx
-                          </button>
-                        </div>
+                          )
+                        })}
                       </div>
-                    )
-                  })}
+                    </div>
+                  ) : null}
+
+                  {filteredCatalog.length > 0 ? (
+                    <div>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                        Catalog matches ({filteredCatalog.length})
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {filteredCatalog.map((med) => {
+                          const key = medicineSelectionKey(med)
+                          const isSelected = selectedFavIds.has(key)
+                          return (
+                            <div
+                              key={key}
+                              onClick={() => toggleSelectFav(key)}
+                              onDoubleClick={() => handleAddSingleFav(med)}
+                              className={`flex flex-col justify-between rounded-xl border p-3 transition-all cursor-pointer ${
+                                isSelected
+                                  ? "border-emerald-500 bg-emerald-50/50 dark:border-emerald-600 dark:bg-emerald-950/30"
+                                  : "border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-800/60 dark:hover:bg-neutral-800"
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleSelectFav(key)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="size-4 rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="font-bold text-sm text-neutral-900 dark:text-white">
+                                      {med.name}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                                  {med.strength ? <span>{med.strength}</span> : null}
+                                  <span>{med.dosageForm || "Tablet"}</span>
+                                  {med.genericName ? (
+                                    <>
+                                      <span>•</span>
+                                      <span className="italic">{med.genericName}</span>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="mt-3 flex justify-end border-t border-neutral-100 pt-2 dark:border-neutral-800/80">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAddSingleFav(med)
+                                  }}
+                                  className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                                >
+                                  + Add to Rx
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>

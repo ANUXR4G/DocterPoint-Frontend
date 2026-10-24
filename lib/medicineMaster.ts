@@ -837,19 +837,71 @@ export function normalizeMedicineMasterItem(m: any): MedicineMasterItem {
   }
 }
 
+/** Stable key for checkbox / multi-select (never collide on empty id). */
+export function medicineSelectionKey(
+  m: Partial<
+    Pick<
+      MedicineMasterItem,
+      "id" | "medicineCode" | "name" | "strength" | "brandName"
+    >
+  >,
+): string {
+  const id = String(m.id || "").trim()
+  if (id) return `id:${id}`
+  const code = String(m.medicineCode || "").trim()
+  if (code) return `code:${code}`
+  const name = String(m.name || m.brandName || "").trim().toLowerCase()
+  const strength = String(m.strength || "").trim().toLowerCase()
+  return `name:${name}|${strength}`
+}
+
+/** Match all whitespace-separated tokens across name / brand / generic / strength / codes. */
+export function medicineMatchesQuery(
+  m: Pick<
+    MedicineMasterItem,
+    | "name"
+    | "brandName"
+    | "genericName"
+    | "strength"
+    | "medicineCode"
+    | "countryCode"
+    | "category"
+    | "dosageForm"
+  >,
+  query: string,
+): boolean {
+  const raw = query.trim().toLowerCase()
+  if (!raw) return true
+  const hay = [
+    m.name,
+    m.brandName,
+    m.genericName,
+    m.strength,
+    m.medicineCode,
+    m.countryCode,
+    m.category,
+    m.dosageForm,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+  if (hay.includes(raw)) return true
+  const tokens = raw.split(/\s+/).filter(Boolean)
+  return tokens.length > 0 && tokens.every((t) => hay.includes(t))
+}
+
 export function searchMedicineMaster(query: string, limit = 30): MedicineMasterItem[] {
-  const q = query.trim().toLowerCase();
+  const q = query.trim()
   if (!q) {
-    return CENTRAL_MEDICINE_MASTER.slice(0, limit);
+    return CENTRAL_MEDICINE_MASTER.slice(0, limit)
   }
-  return CENTRAL_MEDICINE_MASTER.filter((m) => {
-    return (
-      (m.name || "").toLowerCase().includes(q) ||
-      (m.brandName || "").toLowerCase().includes(q) ||
-      (m.genericName || "").toLowerCase().includes(q) ||
-      (m.medicineCode || "").toLowerCase().includes(q) ||
-      (m.countryCode || "").toLowerCase().includes(q) ||
-      (m.category || "").toLowerCase().includes(q)
-    );
-  }).slice(0, limit);
+  return CENTRAL_MEDICINE_MASTER.filter((m) => medicineMatchesQuery(m, q)).slice(
+    0,
+    limit,
+  )
+}
+
+/** All catalog rows marked favourite / popular (not capped by search slice). */
+export function listFavoriteMedicineMaster(): MedicineMasterItem[] {
+  return CENTRAL_MEDICINE_MASTER.filter((m) => m.favourite || m.isPopular)
 }
