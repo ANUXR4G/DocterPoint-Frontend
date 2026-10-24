@@ -8,7 +8,7 @@ import {
   type DiagnosticCatalogItem,
   type VisitDiagnostic,
 } from "@/lib/diagnosticMaster"
-import { proctoService } from "@/lib/services/procto"
+import DiagnosticAutocomplete from "@/components/ui/procto/DiagnosticAutocomplete"
 import DiagnosticOrderModal from "@/components/ui/procto/DiagnosticOrderModal"
 
 export type { VisitDiagnostic }
@@ -35,9 +35,6 @@ export default function DiagnosticEntryTable({
   bookingId,
 }: Props) {
   const [draft, setDraft] = useState<VisitDiagnostic>(emptyDiagnosticDraft)
-  const [query, setQuery] = useState("")
-  const [suggestions, setSuggestions] = useState<DiagnosticCatalogItem[]>([])
-  const [searching, setSearching] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
 
   const locked = useMemo(
@@ -52,27 +49,8 @@ export default function DiagnosticEntryTable({
     [value, readOnly],
   )
 
-  async function search(q: string) {
-    setQuery(q)
-    setDraft((d) => ({ ...d, name: q }))
-    if (!practiceId || q.trim().length < 1) {
-      setSuggestions([])
-      return
-    }
-    setSearching(true)
-    const res = await proctoService.searchDiagnostics(q, practiceId, 12)
-    setSearching(false)
-    if (res.status === "successful" && Array.isArray(res.data)) {
-      setSuggestions(res.data as DiagnosticCatalogItem[])
-    } else {
-      setSuggestions([])
-    }
-  }
-
   function pickSuggestion(item: DiagnosticCatalogItem) {
     setDraft(catalogToVisitLine(item))
-    setQuery(item.name)
-    setSuggestions([])
   }
 
   function addRow() {
@@ -98,8 +76,6 @@ export default function DiagnosticEntryTable({
       },
     ])
     setDraft(emptyDiagnosticDraft())
-    setQuery("")
-    setSuggestions([])
   }
 
   function removeRow(index: number) {
@@ -300,38 +276,15 @@ export default function DiagnosticEntryTable({
                 </option>
               ))}
             </select>
-            <div className="relative">
-              <input
-                className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-900"
-                placeholder="Search or type test name"
-                value={query}
-                onChange={(e) => void search(e.target.value)}
-              />
-              {suggestions.length > 0 ? (
-                <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
-                  {suggestions.map((s) => (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800 cursor-pointer"
-                        onClick={() => pickSuggestion(s)}
-                      >
-                        <span className="font-medium">{s.name}</span>
-                        <span className="text-xs text-neutral-500">
-                          {s.type || s.categoryCode}
-                          {s.instruction ? ` · ${s.instruction}` : ""}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {searching ? (
-                <span className="absolute right-2 top-2 text-xs text-neutral-400">
-                  …
-                </span>
-              ) : null}
-            </div>
+            <DiagnosticAutocomplete
+              practiceId={practiceId}
+              preferredType={draft.type || "Laboratory"}
+              value={draft.name}
+              placeholder="Search or type test name"
+              className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+              onChange={(name) => setDraft((d) => ({ ...d, name }))}
+              onSelect={pickSuggestion}
+            />
             <input
               type="number"
               min={1}
