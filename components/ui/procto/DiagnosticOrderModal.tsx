@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { toast } from "sonner"
 import {
   catalogToVisitLine,
   type DiagnosticCatalogItem,
   type VisitDiagnostic,
 } from "@/lib/diagnosticMaster"
+import { dashboardPortalRoot } from "@/lib/portalRoot"
 import { proctoService } from "@/lib/services/procto"
 import { formatPracticeDate } from "@/lib/practiceTime"
 
@@ -80,6 +82,9 @@ export default function DiagnosticOrderModal({
   const [loading, setLoading] = useState(true)
   const [savingSet, setSavingSet] = useState(false)
   const [setName, setSetName] = useState("")
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
 
   const currentKeys = useMemo(
     () => new Set(current.map((d) => d.name.trim().toLowerCase())),
@@ -243,10 +248,22 @@ export default function DiagnosticOrderModal({
     { id: "previous", label: "Previous orders" },
   ]
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-neutral-950">
-        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+  if (!mounted) return null
+
+  // Portal above the fixed sidebar (z-50) — same pattern as PopupModal.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[210] flex items-end justify-center bg-black/40 p-3 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Diagnostic orders"
+    >
+      <div
+        className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-neutral-950 ${
+          tab === "tick" ? "max-w-6xl" : "max-w-5xl"
+        }`}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
           <div>
             <h3 className="text-lg font-bold text-neutral-900 dark:text-white">
               Diagnostic orders
@@ -264,7 +281,7 @@ export default function DiagnosticOrderModal({
           </button>
         </div>
 
-        <div className="flex gap-1 overflow-x-auto border-b border-neutral-200 px-3 dark:border-neutral-800">
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-neutral-200 px-3 dark:border-neutral-800">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -281,13 +298,13 @@ export default function DiagnosticOrderModal({
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {loading ? (
             <p className="text-sm text-neutral-500">Loading…</p>
           ) : tab === "tick" && tick ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
+            <div className="flex h-full min-h-0 flex-col gap-3">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
                   <p className="font-semibold text-neutral-900 dark:text-white">
                     {tick.name}
                   </p>
@@ -299,64 +316,77 @@ export default function DiagnosticOrderModal({
                   type="button"
                   onClick={applyTick}
                   disabled={!picked.size}
-                  className="rounded-lg bg-[var(--theme-primary)] px-4 py-2 text-sm font-semibold text-[var(--theme-primary-foreground)] disabled:opacity-40 cursor-pointer"
+                  className="shrink-0 rounded-lg bg-[var(--theme-primary)] px-4 py-2 text-sm font-semibold text-[var(--theme-primary-foreground)] disabled:opacity-40 cursor-pointer"
                 >
                   Add {picked.size || ""} selected
                 </button>
               </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {tick.columns.map((col) => (
-                  <div
+
+              <div className="grid min-h-0 flex-1 grid-cols-1 rounded-xl border border-neutral-200 dark:border-neutral-700 sm:grid-cols-2 xl:grid-cols-4">
+                {tick.columns.map((col, colIdx) => (
+                  <section
                     key={col.categoryCode}
-                    className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-700"
+                    className={`flex min-w-0 min-h-0 flex-col border-neutral-200 dark:border-neutral-700 ${
+                      colIdx > 0 ? "border-t sm:border-t-0" : ""
+                    } ${colIdx % 2 === 1 ? "sm:border-l" : ""} ${
+                      colIdx >= 2 ? "sm:border-t xl:border-t-0 xl:border-l" : ""
+                    }`}
                   >
-                    <h4 className="mb-2 border-b border-neutral-200 pb-1 text-sm font-bold underline dark:border-neutral-700">
+                    <h4 className="shrink-0 border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-center text-sm font-bold tracking-wide text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white">
                       {col.categoryName}
                     </h4>
-                    {col.sections.map((sec) => (
-                      <div key={sec.subcategoryCode} className="mb-3">
-                        <p className="mb-1 text-xs font-bold text-neutral-700 dark:text-neutral-300">
-                          {sec.subcategoryName}
-                        </p>
-                        <ul className="space-y-1">
-                          {sec.items.map((item) => {
-                            const already = currentKeys.has(
-                              item.name.trim().toLowerCase(),
-                            )
-                            const checked = picked.has(item.code)
-                            return (
-                              <li key={item.code}>
-                                <label
-                                  className={`flex cursor-pointer items-start gap-2 rounded-md px-1 py-0.5 text-sm ${
-                                    already ? "opacity-40" : "hover:bg-neutral-50 dark:hover:bg-neutral-900"
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="mt-1"
-                                    disabled={already}
-                                    checked={checked || already}
-                                    onChange={() => toggleCode(item.code)}
-                                  />
-                                  <span>
-                                    <span className="font-medium">{item.name}</span>
-                                    {item.instruction ? (
-                                      <span className="block text-[11px] text-neutral-500">
-                                        {item.instruction}
+                    <div className="min-h-0 min-w-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-3 py-3">
+                      {col.sections.map((sec) => (
+                        <div key={sec.subcategoryCode} className="min-w-0">
+                          <p className="mb-1.5 border-b border-dashed border-neutral-200 pb-1 text-[11px] font-bold uppercase tracking-wide text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                            {sec.subcategoryName}
+                          </p>
+                          <ul className="space-y-0.5">
+                            {sec.items.map((item) => {
+                              const already = currentKeys.has(
+                                item.name.trim().toLowerCase(),
+                              )
+                              const checked = picked.has(item.code)
+                              return (
+                                <li key={item.code} className="min-w-0">
+                                  <label
+                                    className={`flex min-w-0 cursor-pointer items-start gap-2 rounded-md py-1 text-sm ${
+                                      already
+                                        ? "opacity-40"
+                                        : "hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--theme-primary)]"
+                                      disabled={already}
+                                      checked={checked || already}
+                                      onChange={() => toggleCode(item.code)}
+                                    />
+                                    <span className="min-w-0 flex-1 leading-snug">
+                                      <span className="block break-words font-medium text-neutral-900 dark:text-neutral-100">
+                                        {item.name}
                                       </span>
-                                    ) : null}
-                                  </span>
-                                </label>
+                                      {item.instruction ? (
+                                        <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">
+                                          {item.instruction}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  </label>
+                                </li>
+                              )
+                            })}
+                            {!sec.items.length ? (
+                              <li className="py-1 text-xs text-neutral-400">
+                                —
                               </li>
-                            )
-                          })}
-                          {!sec.items.length ? (
-                            <li className="text-xs text-neutral-400">—</li>
-                          ) : null}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
+                            ) : null}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
             </div>
@@ -505,6 +535,7 @@ export default function DiagnosticOrderModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    dashboardPortalRoot(),
   )
 }
