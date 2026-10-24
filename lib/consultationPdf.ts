@@ -657,34 +657,43 @@ export async function buildConsultationPdf(booking: ConsultBooking): Promise<Uin
 
   if (model.diagnostics.length) {
     heading("DIAGNOSTIC ORDERS")
-    draw("Type", left, 9, bold)
-    draw("Description", left + 110, 9, bold)
-    draw("Qty", left + 360, 9, bold)
-    draw("Instruction", left + 400, 9, bold)
+    const dxCols = [32, 90, 210, 36, 155]
+    const dxHeads = ["SNo", "Category", "Description", "Qty", "Instruction"]
+    let dxX = left
+    dxHeads.forEach((label, index) => {
+      draw(label, dxX, 9, bold)
+      dxX += dxCols[index]!
+    })
     y -= 4
     page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.4, color: INK })
     y -= 12
     model.diagnostics.forEach((dx, index) => {
-      const nameLines = wrap(`${index + 1}) ${dx.name}`, font, 9, 240)
-      const instrLines = dx.instruction
-        ? wrap(dx.instruction, font, 8, width - 420)
-        : [""]
-      ensure(14 + Math.max(nameLines.length, instrLines.length) * 11)
-      nameLines.forEach((line, lineIndex) => {
-        if (lineIndex === 0) {
-          draw(dx.type, left, 8)
-          draw(dx.qty, left + 360, 8)
-        }
-        draw(line, left + 110, 9)
-        if (lineIndex < instrLines.length && instrLines[lineIndex]) {
-          draw(instrLines[lineIndex]!, left + 400, 8, font, MUTED)
-        }
-        y -= 11
+      const cells = [
+        String(index + 1),
+        dx.type || "—",
+        dx.name || "—",
+        String(dx.qty ?? 1),
+        dx.instruction || "—",
+      ]
+      const cellLines = cells.map((c, i) =>
+        wrap(c, i === 2 ? bold : font, 9, dxCols[i]! - 4),
+      )
+      const rowH = Math.max(...cellLines.map((l) => l.length), 1) * 11
+      ensure(rowH + 4)
+      let cx = left
+      cellLines.forEach((lines, i) => {
+        lines.forEach((line, lineIndex) => {
+          page.drawText(safe(line), {
+            x: cx,
+            y: y - lineIndex * 11,
+            size: 9,
+            font: i === 2 ? bold : font,
+            color: INK,
+          })
+        })
+        cx += dxCols[i]!
       })
-      for (let i = nameLines.length; i < instrLines.length; i++) {
-        draw(instrLines[i]!, left + 400, 8, font, MUTED)
-        y -= 11
-      }
+      y -= rowH + 4
     })
     y -= 12
   }

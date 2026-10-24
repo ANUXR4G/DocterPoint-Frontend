@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib"
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib"
 import { embedPdfImage } from "@/lib/pdfImage"
 import {
   consultationModel,
@@ -8,6 +8,18 @@ import {
 const INK = rgb(0.08, 0.1, 0.12)
 const TEAL = rgb(0.05, 0.45, 0.52)
 const MUTED = rgb(0.35, 0.4, 0.44)
+
+const PAGE_W = 595.28
+const PAGE_H = 841.89
+const LEFT = 36
+const RIGHT = 559
+const WIDTH = RIGHT - LEFT
+const TOP = 800
+/** Reserve bottom for stamp + Printed On / Page X of Y on every page */
+const CONTENT_BOTTOM = 130
+
+const COL_W = [32, 90, 210, 36, 155] as const
+const COL_HEADERS = ["SNo", "Category", "Description", "Qty", "Instruction"] as const
 
 function safe(text: string): string {
   return text
@@ -35,7 +47,26 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   return lines
 }
 
-/** Dedicated Diagnostic Order print (separate from full consultation report). */
+type Model = ReturnType<typeof consultationModel>
+
+type DxRow = {
+  sno: string
+  category: string
+  description: string
+  qty: string
+  instruction: string
+}
+
+type PageCtx = {
+  page: PDFPage
+  y: number
+}
+
+/**
+ * Dedicated Diagnostic Order printout.
+ * Table: SNo | Category | Description | Qty | Instruction
+ * Header, patient box, doctor stamp footer, Printed On + Page X of Y on every page.
+ */
 export async function buildDiagnosticOrderPdf(
   booking: ConsultBooking,
 ): Promise<Uint8Array> {
@@ -43,226 +74,314 @@ export async function buildDiagnosticOrderPdf(
   const doc = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  let page = doc.addPage([595.28, 841.89])
-  let y = 800
-  const left = 36
-  const right = 559
-  const width = right - left
+  const logo = await embedPdfImage(doc, model.clinicLogoSrc)
+  const doctorStamp = await embedPdfImage(doc, model.stampSrc)
+  const clinicStamp = await embedPdfImage(doc, model.clinicStampSrc)
+
+  const rows: DxRow[] = model.diagnostics.length
+    ? model.diagnostics.map((dx, i) => ({
+        sno: String(i + 1),
+        category: dx.type || "—",
+        description: dx.name || "—",
+        qty: String(dx.qty ?? 1),
+        instruction: dx.instruction || "",
+      }))
+    : [
+        {
+          sno: "—",
+          category: "—",
+          description: "No diagnostic orders recorded",
+          qty: "—",
+          instruction: "",
+        },
+      ]
+
+  const pages: PDFPage[] = []
+
+  const startPage = (): PageCtx => {
+    const page = doc.addPage([PAGE_W, PAGE_H])
+    pages.push(page)
+    let y = drawChromeHeader(page, model, font, bold, logo)
+    y = drawPatientBox(page, model, font, bold, y)
+    y -= 12
+    page.drawText("DIAGNOSTIC ORDERS", {
+      x: LEFT,
+      y,
+      size: 11,
+      font: bold,
+      color: INK,
+    })
+    y -= 16
+    y = drawTableHeader(page, bold, y)
+    return { page, y }
+  }
+
+  let ctx = startPage()
 
   const ensure = (need: number) => {
-    if (y - need > 46) return
-    page = doc.addPage([595.28, 841.89])
-    y = 800
+    if (ctx.y - need >= CONTENT_BOTTOM) return
+    ctx = startPage()
   }
 
-  const draw = (
-    text: string,
-    x: number,
-    size: number,
-    options?: { bold?: boolean; color?: ReturnType<typeof rgb>; maxWidth?: number },
-  ) => {
-    const use = options?.bold ? bold : font
-    const color = options?.color || INK
-    const maxW = options?.maxWidth ?? width
-    const lines = wrap(text, use, size, maxW)
-    for (const line of lines) {
-      ensure(size + 4)
-      page.drawText(line, { x, y, size, font: use, color })
-      y -= size + 3
-    }
-  }
-
-  const logo = await embedPdfImage(doc, model.clinicLogoSrc)
-  if (logo) {
-    page.drawImage(logo, { x: right - 52, y: y - 40, width: 48, height: 48 })
-  }
-
-  draw(model.clinic, left, 14, { bold: true, color: TEAL, maxWidth: width - 60 })
-  if (model.address) draw(model.address, left, 9, { color: MUTED, maxWidth: width - 60 })
-  if (model.tel || model.email) {
-    draw(
-      [model.tel ? `Tel: ${model.tel}` : "", model.email ? `Email: ${model.email}` : ""]
-        .filter(Boolean)
-        .join("  ·  "),
-      left,
-      9,
-      { color: MUTED, maxWidth: width - 60 },
-    )
-  }
-
-  y -= 8
-  ensure(28)
-  page.drawText("DIAGNOSTIC ORDER", {
-    x: left + (width - bold.widthOfTextAtSize("DIAGNOSTIC ORDER", 16)) / 2,
-    y,
-    size: 16,
-    font: bold,
-    color: TEAL,
-  })
-  y -= 22
-
-  ensure(70)
-  page.drawRectangle({
-    x: left,
-    y: y - 58,
-    width,
-    height: 64,
-    borderColor: TEAL,
-    borderWidth: 1.5,
-  })
-  const boxY = y - 14
-  page.drawText(`Patient: ${safe(model.patientName)}`, {
-    x: left + 8,
-    y: boxY,
-    size: 10,
-    font: bold,
-    color: INK,
-  })
-  page.drawText(`MRN: ${safe(model.mrn || "—")}`, {
-    x: left + 280,
-    y: boxY,
-    size: 10,
-    font,
-    color: INK,
-  })
-  page.drawText(`Age / Gender: ${safe(model.ageGender || "—")}`, {
-    x: left + 8,
-    y: boxY - 14,
-    size: 9,
-    font,
-    color: INK,
-  })
-  page.drawText(`Mobile: ${safe(model.mobile || "—")}`, {
-    x: left + 280,
-    y: boxY - 14,
-    size: 9,
-    font,
-    color: INK,
-  })
-  page.drawText(`Doctor: ${safe(model.doctor || "—")}`, {
-    x: left + 8,
-    y: boxY - 28,
-    size: 9,
-    font,
-    color: INK,
-  })
-  page.drawText(`Appointment: ${safe(model.appointment || "—")}`, {
-    x: left + 280,
-    y: boxY - 28,
-    size: 9,
-    font,
-    color: INK,
-  })
-  page.drawText(`Visit: ${safe(model.visitId)}`, {
-    x: left + 8,
-    y: boxY - 42,
-    size: 8,
-    font,
-    color: MUTED,
-  })
-  y -= 76
-
-  draw(`Chief complaint: ${model.chief}`, left, 9, { color: MUTED })
-  if (model.diagnosis) draw(`Diagnosis: ${model.diagnosis}`, left, 9, { color: MUTED })
-  y -= 6
-
-  ensure(24)
-  page.drawText("ORDERED TESTS", {
-    x: left,
-    y,
-    size: 11,
-    font: bold,
-    color: TEAL,
-  })
-  y -= 16
-
-  const colW = [28, 70, 220, 70, 110]
-  const headers = ["#", "Code", "Test / Service", "Category", "Instruction"]
-  ensure(18)
-  let x = left
-  headers.forEach((h, i) => {
-    page.drawText(h, { x, y, size: 8, font: bold, color: MUTED })
-    x += colW[i]
-  })
-  y -= 4
-  page.drawLine({
-    start: { x: left, y },
-    end: { x: right, y },
-    thickness: 0.8,
-    color: TEAL,
-  })
-  y -= 12
-
-  const rows: Array<{
-    code?: string
-    name: string
-    type?: string
-    instruction?: string
-  }> = model.diagnostics.length
-    ? model.diagnostics
-    : [{ code: "—", name: "No diagnostic orders recorded", type: "", instruction: "" }]
-
-  rows.forEach((dx, index) => {
-    ensure(22)
+  for (const row of rows) {
     const cells = [
-      String(index + 1),
-      dx.code || "—",
-      dx.name || "—",
-      dx.type || "—",
-      dx.instruction || "—",
+      row.sno,
+      row.category,
+      row.description,
+      row.qty,
+      row.instruction || "—",
     ]
-    let cx = left
-    const lineHeights: number[] = []
-    cells.forEach((cell, i) => {
-      const lines = wrap(cell, font, 8, colW[i] - 4)
-      lineHeights.push(lines.length)
+    const cellLines = cells.map((c, i) =>
+      wrap(c, i === 2 ? bold : font, 9, COL_W[i]! - 4),
+    )
+    const rowH = Math.max(...cellLines.map((l) => l.length), 1) * 11 + 6
+    ensure(rowH)
+    let cx = LEFT
+    cellLines.forEach((lines, i) => {
       lines.forEach((line, li) => {
-        page.drawText(line, {
+        ctx.page.drawText(line, {
           x: cx,
-          y: y - li * 10,
-          size: 8,
+          y: ctx.y - li * 11,
+          size: 9,
           font: i === 2 ? bold : font,
           color: INK,
         })
       })
-      cx += colW[i]
+      cx += COL_W[i]!
     })
-    y -= Math.max(...lineHeights) * 10 + 6
-  })
-
-  y -= 20
-  ensure(60)
-  page.drawText("Doctor signature / stamp", {
-    x: left,
-    y,
-    size: 9,
-    font: bold,
-    color: MUTED,
-  })
-  y -= 8
-  const stamp = await embedPdfImage(doc, model.stampSrc)
-  const clinicStamp = await embedPdfImage(doc, model.clinicStampSrc)
-  if (stamp) {
-    page.drawImage(stamp, { x: left, y: y - 48, width: 72, height: 48 })
+    ctx.y -= rowH
+    ctx.page.drawLine({
+      start: { x: LEFT, y: ctx.y + 2 },
+      end: { x: RIGHT, y: ctx.y + 2 },
+      thickness: 0.3,
+      color: rgb(0.75, 0.78, 0.8),
+    })
   }
-  if (clinicStamp) {
-    page.drawImage(clinicStamp, { x: left + 100, y: y - 48, width: 72, height: 48 })
-  }
-  y -= 56
-  draw(model.doctor || "", left, 10, { bold: true })
-  if (model.qualification) draw(model.qualification, left, 8, { color: MUTED })
-  if (model.license) draw(`Reg. No: ${model.license}`, left, 8, { color: MUTED })
 
-  y = 40
-  page.drawText(`Printed ${model.printed}`, {
-    x: left,
-    y,
-    size: 7,
-    font,
-    color: MUTED,
+  const total = pages.length
+  pages.forEach((p, idx) => {
+    drawPageStampFooter(p, model, font, bold, doctorStamp, clinicStamp)
+    drawPageMeta(p, model, font, idx + 1, total)
   })
 
   return doc.save()
+}
+
+function drawChromeHeader(
+  page: PDFPage,
+  model: Model,
+  font: PDFFont,
+  bold: PDFFont,
+  logo: PDFImage | null,
+): number {
+  let y = TOP
+  if (logo) {
+    page.drawImage(logo, {
+      x: RIGHT - 44,
+      y: y - 34,
+      width: 44,
+      height: 44,
+    })
+  }
+  page.drawText(safe(model.clinic), {
+    x: LEFT,
+    y,
+    size: 12,
+    font: bold,
+    color: INK,
+  })
+  y -= 14
+  if (model.address) {
+    for (const line of wrap(model.address, font, 9, 360)) {
+      page.drawText(line, { x: LEFT, y, size: 9, font, color: MUTED })
+      y -= 12
+    }
+  }
+  if (model.tel) {
+    page.drawText(safe(`Tel : ${model.tel}`), {
+      x: LEFT,
+      y,
+      size: 9,
+      font,
+      color: MUTED,
+    })
+    y -= 12
+  }
+  if (model.email) {
+    page.drawText(safe(`Email : ${model.email}`), {
+      x: LEFT,
+      y,
+      size: 9,
+      font,
+      color: MUTED,
+    })
+    y -= 12
+  }
+  y -= 8
+  const title = "DIAGNOSTIC ORDERS"
+  const tw = bold.widthOfTextAtSize(title, 13)
+  page.drawText(title, {
+    x: LEFT + (WIDTH - tw) / 2,
+    y,
+    size: 13,
+    font: bold,
+    color: INK,
+  })
+  y -= 4
+  page.drawLine({
+    start: { x: LEFT + 150, y },
+    end: { x: RIGHT - 150, y },
+    thickness: 0.6,
+    color: INK,
+  })
+  return y - 10
+}
+
+function drawPatientBox(
+  page: PDFPage,
+  model: Model,
+  font: PDFFont,
+  bold: PDFFont,
+  y: number,
+): number {
+  const facts: Array<[string, string, string, string]> = [
+    ["Patient's Name:", model.patientName, "Mobile No:", model.mobile],
+    ["Patient MRN:", model.mrn, "ID:", model.shortId],
+    ["Date of Birth:", model.dob, "Age / Gender:", model.ageGender],
+    ["Visit ID:", model.visitId, "Appointment:", model.appointment],
+    ["Doctor", model.doctor, "", ""],
+  ]
+  const boxTop = y
+  y -= 16
+  for (const [a, av, b, bv] of facts) {
+    page.drawText(a, { x: LEFT + 8, y, size: 9, font: bold, color: TEAL })
+    page.drawText(safe(av || "—"), {
+      x: LEFT + 108,
+      y,
+      size: 9,
+      font,
+      color: INK,
+    })
+    if (b) {
+      page.drawText(b, { x: LEFT + 280, y, size: 9, font: bold, color: TEAL })
+      page.drawText(safe(bv || "—"), {
+        x: LEFT + 380,
+        y,
+        size: 9,
+        font,
+        color: INK,
+      })
+    }
+    y -= 14
+  }
+  const boxBottom = y
+  page.drawRectangle({
+    x: LEFT,
+    y: boxBottom,
+    width: WIDTH,
+    height: boxTop - boxBottom,
+    borderWidth: 1.2,
+    borderColor: TEAL,
+  })
+  return boxBottom - 8
+}
+
+function drawTableHeader(page: PDFPage, bold: PDFFont, y: number): number {
+  let x = LEFT
+  COL_HEADERS.forEach((h, i) => {
+    page.drawText(h, { x, y, size: 9, font: bold, color: INK })
+    x += COL_W[i]!
+  })
+  y -= 4
+  page.drawLine({
+    start: { x: LEFT, y },
+    end: { x: RIGHT, y },
+    thickness: 0.8,
+    color: INK,
+  })
+  return y - 12
+}
+
+function drawPageStampFooter(
+  page: PDFPage,
+  model: Model,
+  font: PDFFont,
+  bold: PDFFont,
+  doctorStamp: PDFImage | null,
+  clinicStamp: PDFImage | null,
+) {
+  const stampTop = 110
+  const box = 56
+  if (doctorStamp) {
+    page.drawImage(doctorStamp, {
+      x: LEFT,
+      y: stampTop - box,
+      width: box,
+      height: box,
+    })
+  } else {
+    const cx = LEFT + 28
+    const cy = stampTop - 28
+    page.drawEllipse({
+      x: cx,
+      y: cy,
+      xScale: 26,
+      yScale: 26,
+      borderWidth: 1,
+      borderColor: TEAL,
+    })
+  }
+  if (clinicStamp) {
+    page.drawImage(clinicStamp, {
+      x: LEFT + 70,
+      y: stampTop - box,
+      width: box,
+      height: box,
+    })
+  }
+  let ty = stampTop - box - 10
+  page.drawText(safe(model.doctor || "Doctor"), {
+    x: LEFT,
+    y: ty,
+    size: 9,
+    font: bold,
+    color: INK,
+  })
+  ty -= 11
+  if (model.qualification) {
+    page.drawText(safe(model.qualification).slice(0, 48), {
+      x: LEFT,
+      y: ty,
+      size: 7,
+      font,
+      color: MUTED,
+    })
+  }
+}
+
+function drawPageMeta(
+  page: PDFPage,
+  model: Model,
+  font: PDFFont,
+  pageNo: number,
+  total: number,
+) {
+  page.drawText(`Printed On : ${safe(model.printed)}`, {
+    x: LEFT,
+    y: 22,
+    size: 8,
+    font,
+    color: MUTED,
+  })
+  const label = `Page ${pageNo} of ${total}`
+  const w = font.widthOfTextAtSize(label, 8)
+  page.drawText(label, {
+    x: RIGHT - w,
+    y: 22,
+    size: 8,
+    font,
+    color: MUTED,
+  })
 }
 
 export function diagnosticOrderFileName(booking: ConsultBooking): string {

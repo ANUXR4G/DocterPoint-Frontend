@@ -9,14 +9,9 @@ export default function DiagnosticOrderSheet({
   booking: ConsultBooking
 }) {
   const model = consultationModel(booking)
-  const rows: Array<{
-    code?: string
-    name: string
-    type?: string
-    instruction?: string
-  }> = model.diagnostics.length
+  const rows = model.diagnostics.length
     ? model.diagnostics
-    : [{ code: "—", name: "No diagnostic orders recorded", type: "", instruction: "" }]
+    : [{ name: "No diagnostic orders recorded", type: "", qty: undefined, instruction: "" }]
 
   return (
     <article className="print-sheet mx-auto max-w-3xl bg-white px-8 py-6 text-[13px] text-black">
@@ -40,7 +35,7 @@ export default function DiagnosticOrderSheet({
       </header>
 
       <h1 className="mt-4 text-center text-lg font-bold tracking-wide text-teal-800 underline">
-        DIAGNOSTIC ORDER
+        DIAGNOSTIC ORDERS
       </h1>
 
       <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border-2 border-teal-600 px-3 py-2">
@@ -57,52 +52,48 @@ export default function DiagnosticOrderSheet({
           {model.mrn || "—"}
         </p>
         <p>
+          <span className="font-semibold text-teal-800">ID:</span> {model.shortId || "—"}
+        </p>
+        <p>
+          <span className="font-semibold text-teal-800">Date of Birth:</span>{" "}
+          {model.dob || "—"}
+        </p>
+        <p>
           <span className="font-semibold text-teal-800">Age / Gender:</span>{" "}
           {model.ageGender || "—"}
         </p>
-        <p>
-          <span className="font-semibold text-teal-800">Doctor:</span> {model.doctor || "—"}
+        <p className="break-all">
+          <span className="font-semibold text-teal-800">Visit ID:</span> {model.visitId}
         </p>
         <p>
           <span className="font-semibold text-teal-800">Appointment:</span>{" "}
           {model.appointment || "—"}
         </p>
-        <p className="col-span-2 break-all">
-          <span className="font-semibold text-teal-800">Visit ID:</span> {model.visitId}
+        <p className="col-span-2">
+          <span className="font-semibold text-teal-800">Doctor:</span> {model.doctor || "—"}
         </p>
       </div>
 
-      <section className="mt-4">
-        <p>
-          <span className="font-semibold">Chief complaint:</span> {model.chief}
-        </p>
-        {model.diagnosis ? (
-          <p>
-            <span className="font-semibold">Diagnosis:</span> {model.diagnosis}
-          </p>
-        ) : null}
-      </section>
-
-      <section className="mt-4">
-        <h2 className="font-bold text-teal-800">ORDERED TESTS</h2>
+      <section className="mt-5">
+        <h2 className="font-bold text-teal-800">DIAGNOSTIC ORDERS</h2>
         <div className="mt-2 overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-left text-[12px]">
             <thead>
-              <tr className="border-b-2 border-teal-600">
-                <th className="py-1.5 pr-2 font-semibold">#</th>
-                <th className="py-1.5 pr-2 font-semibold">Code</th>
-                <th className="py-1.5 pr-2 font-semibold">Test / Service</th>
-                <th className="py-1.5 pr-2 font-semibold">Category</th>
+              <tr className="border-b-2 border-neutral-800">
+                <th className="w-10 py-1.5 pr-2 font-semibold">SNo</th>
+                <th className="w-28 py-1.5 pr-2 font-semibold">Category</th>
+                <th className="py-1.5 pr-2 font-semibold">Description</th>
+                <th className="w-12 py-1.5 pr-2 font-semibold">Qty</th>
                 <th className="py-1.5 pr-2 font-semibold">Instruction</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((dx, i) => (
-                <tr key={`${dx.code}-${i}`} className="border-b border-neutral-300">
-                  <td className="py-1.5 pr-2">{i + 1}</td>
-                  <td className="py-1.5 pr-2 font-mono text-[11px]">{dx.code || "—"}</td>
-                  <td className="py-1.5 pr-2 font-semibold">{dx.name}</td>
+                <tr key={`${dx.name}-${i}`} className="border-b border-neutral-300">
+                  <td className="py-1.5 pr-2">{model.diagnostics.length ? i + 1 : "—"}</td>
                   <td className="py-1.5 pr-2">{dx.type || "—"}</td>
+                  <td className="py-1.5 pr-2 font-semibold">{dx.name}</td>
+                  <td className="py-1.5 pr-2">{dx.qty ?? (model.diagnostics.length ? 1 : "—")}</td>
                   <td className="py-1.5 pr-2">{dx.instruction || "—"}</td>
                 </tr>
               ))}
@@ -111,15 +102,16 @@ export default function DiagnosticOrderSheet({
         </div>
       </section>
 
-      <footer className="mt-10 flex items-end justify-between gap-6">
+      <footer className="mt-10 flex items-end justify-between gap-6 border-t border-neutral-200 pt-4">
         <div>
-          <p className="text-xs font-semibold text-neutral-500">Doctor signature / stamp</p>
-          <div className="mt-2 flex items-end gap-4">
+          <div className="mt-1 flex items-end gap-4">
             {model.stampSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={model.stampSrc} alt="Doctor stamp" className="h-14 object-contain" />
             ) : (
-              <div className="h-14 w-24 border-b border-neutral-400" />
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-teal-600 text-[9px] text-teal-700">
+                Stamp
+              </div>
             )}
             {model.clinicStampSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -134,7 +126,10 @@ export default function DiagnosticOrderSheet({
           {model.qualification ? <p className="text-xs">{model.qualification}</p> : null}
           {model.license ? <p className="text-xs">Reg. No: {model.license}</p> : null}
         </div>
-        <p className="text-[10px] text-neutral-500">Printed {model.printed}</p>
+        <div className="text-right text-[10px] text-neutral-500">
+          <p>Printed On : {model.printed}</p>
+          <p>Page 1 of 1</p>
+        </div>
       </footer>
     </article>
   )

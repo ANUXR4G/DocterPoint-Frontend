@@ -88,7 +88,8 @@ export default function ConsultationSheet({ booking }: { booking: ConsultBooking
           <table className="mt-1 w-full border-collapse text-left">
             <thead>
               <tr className="border-y border-black">
-                <th className="py-1 font-semibold">Type</th>
+                <th className="py-1 font-semibold">SNo</th>
+                <th className="py-1 font-semibold">Category</th>
                 <th className="py-1 font-semibold">Description</th>
                 <th className="py-1 font-semibold">Qty</th>
                 <th className="py-1 font-semibold">Instruction</th>
@@ -97,10 +98,9 @@ export default function ConsultationSheet({ booking }: { booking: ConsultBooking
             <tbody>
               {model.diagnostics.map((dx, index) => (
                 <tr key={`${dx.name}-${index}`} className="align-top">
-                  <td className="py-1 pr-3">{dx.type}</td>
-                  <td className="py-1 pr-3">
-                    {index + 1}) {dx.name}
-                  </td>
+                  <td className="py-1 pr-3">{index + 1}</td>
+                  <td className="py-1 pr-3">{dx.type || "—"}</td>
+                  <td className="py-1 pr-3 font-semibold">{dx.name}</td>
                   <td className="py-1 pr-3">{dx.qty}</td>
                   <td className="py-1">{dx.instruction || "—"}</td>
                 </tr>
