@@ -13,6 +13,13 @@ export default function DiagnosticOrderSheet({
     ? model.diagnostics
     : [{ name: "No diagnostic orders recorded", type: "", qty: undefined, instruction: "" }]
 
+  const wt = model.vitals[1] || "—"
+  const temp = model.vitals[3] || "—"
+  const bp = model.vitals[4] || "—"
+  const bpLabel =
+    bp !== "—" && !/mmhg/i.test(bp) ? `${bp} mmHg` : bp
+  const wtLabel = wt !== "—" && !/kg/i.test(wt) ? `${wt}kg` : wt
+
   return (
     <article className="print-sheet mx-auto max-w-3xl bg-white px-8 py-6 text-[13px] text-black">
       <header className="flex items-start justify-between gap-4">
@@ -74,6 +81,27 @@ export default function DiagnosticOrderSheet({
         </p>
       </div>
 
+      <section className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2">
+        <div>
+          <p className="font-bold">CHIEF COMPLAINT</p>
+          <p>
+            Primary Reason: {model.chief}; Secondary Complaints: {model.secondary}
+          </p>
+        </div>
+        <div>
+          <p className="font-bold">Allergy</p>
+          <p>Food: {model.allergyFood || "—"}</p>
+          <p>Drug: {model.allergyDrug || "—"}</p>
+        </div>
+        <p className="col-span-2">
+          <span className="font-semibold">Diagnosis:</span>{" "}
+          <span className="font-semibold text-teal-700">{model.diagnosis || "—"}</span>
+        </p>
+        <p className="col-span-2">
+          Vitals: Temp (deg): {temp}, BP: {bpLabel}, Wt: {wtLabel}
+        </p>
+      </section>
+
       <section className="mt-5">
         <h2 className="font-bold text-teal-800">DIAGNOSTIC ORDERS</h2>
         <div className="mt-2 overflow-x-auto">
@@ -122,8 +150,9 @@ export default function DiagnosticOrderSheet({
               />
             ) : null}
           </div>
-          <p className="mt-2 font-semibold">{model.doctor}</p>
-          {model.qualification ? <p className="text-xs">{model.qualification}</p> : null}
+          <p className="mt-2 font-semibold">
+            {[model.doctor, model.qualification].filter(Boolean).join(" ")}
+          </p>
           {model.license ? <p className="text-xs">Reg. No: {model.license}</p> : null}
         </div>
         <div className="text-right text-[10px] text-neutral-500">

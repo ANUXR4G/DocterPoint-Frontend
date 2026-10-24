@@ -63,9 +63,10 @@ type PageCtx = {
 }
 
 /**
- * Dedicated Diagnostic Order printout.
- * Table: SNo | Category | Description | Qty | Instruction
- * Header, patient box, doctor stamp footer, Printed On + Page X of Y on every page.
+ * Dedicated Diagnostic Order printout (clinic visit Dx mockup).
+ * Page 1: header → patient box → chief/allergy/diagnosis/vitals → Dx table
+ * Cont. pages: header → patient box → Dx table (continued)
+ * Every page: doctor stamp footer + Printed On + Page X of Y
  */
 export async function buildDiagnosticOrderPdf(
   booking: ConsultBooking,
@@ -98,12 +99,16 @@ export async function buildDiagnosticOrderPdf(
 
   const pages: PDFPage[] = []
 
-  const startPage = (): PageCtx => {
+  const startPage = (opts: { clinicalSummary: boolean }): PageCtx => {
     const page = doc.addPage([PAGE_W, PAGE_H])
     pages.push(page)
     let y = drawChromeHeader(page, model, font, bold, logo)
     y = drawPatientBox(page, model, font, bold, y)
-    y -= 12
+    y -= 10
+    if (opts.clinicalSummary) {
+      y = drawClinicalSummary(page, model, font, bold, y)
+      y -= 10
+    }
     page.drawText("DIAGNOSTIC ORDERS", {
       x: LEFT,
       y,
@@ -116,11 +121,11 @@ export async function buildDiagnosticOrderPdf(
     return { page, y }
   }
 
-  let ctx = startPage()
+  let ctx = startPage({ clinicalSummary: true })
 
   const ensure = (need: number) => {
     if (ctx.y - need >= CONTENT_BOTTOM) return
-    ctx = startPage()
+    ctx = startPage({ clinicalSummary: false })
   }
 
   for (const row of rows) {
@@ -286,6 +291,96 @@ function drawPatientBox(
   return boxBottom - 8
 }
 
+/** Chief complaint | Allergy, then Diagnosis + compact vitals (Temp / BP / Wt). */
+function drawClinicalSummary(
+  page: PDFPage,
+  model: Model,
+  font: PDFFont,
+  bold: PDFFont,
+  y: number,
+): number {
+  const mid = LEFT + 300
+
+  page.drawText("CHIEF COMPLAINT", {
+    x: LEFT,
+    y,
+    size: 10,
+    font: bold,
+    color: INK,
+  })
+  page.drawText("Allergy", {
+    x: mid,
+    y,
+    size: 10,
+    font: bold,
+    color: INK,
+  })
+  y -= 13
+
+  const chiefLines = wrap(
+    `Primary Reason: ${model.chief}; Secondary Complaints: ${model.secondary}`,
+    font,
+    9,
+    280,
+  )
+  const allergyLines = [
+    `Food: ${model.allergyFood || "—"}`,
+    `Drug: ${model.allergyDrug || "—"}`,
+  ]
+  const blockLines = Math.max(chiefLines.length, allergyLines.length)
+  for (let i = 0; i < blockLines; i++) {
+    if (chiefLines[i]) {
+      page.drawText(chiefLines[i]!, {
+        x: LEFT,
+        y: y - i * 11,
+        size: 9,
+        font,
+        color: INK,
+      })
+    }
+    if (allergyLines[i]) {
+      page.drawText(safe(allergyLines[i]!), {
+        x: mid,
+        y: y - i * 11,
+        size: 9,
+        font,
+        color: INK,
+      })
+    }
+  }
+  y -= blockLines * 11 + 8
+
+  page.drawText("Diagnosis:", {
+    x: LEFT,
+    y,
+    size: 9,
+    font: bold,
+    color: INK,
+  })
+  page.drawText(safe(model.diagnosis || "—"), {
+    x: LEFT + 62,
+    y,
+    size: 9,
+    font: bold,
+    color: TEAL,
+  })
+  y -= 14
+
+  // vitals: [ht, wt, bmi, temp, bp, rr, spo2, hc, pr]
+  const wt = model.vitals[1] || "—"
+  const temp = model.vitals[3] || "—"
+  const bp = model.vitals[4] || "—"
+  const vitalsLine = `Vitals: Temp (deg): ${temp}, BP: ${bp}${bp !== "—" && !/mmhg/i.test(bp) ? " mmHg" : ""}, Wt: ${wt}${wt !== "—" && !/kg/i.test(wt) ? "kg" : ""}`
+  page.drawText(safe(vitalsLine), {
+    x: LEFT,
+    y,
+    size: 9,
+    font,
+    color: INK,
+  })
+  return y - 4
+}
+
 function drawTableHeader(page: PDFPage, bold: PDFFont, y: number): number {
   let x = LEFT
   COL_HEADERS.forEach((h, i) => {
@@ -340,16 +435,17 @@ function drawPageStampFooter(
     })
   }
   let ty = stampTop - box - 10
-  page.drawText(safe(model.doctor || "Doctor"), {
+  const doctorLine = [model.doctor, model.qualification].filter(Boolean).join(" ")
+  page.drawText(safe(doctorLine || "Doctor"), {
     x: LEFT,
     y: ty,
     size: 9,
     font: bold,
     color: INK,
   })
-  ty -= 11
-  if (model.qualification) {
-    page.drawText(safe(model.qualification).slice(0, 48), {
+  if (model.license) {
+    ty -= 11
+    page.drawText(safe(`Reg. No: ${model.license}`), {
       x: LEFT,
       y: ty,
       size: 7,
@@ -366,6 +462,12 @@ function drawPageMeta(
   pageNo: number,
   total: number,
 ) {
+  page.drawLine({
+    start: { x: LEFT, y: 36 },
+    end: { x: RIGHT, y: 36 },
+    thickness: 0.5,
+    color: MUTED,
+  })
   page.drawText(`Printed On : ${safe(model.printed)}`, {
     x: LEFT,
     y: 22,

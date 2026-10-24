@@ -294,6 +294,33 @@ function allergyText(chart: Chart): string {
     .join("; ")
 }
 
+/** Food / Drug lines for Diagnostic Order print (mockup layout). */
+function allergyFoodDrug(chart: Chart): { food: string; drug: string } {
+  const rows = chart.allergies.filter((row) => row.name)
+  if (chart.noKnownAllergies || rows.length === 0) {
+    return { food: "—", drug: "—" }
+  }
+  const food = rows
+    .filter((row) => /^food/i.test(row.category || ""))
+    .map((row) => row.name)
+    .filter(Boolean)
+  const drug = rows
+    .filter((row) => /^(drug|med)/i.test(row.category || ""))
+    .map((row) => row.name)
+    .filter(Boolean)
+  const other = rows
+    .filter(
+      (row) =>
+        !/^food/i.test(row.category || "") && !/^(drug|med)/i.test(row.category || ""),
+    )
+    .map((row) => [row.category, row.name].filter(Boolean).join(": "))
+    .filter(Boolean)
+  return {
+    food: food.length ? food.join(", ") : other.length ? other.join("; ") : "—",
+    drug: drug.length ? drug.join(", ") : "—",
+  }
+}
+
 function painText(chart: Chart): string {
   const rows = chart.pain.filter(
     (row) => row.scale || row.score || row.location || row.type || row.duration || row.frequency || row.radiation,
@@ -407,6 +434,7 @@ export function consultationModel(booking: ConsultBooking) {
   const address = [booking.location?.address, booking.location?.city].filter(Boolean).join(", ")
   const doctor = withDoctor(booking.provider?.name)
   const qualification = (booking.provider?.description || "").trim().split("\n")[0] || ""
+  const allergySplit = allergyFoodDrug(chart)
   return {
     clinic: booking.practice?.name?.trim() || "Clinic",
     address: address || booking.location?.name || "",
@@ -449,6 +477,8 @@ export function consultationModel(booking: ConsultBooking) {
     ],
     extraVitals: extraVitals(chart.values),
     allergies: allergyText(chart),
+    allergyFood: allergySplit.food,
+    allergyDrug: allergySplit.drug,
     pain: painText(chart),
     diagnosis,
     remarks,
