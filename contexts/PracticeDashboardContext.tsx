@@ -57,6 +57,9 @@ export type PracticeMembership = {
 
 export type RoleAccess = {
   resourceType?: string
+  /** Role & Permissions Master id (Step 1). */
+  roleId?: string
+  roleMasterId?: string
   customRole?: string
   customRoleName?: string
   licenseExpiry?: string

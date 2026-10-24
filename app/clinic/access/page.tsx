@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import PasswordField from "@/components/inputs/PasswordField"
@@ -17,6 +17,14 @@ const ROLES = [
   { value: "DOCTOR", label: "Doctor" },
   { value: "PRACTICE_ADMIN", label: "Clinic admin" },
 ] as const
+
+type MasterRole = {
+  id: string
+  name: string
+  baseRole: string
+  system: boolean
+  description?: string
+}
 
 const DEPARTMENTS = ["Consultation", "Diagnostics", "Front desk", "Pharmacy"]
 const SUB_DEPARTMENTS = [
@@ -99,9 +107,8 @@ export default function RoleAccessPage() {
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<string>("NURSE")
-  const [isCustomRole, setIsCustomRole] = useState(false)
-  const [customRoleName, setCustomRoleName] = useState("")
-  const [baseRole, setBaseRole] = useState<string>("NURSE")
+  const [roleMasterId, setRoleMasterId] = useState<string>("")
+  const [masterRoles, setMasterRoles] = useState<MasterRole[]>([])
   const [resourceType, setResourceType] = useState("Nurse")
   const [licenseNo, setLicenseNo] = useState("")
   const [licenseExpiry, setLicenseExpiry] = useState("")
@@ -119,16 +126,21 @@ export default function RoleAccessPage() {
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
-  const existingCustomRoles = useMemo(() => {
-    const set = new Set<string>()
-    members.forEach((m) => {
-      const cr = m.access?.customRole || m.access?.customRoleName
-      if (cr && typeof cr === "string" && cr.trim()) {
-        set.add(cr.trim())
+  const loadMasterRoles = useCallback(async () => {
+    if (!practiceId || !isClinicAdmin) return
+    try {
+      const res = await proctoService.getRoleAccessMaster(practiceId)
+      if (res.status === "successful" && res.data?.master?.roles) {
+        setMasterRoles(res.data.master.roles as MasterRole[])
       }
-    })
-    return Array.from(set).sort()
-  }, [members])
+    } catch {
+      // Fall back to built-in enum labels if master cannot load.
+    }
+  }, [practiceId, isClinicAdmin])
+
+  useEffect(() => {
+    if (ready) void loadMasterRoles()
+  }, [ready, loadMasterRoles])
 
   const people = useMemo(
     () =>
@@ -147,16 +159,21 @@ export default function RoleAccessPage() {
     setPhone(m.user?.phone || "")
     setEmail(m.user?.email || "")
     setRole(m.role === "PRACTICE_OWNER" ? "PRACTICE_OWNER" : m.role)
-    const cr = access.customRole || access.customRoleName
-    if (cr) {
-      setIsCustomRole(true)
-      setCustomRoleName(cr)
-      setBaseRole(m.role === "PRACTICE_OWNER" ? "NURSE" : m.role)
-    } else {
-      setIsCustomRole(false)
-      setCustomRoleName("")
-      setBaseRole("NURSE")
-    }
+    const masterId =
+      access.roleId ||
+      access.roleMasterId ||
+      (access.customRole || access.customRoleName
+        ? masterRoles.find(
+            (r) =>
+              r.name.toLowerCase() ===
+              String(access.customRole || access.customRoleName)
+                .trim()
+                .toLowerCase(),
+          )?.id
+        : undefined) ||
+      masterRoles.find((r) => r.baseRole === m.role && r.system)?.id ||
+      ""
+    setRoleMasterId(masterId)
     setResourceType(access.resourceType || roleLabel(m.role, access))
     setLicenseNo(m.user?.doctor?.licenseNo || "")
     setLicenseExpiry(access.licenseExpiry || "")
@@ -165,6 +182,7 @@ export default function RoleAccessPage() {
     setConfirmPassword("")
     setRestricted(Boolean(access.restricted))
     setDeviceIds(access.deviceIds || [])
+    const cr = access.customRole || access.customRoleName
     setDepartments(
       access.departments?.length
         ? access.departments
@@ -186,11 +204,13 @@ export default function RoleAccessPage() {
     setLastName("")
     setPhone("")
     setEmail("")
-    setRole("NURSE")
-    setIsCustomRole(false)
-    setCustomRoleName("")
-    setBaseRole("NURSE")
-    setResourceType("Nurse")
+    const defaultMaster =
+      masterRoles.find((r) => r.id === "sys-NURSE") ||
+      masterRoles.find((r) => r.baseRole === "NURSE") ||
+      masterRoles[0]
+    setRole(defaultMaster?.baseRole || "NURSE")
+    setRoleMasterId(defaultMaster?.id || "")
+    setResourceType(defaultMaster?.name || "Nurse")
     setLicenseNo("")
     setLicenseExpiry("")
     setLicenseProvider("")
@@ -207,10 +227,15 @@ export default function RoleAccessPage() {
   }
 
   function accessBody(): RoleAccess {
+    const master = masterRoles.find((r) => r.id === roleMasterId)
+    const displayName = master?.name || resourceType
+    const isCustom = Boolean(master && !master.system)
     return {
-      resourceType: isCustomRole ? customRoleName.trim() : resourceType,
-      customRole: isCustomRole ? customRoleName.trim() : undefined,
-      customRoleName: isCustomRole ? customRoleName.trim() : undefined,
+      resourceType: displayName,
+      roleId: roleMasterId || undefined,
+      roleMasterId: roleMasterId || undefined,
+      customRole: isCustom ? displayName : undefined,
+      customRoleName: isCustom ? displayName : undefined,
       licenseExpiry,
       licenseProvider,
       restricted,
@@ -227,11 +252,15 @@ export default function RoleAccessPage() {
       setError("First name and email are required.")
       return
     }
-    if (isCustomRole && !customRoleName.trim()) {
-      setError("Please enter a custom role name.")
+    if (role !== "PRACTICE_OWNER" && !roleMasterId) {
+      setError("Select a role from Roles & permissions (Step 1).")
       return
     }
-    const effectiveRole = isCustomRole ? baseRole : role
+    const master = masterRoles.find((r) => r.id === roleMasterId)
+    const effectiveRole =
+      role === "PRACTICE_OWNER"
+        ? "PRACTICE_OWNER"
+        : master?.baseRole || role
     if (editingId === "new") {
       if (password.trim().length < 6) {
         setError("Password must be at least 6 characters.")
@@ -294,7 +323,7 @@ export default function RoleAccessPage() {
             access: accessBody(),
           })
         }
-        setMessage("Role access saved.")
+        setMessage("User saved.")
       } else if (editingId) {
         const specialtiesChanged = !sameIds(specialtyIds, loadedSpecialtyIds)
         const res = await proctoService.updateRoleAccess(practiceId, editingId, {
@@ -309,15 +338,15 @@ export default function RoleAccessPage() {
             : {}),
         })
         if (res.status !== "successful") {
-          setError(res.message || "Could not update role access.")
+          setError(res.message || "Could not update user.")
           setBusy(false)
           return
         }
-        setMessage("Role access updated.")
+        setMessage("User updated.")
       }
       await refresh()
     } catch {
-      setError("Could not save role access.")
+      setError("Could not save user.")
     } finally {
       setBusy(false)
     }
@@ -336,7 +365,7 @@ export default function RoleAccessPage() {
   if (!ready) {
     return (
       <div className="dashboard-page-wide">
-        <p className="text-sm text-slate-500">Loading role access…</p>
+        <p className="text-sm text-slate-500">Loading users…</p>
       </div>
     )
   }
@@ -345,7 +374,7 @@ export default function RoleAccessPage() {
     return (
       <div className="dashboard-page-wide">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Only the clinic owner or a clinic admin can change role access.
+          Only the clinic owner or a clinic admin can manage users.
         </p>
       </div>
     )
@@ -353,7 +382,7 @@ export default function RoleAccessPage() {
 
   return (
     <div className="dashboard-page-wide">
-      <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <button
             type="button"
@@ -375,11 +404,25 @@ export default function RoleAccessPage() {
               ? "Add user"
               : editingId
                 ? "Update user"
-                : "Role access"}
+                : "Users"}
           </h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            Step 2 of 2 — create staff profiles and assign a role defined in{" "}
+            <Link
+              href="/clinic/roles"
+              className="font-semibold text-[var(--theme-primary)] hover:underline"
+            >
+              Roles & permissions
+            </Link>
+            .
+          </p>
           <p className="mt-1 text-xs text-slate-500">
             <Link href="/clinic/dashboard" className="hover:underline">
               Dashboard
+            </Link>
+            <span className="mx-1">›</span>
+            <Link href="/clinic/roles" className="hover:underline">
+              Roles & permissions
             </Link>
             <span className="mx-1">›</span>
             <button
@@ -402,13 +445,21 @@ export default function RoleAccessPage() {
           </p>
         </div>
         {!editingId ? (
-          <button
-            type="button"
-            onClick={openNew}
-            className="inline-flex h-10 items-center rounded-lg bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white"
-          >
-            Add user
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/clinic/roles"
+              className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.04] dark:text-white"
+            >
+              ← Step 1 · Roles
+            </Link>
+            <button
+              type="button"
+              onClick={openNew}
+              className="inline-flex h-10 items-center rounded-lg bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white"
+            >
+              Add user
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -516,123 +567,59 @@ export default function RoleAccessPage() {
             <div>
               <div className="mb-1 flex items-center justify-between text-xs font-medium text-slate-500">
                 <span>Select Role *</span>
-                {role !== "PRACTICE_OWNER" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!isCustomRole) {
-                        setIsCustomRole(true)
-                        setCustomRoleName("")
-                        setBaseRole("NURSE")
-                      } else {
-                        setIsCustomRole(false)
-                        setCustomRoleName("")
-                        setResourceType(roleLabel(role))
-                        setDepartments((rows) =>
-                          rows.map((row, i) =>
-                            i === 0 ? { ...row, role: roleLabel(role) } : row,
-                          ),
-                        )
-                      }
-                    }}
+                {role !== "PRACTICE_OWNER" ? (
+                  <Link
+                    href="/clinic/roles"
                     className="font-semibold text-blue-600 hover:underline dark:text-sky-400"
                   >
-                    {isCustomRole ? "← Standard roles" : "+ Create custom role"}
-                  </button>
-                )}
+                    Manage roles & rights
+                  </Link>
+                ) : null}
               </div>
               {role === "PRACTICE_OWNER" ? (
                 <input className={field} value="Clinic owner" disabled />
-              ) : isCustomRole ? (
-                <div className="space-y-2">
-                  <input
-                    className={field}
-                    value={customRoleName}
-                    placeholder="Custom role name (e.g. Pharmacist, Lab Tech)"
-                    autoFocus
-                    onChange={(e) => {
-                      const val = e.target.value
-                      setCustomRoleName(val)
-                      if (val.trim()) {
-                        setResourceType(val.trim())
-                        setDepartments((rows) =>
-                          rows.map((row, i) =>
-                            i === 0 ? { ...row, role: val.trim() } : row,
-                          ),
-                        )
-                      }
-                    }}
-                  />
-                  <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-2.5 text-xs dark:border-blue-900/40 dark:bg-blue-950/20">
-                    <span className="font-semibold text-blue-900 dark:text-blue-200">
-                      Base permissions:
-                    </span>
-                    <select
-                      className="mt-1 h-8 w-full rounded border border-blue-200 bg-white px-2 text-xs text-slate-800 dark:border-blue-800 dark:bg-slate-900 dark:text-white"
-                      value={baseRole}
-                      onChange={(e) => setBaseRole(e.target.value)}
-                    >
-                      <option value="NURSE">Clinical Staff (Nurse access)</option>
-                      <option value="RECEPTIONIST">Front Desk (Receptionist access)</option>
-                      <option value="PRACTICE_ADMIN">Clinic Admin (Full admin access)</option>
-                    </select>
-                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      User will display as <strong>{customRoleName.trim() || "Custom Role"}</strong> and inherit the selected clinic permissions.
-                    </p>
-                  </div>
-                </div>
               ) : (
-                <select
-                  className={field}
-                  value={role}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    if (val === "__CUSTOM__") {
-                      setIsCustomRole(true)
-                      setCustomRoleName("")
-                      setBaseRole("NURSE")
-                      return
-                    }
-                    if (val.startsWith("CUSTOM:")) {
-                      const name = val.replace("CUSTOM:", "")
-                      setIsCustomRole(true)
-                      setCustomRoleName(name)
-                      setResourceType(name)
+                <div className="space-y-1.5">
+                  <select
+                    className={field}
+                    value={roleMasterId}
+                    onChange={(e) => {
+                      const id = e.target.value
+                      setRoleMasterId(id)
+                      const master = masterRoles.find((r) => r.id === id)
+                      if (!master) return
+                      setRole(master.baseRole)
+                      setResourceType(master.name)
                       setDepartments((rows) =>
                         rows.map((row, i) =>
-                          i === 0 ? { ...row, role: name } : row,
+                          i === 0 ? { ...row, role: master.name } : row,
                         ),
                       )
-                      return
-                    }
-                    setRole(val)
-                    const label = roleLabel(val)
-                    setResourceType(label)
-                    setDepartments((rows) =>
-                      rows.map((row, i) =>
-                        i === 0 ? { ...row, role: label } : row,
-                      ),
-                    )
-                  }}
-                >
-                  <optgroup label="Standard Roles">
-                    {ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
+                    }}
+                  >
+                    <option value="">Select a configured role…</option>
+                    {masterRoles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                        {r.system ? "" : " (custom)"}
                       </option>
                     ))}
-                  </optgroup>
-                  {existingCustomRoles.length ? (
-                    <optgroup label="Existing Custom Roles">
-                      {existingCustomRoles.map((cr) => (
-                        <option key={cr} value={`CUSTOM:${cr}`}>
-                          {cr}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  <option value="__CUSTOM__">+ Create custom role…</option>
-                </select>
+                  </select>
+                  {masterRoles.length === 0 ? (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                      No roles loaded.{" "}
+                      <Link href="/clinic/roles" className="font-semibold underline">
+                        Open Roles & permissions
+                      </Link>{" "}
+                      (Step 1) first.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-slate-500">
+                      Roles and rights are configured in Step 1. This assigns one
+                      predefined role to the user.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
             <label className="block text-sm">
@@ -848,27 +835,26 @@ export default function RoleAccessPage() {
                       )
                     }
                   >
-                    <optgroup label="Standard Roles">
-                      {ROLES.map((r) => (
-                        <option key={r.value} value={r.label}>{r.label}</option>
-                      ))}
-                    </optgroup>
-                    {isCustomRole && customRoleName.trim() ? (
-                      <optgroup label="Current Custom Role">
-                        <option value={customRoleName.trim()}>{customRoleName.trim()}</option>
-                      </optgroup>
-                    ) : null}
-                    {existingCustomRoles.length ? (
-                      <optgroup label="Custom Roles">
-                        {existingCustomRoles.map((cr) => (
-                          <option key={`dept-${cr}`} value={cr}>{cr}</option>
+                    {masterRoles.length ? (
+                      <optgroup label="Configured roles">
+                        {masterRoles.map((r) => (
+                          <option key={`dept-${r.id}`} value={r.name}>
+                            {r.name}
+                          </option>
                         ))}
                       </optgroup>
-                    ) : null}
+                    ) : (
+                      <optgroup label="Standard Roles">
+                        {ROLES.map((r) => (
+                          <option key={r.value} value={r.label}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                     {row.role &&
-                    !ROLES.some((r) => r.label === row.role) &&
-                    !existingCustomRoles.includes(row.role) &&
-                    row.role !== customRoleName.trim() ? (
+                    !masterRoles.some((r) => r.name === row.role) &&
+                    !ROLES.some((r) => r.label === row.role) ? (
                       <option value={row.role}>{row.role}</option>
                     ) : null}
                   </select>

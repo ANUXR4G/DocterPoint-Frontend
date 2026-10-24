@@ -990,6 +990,38 @@ export const proctoService = {
       body: JSON.stringify(body),
     }),
 
+  /** Step 1 — Role & Permissions Master for a clinic. */
+  getRoleAccessMaster: (practiceId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/role-access-master`) as Promise<
+      ProctoResult<{
+        master: {
+          roles: Array<{
+            id: string
+            name: string
+            baseRole: string
+            system: boolean
+            description?: string
+            permissions: Record<string, boolean | string>
+          }>
+        }
+        permissionCatalog: Array<{
+          key: string
+          label: string
+          group: string
+          description: string
+        }>
+      }>
+    >,
+
+  saveRoleAccessMaster: (
+    practiceId: string,
+    body: { roles: Array<Record<string, unknown>> },
+  ) =>
+    proctoFetch(`/procto/practices/${practiceId}/role-access-master`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
   openPracticeSchedule: (
     practiceId: string,
     userId: string,
