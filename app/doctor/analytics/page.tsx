@@ -6,8 +6,10 @@ import DoctorAnalyticsPage from "@/components/ui/doctors/pages/DoctorAnalyticsPa
 
 export default function DoctorAnalyticsRoute() {
   return (
-    <div className="dashboard-page-wide">
+    <div className="dashboard-page-wide h-full min-h-0 overflow-hidden !space-y-0 gap-3">
       <DashboardPageHeader
+        compact
+        className="shrink-0"
         eyebrow="Doctor"
         title={
           <>
@@ -17,7 +19,7 @@ export default function DoctorAnalyticsRoute() {
         }
         subtitle="Track patient visits by gender over time. Switch between weekly and monthly views."
       />
-      <div className="dashboard-panel">
+      <div className="dashboard-panel min-h-0 flex-1 overflow-hidden !p-3 sm:!p-4">
         <Suspense
           fallback={
             <p className="text-sm text-slate-500">Loading analytics…</p>

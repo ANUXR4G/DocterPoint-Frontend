@@ -32,10 +32,16 @@ ChartJS.register(
 
 const PERIOD_TITLES: Record<TypeAnalyticsParam, string> = {
   day: "Today by hour",
-  week: "This week by day",
+  week: "This week by date",
   month: "This month by day",
   year: "This year by month",
   yoy: "This year vs last year",
+}
+
+/** Axis tick text — keep date/hour labels intact; shorten month names. */
+function axisTickLabel(name: string, active: TypeAnalyticsParam) {
+  if (active === "day" || active === "week" || active === "month") return name
+  return name.substring(0, 3)
 }
 
 export const ANALYTICS_PERIOD_OPTIONS: {
@@ -164,11 +170,7 @@ export function PatientGenderBarChart({ data, active }: GenderBarProps) {
   return (
     <Bar
       data={{
-        labels: metrics.map((m) =>
-          active === "day" || active === "month"
-            ? m.name
-            : m.name.substring(0, 3),
-        ),
+        labels: metrics.map((m) => axisTickLabel(m.name, active)),
         datasets: [
           {
             label: "Male",
@@ -261,9 +263,7 @@ export function AppointmentTrendLineChart({
   const end = Math.max(range.start, range.end)
   const visible = metrics.slice(start, end + 1)
 
-  const labels = visible.map((m) =>
-    active === "day" || active === "month" ? m.name : m.name.substring(0, 3),
-  )
+  const labels = visible.map((m) => axisTickLabel(m.name, active))
 
   const completed = visible.map((m) => m.completed ?? 0)
   const cancelled = visible.map((m) => m.cancelled ?? 0)

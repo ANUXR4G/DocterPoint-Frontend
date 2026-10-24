@@ -34,7 +34,7 @@ const DoctorAnalyticsChartPanel = dynamic(
 
 const PERIOD_SUBTITLE: Record<TypeAnalyticsParam, string> = {
   day: "Today by hour",
-  week: "This week",
+  week: "This week by date",
   month: "This month by day",
   year: "This year by month",
   yoy: "This year vs last year",
@@ -189,7 +189,7 @@ export default function DoctorAnalyticsPage({
     Boolean(providerId)
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-y-auto custom-scroll">
       {planLocked ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/50 dark:bg-amber-950/30">
           <h2 className="text-lg font-semibold text-amber-950 dark:text-amber-100">
