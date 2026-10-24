@@ -169,6 +169,7 @@ export default function DeskPatientPicker({
   const [searching, setSearching] = useState(false)
   const [searched, setSearched] = useState("")
   const [searchError, setSearchError] = useState("")
+  const [canCreatePatient, setCanCreatePatient] = useState(true)
 
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
@@ -195,6 +196,20 @@ export default function DeskPatientPicker({
       loadingRecord: saving || Boolean(linkingId),
     })
   }, [searching, saving, linkingId])
+
+  useEffect(() => {
+    let alive = true
+    if (!practiceId) return
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (!alive) return
+      if (res.status === "successful" && res.data?.permissions) {
+        setCanCreatePatient(Boolean(res.data.permissions.CREATE_PATIENT))
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [practiceId])
 
   useEffect(() => {
     const q = query.trim()
@@ -244,6 +259,12 @@ export default function DeskPatientPicker({
   }, [query, practiceId, country, nameOnly])
 
   function startRegister() {
+    if (!canCreatePatient) {
+      setSearchError(
+        "Your role cannot register patients. Ask a clinic admin for Patient Creation.",
+      )
+      return
+    }
     const q = query.trim()
     const digits = q.replace(/\D/g, "")
     if (/^[+\d\s()-]+$/.test(q) && digits.length >= 10) {
@@ -671,11 +692,13 @@ export default function DeskPatientPicker({
       ) : searched && searched === q && !searching ? (
         <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           No patient found for “{q}”.
-          {nameOnly
-            ? " Register them below."
-            : /\d/.test(q) && q.replace(/\D/g, "").length < 10
-              ? " Try the full 10-digit mobile, or register them below."
-              : " Register them below."}
+          {canCreatePatient
+            ? nameOnly
+              ? " Register them below."
+              : /\d/.test(q) && q.replace(/\D/g, "").length < 10
+                ? " Try the full 10-digit mobile, or register them below."
+                : " Register them below."
+            : " Ask a clinic admin if you need Patient Creation access."}
         </p>
       ) : (
         <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -684,13 +707,15 @@ export default function DeskPatientPicker({
             : "Type at least 4 digits of the mobile, 2 letters of the name, or the MRN."}
         </p>
       )}
-      <button
-        type="button"
-        onClick={startRegister}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-[var(--theme-primary)] hover:bg-[color-mix(in_srgb,var(--theme-primary)_6%,transparent)] hover:text-[var(--theme-primary)] dark:border-slate-600 dark:text-slate-200"
-      >
-        <span className="text-base leading-none">+</span> Register new patient
-      </button>
+      {canCreatePatient ? (
+        <button
+          type="button"
+          onClick={startRegister}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-[var(--theme-primary)] hover:bg-[color-mix(in_srgb,var(--theme-primary)_6%,transparent)] hover:text-[var(--theme-primary)] dark:border-slate-600 dark:text-slate-200"
+        >
+          <span className="text-base leading-none">+</span> Register new patient
+        </button>
+      ) : null}
     </div>
   )
 }

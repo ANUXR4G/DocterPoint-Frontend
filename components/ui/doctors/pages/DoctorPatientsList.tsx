@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, Fragment } from "react"
+import { useEffect, useMemo, useState, Fragment } from "react"
 import Link from "next/link"
 import { Paperclip } from "lucide-react"
 import TablePagination from "@/components/pagination/TablePagination"
@@ -10,6 +10,7 @@ import {
   usePracticeDashboard,
   type PracticePatientRow,
 } from "@/contexts/PracticeDashboardContext"
+import { proctoService } from "@/lib/services/procto"
 import {
   bookingStatusClass,
   bookingStatusLabel,
@@ -180,17 +181,92 @@ export default function DoctorPatientsList() {
     loading,
     error,
     practiceName,
+    practiceId: contextPracticeId,
     patients,
     refresh,
   } = usePracticeDashboard()
+  const practiceId = contextPracticeId ?? ""
   const [query, setQuery] = useState("")
   const [expanded, setExpanded] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all")
   const [docsPatient, setDocsPatient] = useState<PracticePatientRow | null>(
     null,
   )
+  const [canViewHistory, setCanViewHistory] = useState(true)
+  const [canArchive, setCanArchive] = useState(false)
+  const [canMerge, setCanMerge] = useState(false)
+  const [mergeSurvivorId, setMergeSurvivorId] = useState<string | null>(null)
+  const [permBusy, setPermBusy] = useState("")
+
+  useEffect(() => {
+    let alive = true
+    if (!practiceId) return
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (!alive || res.status !== "successful" || !res.data?.permissions) return
+      const p = res.data.permissions
+      setCanViewHistory(
+        Boolean(p.VIEW_PATIENT_HISTORY || p.OPEN_PATIENT_DOCS),
+      )
+      setCanArchive(Boolean(p.DELETE_PATIENT))
+      setCanMerge(Boolean(p.MERGE_PATIENT))
+    })
+    return () => {
+      alive = false
+    }
+  }, [practiceId])
 
   const showLoading = (!ready && loading) || (ready && !hydrated)
+
+  async function archivePatient(patientUserId: string, name: string | null) {
+    if (!practiceId || !patientUserId) return
+    if (
+      !window.confirm(
+        `Archive ${name || "this patient"} from the clinic list? Past visits and MRN are kept.`,
+      )
+    ) {
+      return
+    }
+    setPermBusy(patientUserId)
+    try {
+      const res = await proctoService.archivePracticePatient(
+        practiceId,
+        patientUserId,
+      )
+      if (res.status === "successful") void refresh()
+      else window.alert(res.message || "Could not archive patient.")
+    } finally {
+      setPermBusy("")
+    }
+  }
+
+  async function mergeIntoSurvivor(duplicateUserId: string) {
+    if (!practiceId || !mergeSurvivorId || mergeSurvivorId === duplicateUserId) {
+      return
+    }
+    if (
+      !window.confirm(
+        "Merge this duplicate into the selected survivor? Visits move to the survivor; the duplicate leaves the clinic list.",
+      )
+    ) {
+      return
+    }
+    setPermBusy(duplicateUserId)
+    try {
+      const res = await proctoService.mergePracticePatients(
+        practiceId,
+        mergeSurvivorId,
+        duplicateUserId,
+      )
+      if (res.status === "successful") {
+        setMergeSurvivorId(null)
+        void refresh()
+      } else {
+        window.alert(res.message || "Could not merge patients.")
+      }
+    } finally {
+      setPermBusy("")
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -426,6 +502,50 @@ export default function DoctorPatientsList() {
                           />
                         </div>
                       </div>
+                      {p.patientId && (canArchive || canMerge) ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {canArchive ? (
+                            <button
+                              type="button"
+                              disabled={permBusy === p.patientId}
+                              onClick={() =>
+                                void archivePatient(p.patientId!, p.name)
+                              }
+                              className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900/40 dark:text-rose-300"
+                            >
+                              Archive from clinic list
+                            </button>
+                          ) : null}
+                          {canMerge ? (
+                            mergeSurvivorId === p.patientId ? (
+                              <button
+                                type="button"
+                                onClick={() => setMergeSurvivorId(null)}
+                                className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                              >
+                                Survivor selected — pick a duplicate
+                              </button>
+                            ) : mergeSurvivorId ? (
+                              <button
+                                type="button"
+                                disabled={permBusy === p.patientId}
+                                onClick={() => void mergeIntoSurvivor(p.patientId!)}
+                                className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-800 dark:text-amber-200"
+                              >
+                                Merge into survivor
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setMergeSurvivorId(p.patientId!)}
+                                className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-200"
+                              >
+                                Mark as merge survivor
+                              </button>
+                            )
+                          ) : null}
+                        </div>
+                      ) : null}
                       <p className="mt-3 text-xs font-semibold uppercase tracking-wide opacity-50">
                         Recent visits
                       </p>
@@ -437,10 +557,13 @@ export default function DoctorPatientsList() {
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <span className="font-medium">
-                                {b.disease?.trim() &&
+                                {canViewHistory &&
+                                b.disease?.trim() &&
                                 !/^general\s+consultation$/i.test(b.disease)
                                   ? b.disease
-                                  : "No chief complaint"}
+                                  : canViewHistory
+                                    ? "No chief complaint"
+                                    : "Visit"}
                               </span>
                               <span
                                 className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusClass(b.status)}`}
@@ -449,7 +572,8 @@ export default function DoctorPatientsList() {
                               </span>
                             </div>
                             <p className="mt-0.5 opacity-60">{visitWhen(b)}</p>
-                            {b.doctorRemarks?.trim() &&
+                            {canViewHistory &&
+                            b.doctorRemarks?.trim() &&
                             !/^Chief complaint:/i.test(b.doctorRemarks) &&
                             !/AI brief for doctor:/i.test(b.doctorRemarks) ? (
                               <p className="mt-1 whitespace-pre-wrap text-sm opacity-90">
@@ -457,7 +581,13 @@ export default function DoctorPatientsList() {
                                 {b.doctorRemarks}
                               </p>
                             ) : null}
-                            <VisitChartLines booking={b} />
+                            {canViewHistory ? (
+                              <VisitChartLines booking={b} />
+                            ) : (
+                              <p className="mt-1 text-xs text-neutral-500">
+                                Medical history hidden — needs View Patient Medical History.
+                              </p>
+                            )}
                             <Link
                               href={`/doctor/queue/${b.id}`}
                               className="mt-1 inline-block font-semibold text-[var(--theme-primary)] hover:underline"
@@ -634,6 +764,54 @@ export default function DoctorPatientsList() {
                                 </p>
                               ) : null}
                             </div>
+                            {p.patientId && (canArchive || canMerge) ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {canArchive ? (
+                                  <button
+                                    type="button"
+                                    disabled={permBusy === p.patientId}
+                                    onClick={() =>
+                                      void archivePatient(p.patientId!, p.name)
+                                    }
+                                    className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900/40 dark:text-rose-300"
+                                  >
+                                    Archive from clinic list
+                                  </button>
+                                ) : null}
+                                {canMerge ? (
+                                  mergeSurvivorId === p.patientId ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setMergeSurvivorId(null)}
+                                      className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                                    >
+                                      Survivor selected — pick a duplicate
+                                    </button>
+                                  ) : mergeSurvivorId ? (
+                                    <button
+                                      type="button"
+                                      disabled={permBusy === p.patientId}
+                                      onClick={() =>
+                                        void mergeIntoSurvivor(p.patientId!)
+                                      }
+                                      className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-800 dark:text-amber-200"
+                                    >
+                                      Merge into survivor
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setMergeSurvivorId(p.patientId!)
+                                      }
+                                      className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-200"
+                                    >
+                                      Mark as merge survivor
+                                    </button>
+                                  )
+                                ) : null}
+                              </div>
+                            ) : null}
                             <p className="mt-3 text-xs font-semibold uppercase tracking-wide opacity-50">
                               Recent visits
                             </p>
@@ -645,12 +823,15 @@ export default function DoctorPatientsList() {
                                 >
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="font-medium">
-                                      {b.disease?.trim() &&
+                                      {canViewHistory &&
+                                      b.disease?.trim() &&
                                       !/^general\s+consultation$/i.test(
                                         b.disease,
                                       )
                                         ? b.disease
-                                        : "No chief complaint"}
+                                        : canViewHistory
+                                          ? "No chief complaint"
+                                          : "Visit"}
                                     </span>
                                     <span
                                       className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusClass(b.status)}`}
@@ -659,7 +840,8 @@ export default function DoctorPatientsList() {
                                     </span>
                                   </div>
                                   <p className="mt-0.5 opacity-60">{visitWhen(b)}</p>
-                                  {b.doctorRemarks?.trim() &&
+                                  {canViewHistory &&
+                                  b.doctorRemarks?.trim() &&
                                   !/^Chief complaint:/i.test(b.doctorRemarks) &&
                                   !/AI brief for doctor:/i.test(
                                     b.doctorRemarks,
@@ -671,7 +853,13 @@ export default function DoctorPatientsList() {
                                       {b.doctorRemarks}
                                     </p>
                                   ) : null}
-                                  <VisitChartLines booking={b} />
+                                  {canViewHistory ? (
+                                    <VisitChartLines booking={b} />
+                                  ) : (
+                                    <p className="mt-1 text-xs text-neutral-500">
+                                      Medical history hidden — needs View Patient Medical History.
+                                    </p>
+                                  )}
                                   <Link
                                     href={`/doctor/queue/${b.id}`}
                                     className="mt-1 inline-block font-semibold text-[var(--theme-primary)] hover:underline"

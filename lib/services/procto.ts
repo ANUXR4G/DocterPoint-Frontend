@@ -729,6 +729,39 @@ export const proctoService = {
       method: "POST",
     }) as Promise<ProctoResult<DeskPatient>>,
 
+  updatePracticePatientProfile: (
+    practiceId: string,
+    patientUserId: string,
+    body: {
+      name?: string
+      phone?: string
+      gender?: string
+      dateOfBirth?: string
+      email?: string | null
+      address?: string | null
+      relationship?: string | null
+    },
+  ) =>
+    proctoFetch(`/procto/practices/${practiceId}/patients/${patientUserId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  archivePracticePatient: (practiceId: string, patientUserId: string) =>
+    proctoFetch(`/procto/practices/${practiceId}/patients/${patientUserId}`, {
+      method: "DELETE",
+    }),
+
+  mergePracticePatients: (
+    practiceId: string,
+    survivorUserId: string,
+    duplicateUserId: string,
+  ) =>
+    proctoFetch(`/procto/practices/${practiceId}/patients/merge`, {
+      method: "POST",
+      body: JSON.stringify({ survivorUserId, duplicateUserId }),
+    }),
+
   getAuditLog: (
     practiceId: string,
     q: {
@@ -1576,6 +1609,12 @@ export type MyPracticePermissions = {
   permissions: {
     MANAGE_SLOTS_INLINE: PracticePermissionScope;
     VIEW_AUDIT_LOG: PracticePermissionScope;
+    CREATE_PATIENT?: PracticePermissionScope;
+    READ_PATIENT?: PracticePermissionScope;
+    MODIFY_PATIENT?: PracticePermissionScope;
+    DELETE_PATIENT?: PracticePermissionScope;
+    MERGE_PATIENT?: PracticePermissionScope;
+    VIEW_PATIENT_HISTORY?: PracticePermissionScope;
     CREATE_MASTER_DATA?: PracticePermissionScope;
     EDIT_MASTER_DATA?: PracticePermissionScope;
     DEACTIVATE_MASTER_DATA?: PracticePermissionScope;
