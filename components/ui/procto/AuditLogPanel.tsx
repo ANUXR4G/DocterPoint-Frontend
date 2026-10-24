@@ -20,8 +20,13 @@ type ActionOption = {
 const ACTION_OPTIONS: ActionOption[] = [
   { value: "BOOKING_CREATED", label: "Appointments booked", category: "APPOINTMENTS" },
   { value: "BOOKING_MOVED", label: "Appointments moved", category: "APPOINTMENTS" },
+  { value: "BOOKING_RESCHEDULED", label: "Appointments rescheduled", category: "APPOINTMENTS" },
+  { value: "BOOKING_STATUS_CHANGED", label: "Status changes", category: "APPOINTMENTS" },
   { value: "WALK_IN_ADDED", label: "Emergency walk-ins", category: "APPOINTMENTS" },
   { value: "PATIENT_REGISTERED", label: "Patient registrations", category: "APPOINTMENTS" },
+  { value: "PATIENT_UPDATED", label: "Patient profile updates", category: "APPOINTMENTS" },
+  { value: "PATIENT_ARCHIVED", label: "Patients archived", category: "APPOINTMENTS" },
+  { value: "PATIENT_MERGED", label: "Patients merged", category: "APPOINTMENTS" },
   { value: "SLOT_CREATED", label: "Slots created", category: "SCHEDULE" },
   { value: "SLOT_REMOVED", label: "Slots removed", category: "SCHEDULE" },
   { value: "OVERRIDE_CREATED", label: "Leave & blocks", category: "SCHEDULE" },
@@ -30,8 +35,15 @@ const ACTION_OPTIONS: ActionOption[] = [
   { value: "DOCUMENT_SENT", label: "Prescription / consultation sent", category: "DOCUMENTS" },
   { value: "DOCUMENT_SHARED", label: "Documents shared", category: "DOCUMENTS" },
   { value: "DOCUMENT_UPLOADED", label: "Visit documents uploaded", category: "DOCUMENTS" },
+  { value: "DOCUMENT_EDITED", label: "Clinical documents edited", category: "DOCUMENTS" },
+  { value: "DOCUMENT_FINALIZED", label: "Visits finalized", category: "DOCUMENTS" },
   { value: "DOCTOR_STAMP_UPDATED", label: "Doctor stamp changes", category: "DOCUMENTS" },
   { value: "PRACTICE_BRANDING_UPDATED", label: "Clinic logo & stamp", category: "DOCUMENTS" },
+  { value: "PAYMENT_CREATED", label: "Payment requests created", category: "PAYMENTS" },
+  { value: "WHATSAPP_CONFIRMATION", label: "WhatsApp confirmations", category: "MESSAGING" },
+  { value: "WHATSAPP_RESCHEDULE", label: "WhatsApp reschedules", category: "MESSAGING" },
+  { value: "WHATSAPP_CANCELLATION", label: "WhatsApp cancellations", category: "MESSAGING" },
+  { value: "WHATSAPP_DOCUMENT", label: "WhatsApp documents", category: "MESSAGING" },
 ]
 
 const CATEGORIES: Array<{ value: AuditCategory | ""; label: string }> = [
@@ -39,6 +51,8 @@ const CATEGORIES: Array<{ value: AuditCategory | ""; label: string }> = [
   { value: "APPOINTMENTS", label: "Appointments" },
   { value: "SCHEDULE", label: "Schedule & blocks" },
   { value: "DOCUMENTS", label: "Documents & branding" },
+  { value: "PAYMENTS", label: "Payments" },
+  { value: "MESSAGING", label: "WhatsApp messaging" },
 ]
 
 const ACTION_STYLE: Record<string, string> = {
@@ -46,9 +60,19 @@ const ACTION_STYLE: Record<string, string> = {
     "bg-indigo-100 text-indigo-900 dark:bg-indigo-900/40 dark:text-indigo-100",
   BOOKING_MOVED:
     "bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100",
+  BOOKING_RESCHEDULED:
+    "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100",
+  BOOKING_STATUS_CHANGED:
+    "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100",
   WALK_IN_ADDED: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
   PATIENT_REGISTERED:
     "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
+  PATIENT_UPDATED:
+    "bg-emerald-50 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100",
+  PATIENT_ARCHIVED:
+    "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200",
+  PATIENT_MERGED:
+    "bg-teal-100 text-teal-900 dark:bg-teal-900/40 dark:text-teal-100",
   SLOT_CREATED:
     "bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-200",
   SLOT_REMOVED:
@@ -65,10 +89,24 @@ const ACTION_STYLE: Record<string, string> = {
     "bg-cyan-100 text-cyan-900 dark:bg-cyan-900/40 dark:text-cyan-100",
   DOCUMENT_UPLOADED:
     "bg-lime-100 text-lime-900 dark:bg-lime-900/40 dark:text-lime-100",
+  DOCUMENT_EDITED:
+    "bg-lime-50 text-lime-900 dark:bg-lime-900/30 dark:text-lime-100",
+  DOCUMENT_FINALIZED:
+    "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100",
   DOCTOR_STAMP_UPDATED:
     "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-100",
   PRACTICE_BRANDING_UPDATED:
     "bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-100",
+  PAYMENT_CREATED:
+    "bg-yellow-100 text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100",
+  WHATSAPP_CONFIRMATION:
+    "bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-100",
+  WHATSAPP_RESCHEDULE:
+    "bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-100",
+  WHATSAPP_CANCELLATION:
+    "bg-red-50 text-red-800 dark:bg-red-900/30 dark:text-red-100",
+  WHATSAPP_DOCUMENT:
+    "bg-teal-50 text-teal-800 dark:bg-teal-900/30 dark:text-teal-100",
 }
 
 const DOCTOR_ROLES = new Set(["DOCTOR", "PRACTICE_OWNER", "PRACTICE_ADMIN"])
