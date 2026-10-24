@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { Users, FileText, Clock } from "lucide-react"
 import { usePracticeDashboard } from "@/contexts/PracticeDashboardContext"
@@ -8,6 +9,7 @@ import ClinicPortalLinks from "@/components/ui/clinics/ClinicPortalLinks"
 import DoctorScheduleReport from "@/components/ui/doctors/reports/DoctorScheduleReport"
 import PatientVisitReport from "@/components/ui/doctors/reports/PatientVisitReport"
 import PatientAppointmentReport from "@/components/ui/doctors/reports/PatientAppointmentReport"
+import { proctoService } from "@/lib/services/procto"
 
 interface DoctorReportsPageProps {
   portal?: "doctor" | "clinic"
@@ -22,6 +24,24 @@ export default function DoctorReportsPage({
   const currentTab = searchParams.get("tab") || "schedule"
 
   const { practiceId, memberships, isClinicAdmin, ready } = usePracticeDashboard()
+  const [canExportReports, setCanExportReports] = useState(true)
+  const [permReady, setPermReady] = useState(false)
+
+  useEffect(() => {
+    if (!practiceId) return
+    let alive = true
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (!alive) return
+      if (res.status === "successful" && res.data?.permissions) {
+        const p = res.data.permissions
+        setCanExportReports(Boolean(p.EXPORT_REPORTS || p.VIEW_ANALYTICS))
+      }
+      setPermReady(true)
+    })
+    return () => {
+      alive = false
+    }
+  }, [practiceId])
 
   const handleTabChange = (tabKey: string) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -49,6 +69,20 @@ export default function DoctorReportsPage({
       description: "Appointment breakdown and metrics across different booking statuses",
     },
   ]
+
+  if (ready && permReady && !canExportReports) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto custom-scroll">
+        <div className="no-print shrink-0">
+          {portal === "clinic" ? <ClinicPortalLinks /> : <DoctorPortalLinks />}
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-8 text-center text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+          Your clinic role does not include Data Export / Reporting. Ask a clinic
+          admin to grant <strong>EXPORT_REPORTS</strong> in Role &amp; Permissions.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto custom-scroll">
@@ -110,6 +144,7 @@ export default function DoctorReportsPage({
             practiceId={practiceId || undefined}
             memberships={memberships}
             isClinicAdmin={isClinicAdmin}
+            canExport={canExportReports}
           />
         )}
 
@@ -118,6 +153,7 @@ export default function DoctorReportsPage({
             practiceId={practiceId || undefined}
             memberships={memberships}
             isClinicAdmin={isClinicAdmin}
+            canExport={canExportReports}
           />
         )}
 
@@ -126,6 +162,7 @@ export default function DoctorReportsPage({
             practiceId={practiceId || undefined}
             memberships={memberships}
             isClinicAdmin={isClinicAdmin}
+            canExport={canExportReports}
           />
         )}
       </div>

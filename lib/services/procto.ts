@@ -1255,6 +1255,7 @@ export const proctoService = {
 
 export type ProctoBooking = {
   id: string;
+  practiceId?: string;
   patient_phone: string;
   patientPhone?: string;
   patient_name?: string | null;

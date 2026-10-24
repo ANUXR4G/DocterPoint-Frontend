@@ -29,11 +29,13 @@ interface PatientAppointmentReportProps {
   practiceId?: string | null
   memberships?: any[]
   isClinicAdmin?: boolean
+  canExport?: boolean
 }
 
 export default function PatientAppointmentReport({
   practiceId,
   memberships,
+  canExport = true,
 }: PatientAppointmentReportProps) {
   const [criteria, setCriteria] = useState<CriteriaType>("week")
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("all")
@@ -372,13 +374,15 @@ export default function PatientAppointmentReport({
             >
               <Printer className="h-3.5 w-3.5 text-neutral-500" /> Print Report
             </button>
-            <button
-              type="button"
-              onClick={handleExportCsv}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
-            >
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </button>
+            {canExport ? (
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+              >
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

@@ -102,6 +102,20 @@ export default function AuditLogPanel() {
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState("")
+  const [canExport, setCanExport] = useState(true)
+
+  useEffect(() => {
+    if (!practiceId) return
+    let alive = true
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (!alive || res.status !== "successful" || !res.data?.permissions) return
+      const p = res.data.permissions
+      setCanExport(Boolean(p.EXPORT_REPORTS || p.VIEW_AUDIT_LOG))
+    })
+    return () => {
+      alive = false
+    }
+  }, [practiceId])
 
   const doctors = useMemo(
     () =>
@@ -287,14 +301,16 @@ export default function AuditLogPanel() {
             onChange={(e) => setTo(e.target.value)}
           />
         </label>
-        <button
-          type="button"
-          onClick={() => void exportCsv()}
-          disabled={exporting || !events.length}
-          className="ml-auto rounded-xl border border-neutral-300 px-4 py-2 text-sm font-semibold disabled:opacity-50 dark:border-neutral-600"
-        >
-          {exporting ? "Exporting…" : "Export CSV"}
-        </button>
+        {canExport ? (
+          <button
+            type="button"
+            onClick={() => void exportCsv()}
+            disabled={exporting || !events.length}
+            className="ml-auto rounded-xl border border-neutral-300 px-4 py-2 text-sm font-semibold disabled:opacity-50 dark:border-neutral-600"
+          >
+            {exporting ? "Exporting…" : "Export CSV"}
+          </button>
+        ) : null}
       </div>
 
       {scope === "OWN" ? (

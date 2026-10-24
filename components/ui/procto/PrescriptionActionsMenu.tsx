@@ -6,6 +6,8 @@ import { ClipboardPlus, Eye, MessageCircle } from "lucide-react"
 import ClinicLogModal from "@/components/ui/procto/ClinicLogModal"
 import SendToCustomerModal from "@/components/ui/procto/SendToCustomerModal"
 import { dashboardPortalRoot } from "@/lib/portalRoot"
+import { proctoService } from "@/lib/services/procto"
+import { toast } from "sonner"
 
 type Props = {
   bookingId: string
@@ -18,6 +20,7 @@ type Props = {
   className?: string
   beforeOpen?: () => Promise<boolean>
   currentBooking?: import("@/lib/services/procto").ProctoBooking | null
+  practiceId?: string | null
 }
 
 /**
@@ -32,18 +35,41 @@ export default function PrescriptionActionsMenu({
   className = "",
   beforeOpen,
   currentBooking,
+  practiceId: practiceIdProp,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
   const [sendModalOpen, setSendModalOpen] = useState(false)
   const [printKind, setPrintKind] = useState<"consultation" | "prescription">("consultation")
   const [notice, setNotice] = useState("")
+  const [canCreateDocument, setCanCreateDocument] = useState(true)
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
     null,
   )
   const rootRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
+
+  const practiceId =
+    practiceIdProp ||
+    currentBooking?.practiceId ||
+    currentBooking?.practice?.id ||
+    null
+
+  useEffect(() => {
+    if (!practiceId) return
+    let alive = true
+    void proctoService.getMyPracticePermissions(practiceId).then((res) => {
+      if (!alive || res.status !== "successful" || !res.data?.permissions) return
+      const p = res.data.permissions
+      setCanCreateDocument(
+        Boolean(p.CREATE_CLINICAL_DOCUMENT || p.APPROVE_CLINICAL),
+      )
+    })
+    return () => {
+      alive = false
+    }
+  }, [practiceId])
 
   useLayoutEffect(() => {
     if (!open) {
@@ -87,9 +113,13 @@ export default function PrescriptionActionsMenu({
     return () => document.removeEventListener("mousedown", onDoc)
   }, [open])
 
-  if (!enabled) return null
+  if (!enabled || !canCreateDocument) return null
 
   async function openPreview(kind: "consultation" | "prescription") {
+    if (!canCreateDocument) {
+      toast.error("Your clinic role can't generate clinical documents.")
+      return
+    }
     if (beforeOpen) {
       const ok = await beforeOpen()
       if (!ok) return
@@ -101,6 +131,10 @@ export default function PrescriptionActionsMenu({
   }
 
   async function sendWhatsApp() {
+    if (!canCreateDocument) {
+      toast.error("Your clinic role can't generate clinical documents.")
+      return
+    }
     if (beforeOpen) {
       const ok = await beforeOpen()
       if (!ok) return
