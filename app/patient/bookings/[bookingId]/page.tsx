@@ -81,6 +81,10 @@ type VisitBooking = {
   documents?: VisitDoc[] | null
   slotStart?: string | null
   tokenNumber?: number | null
+  servingToken?: number | null
+  serving_token?: number | null
+  tokensAhead?: number | null
+  tokens_ahead?: number | null
   sessionDate?: string | null
   createdAt?: string | null
   created_at?: string | null
@@ -434,7 +438,23 @@ export default function PatientVisitPage() {
     ["Doctor Notes", dash(doctorRemarks)],
     ["Mode", dash(formatLabel(booking.mode || ""))],
     ["Channel", dash(formatLabel(booking.channel || ""))],
-    ["Token", booking.tokenNumber != null ? `#${booking.tokenNumber}` : "—"],
+    [
+      "Your token",
+      booking.tokenNumber != null ? `#${booking.tokenNumber}` : "—",
+    ],
+    [
+      "Now serving",
+      (booking.servingToken ?? booking.serving_token) != null
+        ? `#${booking.servingToken ?? booking.serving_token}${
+            (booking.tokensAhead ?? booking.tokens_ahead) != null &&
+            (booking.tokensAhead ?? booking.tokens_ahead)! > 0
+              ? ` · ${booking.tokensAhead ?? booking.tokens_ahead} ahead`
+              : ""
+          }`
+        : booking.mode === "TOKEN_BASED"
+          ? "Not started"
+          : "—",
+    ],
     ["Recorded", dash(recorded)],
     ["Height", dash(vitalValues.ht)],
     ["Weight", dash(vitalValues.wt)],

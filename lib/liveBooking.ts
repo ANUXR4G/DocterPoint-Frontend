@@ -36,6 +36,10 @@ export function patchBookingFields<T extends { id: string }>(
   const sessionDate =
     str(incoming.session_date) ?? str(incoming.sessionDate) ?? undefined
   const tokenNumber = num(incoming.token_number) ?? num(incoming.tokenNumber)
+  const servingToken =
+    num(incoming.serving_token) ?? num(incoming.servingToken)
+  const tokensAhead =
+    num(incoming.tokens_ahead) ?? num(incoming.tokensAhead)
   const patientName =
     str(incoming.patient_name) ?? str(incoming.patientName)
   const patientPhone =
@@ -82,6 +86,12 @@ export function patchBookingFields<T extends { id: string }>(
       : {}),
     ...(tokenNumber !== undefined
       ? { tokenNumber, token_number: tokenNumber }
+      : {}),
+    ...(servingToken !== undefined
+      ? { servingToken, serving_token: servingToken }
+      : {}),
+    ...(tokensAhead !== undefined
+      ? { tokensAhead, tokens_ahead: tokensAhead }
       : {}),
     ...(patientName !== undefined
       ? { patientName, patient_name: patientName }

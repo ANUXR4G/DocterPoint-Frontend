@@ -111,6 +111,23 @@ export function sortBookingsByWhen(
   })
 }
 
+export function bookingServingToken(booking: ProctoBooking): number | null {
+  const raw =
+    (booking as { servingToken?: number | null }).servingToken ??
+    (booking as { serving_token?: number | null }).serving_token
+  if (raw == null || !Number.isFinite(Number(raw))) return null
+  return Number(raw)
+}
+
+export function bookingTokensAhead(booking: ProctoBooking): number | null {
+  const raw =
+    (booking as { tokensAhead?: number | null }).tokensAhead ??
+    (booking as { tokens_ahead?: number | null }).tokens_ahead
+  if (raw == null || !Number.isFinite(Number(raw))) return null
+  return Number(raw)
+}
+
+/** "Token #12 · Today · Now serving #8 (4 ahead)" for token queues. */
 export function formatBookingWhenDetailed(booking: ProctoBooking): string {
   const mode = booking.mode
   const token = booking.tokenNumber ?? booking.token_number
@@ -119,7 +136,16 @@ export function formatBookingWhenDetailed(booking: ProctoBooking): string {
 
   if (mode === "TOKEN_BASED" && token != null) {
     const day = session ? formatPracticeDate(session) : ""
-    return `Token #${token}${day && day !== "—" ? ` · ${day}` : ""}`
+    let label = `Token #${token}${day && day !== "—" ? ` · ${day}` : ""}`
+    const serving = bookingServingToken(booking)
+    if (serving != null) {
+      const ahead = bookingTokensAhead(booking)
+      label +=
+        ahead != null && ahead > 0
+          ? ` · Now serving #${serving} (${ahead} ahead)`
+          : ` · Now serving #${serving}`
+    }
+    return label
   }
 
   if (slot) {

@@ -1334,6 +1334,12 @@ export type ProctoBooking = {
   slot_end?: string | null;
   token_number?: number | null;
   tokenNumber?: number | null;
+  /** Clinic token currently being served for this doctor/session day. */
+  serving_token?: number | null;
+  servingToken?: number | null;
+  /** How many tokens are still ahead of this patient (0 when serving / done). */
+  tokens_ahead?: number | null;
+  tokensAhead?: number | null;
   session_date?: string | null;
   sessionDate?: string | null;
   notes?: string | null;
